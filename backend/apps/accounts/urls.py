@@ -12,6 +12,8 @@ from .views import (
     CheckHandleView,
     # SETTINGS-POLISH-1: public role-list metadata
     RolesView,
+    # Personality assessment + discovery opt-in
+    PersonalityAssessmentView, PersonalityMeView,
 )
 
 urlpatterns = [
@@ -42,6 +44,9 @@ urlpatterns = [
     path('liked-buildings/', LikedBuildingsView.as_view(), name='liked-buildings'),
     # SETTINGS-POLISH-1: public metadata (AllowAny — login page needs it pre-auth)
     path('meta/roles/', RolesView.as_view(), name='meta-roles'),
+    # Personality assessment + discovery
+    path('personality/assessment/', PersonalityAssessmentView.as_view(), name='personality-assessment'),
+    path('personality/me/', PersonalityMeView.as_view(), name='personality-me'),
 ]
 
 if settings.DEBUG:

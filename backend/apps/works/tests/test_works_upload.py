@@ -410,6 +410,81 @@ class TestFinalize:
         )
         assert resp.status_code == 400
 
+    @pytest.mark.django_db
+    def test_finalize_built_status_defaults_to_built(self, auth_client, user_and_profile):
+        """built_status omitted -> defaults to 'built' on the created Work.
+
+        Mirrors test_finalize_success: WORKS_R2_ENABLED=False + patched
+        threading.Thread so _process_work never actually runs (no real
+        Gemini/R2 calls, no background thread touching the test DB)."""
+        from apps.works.models import Work
+
+        _user, profile = user_and_profile
+        with override_settings(WORKS_R2_ENABLED=False):
+            with patch('apps.works.views.threading.Thread') as mock_thread_cls:
+                mock_thread = MagicMock()
+                mock_thread_cls.return_value = mock_thread
+
+                resp = auth_client.post(
+                    '/api/v1/works/',
+                    {
+                        'title': 'My Building',
+                        'program': 'residential',
+                        'r2_keys': [f'works/{profile.id}/abc_cover.webp'],
+                        'is_copyright_confirmed': True,
+                    },
+                    format='json',
+                )
+        assert resp.status_code == 201
+        work = Work.objects.get(upload_id=resp.json()['upload_id'])
+        assert work.built_status == 'built'
+
+    @pytest.mark.django_db
+    def test_finalize_built_status_unbuilt_accepted(self, auth_client, user_and_profile):
+        """built_status='unbuilt' is accepted and persisted.
+
+        Mirrors test_finalize_success's thread-mocking pattern (see above)."""
+        from apps.works.models import Work
+
+        _user, profile = user_and_profile
+        with override_settings(WORKS_R2_ENABLED=False):
+            with patch('apps.works.views.threading.Thread') as mock_thread_cls:
+                mock_thread = MagicMock()
+                mock_thread_cls.return_value = mock_thread
+
+                resp = auth_client.post(
+                    '/api/v1/works/',
+                    {
+                        'title': 'My Building',
+                        'program': 'residential',
+                        'built_status': 'unbuilt',
+                        'r2_keys': [f'works/{profile.id}/abc_cover.webp'],
+                        'is_copyright_confirmed': True,
+                    },
+                    format='json',
+                )
+        assert resp.status_code == 201
+        work = Work.objects.get(upload_id=resp.json()['upload_id'])
+        assert work.built_status == 'unbuilt'
+
+    @pytest.mark.django_db
+    def test_finalize_built_status_invalid_400(self, auth_client, user_and_profile):
+        """built_status not in {'built', 'unbuilt'} -> 400."""
+        _user, profile = user_and_profile
+        resp = auth_client.post(
+            '/api/v1/works/',
+            {
+                'title': 'My Building',
+                'program': 'residential',
+                'built_status': 'maybe',
+                'r2_keys': [f'works/{profile.id}/abc_cover.webp'],
+                'is_copyright_confirmed': True,
+            },
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert 'built_status' in resp.json()['detail']
+
 
 # ---------------------------------------------------------------------------
 # BACK-WORKS-2 — parallelized per-key R2 HEAD loop tests
@@ -546,7 +621,7 @@ class TestList:
         assert data['page_size'] == 50
         item = data['works'][0]
         assert set(item.keys()) == {
-            'upload_id', 'title', 'program', 'cover_url',
+            'upload_id', 'title', 'program', 'built_status', 'cover_url',
             'is_publishable', 'gate_reason', 'created_at',
         }
         assert 'r2_keys' not in item
@@ -637,6 +712,89 @@ class TestList:
 
 
 # ---------------------------------------------------------------------------
+# Design-parity — GET /api/v1/works/?user_id=<id> (public-profile Created tab)
+# ---------------------------------------------------------------------------
+
+class TestListOtherUser:
+    """Any authenticated user may fetch another user's works via ?user_id=.
+    Non-owner view is publishable-only; owner (self) view is unfiltered."""
+
+    @pytest.mark.django_db
+    def test_other_user_sees_only_publishable(self, auth_client, user_and_profile):
+        """?user_id=<other> returns only that user's is_publishable=True works."""
+        from django.contrib.auth.models import User
+
+        from apps.works.models import Work
+
+        other_user = User.objects.create_user(
+            username='targetuser', email='target@test.com', password='pass1234',
+        )
+        other_profile = UserProfile.objects.create(user=other_user, display_name='Target User')
+        Work.objects.create(
+            owner=other_profile,
+            upload_id=Work.generate_upload_id(),
+            title='Published Work',
+            program='residential',
+            r2_keys=[],
+            is_copyright_confirmed=True,
+            is_publishable=True,
+        )
+        Work.objects.create(
+            owner=other_profile,
+            upload_id=Work.generate_upload_id(),
+            title='Processing Work',
+            program='residential',
+            r2_keys=[],
+            is_copyright_confirmed=True,
+            is_publishable=False,
+        )
+
+        resp = auth_client.get('/api/v1/works/', {'user_id': other_user.id})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data['total'] == 1
+        assert data['works'][0]['title'] == 'Published Work'
+
+    @pytest.mark.django_db
+    def test_self_user_id_sees_all_including_unpublished(self, auth_client, user_and_profile):
+        """?user_id=<self> behaves like the no-param owner path (all works)."""
+        from apps.works.models import Work
+
+        _user, profile = user_and_profile
+        Work.objects.create(
+            owner=profile,
+            upload_id=Work.generate_upload_id(),
+            title='Still Processing',
+            program='residential',
+            r2_keys=[],
+            is_copyright_confirmed=True,
+            is_publishable=False,
+        )
+
+        resp = auth_client.get('/api/v1/works/', {'user_id': _user.id})
+        assert resp.status_code == 200
+        assert resp.json()['total'] == 1
+
+    @pytest.mark.django_db
+    def test_unknown_user_id_404(self, auth_client):
+        """A user_id with no matching UserProfile -> 404."""
+        resp = auth_client.get('/api/v1/works/', {'user_id': 999999})
+        assert resp.status_code == 404
+
+    @pytest.mark.django_db
+    def test_non_integer_user_id_400(self, auth_client):
+        """A non-integer user_id -> 400."""
+        resp = auth_client.get('/api/v1/works/', {'user_id': 'abc'})
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    def test_unauthenticated_user_id_query_401(self, anon_client):
+        """No anonymous access, even with ?user_id= set."""
+        resp = anon_client.get('/api/v1/works/', {'user_id': 1})
+        assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # FULL-WORKS-3 — GET /api/v1/works/<upload_id>/ detail view tests
 # ---------------------------------------------------------------------------
 
@@ -672,6 +830,7 @@ class TestWorkDetail:
         assert data['upload_id'] == work.upload_id
         assert data['title'] == 'My Gallery Work'
         assert data['program'] == 'cultural'
+        assert data['built_status'] == 'built'
         assert data['location_city'] == 'Seoul'
         assert data['location_country'] == 'South Korea'
         assert data['project_year'] == 2023

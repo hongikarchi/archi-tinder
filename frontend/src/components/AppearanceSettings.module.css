@@ -23,11 +23,12 @@
 
 .swatchTile {
   position: relative;
-  height: 72px;
+  height: 76px;
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 0 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
   transition: box-shadow var(--motion-fast) var(--motion-ease),
               border-color var(--motion-fast) var(--motion-ease),

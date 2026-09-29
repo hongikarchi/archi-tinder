@@ -12,13 +12,17 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe, updateMyProfile } from '../../api/client.js'
 import Toggle from '../../components/Toggle.jsx'
-import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import styles from './NotificationsScreen.module.css'
 
 const CATEGORY_KEYS = ['social', 'content', 'security', 'recommend', 'marketing']
 
-export default function NotificationsScreen() {
+export default function NotificationsScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const [prefs, setPrefs] = useState(null)   // null = not loaded yet
@@ -90,22 +94,16 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <div className={styles.page}>
-      {/* Glassmorphic sticky header */}
-      <div className={styles.header}>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className={styles.iconBtn}
-        >
-          <IconBack width={20} height={20} />
-        </button>
-        <h2 className={styles.headerTitle}>{t('notifications.title')}</h2>
-        <div style={{ width: 44 }} />
-      </div>
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+    <PageShell
+      width="narrow"
+      chrome={<>
+        <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
+        <PageTopControls onLogout={onLogout} />
+      </>}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('notifications.title')}</PageTitle>
 
         {/* Honest hint: email/push delivery not yet implemented */}
         <div style={{
@@ -202,8 +200,7 @@ export default function NotificationsScreen() {
           )
         })}
 
-      </div>
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }

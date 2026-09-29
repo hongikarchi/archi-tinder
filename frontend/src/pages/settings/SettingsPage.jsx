@@ -5,8 +5,12 @@
  * Layout: viewport-locked scroll, glassmorphic sticky header (mirrors ProfileHeader).
  */
 import { useNavigate, Outlet, useLocation } from 'react-router-dom'
-import { IconBack } from '../../components/icons.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import styles from './SettingsPage.module.css'
 
 const ROWS = [
@@ -16,7 +20,7 @@ const ROWS = [
   { key: 'appearance',    labelKey: 'settings.rows.appearance.label',     hintKey: 'settings.rows.appearance.hint',     path: '/settings/appearance' },
 ]
 
-export default function SettingsPage() {
+export default function SettingsPage({ onLogout }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
@@ -27,43 +31,34 @@ export default function SettingsPage() {
   return (
     <>
       {isRoot && (
-        <div className={styles.page}>
-          {/* Glassmorphic sticky header */}
-          <div className={styles.header}>
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              aria-label="Back"
-              className={styles.iconBtn}
-            >
-              <IconBack width={20} height={20} />
-            </button>
-            <h2 className={styles.headerTitle}>{t('settings.title')}</h2>
-            {/* Spacer to keep title centered */}
-            <div style={{ width: 44 }} />
-          </div>
-
-          {/* Settings list */}
-          <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
-            <div className={styles.listCard}>
-              {ROWS.map((row) => (
-                <button
-                  key={row.key}
-                  type="button"
-                  onClick={() => navigate(row.path)}
-                  className={styles.row}
-                >
-                  <span className={styles.rowLabel}>{t(row.labelKey)}</span>
-                  {row.hintKey && <span className={styles.rowHint}>{t(row.hintKey)}</span>}
-                  <span className={styles.rowChevron} aria-hidden="true">›</span>
-                </button>
-              ))}
-            </div>
+        <PageShell
+          width="narrow"
+          chrome={<>
+            <PageBackButton onClick={() => navigate(-1)} />
+            <PageLogoHeader />
+            <PageTopControls onLogout={onLogout} />
+          </>}
+          contentStyle={{ padding: '24px 20px' }}
+        >
+          <PageTitle>{t('settings.title')}</PageTitle>
+          <div className={styles.listCard}>
+            {ROWS.map((row) => (
+              <button
+                key={row.key}
+                type="button"
+                onClick={() => navigate(row.path)}
+                className={styles.row}
+              >
+                <span className={styles.rowLabel}>{t(row.labelKey)}</span>
+                {row.hintKey && <span className={styles.rowHint}>{t(row.hintKey)}</span>}
+                <span className={styles.rowChevron} aria-hidden="true">›</span>
+              </button>
+            ))}
           </div>
 
           {/* Bottom padding for TabBar */}
           <div style={{ height: 24 }} />
-        </div>
+        </PageShell>
       )}
       <Outlet />
     </>

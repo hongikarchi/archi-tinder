@@ -4,58 +4,10 @@
  * interactive row hover/focus states.
  */
 
-.page {
-  height: calc(100vh - 64px);
-  overflow-y: auto;
-  background: var(--color-bg);
-}
-
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: color-mix(in srgb, var(--color-bg) 72%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 12px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--color-border-soft);
-  gap: 8px;
-}
-
-.headerTitle {
-  color: var(--color-text);
-  font-size: 17px;
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: -0.01em;
-}
-
-.iconBtn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--color-text);
-  cursor: pointer;
-  border-radius: 12px;
-  transition: background var(--motion-fast) var(--motion-ease);
-}
-
-.iconBtn:hover {
-  background: var(--color-surface-2);
-}
-
-.iconBtn:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: 2px;
-}
+/* `.page` moved to the shared `PageShell` component; `.headerTitle`'s
+ * distinct margin/padding (tighter than the other settings screens, aligned
+ * with this page's own 12px row padding) is now passed as a `style` override
+ * to the shared `PageTitle` component — UI-CONSISTENCY-B Phase 2b. */
 
 .row {
   display: flex;
@@ -107,7 +59,7 @@
 
 .loadMoreBtn:hover {
   background: var(--color-surface-2);
-  border-color: var(--border-soft);
+  border-color: var(--color-border-soft);
 }
 
 .loadMoreBtn:disabled {

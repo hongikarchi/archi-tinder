@@ -57,8 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어있음 — FULL-WORKS-3 완료 2026-08-12, ## Done 참조)_
-
+_(비어 있음 — BACK-LLM-5 완료 2026-09-26, ## Done 참조)_
 
 ## Next
 
@@ -107,6 +106,42 @@ Implementation map:
 
 ### HIGH
 
+#### BACK-RECOMMEND-5 — Love intensity 잔재 전수 제거
+_FULL-RECOMMEND-1 후속 PR 3. 프론트가 `intensity`를 한 번도 보내지 않아 모든 like = 1.0(Love 1.8 미구현 잔재). `swipe_service.py:786,1134`, `models.py:16` 주석, `rerank.py:118-141`, `engine.py:2037-2079`, `event_log.emit_swipe_event`, discovery/office/_shared 파서 등 코드·주석 전수 조사 후 제거._
+
+#### BACK-RECOMMEND-6 — 태그를 취향좌표에 병합 검토
+_FULL-RECOMMEND-1에서 보류. 선행: Make DB에서 건물 embedding 입력 텍스트 확인(태그 포함 여부 — 포함 시 이중 계산). 결과에 따라 태그→좌표(해당 태그 건물 embedding 평균, 정규화)를 pref_vector에 병합. 이후 유지 컬럼 `tag_axis_counts` / `recent_like_tag_sets` / `question_bias_vector`의 재사용·삭제를 사용자에게 재질문._
+#### FULL-BOARD-FLOW-1 — 저장된 보드·진행 세션이 삭제되는 버그 + 보드·리포트 경로 정리
+2026-09-27 경로 감사(세션, 코드 확인 완료). UI-CONSISTENCY-B와 분리해 별도 PR로 처리.
+- **D1 (데이터 손실)**: 저장 보드 "이어서 탐색하기" 후 오른쪽 스와이프 없이 나가기 → 서버 보드 DELETE. `handleResumeProject` 합성 엔트리 `likedBuildings: []`(App.jsx:~991-1004) + 나가기 삭제 조건이 로컬 likedBuildings 길이 기준(App.jsx:~1092-1105). Discovery promote 엔트리도 likedBuildings []로 시작. 백엔드 DELETE에 is_temp 가드 없음(views/projects.py:~244-251). 수정: 삭제 조건을 `isTemp===true`로, 서버 가드 추가.
+- **D2 (데이터 손실)**: 스와이프 중 취향 탭(/search) → 진행 중 temp 세션 삭제 — /search 재진입 청소(App.jsx:~210-221)가 활성 프로젝트를 제외하지 않음. 수정: 활성 프로젝트 제외.
+- 결정 필요: G1 Discovery→Taste 보드에 저장 시트 미노출(is_temp=False 생성 → `discovery_YYMMDD` 이름·비공개로 남아 /people 미노출); G2 페르소나 이미지 자동 생성이 한 분기뿐(썸네일·people 카드가 수동 생성 의존), G3 Results에서 만든 이미지 재마운트 시 유실; G4 temp 보드가 프로필에 노출(`_build_boards_field` is_temp 필터 없음); G5 리포트 없는 내 보드에서 리포트 진입 경로 없음; G6 BoardCard flip/Resume/Start New 죽은 코드(latest_session_meta 미포함); G7 Results 재진입 불가; G8 좋아요 0 Results 막다른 길; G9 "Finish & View Report →" 영어 하드코딩·세션 없을 때 노출; G10 리포트 로딩 중 뒤로가기 없음; G11 리포트→보드 push로 뒤로가기 루프; G12 Results 뒤로가기=/discovery; G13 공유 링크 새로 열면 뒤로가기가 앱 밖; G14 PersonaReport 두 곳 폭 불일치; G15 보드 커버(첫 건물) ≠ 프로필 썸네일(페르소나 이미지); G16 리포트 버튼 스타일 DESIGN §8.1과 불일치. 리포트 표시 방식(보드 상세 요약 카드 / 버튼만 / 통합)도 이때 결정.
+
+#### DEPLOY-BLOCKER-1 — develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)
+_user 결정: 개발 단계라 develop에는 먼저 합치고, **실서비스 배포 전에 반드시 처리**. 다음 deploy PR 전에 이 항목 확인._
+- ① **#333 공모전 프로토타입 공개 범위** — `/competitions` 라우트 + `SocialSegment` [🏆]가 게이트 없이 모든 사용자에게 노출됨. 배포 전 (a) `import.meta.env.DEV` 게이트, (b) `VITE_ENABLE_COMPETITION_PROTOTYPE` 플래그(프리뷰만 on), (c) 실서비스 공개 중 택1
+- ② (c) 또는 게이트 없이 나갈 경우 필수: 실제 기관명(대한건축사협회·서울특별시·국토교통부·한국건축가협회) 붙은 가짜 공모전 → 가상 기관명, 가짜 관심 수·모집 팀 수 → 상단에 눈에 띄는 '예시 데이터' 배너, `제안`/`참여 요청` 토스트 "보냈어요" → "준비 중이에요", 목 유저 `user_id` 36~40·3 하드코딩 링크 제거
+- ③ #333 저위험: 관심 localStorage 키 유저별 분리 + 로그아웃 시 삭제, `fitReason` 폴백이 반대 축에 "비슷해요" 출력, 목 유저 `type_code`가 벡터와 불일치(c1 5명), `AXIS_LABELS` 중복, `CompetitionListPage` 헤더가 구 글래스 헤더 그대로(`/people`은 `PageLogoHeader`)
+- ④ **#334 헤더 축소**: 공용 상단 버튼 28px·토글 22px → DESIGN.md §3.2 터치 최소치(데스크톱 32/모바일 44) 미달, 히트 영역 확대 필요. `login.common.langKo/langEn` "한/EN" 축약이 설정>화면 언어 선택지에도 적용됨 → 짧은 키 분리. LoginPage 로고 "좌상단" 설명과 달리 가운데 정렬
+- ⑤ #334 하네스: Codex 규칙(별도 클론 선택화)과 CLAUDE.md HARD RULE 7이 반대 — user 판단: 역할이 달라 허용, 추후 점검
+
+#### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)
+_스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._
+- ① 퇴장 애니메이션 부자연: `animateOut` power 3.0(대각선 3배) + 500ms cap + linear easing(`config:{duration}` 감속 없음) → power 감소 + ease-out cubic + duration floor
+- ② 스택 승격 뚝뚝: SwipeDeck 레이어 static, 승격 시 무전환 교체 → 새 active 카드 entrance(scale 0.95→1, motion-normal)
+- ③ 갤러리 키보드: ArrowUp/Down 핸들러 없음 → showGallery 중 keydown, `scrollBy(±CARD_HEIGHT, smooth)`
+- ④ 스냅 끊김: `scrollSnapStop:'always'` + 데스크탑 휠 vs mandatory 스냅 충돌 → 휠 인터셉트 카드 단위 스냅(터치 네이티브 유지)
+- ⑤ 갤러리 full 해상도 로드(확인됨): `api/images.js:110` gallery raw passthrough → `rightSizeImageUrl` map(idempotent 안전)
+
+#### INFRA-TOKEN-1 — --color-success 토큰 신설 (4테마) + #34d399 전환
+_A1-HEX-R2 이연(2026-08-15): share-copied 등 success green을 accent-2로 바꾸면 의미 파괴(보라). tokens.css 4테마에 success green 추가 후 `BoardDetailPage.jsx:416` `#34d399` 전환 + DESIGN.md §1 동기화._
+
+#### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)
+_디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._
+- 전체 46파일 스윕, 유형별 PR 분리(사용자 결정): PR-1 hex→토큰(토큰 값과 정확 일치/명백 우회만, §8.6 photo-overlay 및 white-on-accent 예외, 애매한 색은 로그만), PR-2 onMouseEnter→모듈 :hover(동일 값 이전, 로직성 핸들러 제외). pixel-identical 하드 제약.
+- 잔여 규모(B1 후): hex ~44파일, onMouseEnter 12파일(최다: BoardCard 6, BoardDetailPage 4). B1 처리분(로그인/프로필 5파일) 제외.
+- 포함: UserProfilePage.jsx:641 dark-glass 배경 라이트테마 invisible(B1 Opus verify 지적, 기존 이슈).
+
 #### ALGO-ACCURACY-1 — "Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)
 _출처: 2026-07-06 4-agent 정적분석 종합(`.claude/plans/algo-speed-accuracy-analysis.md`, 2026-08-05 stale-정리 때 삭제 — speed 파트는 #266-#269/#283 등으로 대부분 해소, accuracy 파트만 여기로 이관)._
 - **[CRITICAL] Photo-vs-taste confound**: 스와이프 자극은 사진인데 기록 신호는 텍스트 캡션 임베딩(`visual_description`, sentence encoder — 이미지/CLIP 임베딩은 스와이프 경로에 전무). 엔진의 "시각 유사도"는 실제로는 캡션 어휘 유사도. 옵션: Make DB CLIP/이미지-임베딩 채널(조율 필요, 최대 리프트) / 주장을 caption-semantic taste로 축소 / 실험으로 검증.
@@ -144,6 +179,23 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+
+#### BACK-RECOMMEND-8 — 형태 축(정형↔비정형) 근거 부재
+_FULL-PERSONA-1에서 제외. 임베딩이 기하학 형태 정보를 약하게 담아 기준 문장 투영 AUC 0.63~0.75. 후보: Gemini 건물별 정형도 채점(표본 200~300개로 AUC 검증 후 전체 일괄), 건물 사진 임베딩, Make DB에 형태 필드 요청. 태그로 양 끝 정의는 사용자 반대._
+
+#### BACK-RECOMMEND-9 — 태그 가중치 방식 잔재 삭제 확정
+_`services/axis_scores.py` 주석 처리된 태그 가중치 코드, `TagAxisWeight` 모델·표, `fixtures/tag_axis_weights.json`, 마이그레이션 0033 데이터. 사용자 확정 시 코드 삭제 + 표 삭제 마이그레이션._
+#### FRONT-DESIGN-C2 — 디자인 포트 잔여 결정 4건 + 스타일 델타 21곳
+FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15장이면 취향 프로필 완성" 카피 복원 여부(핵심 약속 문구, 한 줄 revert). 스타일 델타 잔여 21곳은 `python tools/design-diff.py`로 재측정 후 처리. 로그인 하위 4카드+오버레이 17종은 자동 대조 불가 — 수동 확인.
+
+#### FRONT-PEOPLE-I18N-1 — PeopleDiscoveryPage 페이지 크롬 i18n
+카드 내부(PersonCard 등)는 FRONT-FUNC-CHECK-1에서 i18n 완료됐으나 페이지 크롬이 하드코딩 한국어로 남음: 제목 "사람 발견", 프리셋 필터 칩(전체/영감 주는 사람/정반대 성향), 빈상태·에러·진단유도 문구, 관심 토스트. locales.js peoplePage.* namespace 신설 + useTranslation 배선.
+
+#### FRONT-LOGINKEY-1 — 로그인 키보드 진행 지원
+choice/consent 두 카드가 SwipeGestureFrame 드래그 전용이라 키보드 사용자는 계정 생성 자체가 불가(포커스 가능 컨트롤 0개). 나머지 폼 단계(credentials/returning/profile)는 이미 form onSubmit + native button 완비. 후보: `useKeyboardSwipe` 훅 재사용(ArrowLeft/Right) + 텍스트 입력 포커스 중 오발동 guard. 2026-09-06 유저 결정으로 보류 — 인터랙션 디자인 선행 필요.
+
+_(FRONT-ASSESSMENT-2 — 진단 카드 reduced-motion 정책 충돌: FRONT-FUNC-CHECK-1에서 (a)안으로 종결 2026-09-06 — 인터랙션 모션은 무시로 통일, gate 삭제. `## Done` 참조.)_
+
 #### SNS-PERSONA-AXIS-1 — persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)
 PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에 axis_scores 미사용 = 기능 미착륙 확인. 원격 브랜치는 보존됨(정리에서 유일하게 제외). 살리려면 rebase 필요 — 이후 persona seam 변경(#290 provider pin, #291 mock) 충돌 예상, cherry-pick보다 재구현이 쌀 수도. hypothesis-grade: 기능 가치 자체(개인화 페르소나 품질)는 제품 결정 필요.
 
@@ -162,17 +214,14 @@ PR #301/#302 리뷰(2026-08-14, 41-agent)發. 현재 커버는 프론트 r2_keys
 - (d) status 3-way 파생(published/rejected/processing) 프론트(UserProfilePage 인라인)/백(WorkDetailView) 이중구현 — list 엔드포인트가 파생 `status`를 반환하게 통합
 - (e) JPEG-fallback content-type: `canvasToBlob`이 jpeg로 폴백해도 presign/PUT은 `image/webp` 고정 — blob.type을 per-file로 스레딩 (WebP 인코딩 없는 브라우저에서만 발동, 이론적)
 
-#### FRONT-VERIFY-1 — 보드저장 PATCH 경로 verify_required 모달 미배선
-FULL-ONBOARDING-2(`92237d8`)가 guest promote-limit을 `403 {'detail':'verify_required','reason':'board_limit_reached','limit':3}`로 표준화했으나, 프론트 `updateProject`(projects.js:64-71)는 verify_required를 VerifyRequiredError로 변환 안 함(createProject:26-40만 처리) → SaveBoardModal에서 guest가 4번째 보드 저장확정 시 VerifyGateModal 대신 generic 에러 문자열. `updateProject`에 createProject와 동일한 403 verify_required 감지 + VerifyGateModal 배선. Non-blocking(백엔드 enforcement는 정상).
+#### BACK-PRIVACY-2 — 공개 보드 상세의 report_image 노출 정책 결정
+BACK-PRIVACY-1(리스트 유출 차단) 후속. `ProjectDetailView`(AllowAny, views/projects.py:149)는 public 보드에 ProjectSerializer 전체 — report_image base64 포함 — 를 비인증에게도 반환. 단건이라 bulk 수확은 불가하나 `ProjectReportImageFetchView`(IsAuthenticated)와 정책 불일치. BoardReportPage.jsx:154가 이 경로의 report_image를 소비 중이라 단순 제거는 익명 공개-보드 리포트 열람을 깨뜨림. 옵션: (a) BoardReportPage를 lazy pointer 패턴으로 전환 + FetchView를 public-board-AllowAny로 완화 + 상세에서 필드 제거, (b) "공개 보드 리포트 이미지 = 의도적 공개(단건)"로 확정하고 FetchView 권한을 맞춰 불일치만 해소. Opus verify 2026-09-06 medium.
 
 #### ADMIN-DBCHECK-3 — 판정층 첫 정식 QC 패스
 ADMIN-DBCHECK-2에서 분리(2026-08-04). 기계층 기준선(`qc_20260804T035813Z`) 위에서 시각 판정층 첫 실행: 태그 진실성 표본(tagged top-10 이미지 판정) + 음성 표본 감사(태그 없는 20동 → 태그 누락률 추정). 프로토콜은 `backend/tools/db_qc_rubric.md` 런북 그대로 (블라인드 sonnet 판정, 양성 대조군 3-5동 심기). 파서·엔진 수선 착지 후 돌리면 before/after 한 번에 나옴. ~600k sonnet/패스.
 
 #### INFRA-TEMP-GC-1 — orphan temp 보드 서버측 GC/TTL 없음
 FULL-ONBOARDING-2에서 분리(2026-07-12). 브라우저 닫기/로그아웃 시 `is_temp=True` 보드가 서버에 영구 잔류(frontend cleanup은 /search 재진입 경로만). TTL 필드 or 정리 job(cron/management command) 필요 — 설계 결정(TTL 기간, report-있는 temp 처리) 선행. 비차단.
-
-#### FRONT-UX-7 — 로그인 뒤로가기 시 입력 draft 소실
-LOGIN-REWORK-1(`a390f9f`) pre-existing 잔존. CredentialsStep이 localId/localPassword를 컴포넌트 로컬 useState로 들고, 앞 카드가 `step`으로 key돼 profile→back→credentials 시 remount → 입력 draft 초기화. 부모 id/password는 마지막 confirmed 값 유지하나 local state를 props로 seed 안 함 → 입력창 빈 채로 보임. deck 리워크가 뒤로가기를 쉽게 만들어 노출 빈도↑. 수정: 마운트 시 부모 props로 local state seed, 또는 id/password를 부모로 완전 lift해 controlled 전환. Non-blocking UX papercut.
 
 #### NOTIF-CHANNELS-1 — 이메일·푸시 알림 채널 발송
 NOTIF-INAPP-1(0bac717)은 앱 내 채널만. 이메일(SMTP — Resend/Gmail 등) + 웹푸시(FCM)는 새 외부 의존성 → Product Constitution 상 사용자 승인 필요. prefs JSON은 push/email 키 이미 보존·검증됨(validator {push,email,in_app}) — 발송 파이프라인만 추가하면 됨. 보안 카테고리 이메일이 최우선 후보.
@@ -273,6 +322,269 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-REPORT-2 — 리포트가 언어 전환에 안 따라옴 — RESOLVED 2026-09-27 (`e13c9b9`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).
+- 최상위 필드 = 생성 시 언어(하위 호환), `dominant_*` 영어 유지, 한쪽 누락 시 다른 쪽으로 채움. 적용: PersonaReport, ResultsPage, BoardDetailPage 공유 문구, SaveBoardModal 기본 이름. 기존 리포트는 재생성 시 두 판 생성.
+- 검증: review/security PASS, BE 30 pass, FE 124 pass, 실데이터 ko/en 샘플 일치 확인.
+
+### FULL-PERSONA-1 — 취향 막대가 반대·근거 없음이 중립으로 보임 — RESOLVED 2026-09-27 (`54e9c97`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).
+- 점수 방식 교체(`54e9c97`): 태그 가중치(`7562118`, 단어 의미 연결·16행·재료 규칙 — 현재 주석 처리 보존) → **건물 임베딩을 기준 문장 방향에 투영**(태그 미사용). 축 4개(물성·공간감·분위기·전통성), 형태 축 제외(문장 AUC 0.63~0.75). 검증 AUC 0.92/0.99/0.85/0.91.
+- 기준 문장 `services/_axis_anchors.py`, 방향 계산 `manage.py build_axis_directions` → `fixtures/axis_directions.json`(HF는 빌드 시만). 저장 형태 `{score, dots(25/50/75% 또는 3개 이하 전부), n, iqr, confidence=min(n/5,1)×(1−iqr)}`, 예전 형식은 열 때 재계산.
+- UI `TasteSpectrum.jsx`: 좌우 바깥 단어, 0.5px 선, 검정 원(작은 3.5/큰 9), 테마색 곡선(신뢰도 크기, 축 사이 S자 연결). Deferred: BACK-RECOMMEND-8 (형태 축 재도입), BACK-RECOMMEND-9 (태그 가중치 코드·표 삭제 확정).
+
+### BACK-RECOMMEND-7 — 결과 My Likes에 Discovery 좋아요 누락 — RESOLVED 2026-09-27 (`9a19711`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
+- 결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.
+
+### BACK-LLM-5 — 리포트 취향 문장이 근거 없음 — RESOLVED 2026-09-26 (`c69c895`, PR 대기 — FULL-RECOMMEND-1 위 스택)
+- 리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).
+리포트를 스와이프 사실 기반으로 재작성 (grilling 2026-09-25~26 결정, FULL-RECOMMEND-1 위에 스택 — `feature/algo-report-grounding`). 기존 `generate_persona_report`는 liked 6속성만 영어 프롬프트로 전송(언어 설정 무시, 싫어요 미사용).
+- 기준 = 보여준 카드(`Project.liked_ids` ∪ `disliked_ids`, 양쪽이면 like). 편중도 = 특징 있는 카드 like율 ÷ 없는 카드 like율, 양쪽 +1/+2 스무딩. 코퍼스 캐시 미사용.
+- 좋아요 사실: shown≥3, liked≥2, ratio≥1.5. 싫어요 사실: shown≥3, 넘김≥40%(≥80% "대부분"/≥40% "여러 번"), like ratio ≤1/1.5. 정렬: ratio 내림차순, 0.3 이내면 근거 수 많은 순, 축당 1개, 근거 80%+ 겹치면 1개, like 2~3 + dislike ≤1. 배수 0.5 단위 내림.
+- 출력: `pattern_paragraph`(신규, "보여드린 건물 중…"으로 시작, 사실 문구 틀 엄격(어미 연결만 허용, LLM 이탈은 검사 없이 수용), ~200자, 사실 없으면 생략) + `description`(취향 해석, 부드러운 추정, ~300자) + `persona_type`(1~2단어 경향명) + `one_liner`(태그 포함 구체문) — 사용자 언어; `dominant_*` 영어 유지; `taste_facts` 저장(비표시). 용어 한글 음차, 국가 한국어, 건축가 영어. 금지: "다른 사용자보다" 등 미계산 비교, 최상급, 성격 판단, 비하.
+- 규칙 위치: `services/_report_prompts.py`(문장), `settings.RECOMMENDATION` `report_*`(기준값), `docs/report-writing.md`(설명). 기존 리포트 유지, 재생성 시에만 신 방식. 공개 보드도 동일 문장.
+- 검증: feature workflow review/security PASS(보안 1건 수정: 싫어요 id 노출); 로컬 Neon 전체 1459 pass/0 fail; FE 117 pass, eslint 0 error, build OK; 실데이터 샘플 3건 확인. 후속: 사실 문구 엄격 복원(검사 장치 없이 LLM 이탈 수용), 배수 정수 표기(2.0→2), 스무딩 0 나눗셈 방어.
+- 관찰: 샘플 3건 모두 1순위 사실이 흔한 스타일 `contemporary` — 계산은 맞으나 Aha 약함. 실사용 데이터 확인 후 판단.
+
+### FULL-RECOMMEND-1 — 질문카드가 리포트에 무영향·순위만 과왜곡 — RESOLVED 2026-09-25 (`5c7d74c`, PR 대기)
+- 질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).
+- FE: `QuestionCard.jsx` + SwipePage/App/MainLayout 배선, `submitQuestionResponse`, i18n `swipe.questionCard.*`, 죽은 `latency_ms` 측정(`cardShownAtRef`) 제거.
+- BE: 트리거·`handle_question_response`·`question-responses/` 라우트, engine `question_bias_vector` 파라미터 + 전 호출부, `question_*`/`recent_latencies_cap` 설정 제거.
+- DB: 0031 DROP `recent_latencies`/`question_count`/`question_cooldown`/`q_card_consecutive_dislikes`; 0032 `tag_answer` 이벤트 선택지 제거. 로컬 적용 완료 — **prod는 배포 후 `make migrate-prod`**(코드 먼저).
+- 유지(미사용, BACK-RECOMMEND-6 대기): `tag_axis_counts`, `recent_like_tag_sets`, `question_bias_vector` 컬럼. 무관 유지: ActionCard, DiscoveryTriggerCard, parse_query probe, `cardShell.js`, `get_corpus_tag_df`.
+- 검증: feature workflow review/security PASS(확정 결함 0); API 스모크 0 fail(연속 싫어요·연속 좋아요·수렴/ActionCard·재개·결과·리포트, `question-responses/` 404); BE 비DB 테스트 603 pass/0 fail(DB 테스트 831건은 로컬 DB 미연결 — CI 필요); FE 117 pass, eslint 0 error, build OK. app-test는 Playwright MCP 부재로 미실행.
+- 참고: 로컬 `dev-login` 500(`test_architinder` username 중복, 기존 데이터 문제 — 본 변경 무관).
+### UI-CONSISTENCY-B — 디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체 — RESOLVED 2026-09-29 (`cb4b025`, PR 대기)
+- 2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`
+- 1단계 규칙·토큰: radius 역할(사진 20·UI 12·내부 8·시트 24·칩 pill), 5단 글자 12/14/16/20/24 + 굵기 400~700(800 금지), 모달 배경 `--color-scrim-modal` 0.4, 원형 버튼 28px/터치 44px. DESIGN.md의 `calc(var(--radius) * 1px)` 오류(모서리 0 렌더) 제거
+- 2단계 공통 부품: FloatingIconButton, PageTitle/SectionTitle, PageShell, Tabs, EmptyState, Skeleton(반짝임 제거), PhotoTile(4:5·캡션 오버레이), Modal(모바일 시트/데스크탑 중앙), SegmentedControl(선택 표시 슬라이딩 — 탭바·한/EN·라이트/다크·사람/공모전·프로필 탭). 하단 탭바 → 인스타 iOS식 떠 있는 유리 캡슐(아이콘만, 취향=돋보기, 선택=알약+채운 아이콘), `--page-height` 전체 화면 + `--tabbar-clearance`
+- 3단계 페이지: 보드 상세(풀블리드 히어로 제거 → 공통 틀 + 커버 카드, 정보 한 축 정렬, `SHOW_COVER`로 텍스트 헤더 전환 가능), architects(프로필 구조), 프로필·Studios(StudioCard 분리, 죽은 LikedOfficesPage 삭제), 공모전, 건물 상세·결과·리포트, 모달 전체
+- 부수 (FRONT-UX-QUICK-A): 프로필 로그아웃 우측 이동, 보드 Edit 버튼 숨김(`SHOW_BOARD_EDIT_BUTTON`), Studios 화살표, "오피스"→"스튜디오", DevLoginView username 기준 조회(구글 연동으로 이메일 바뀐 테스트 계정 500). 보드 API error는 로컬 DB 컬럼 4개 누락(로컬만) — 로컬 브랜치 복구, 코드 무변경
+- 병렬 5 worktree로 3단계 동시 진행 → 통합 시 locales.js 네임스페이스(`profileB3`/`architectB3`/`competitionB3`/`detailB3`/`modalB3`) 충돌만 수동 해결. eslint 0 error, build 통과, 11개 페이지 콘솔 에러 0
+- Deferred: 보드·리포트 경로 정리 + 데이터 삭제 버그 → `FULL-BOARD-FLOW-1`(HIGH, 별도 PR); locales `*B3` 네임스페이스를 기존 키 체계로 흡수; `--color-nav-inactive` 유리 위 대비(사진 위 비활성 아이콘 약함) 점검.
+
+### FRONT-COMP-PROTO-1 — 공모전 팀빌딩 화면 프로토타입 — RESOLVED 2026-09-23 (`04d2e90`, PR 리뷰 대기)
+- **완성품이 아니라 판단용**: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정
+- 그래서 **의도적으로 만들지 않은 것** — `Competition`/`CompetitionInterest`/`Team`/`TeamInvite` 모델, 마이그레이션, API. 커뮤니티가 탈락하면 브랜치째 버릴 수 있어야 하는데 마이그레이션이 들어가면 되돌리기 어려움. **백엔드 변경 0줄**
+- 화면 2종: `/competitions`(마감 임박순 목록) · `/competitions/:id`(찜 → 사람 발견 → 팀 전환이 한 화면에서). Social 탭 안 세그먼트로 진입, TabBar 3개 구조 무변경
+- `teamFit.js` — 설계 §4 축 계산 구현. 발견 피드의 유클리드를 못 씀(1·2축 보완, 3·4축 일치). `w = 0.4`. 한국어 조사 처리 포함(축 이름이 '방식'/'태도'로 섞여 고정 조사 시 "접근 태도이"가 나옴)
+- 찜은 localStorage만 — 데모 중 새로고침해도 유지돼야 진짜처럼 느껴지므로 sessionStorage 아님
+- 추천은 **상위 1명만** 승격. 2~3명이면 "추천"이 희석되어 정렬된 목록과 다를 게 없어짐. 카드 레이아웃은 목록과 동일하게 두고 테두리만 강조 — 모양이 다르면 별개 기능처럼 보여 연결이 끊김
+- 아이디 클릭 → `/user/:id?tab=created`. `UserProfilePage`의 딥링크 `isMe` 가드 제거(`handleCreatedTab`은 이미 `getUserWorks`로 양쪽 처리, 탭 버튼도 조건부 아님 — 가드만 남의 프로필 진입을 막고 있었음)
+- **검증 중 발견**: id를 로컬 DB 실제 행(36~40)에 맞추자 추천 1위가 뷰어와 거의 동일한 **복제형**으로 나옴. 계산은 정상(`w=0.4`라 일치가 무거운데 보완·일치를 동시에 갖춘 시드 유저가 없었음)이나 **데모가 기능의 주장을 스스로 보여주지 못하는** 상태였음 → `MOCK_MY_VECTOR`를 시드 유저와의 관계를 보고 재설정해 `@dohyun`(1·2축 반대 + 3·4축 일치)이 0.82로 뚜렷한 1위가 되게 함
+- 테스트 16개 추가(`node --test`), 전체 133/133 통과
+- **한계(PR에 명시)**: 시드 유저는 로컬 DB에만 있어 다른 환경에서는 프로필 이동이 엉뚱한 사람에게 가거나 404. 핸들 조회 API가 없고 만들면 "백엔드 0" 전제가 깨져, 바꾸지 않고 안내로 처리하기로 user와 합의
+- Deferred: 팀 상세 화면(설계 §7-3) 미구현 — 판단에 필수가 아니라 생략. 배포 방법 미정(링크 공유하려면 필요)
+
+### FRONT-RESULTS-SAVE-1 — 리포트 화면 상단 저장 CTA + 저장 후 프로필 이동 — RESOLVED 2026-09-17 (`e196549`, PR 리뷰 대기)
+- user 지적: Discovery → Taste 리포트 생성 후 **끝나는 지점이 없음**. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. **기능 결함이 아니라 완결감(closure)의 부재**
+- 브레인스토밍에서 3안 검토 후 B안 채택: 모달 자동 노출을 없애고 **리포트를 먼저 보여준 뒤 유저가 상단 CTA로 마무리**. A안(모달 강제)은 리포트를 보기도 전에 이름부터 정해야 해 순서가 부자연스럽고, C안(기본값 즉시 저장)은 공개여부 선택권이 사라져 발견 피드 노출과 충돌
+- `App.jsx` 자동 모달 2곳 제거하되 `saveModalProject` 세팅은 유지 — CTA가 바로 쓸 대상만 준비
+- CTA는 상태에 따라 분기: 임시 보드 → `저장하고 프로필로`(모달→저장→프로필), 이미 저장됨 → `프로필에서 보기`(바로 이동). 리포트 없으면 미렌더
+- `handleBoardSaved`에 `navigate('/user/me')` — CTA·재진입 배너 **모든 저장 경로가 프로필에서 끝남**
+- `SaveBoardModal`의 `나중에` 제거(출구를 저장으로 일원화)하되 **backdrop 클릭은 유지** — 오터치로 갇히면 안 되고, 돌아가도 리포트가 그대로 있어 잃는 게 없음
+- 신규 제작은 **버튼 하나**뿐. 모달·저장 API·`handleBoardSaved`는 기존 재사용, 버튼 스타일은 `PersonaReport` CTA 값 사용. i18n ko/en 2키 추가
+- 설계: `docs/plans/2026-09-17-results-save-cta-design.md`
+- 미검증: 브라우저 실물(모달 미노출·CTA 동작·프로필 도착). PR에 수동 절차 기재
+
+### FRONT-REPORT-OWNER-1 — 페르소나 리포트 재생성 버튼 소유자 제한 — RESOLVED 2026-09-10 (`f6e1118`, PR 리뷰 대기)
+- 소셜 탭 → 타인 프로필 → curated 보드 → 리포트 진입 시 남의 리포트 화면에 `이미지 재생성`/`리포트 재생성` 버튼이 그대로 노출됨
+- **백엔드는 이미 안전했음**: 두 POST 모두 `filter(project_id=pk, user=profile)`라 타인 보드는 404(실측 확인 — 예원의 public 보드에 재생성 2종 POST → 둘 다 404). 데이터 유출·변조는 없었고 문제는 UI가 **반드시 실패할 버튼**을 노출한 것
+- `PersonaReport`에 `canRegenerate` prop 추가(기본 `true`). false면 두 버튼을 **비활성이 아니라 미렌더** — 남의 리포트를 덮어쓰는 조작이라 "눌러도 안 되는 버튼"으로 남길 이유가 없음. 리포트 본문 열람은 그대로. 기본 true라 `ResultsPage`(본인 세션 결과) 호출부는 무영향
+- `BoardReportPage`의 소유권 판정식은 `BoardDetailPage`와 동일(sessionStorage viewer id vs board owner id)하게 맞춰 두 페이지가 같은 기준을 봄
+- **부수 발견 — 자동 생성도 게이팅**: `shouldAutoGenerate`가 소유권을 보지 않아, 리포트 없는 타인 보드를 **열기만 해도** 그 사람 프로젝트에 `generateReport`가 발사됐음(타인 데이터 쓰기 + Gemini 호출 시도). 서버가 404로 막아 실제 변조는 없었으나 매 진입마다 무의미한 실패 요청 발생. 비소유자는 기존 no-report 상태로 떨어지도록 수정
+- 미검증: 브라우저 실물(타인 보드에서 버튼 미노출·본인 보드에서 정상 노출). PR에 수동 절차 기재
+
+### INFRA-MOCKS-1 — __mocks 픽스처 develop 추적(공개 URL 노출) — RESOLVED 2026-09-06 (`be390c4`, PR 대기)
+- `git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D
+
+### FULL-PRIVACY-1 — 발견 피드 opt-out 부재(진단=영구 노출) — RESOLVED 2026-09-06 (`b227e59`, PR 대기)
+- discovery_opt_in 쓰기 경로 전무(#311 이후 최상위 privacy 갭) — PATCH /personality/me/ 신설: strict boolean 전용 serializer(축/타입 구조적 쓰기 불가), owner 한정 404 미러, 값 변경 시 evict_user_profile_detail(User id 키 정확 사용)
+- 공개 프로필 성향 임베드 게이팅 — non-owner/익명은 opt-out 시 personality=null, owner는 항상 자기 것 열람(뷰어별 캐시 키라 분기 안전). 피드는 기존 필터 그대로 무접촉
+- 설정→계정 "발견 피드 노출" 토글(결정 (a)) — 진단 완료자만 표시, optimistic+실패 revert, DRF field-error 파싱(Opus low 반영), ko/en i18n
+- 테스트 12종(PATCH 왕복/401/400/404/extra-field, evict 범프+no-op 무범프, 임베드 4뷰어, 피드 풀 이탈). prod 배포 전 opt-out 라이브 = DEPLOY-BATCH-2 핵심 목표
+
+### FRONT-VERIFY-1 — PATCH 경로 verify_required 모달 배선 + 로그인 draft 유지 — RESOLVED 2026-09-06 (`872d7fb`, PR 대기)
+- updateProject가 403 verify_required를 미변환(createProject만 처리) → 공용 throwIfVerifyRequired 헬퍼 추출, 양 경로 동일 동작(VerifyRequiredError + archithon:verify-required 이벤트). guest 4번째 보드 저장확정 시 VerifyGateModal 정상 표출
+- SaveBoardModal은 VerifyRequiredError를 무음 처리(시트 유지·재시도 가능, 전역 모달 밑 generic 에러 중복 제거)
+- 로그인 뒤로가기 draft 소실(구 FRONT-UX-7 슬러그, 로그인 건) — CredentialsStep이 부모 confirmed id/password로 local state + check state seed, remount에도 입력 유지. ReturningStep은 부모 lifted state 부재 확인 후 무접촉
+- 리뷰+보안+Opus verify finding 0. DEPLOY-BATCH-2 플랜 PR-B
+
+### BACK-PRIVACY-1 — 비인증 base64 리포트 유출 + 썸네일 캐시 evict 누락 — RESOLVED 2026-09-06 (`9b7c5e8`, PR 대기)
+- AllowAny `/users/<id>/projects/`가 report_image base64(개당 ~200KB, 페이지당 50개)를 익명 호출자에게 그대로 실어줌 — 신규 PublicProjectListSerializer로 해당 엔드포인트만 두 필드 제거(프론트 소비자 0 확인). owner GET /projects/는 불변(App.jsx:929 로그인 동기화 의존). queryset defer도 추가(DB→앱 전송비, Opus 검증 안전)
+- ProjectReportImageView.post가 이미지 생성 후 evict_user_profile_detail 미호출 → 프로필 보드 썸네일 60초 stale(#318 잔여) — evict 1줄 추가, 캐시 short-circuit 경로는 무접촉
+- 테스트 5종: 익명/owner 리스트 유출 부재, owner 자기 리스트 회귀 가드, evict 버전 범프, cached 경로 no-bump. DEPLOY-BATCH-2 플랜 PR-A
+- Deferred: ProjectDetailView(AllowAny)가 public 보드 상세에 report_image base64 여전히 포함 — pre-existing, BoardReportPage 익명 열람이 소비 중이라 단순 제거 불가. pointer 패턴 전환 vs 의도적 공개 정렬 결정 필요.
+
+### FRONT-PEOPLE-CARD-2 — 발견 피드 빈 화면: seed_discovery 커맨드 + 소셜 탭 신설 — RESOLVED 2026-09-06 (`c791c24`, PR 대기)
+- 빈 피드 원인 재실측 — #315 완화 후 게이트는 2중(discovery_opt_in + public report_image 프로젝트)인데 로컬 DB 통과자 0명: report_image 프로젝트 4개 전부 private(#315 이전 SaveBoardModal 기본값), 진단 완료 4명 전부 본인 계정. "테스트 서버 계정"은 prod Neon DB 소속 + prod엔 discovery 미배포라 로컬에서 원천 불가시
+- `manage.py seed_discovery` 신규(백엔드 dev 도구) — 가짜 유저 N명(기본 20): 실 파생 함수 `_compute_type_code` 재사용으로 vector↔type_code 정합 보장, 16타입·거리분산 벡터, 순수 파이썬 PNG(의존성 0) public 보드, `--clean`/`--publish-existing`/`--n 0`, DEBUG=False 실행 거부 가드, get_or_create 멱등. pytest 9케이스 동봉(CI 게이트)
+- 소셜 탭 — TabBar 4탭째(디스커버리·테이스트·소셜·프로필), `/people`+`/assessment` 라우트 귀속, PeopleDiscoveryPage 뒤로가기 버튼 제거(탭 루트 전환), tabbar.social ko/en. people 기능이 디스커버리(건물 스와이프)와 개발 경로 분리됨
+- 로컬 실검증 — 시딩 후 피드 후보 22명, GET /people/ 200·15장, report-image 200 PNG, opposite 필터 정상. 썸네일/flip/이름클릭→프로필은 #314/#318 코드 그대로 (데이터 부재가 유일 병목이었음)
+- Deferred: PeopleDiscoveryPage 페이지 크롬("사람 발견", 필터 칩, 빈상태 문구) 하드코딩 한국어 — i18n 후속.
+
+### FRONT-FUNC-CHECK-1 — 기능 점검 4종: 카드뒷면 i18n·모션·사무소 링크·/office 정리 — RESOLVED 2026-09-06 (`f4cede0`, PR 대기)
+- 카드 뒷면 한영 — 원인은 PersonCard/PentagonChart/SwipeCard/AssessmentCard 4곳이 useTranslation 미구독(정적 텍스트). 전부 배선 + 성향 오각형 축 5종 신규 namespace(personality.*, 취향 축 persona.axis.*와 별개 분류) + 진단 문항 20개 text_en 저작 + assessment 페이지 크롬까지 일괄 i18n (문항 채점은 id 기반이라 번역 무영향)
+- [x] 카드 모션 — yywon PR #312~#319 유실 감사 결과 기능 유실 제로(exit 애니메이션 파일 바이트 동일). "그쪽 컴퓨터와 다름"의 실원인 = 신규 코드의 reduced-motion gate 2곳(AssessmentPage 페이드 대체, PersonCard flip transition:none) — 이 기기(reduced-motion ON)에서만 죽어 보임. 표준 룰(인터랙션 모션은 OS 설정 무시, tinderCard JS 스프링은 원래 면역) 따라 gate 삭제
+- [x] building→사무소 — `/images/batch/`가 architect id를 미반환(표시 문자열만)이 병목. metadata.architect_id(arch_XXXXXX|null) 추가 + BuildingDetailPage 이탤릭 서브라인·Architect 타일 클릭 → /architects/:id (id 없으면 기존 그대로). 리뷰가 캐시 오염 결함 적발(공유 카드 캐시에 컬럼 누락 fetcher가 선기록 → stale None) → engine SELECT 8곳 `_CARD_SELECT_COLS` 공용 상수화 + 캐시 스키마 v2→v3 범프로 구조적 봉인
+- /office front 삭제 — FirmProfilePage + firmProfile/ 5파일 + getOffice 제거(백엔드 Office 서브시스템은 claim substrate로 보존). 부수로 dead 된 Bio/DescriptionAbout 플립카드 4파일도 삭제. tools/design-capture.py 전 세션 누락분 탑승
+- 로그인 키보드는 유저 결정으로 이번 세션 스킵(디자인 선행 필요) → `## Next` FRONT-LOGINKEY-1
+- Deferred: 건물 메타·persona LLM 텍스트는 데이터 자체 단일 언어(FULL-LANGUAGE-1 범위); 배포 시 Redis 카드 캐시 v3 자동 무효화 — 별도 조치 불필요
+
+### FRONT-DESIGN-FT — 디자인 파인튜닝: vision 전수 감사 + 결정 반영 — RESOLVED 2026-09-06 (`046f664`, PR 대기)
+- 21보드 × 2라운드 vision 감사(스크린샷 쌍을 에이전트가 직접 판정 + 회의적 재검증, 48 에이전트) + 속성 diff 교차. 완전 일치 4, 수정 완료 7, 판정불가 4(dev 데이터 필요 — taste-swipe 세션/building/architect/office)
+- 프로필 상단 시안 전환(좌측 원형 4버튼·sticky 바/글로우 제거·ProfileHeader 삭제), assessment 상단 swipe 관용구화(#316 draft-resume 불가침 검증), vision 확정 수정 6건(아바타 onError fallback 버그, llm-search 글로우, appearance 테마카드 한줄 배치·중복 레이블, i18n 28키, select chevron)
+- 결정 8-10: 로그아웃 전 페이지 유지(시안 예외 등록), user-other Liked/Created 공개(백엔드 ?user_id= 읽기 신설, publishable 게이트), upload Built/Unbuilt 토글+선택정보 접이식(Work.built_status 마이그레이션 0004 — 로컬 적용 완료, prod는 배포 시 make migrate-prod)
+- 신규 도구 tools/design-capture.py(시안·앱 스크린샷 쌍 생성, 실ID 동적 해석) — design-diff.py와 함께 검증 하니스 구성
+- 부수: 죽은 LikedOfficesPage import 제거(ARCHITECT-UNIFY-C의 parked FirmProfilePage는 기록대로 유지), 프로필 A→B 이동 시 liked/works 캐시 누수 수정, UploadWorkPage 편집 모달 z-index 위험 해소
+- Deferred: 판정불가 4종 시딩 후 재검; WorkDetailView 공개화(타인 Created 카드 → 상세 진입) 결정; llm-search 채팅 이력이 생성 시점 언어로 고정되는 스냅샷 한계
+
+### FRONT-DESIGN-C — Claude Design canvas 41보드 → 실코드 반영 (B2 종결) — RESOLVED 2026-09-06 (`3f5f5cb`, PR #321)
+- Claude Design "Archibe Front Design" canvas 41보드를 실제 front 코드에 이식 — 공용 컴포넌트 3종 신설(PageTopControls 언어·테마·로그아웃 / PageLogoHeader 로고 / PageBackButton 떠있는 뒤로가기), sticky 헤더 19화면 → 인플로우 제목, 단색 CTA 전환(~40곳, DESIGN.md §8.1 재작성), scrim 토큰 4종×4테마
+- Tailwind 팔레트 잔재 ~40곳 토큰화(pink/red/rose/indigo-500, amber-400), 라이트 테마에서 안 보이던 흰색 워시 20+곳 수정, 취향 축 레이블 i18n(영어 고정이었음), TabBar 활성색 accent-1, 업로드 편집 모달 z-index 100→9999 위험 수정
+- 검증 하니스 신설 `tools/design-diff.py` — 시안·앱을 Playwright 렌더 후 계산 스타일 속성 단위 diff. 컨트롤 누락 70→25, 스타일 델타 62→38(잔여 17은 TabBar 활성 상태 아티팩트). 판독 규칙은 `canvas-design-port.md` §10
+- 브랜치 `feature/claude-design-ALL` 38커밋 squash 대상. sns PR 4건(#316-319)과 병합 충돌 1곳(AssessmentPage import 블록) merge-tree로 사전 계산·해소
+- Deferred: `frontend/public/__mocks/` #319 경유로 develop에 추적됨(테스트 픽스처, git rm --cached 결정 필요); 저장 상태 amber 토큰 부재; 모달 backdrop 0.4 vs 0.65 (DESIGN.md §1.4/§8.10 모순); UserProfile 뒤로가기 목적지; 로그인 첫카드 "10~15장" 카피 삭제 여부
+
+### FRONT-PEOPLE-THUMB-1 — 프로필 보드 썸네일을 페르소나 리포트 이미지로 교체 — RESOLVED 2026-09-05 (`9488979`, PR 리뷰 대기)
+- 요청 전제 정정: "프로필과 People 탭 **양쪽**에서 보드 썸네일 교체"였으나, **People 탭에는 보드 썸네일이 없음**(`PeopleDiscoveryPage`에 board 코드 0줄). `PersonCard`가 이미 `getPersonReportImage()`로 페르소나 이미지를 앞면에 쓰고 있음(#314 머지 완료) → 실제 대상은 프로필 `BoardCard` 한 곳. user 확인 후 범위 확정
+- 데이터 구조가 맞아떨어짐: 보드 = `Project`이고 `report_image`도 `Project`에 있어, 유저당 하나가 아니라 **보드마다 자기 리포트 이미지**를 커버로 쓰게 됨
+- **레이아웃/스타일 무변경**: `<img>` 엘리먼트·인라인 스타일·telemetry 훅·그라디언트 플레이스홀더 전부 그대로. 바뀐 건 `src` 하나
+- 폴백은 기존 체인 유지하며 앞에 한 단계만 추가 — 페르소나 이미지 → 기존 건축물 커버 → 그라디언트 플레이스홀더. `has_report_image`가 없거나 fetch 실패면 자동으로 기존 동작
+- 전달 방식은 **포인터 + lazy fetch**(base64 인라인 아님): `report_image`가 base64 TEXT(~200KB)이고 보드 `page_size`가 최대 50이라 인라인 시 프로필 응답 하나가 MB 단위. `/people` 피드와 같은 분리
+- `GET /projects/<pk>/report-image/` 신규. 가시성은 **보드 목록과 동일 규칙**(소유자는 자기 것, 그 외 public만). private은 존재 여부도 노출하지 않도록 404로 통일
+- 실증(로컬 API): payload 필드 적재 · 포인터 조회 200 · 이미지 없는 보드 404 · **비소유자의 타인 private 보드 404 / public 200** · 미인증 401
+- Deferred: `_build_boards_field`가 full `Project` row를 로드해 직렬화에 쓰지도 않는 `report_image` base64를 매번 DB에서 끌어옴. 기존 이슈이며 `.only()`/`.defer()`로 줄일 수 있으나 이번 범위 밖
+- 미검증: 브라우저 실물 확인 못 함(썸네일 렌더·폴백 외형). PR에 수동 절차 기재
+
+### FRONT-ASSESSMENT-4 — 재진단 진입점(다시 진단받기 버튼) — RESOLVED 2026-09-05 (`62f2b95`, PR 리뷰 대기)
+- 팀 내부 People 탭 데모/테스트를 위해 반복 진단이 필요한데 UI에 진입점이 없었음. `UserProfilePage`가 `personality`가 **없을 때만** `성향 진단 받기` CTA를 띄우고 **있으면** 오각형 차트만 보여줘 다시 들어갈 문이 없었음(`/assessment` URL 직접 입력은 그 전에도 동작)
+- **백엔드 변경 0**: `PersonalityAssessmentView`가 처음부터 upsert — `PersonalityProfile.update_or_create` + `evict_user_profile_detail`, 201(생성)/200(재진단). 이력 테이블이 없어 최신 하나만 유지되며 기존 모델 설계 그대로. 즉 override 요구사항은 이미 충족돼 있었고 **없던 건 진입점뿐**이었음
+- 버튼은 오각형 차트 + `{type_code} 유형` 문구 아래. 바로 위 형제 분기의 CTA와 같은 자리·같은 스타일(`--radius-pill`, `--color-surface`, `13px/600`, `minHeight:36`)이라 두 상태가 대칭. 새 스타일 값 미생성
+- 확인 모달 없음 — 제출 전에는 아무것도 안 바뀌므로(`update_or_create`가 제출 시점에만 실행) 중간 이탈해도 이전 결과가 남아 보호할 대상이 없고, 반복 데모에 마찰만 됨
+- 실증(로컬 API): 같은 유저 2회 제출로 `CLON[1,1,1,1,1]` → `RSDT[-1,-1,-1,-1,-1]` 교체(둘 다 200). `GET /users/1/`도 새 값 반환(캐시 무효화 동작). People 피드는 캐시가 없어 매 요청 DB 직조회 → 즉시 반영
+- 설계는 `docs/plans/2026-08-20-personality-discovery-design.md` §12에 기록(같은 주제 문서에 덧붙임). 이 파일은 그동안 untracked였어 이번에 추적 시작
+- Deferred: PR #316(진단 이어하기) 머지 시 재진단이 중단된 draft를 되살려 "항상 1번부터" 결정과 충돌 → 진입 지점에서 draft 제거 필요
+- 미검증: 브라우저 실물 확인 못 함(버튼 렌더 + 네비게이션). PR에 수동 절차 기재
+
+### FRONT-ASSESSMENT-3 — 진단 중 새로고침/뒤로가기/URL 재진입 시 진행 상태 유실 — RESOLVED 2026-09-05 (`afca933`, PR 리뷰 대기)
+- 배경: People 탭에 페르소나 카드를 채우려면 유저가 진단을 **완주**해야 하는데, 중간 이탈 후 재진입하면 1번 문항으로 리셋돼 완주율을 깎고 있었음
+- 원인: `AssessmentPage`의 `currentQ`/`responses`가 순수 `useState`. 새로고침·브라우저 뒤로가기·URL 직접 입력이 전부 컴포넌트 리마운트라 상태가 초기값으로 돌아감
+- 저장 위치는 **기존 패턴을 따라 판단**: `App.jsx`가 durable 유저별 진행 상태를 `localStorage`의 `archithon_*_${userId}`에 두고(`projects`/`activeId`/`currentCard`), 일회성 덱 상태만 `sessionStorage`에 둠(`discovery_*`). 미완료 진단은 전자 → `archithon_assessment_${userId}`. `sessionStorage`는 새로고침은 버텨도 탭을 닫으면 사라져 완주 목표에 부적합
+- `utils/assessmentDraft.js` 신규 — 저장값을 신뢰하지 않고 검증 실패 시 `null` 반환해 깨끗한 시작으로 폴백. 문항 수가 달라진 draft는 인덱스가 어긋나 폐기. quota/private-mode 예외는 삼켜서 진단 자체를 막지 않음
+- 신규 진단 보장: 제출 **성공 시 draft 제거** → 다음 진입은 1번 문항부터. 답변 0개 + 1번 문항이면 애초에 저장하지 않아 빈 draft가 생기지 않음
+- 이어서 시작한 경우 안내 문구 노출(첫 응답 시 해제) — 왜 1번이 아닌지 사용자가 알 수 있게
+- 테스트 23개 추가(`node --test`, 기존 `loginFlow.test.mjs` 방식): 왕복 복원 · 음수 Likert 값 · 유저별 격리 · 손상 JSON/범위 밖 인덱스/비유한 값 폴백 · storage 예외. `npm test` 등록, 전체 **117/117 통과**
+- 미검증: 브라우저 실물 확인은 못 함(로직은 단위 테스트로 커버). PR에 수동 테스트 절차 기재
+
+### FRONT-PEOPLE-CARD-5 — 카드 뒷면 성향 그래프 축소(여백 확보) — RESOLVED 2026-09-06 (`6b7d5f9`, PR 리뷰 대기, #319 위 스택)
+- 피드백: flip 뒷면 그래프가 카드를 꽉 채워 답답함. 원인은 두 가지가 겹친 것 — `.chartWrap svg`가 `width:100%`라 카드 폭 전체를 쓰고, `.back` 패딩이 `8px 6px`뿐이라 좌우 6px만 남았음
+- `.back` `padding 8px 6px → 14px 12px` · `gap 4px → 8px`, `.chartWrap` `width 100% → 78%` + `max-width 240px`
+- 퍼센트를 쓴 이유: 4/3/2열 브레이크포인트마다 카드 폭이 달라(308/243/179px) 픽셀 고정 시 값을 따로 관리해야 함. `max-width`는 그리드가 더 넓어져도 그래프가 비대해지지 않게 하는 상한
+- 그래프 컴포넌트와 카드 크기/비율(2:3)은 무변경 — 바뀐 건 컨테이너 폭과 패딩뿐
+- 측정: 모바일 167→121px(여백 29px) · 태블릿 231→171px(36px) · 데스크탑 296→222px(43px). 세로 사용률 100%→65~69%로 내려가 이름 행과 균형 확보
+- **전/후 시각 비교를 아티팩트로 발행** — 실제 `PentagonChart`를 esbuild+react-dom/server로 SSR 렌더한 SVG를 실제 카드 CSS·픽셀 크기에 넣어 3개 브레이크포인트 대조. 브라우저 캡처 불가에 대한 대안
+- 스택 구조: #315 → #319 → 이 PR. PR base를 `feature/sns-people-card-self-graph`로 지정해 이번 작업분만 diff에 보이게 함. **#319 머지 후 base를 develop으로 바꾼 뒤 머지해야 함**
+- 미검증: 브라우저 실물(실제 렌더·flip 중 여백 체감)
+
+### FRONT-PEOPLE-CARD-4 — 내 카드는 성향 그래프 단독 표시 — RESOLVED 2026-09-06 (`636bb1d`, PR 리뷰 대기, #315 위 스택)
+- 요청은 "카드 클릭 flip + 오버레이 + 내 카드는 단독 + 이름 클릭 프로필 이동" 4가지였으나, **flip·오버레이·이름 이동 3가지는 `#314`에서 이미 구현돼 있었음**. 실제 미구현은 "내 카드 단독 표시" 하나
+- 그런데 `develop`의 피드는 본인을 제외(`exclude(user=requester_profile)`)해 **"내 카드"가 존재하지 않음** → `is_me`를 도입하는 `#315` 위에 스택해야 구현·검증 가능. user 확인 후 그렇게 진행
+- `is_me`일 때 `theirVector=null` + `legend=false` + `highlightAxis=null`. 같은 사람을 자기 자신과 비교하면 동일 폴리곤 2개가 포개지고 범례가 양쪽 다 '나'가 되며, '가장 닮은 축' 강조도 무의미해짐
+- 이름 옆 `나` 배지 추가 — 없으면 그 카드만 그래프가 하나인 게 버그처럼 읽힘
+- `myVector` 없을 때 `person.vector` 폴백(차트 공백 방지). 구 payload에서 `is_me` 부재 시 falsy → 기존 오버레이 동작 유지
+- 검증: **실제 컴포넌트를 esbuild+react-dom/server로 SSR 렌더**해 대조 — `isMe=false` polygon 5·점선 2·text 7·height 138 / `isMe=true` polygon 4·점선 0·text 5·height 120. 실 API에서도 `dev_test`만 `is_me=true`, 나머지 7명 false 확인
+- 미검증: 브라우저 실물(flip 모션·배지 위치). 컴포넌트 테스트 인프라가 없어(리포지토리에 React 테스트 없음) SSR 렌더로 대체
+
+### FRONT-PEOPLE-FEED-1 — 페르소나 이미지 생성이 발견 피드에 반영되지 않던 문제 — RESOLVED 2026-09-03 (`9f83cbd` + `3abf9d8`, PR 리뷰 대기)
+- 팀장 피드백: 페르소나 리포트에서 이미지를 생성했는데 `/people`에 카드가 안 뜸. 조사 결과 **이미지 경로는 정상**이었고(리포트가 쓰는 `recommendation_project.report_image`를 피드가 그대로 읽음, 피드에 캐시 없음 = 즉시 반영 구조) 나머지 조건들이 막고 있었음
+- 실측 원인 2개: ① 피드가 본인을 제외(`exclude(user=requester_profile)`)해서 **자기 이미지는 자기 피드에 절대 안 뜸** ② 저장 모달 기본값이 `private`이라 이미지를 만들어도 보드가 비공개로 저장되어 `visibility='public'` 조건에서 탈락
+- 백엔드(`9f83cbd`): 본인 제외 · 게스트 제외 · publishable Work 보유 요구 **3개 제거**. 이미지 보유가 사실상 유일한 게이트가 됨. 본인 카드는 자기와의 거리가 0이라 "가장 닮았어요"가 자기 자신에 대해 출력되므로 `is_me` 플래그 + `reason='나의 카드예요'` + `highlight_axis=None`으로 분리
+- **유지한 조건 2개(프라이버시, 의도적)**: `discovery_opt_in`은 유저 본인의 "발견에서 숨기기" 스위치라 완성도 게이트가 아님 / `Project.visibility='public'`은 `report_image`가 비공개 취향 리포트와 같은 행에 있어 풀면 유출. 실측상 둘 다 현재 후보를 0명도 걸러내지 않아 손실 없음
+- 프론트(`3abf9d8`): `SaveBoardModal` 기본값 `private` → `public`. 토글은 그대로라 사용자가 비공개 선택 가능. 프로젝트 **생성** 시점의 private 기본값(App.jsx)은 유지 — 저장 모달에서 확정 전까지는 보수적으로
+- 로컬 실측: 후보 6 → 8명(게스트 1 + 본인 1). 실제 API로 `is_me` 카드까지 확인
+- **중요 한계**: 로컬 `backend/.env`는 프로덕션이 아니라 2026-05-25에 갈라진 Neon 자식 브랜치(`ep-holy-band`)라, 그 이후 프로덕션에서 만들어진 데이터(팀장 계정·이미지)가 존재하지 않음. 팀장 환경 확인은 배포 후에만 가능
+
+### FRONT-PEOPLE-CARD-3 — /people 카드를 report 추천 타일 규격으로 축소 + 스크롤 버그 — RESOLVED 2026-08-29 (`416e891`, PR #314)
+- user 지적: 카드가 너무 커서 한 화면에 몇 장 안 보임 → report 생성 후 추천 그리드와 같은 타일로 통일
+- **재사용 시도의 실제 결과**: `ResultsPage`의 `ResultCard`는 컴포넌트화돼 있지 않음(로컬 함수, export 없음) → import 불가. 측정값을 `photoCardShell.js`로 추출하고 `ResultCard`도 그걸 참조하도록 리팩터링(값 동일, 시각 변화 0). 이제 추천 타일 디자인 변경이 `/people`에 자동 전파
+- 공유 값: `aspect 2/3` · `radius 12` · `--color-border-soft` · `0 18px 42px rgba(0,0,0,.35)` · scrim `to top .94/.52(48%)/.08` · caption `10px/700` + `9px italic`
+- 앞면 배치도 추천 타일 언어로: 타입 칩 = `#rank` 자리(좌상단), 관심 버튼 = 북마크 별 자리(우상단 원형). 뒷면은 그래프+범례+이름만 남기고 추천 이유 제거(타일 폭에서 4~5줄로 감겨 그래프를 밀어냄)
+- 그리드는 **4/3/2 반응형** — `ResultsPage`는 4열 고정이지만 그대로 쓰면 390px에서 타일이 86px이 되어 뒤집힌 차트가 판독 불가
+- **스크롤 버그 수정 (#311부터 존재)**: `.page`가 `min-height`라 flex 컬럼이 내용만큼 늘어나 `.content`의 `overflow-y`가 발동하지 않았고, `body`(`height:100vh;overflow:hidden`)에 잘려 접근 불가였음. `height`로 교체 + `.content min-height:0` + 상단 영역 `flex-shrink:0`. CLAUDE.md 뷰포트 락 규약과 일치. 피드가 비어 있던 동안 드러나지 않다가 시드 유저 투입 후 발견
+- **실데이터 검증 완료**: 로컬 시드 유저 5명(진단+publishable Work+public report_image 충족)으로 피드 조회→카드 렌더→flip→오버레이 그래프→프로필 이동까지 브라우저 확인. `GET /people/<id>/report-image/`도 200/404 동작 확인
+- Deferred: `AssessmentPage`에 동일한 `min-height` 스크롤 버그 존재 — PR #313 소관이라 미수정
+
+### FRONT-PEOPLE-CARD-1 — /people 발견 카드 이미지 앞면 + flip 상세 — RESOLVED 2026-08-26 (`c58504e`, PR 리뷰 대기)
+- 카드 구조 교체: 앞면 = 취향분석 리포트 건축 이미지 전면(그래프/이름/아바타 제거), 탭 시 flip → 뒷면에 성향 그래프 + 내 벡터 오버레이 + 범례 + 이름(클릭 시 프로필 이동)
+- **재사용 우선 원칙 적용**: flip은 `BioPersonaFlipCard`/`SwipeCard` 갤러리 면과 동일 기법 — 세 곳이 리터럴로 갖고 있던 `0.5s cubic-bezier(0.4,0,0.2,1)`이 `--motion-flip`/`--motion-ease` 토큰과 일치해 토큰 참조로 전환. 그래프 오버레이는 `PentagonChart`에 **이미 구현돼 있어** 신규 작업 불필요(myVector 실선 accent-1 + theirVector 점선 accent-2). 프로필 이동은 기존 `navigate('/user/<id>')` 유지
+- 신규 ①: `PentagonChart` `legend` prop — 범례만 없었음. 별도 컴포넌트 대신 기존 컴포넌트 확장, 범례 선 스타일은 polygon stroke 미러링(색 드리프트 차단). 루트를 `<svg>`로 유지해 기존 호출부 3곳 무영향
+- 신규 ②: `GET /people/<user_id>/report-image/` — `Project.report_image`는 base64 TEXT라 피드에 15개 인라인하면 응답이 MB 단위. 피드는 `report_image_url` 포인터만 주고 카드가 lazy 로드. `visibility='public'` 프로젝트만 대상(비공개 리포트 미노출)
+- 함정: URL/피드의 `user_id`는 auth User id, `Project.user_id`는 UserProfile.id — 엔드포인트는 `user__user_id` 순회 필수. 직접 비교하면 **다른 사람 이미지가 매칭됨**
+- 요구사항 "진단 안 한 유저 제외"는 기존 쿼리셋(`PersonalityProfile` 기반)이 이미 충족 — 추가 작업 없었음
+- 미검증(중요): 로컬 DB에 표시 가능한 데이터가 0건이라 **브라우저 실물 확인 불가**. 진단 완료 2명이 전부 게스트라 `exclude(is_guest=True)`에서 탈락(이번 변경 이전부터 그러함), `report_image` 보유 프로젝트는 공개 여부 무관 0건. 로컬 전용 목 모드로만 렌더 확인
+- Deferred: `report_image` 보유 유저가 없으면 배포 후에도 피드가 빈 화면 — Step 2b 필터 유지 여부 결정 필요
+
+### FRONT-ASSESSMENT-1 — 성향 진단 진입 버그 + 문항 스와이프 카드화 — RESOLVED 2026-08-25 (`968194f` + `51936b8`, PR #312/#313 리뷰 대기)
+- 진단 문항을 **질문 1개 = 카드 1장** 스와이프 카드로 전환. 답변 방식(5점 Likert 버튼)은 유지하고 카드 디자인·전환 애니메이션만 Discovery/Taste 덱과 동일 시스템으로 통일
+- ① 진입 버그(PR #312, `968194f`): `assessment`/`people` 두 라우트만 `ProtectedRoute` **중복 래핑 + 안쪽에 `userId` 미전달** → `!userId` 항상 참 → `/login` → 로그인 상태라 `/` → index → `/discovery`. **로그인했기 때문에 오히려 튕기는** 구조. 바깥 레이아웃 라우트가 이미 가드하므로 안쪽 래퍼 제거(보호 유지, 형제 라우트와 일관)
+- ② 카드 표면(PR #313): `cardShell.js` 신설 — 기존 `QuestionCard.jsx`(취향 보정 질문 카드)가 쓰던 값을 추출한 단일 출처. `QuestionCard`도 이걸 참조하도록 리팩터링(값 동일, 시각 변화 0). footprint는 `SwipeCard`의 `CARD_WIDTH/HEIGHT`, 모서리는 `--radius-lg`(SwipeCard/SwipeDeck이 하드코딩하던 20px)
+- ③ 애니메이션 = 값 복제가 아니라 **코드 재사용**: 퇴장은 `SwipeDeck`+`SwipeGestureFrame`+`cardRef.swipe('left')`로 `tinderCard.animateOut()` 원본 실행(easeInOutCubic, [480,680]ms, 대각선 거리, 회전 x*45). 이전 문항 복귀는 `physics.animateBack` export 후 재사용(드래그 snap-back과 동일 스프링) → FRONT-UX-14 튜닝값이 자동 승계
+- ④ 상호작용: 드래그 응답은 `SWIPE_PREVENT_ALL`로 차단(탭 전용, 명령형 swipe는 우회). 중복 응답 차단 `busyRef`+`pointerEvents`+`disabled` 3중 양방향. 진행률을 응답 개수 기준으로 변경 → 탭 즉시 갱신되어 카드 비행과 이어짐. 마지막 문항은 완료 버튼 없이 즉시 제출, 실패 시 `retryKey`로 카드 복귀
+- ⑤ 이전 문항 복귀 신설(기존 없던 기능, user 요청). 이전 답변은 선택 상태로 보존 — 지우지 않고 수정 가능
+- 함정 2건: `busy`/`exiting`/`entering` 상태 분리 필수(한 플래그면 reduced-motion에서 **복귀 카드가 opacity 0으로 소멸**). 카드 내부 요소에 `pressable` 클래스 필수(`tinderCard`가 `touchstart`에서 `preventDefault`로 탭·스크롤을 삼킴)
+- Deferred: reduced-motion 페이드가 FRONT-UX-14-R7의 "인터랙션 모션은 reduced-motion 무시" 제품 결정과 충돌 — PR #313에 검토 요청으로 명시, 팀장 판단 대기
+- 미검증: `/people` 진입은 라우트 수정만 확인(피드 자체는 진단 완료 계정 필요)
+
+### FULL-PERSONALITY-1 — 성향 기반 유저 발견 (4+1축 진단·발견 피드·5각형 차트) — RESOLVED 2026-08-24 (`bc40fbf`, PR #311)
+- P2 협업/팀빌딩 발견 기능(연애 매칭 아님 — Product Constitution 범위 확인). 23파일 +2223줄
+- 백엔드: `PersonalityProfile` 모델(5축 + `type_code`) + `accounts/0012` 마이그레이션, 진단 API(`POST /personality/assessment/`, `GET /personality/me/`), 발견 피드 API(`GET /people/`), `/users/:id/`에 personality 필드 추가
+- 프론트: `PentagonChart`(5각형 레이더), `AssessmentPage` + 20문항 뱅크, `PeopleDiscoveryPage` + `PersonCard`, `UserProfilePage` 통합, `api/personality.js` · `api/people.js`
+- **감사 누락분 소급 기록**: 머지(2026-08-24) 시점에 reporter-inline이 돌지 않아 `## Now`에 미완료 체크박스로 남아 있던 것을 정리. ID도 `FULL-DISCOVERY-1`로 잘못 적혀 있었음 — 그 ID는 2026-06-04 Discovery v3.1/v3.2 재설계가 이미 점유 → `FULL-PERSONALITY-1`로 신규 부여
+- Deferred: 진단 UI가 일반 폼이라 앱의 스와이프 카드 언어와 이질적 (→ FRONT-ASSESSMENT-1에서 해소)
+
+### FRONT-UX-14 — 스와이프 모션 + 갤러리 UX (7 라운드 feel-iteration) — RESOLVED 2026-08-15 (`94391bf`…`9c09a8c`)
+- ① 퇴장: vendored `lib/tinderCard.js` — linear 3-대각선 총알 → **easeInOutCubic + power 1.0 + [480,680]ms** (가시 구간 56ms→~250ms, 카드가 가속하며 떠나는 게 보임. r2 easeOut 시도는 가시 구간이 더 짧아져 실패 — 교훈: 이동거리 대부분이 화면 밖이면 ease-out은 역효과)
+- ② 스택: 승격 애니메이션 접근 3회 실패 후 **모델 교체(user 통찰)** — 뒤 카드를 처음부터 풀사이즈로 밑에 렌더(Tinder 표준), key=카드id 동일 래퍼 리스트라 승격=key 이동(리마운트 0=깜빡임 원천 제거, 숨어서 로딩 완료), 깊이 사다리+그림자 홀더는 영구 정적 장식. Discovery 자체 스택(index-키 깜빡임 원인) SwipeDeck 통일. net −212줄
+- ③ 갤러리 키보드: ArrowUp/Down rAF easeInOutCubic 450ms 글라이드 + Escape(신규) + 연타 누적(대기 목적지 기준). **reduced-motion 가드 의도적 제거(user 결정 r7)** — 카드 exit spring과 동일 철학, 인터랙션 피드백 모션은 제품 핵심(장식성 CSS 모션은 계속 존중). 갤러리 열림 중 덱 ←→ 허용(user 결정)
+- ④ 휠/터치: 네이티브 1:1 스크롤 + CSS mandatory 스냅 (원 stutter 진범 = `scrollSnapStop:'always'` 제거; 인터셉트/커스텀 애니메이터 전부 삭제). 스냅 소유권 imperative-only
+- ⑤ 갤러리 이미지 = 앞면 동일 처리: 840px 리사이즈 + per-image computeFit 적응형 cover/contain + DPR `gallery_srcset`(raw 기반) + 인접 프리로드, `DECK_CACHE_KEY` v2→v4
+- **온디바이스 검증**: user 기기가 `prefers-reduced-motion: reduce` ON(Windows 애니메이션 효과 OFF)이라 r5/r6 글라이드가 전부 즉시 점프였음을 Chrome trace로 확정(Chromium은 네이티브 smooth 전체 강등) — r7 rAF 무가드 후 trace 곡선 0→4→46→177→424→584→651/470ms 연속 25프레임 확인. 교훈: **feel 버그는 기기 설정부터 측정** (이징 3회 교체가 무의미했던 이유)
+- 부수: `core.js` `import.meta.env` optional chain — CI 조용히 skip되던 테스트 13개 부활(Opus MEDIUM). npm test 94/94·skip 0. Workflow ×7 전부 review+security PASS
+- Deferred: TabBar 디스커버리 아이콘 핑크 잔존 1건(A1 잔여), dead velocity-branch 정리(tinderCard.js)
+
+### FRONT-DESIGN-A1 — 디자인 정합성 기계적 스윕 (2 PR) — RESOLVED 2026-08-15 (`fc72775` + `7e192d2`)
+- 디자인 이니셔티브(B1→A1→B2→A2) A1, 유형별 PR 분리(user 결정): PR-1 hex→토큰, PR-2 hover 핵 제거 (stacked 브랜치)
+- PR-1 (`fc72775`): 2-라운드 스윕 — R1 exact-map(정확 일치 hex는 대부분 기토큰화 확인) + UserProfilePage:641 dark-glass 라이트테마 invisible 버그 수정(rgba(15,15,15,.80)→color-mix --color-bg 80%); R2 확정 매핑 7파일 59치환 1:1 — #ec4899→accent-1, 핑크 그라디언트→accent-1/2(§8.1), rgba 핑크→color-mix, #fbbf24→accent-3, #f9a8d4→accent-1 tint, Tailwind 그레이→text-dim/muted
+- 의도적 유지 확정: #34d399 success green(토큰 부재 — INFRA-TOKEN-1 신설), Toggle 흰 knob, 도면 letterbox 흰 배경, 라이트박스 검정, photo-overlay 흰색, 브랜드/프리뷰/인쇄물/디버그 제외 파일
+- PR-2 (`7e192d2`): onMouseEnter 스타일 핵 13파일 전환 — 값 동일 이전, 모듈 12개 신설, reduced-motion 블록, hover 전용 state 5개 삭제(BoardDetailPage). 로직 예외 1건 유지(BoardCard isHovered 조건부 마운트). MainLayout logout hover #f87171→destructive 토큰(B1 선례)
+- Workflow ×3(hex R1/R2 + hover): 전부 review PASS + security PASS, confirmed findings 0. eslint 0 + build green
+- 잔여 hex는 전부 문서화된 예외 — 코드베이스 hover 핵 0 (BoardCard 로직 1건 제외)
+
+### FRONT-FLOW-2 — 팝업/인터스티셜 de-drift 스윕 — RESOLVED 2026-08-15 (`fbc06ee`)
+- user 스크린샷 지적(ActionCard 구 디자인 잔존)發 전체 팝업 12종 감사: 위반 5곳 수정, 7곳 정상 확인(SaveBoardModal/VerifyGateModal/WorkDetailModal/QuestionCard/ExitConfirm/DismissConfirm 토큰 기반, ShareCardModal 의도적 인쇄물 예외)
+- SwipePage ActionCard(Taste 수렴 카드): 인디고 그라디언트+이모지 → paper 명함 언어(TriggerCard 미러, 'TASTE FOUND' mono 스탬프 — i18n `swipe.actionCard.stamp` ko/en)
+- SwipePage 핑크 전멸: ConfidenceBar fill/Finish 버튼×2/ExitConfirm primary/배지 → §8.1 accent 토큰·그라디언트 + color-mix 섀도
+- SurpriseBoardModal·SaveToBoardModal: 핑크 그라디언트 → accent, `#fca5a5` → destructive, ✨ 제거
+- PersonaReport: 차트 핑크 4곳 → accent-1 (SVG 속성 → style 이동, var() 지원)
+- Workflow: review PASS + security PASS, Opus verify LOW 1건(스탬프 i18n) 동일 커밋 수정. eslint 0 + build green
+
+### FRONT-FLOW-1 — 스와이프 온보딩 3연타 인터럽트 정리 — RESOLVED 2026-08-15 (`ddfa655`)
+- B1 검토 중 user 발견/결정 3건 이행: 신규 유저 Discovery→Taste 시퀀스의 연속 인터럽트(TriggerCard→TutorialPopup→DismissConfirm) 정리
+- DiscoveryTriggerCard: 파랑-보라 그라디언트/이모지/glass → paper 명함 언어(cardLanguage.js, ARCHIBE 워드마크 + '10 LIKES' mono 스탬프, 테마 적응). 주입 로직/props 불변
+- TutorialPopup: SwipePage 최초 진입 → **신규 가입 계정의 Discovery 최초 진입** (register 성공 시에만 `archithon_show_tutorial` 플래그, 기존 계정 로그인/google/dev 미노출). 카피 Discovery 의미론(← pass 중립 muted · → like accent-1) + 전체 i18n ko/en(기존 영어 하드코딩), hex 3종 제거. SwipePage에서 완전 제거
+- DismissConfirmPopup: 로직/카피 불변(Taste 전용 dislike 영구 경고 — Discovery는 pass라 미해당, 코드 검증), backdrop rgba(0,0,0,0.4) + radius 토큰 §8.10 정합
+- Workflow: review PASS + security PASS, Opus verify confirmed LOW 1건(dead `archithon_tutorial_dismissed` write-only key) — 동일 커밋에서 제거. eslint 0 errors + build green
+- Deferred: web-testing/runner/runner.py:77의 dismissed-key 세팅 이제 무의미(inert, 테스트 영향 없음 — dev-login은 플래그 미설정) — 차기 web-testing 정리 때 제거
+
+### FRONT-DESIGN-B1 — 로그인+프로필 비주얼 튜닝 — RESOLVED 2026-08-15 (`051254e`)
+- 디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 B1: 시스템 내 리파인, 컨셉 교체 없음
+- 로그인: `lp-*` 전역 규칙 index.css → LoginPage.module.css 단일화(camelCase 모듈 클래스), input focus 3-state 신설(기존 outline:none 접근성 공백), error slot 고정 높이(레이아웃 시프트 제거), reduced-motion 블록. _(drafting-grid 배경 시그니처는 넣었다가 사용자 결정으로 제거 `1b4de9c` — 스와이프 페이지 플레인 톤 유지)_
+- 프로필: 핑크 하드코드 전멸(#ec4899 halo/hover → var(--accent-1/2), #ef4444 logout → var(--color-destructive)), 라이트테마 invisible avatar placeholder 수정(rgba(255,255,255,.4) → var(--color-text-dim)), onMouseEnter 핵 전부 → 모듈 :hover(iconBtn/linkPill/statBtn/tab 클래스), 링크필 3중복 → 단일 map, 탭바 ink underline 유지+hover/focus-visible
+- Workflow(feature.js): review PASS + security PASS + Opus verify 0 findings(리뷰 오탐 3건 기각); eslint 0 errors + build green; net −207 lines(11 files +608/−419)
+- feature.js sonnet 워커 4곳 `effort: 'high'` 핀(xhigh 세션 상속 400 가드 — Explore 3연사 사고 재발 방지)
+- Deferred: UserProfilePage.jsx:641 dark-glass 배경 라이트테마 invisible(기존 이슈, Opus verify 지적) — A1 스윕에서 처리
+
 ### UPLOAD-NAV-1 — 업로드 성공 모달 + Created 탭 이동 — RESOLVED 2026-08-14 (PR #300 `56bae0d`)
 _(yywon1 ad-hoc PR — Task ID 없이 들어와 사후 부여. 업로드 완료 인라인 메시지 → 확인 모달 + `/user/me?tab=created` 이동.)_
 - UploadWorkPage: processingMsg 인라인 → 성공 모달(제목/본문/확인), uploadWork.success.confirm i18n KO+EN

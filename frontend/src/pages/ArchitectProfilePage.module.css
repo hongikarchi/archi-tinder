@@ -1,73 +1,91 @@
-.backBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border-soft);
-  font-size: 14px;
-  font-weight: 500;
-  font-family: inherit;
+/*
+ * ArchitectProfilePage.module.css
+ * UI-CONSISTENCY-B3b-2: hero action buttons (Follow / Website / Contact) +
+ * stat button, rebuilt onto DESIGN.md §8.1/§8.2 primary/secondary button
+ * specs + ProfileHero's `.statBtn`/`.statLabel` pattern. Interactive
+ * (:hover/:focus) -> co-located CSS Module per DESIGN.md §4/§10.4.
+ */
+
+/* ---- Hero action buttons ---- */
+
+.actionBtn {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
   cursor: pointer;
-  transition: color var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease);
-}
-
-.backBtn:hover {
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-
-.iconBtn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border-soft);
-  cursor: pointer;
+  gap: 5px;
   font-family: inherit;
-  transition: color var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease);
+  border: none;
+  transition: transform var(--motion-normal) var(--motion-ease),
+              background var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease),
+              box-shadow var(--motion-slow) var(--motion-ease-out);
 }
 
-.iconBtn:hover {
+.actionBtn:active {
+  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
+}
+
+/* Primary — Follow (not-yet-following state). DESIGN.md §8.1: flat accent-1. */
+.primaryBtn {
+  background: var(--accent-1);
+  color: #fff;
+}
+
+.primaryBtn:active {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+}
+
+/* Secondary — Following state + Website + Contact. DESIGN.md §8.2. */
+.secondaryBtn {
+  background: var(--color-surface);
   color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.secondaryBtn:hover {
+  background: var(--color-surface-2);
   border-color: var(--color-border);
 }
 
-/* Enabled action buttons (Website / Contact) */
-.actionBtn {
-  transition: background var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease);
+/* ---- Stats row (Buildings / Followers) — matches ProfileHero .statBtn ---- */
+
+.statBtn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  padding: 6px 14px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: inherit;
+  color: inherit;
+  border-radius: var(--radius-sm);
 }
 
-.actionBtn:hover {
-  background: var(--color-surface-2) !important;
-  border-color: var(--color-border) !important;
+.statLabel {
+  color: var(--color-text-dim);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
 }
 
-.buildingCard {
-  aspect-ratio: 3 / 4;
-  border-radius: 12px;
-  overflow: hidden;
-  position: relative;
-  cursor: pointer;
-  background: var(--color-surface-2);
-  transition: transform var(--motion-normal) var(--motion-ease);
+/* ---- Save-to-board floating button, saved state tint ---- */
+
+.saveBtnActive {
+  background: color-mix(in srgb, var(--accent-1) 45%, transparent) !important;
+  color: var(--accent-1) !important;
 }
 
-.buildingCard:hover {
-  transform: translateY(-3px);
-}
-
-.skeletonCard {
-  aspect-ratio: 3 / 4;
-  border-radius: 12px;
-  background: var(--color-surface-2);
+@media (prefers-reduced-motion: reduce) {
+  .actionBtn {
+    transition: none;
+  }
 }

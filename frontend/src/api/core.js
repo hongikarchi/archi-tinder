@@ -4,7 +4,10 @@
  * All other api/* modules import callApi + token helpers from here.
  */
 
-export const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
+// Optional chain: import.meta.env is always defined under Vite (identical
+// behavior), but undefined under plain Node ESM (node --test) — lets test
+// files import this module instead of skip-guarding (FRONT-UX-14-FIX).
+export const BASE = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
 
 const FETCH_TIMEOUT_MS = 15000          // 15-second default timeout (per-call override available via callApi 5th param)
 const MAX_NETWORK_RETRIES = 2           // retry count for network failures

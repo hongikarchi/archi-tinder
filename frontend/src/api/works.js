@@ -58,7 +58,7 @@ export function uploadToR2(presignResult, blob, contentType, onProgress) {
 
 /**
  * Finalize a work upload after all R2 uploads complete.
- * @param {{title: string, program: string, location_city?: string, location_country?: string, project_year?: number, r2_keys: string[], is_copyright_confirmed: boolean}} payload
+ * @param {{title: string, program: string, built_status?: 'built'|'unbuilt', location_city?: string, location_country?: string, project_year?: number, r2_keys: string[], is_copyright_confirmed: boolean}} payload
  * @returns {Promise<{upload_id: string, status: string}>}
  */
 export async function finalizeWork(payload) {
@@ -67,11 +67,23 @@ export async function finalizeWork(payload) {
 }
 
 /**
- * Fetch the current user's uploaded works.
- * @returns {Promise<{works: Array<{upload_id: string, title: string, program: string, cover_url: string|null, is_publishable: boolean, gate_reason: string|null, created_at: string}>, total: number}>}
+ * Fetch the current user's uploaded works (all, regardless of publishable state).
+ * @returns {Promise<{works: Array<{upload_id: string, title: string, program: string, built_status: string, cover_url: string|null, is_publishable: boolean, gate_reason: string|null, created_at: string}>, total: number}>}
  */
 export async function getMyWorks() {
   const res = await callApi('GET', '/works/')
+  return res
+}
+
+/**
+ * Fetch another user's PUBLISHABLE-ONLY works (design-parity public-profile
+ * Created tab). Any authenticated caller may view another user's published
+ * works — taste-sharing is the product concept, still requires auth.
+ * @param {number|string} userId
+ * @returns {Promise<{works: Array<{upload_id: string, title: string, program: string, built_status: string, cover_url: string|null, is_publishable: boolean, gate_reason: string|null, created_at: string}>, total: number}>}
+ */
+export async function getUserWorks(userId) {
+  const res = await callApi('GET', `/works/?user_id=${encodeURIComponent(userId)}`)
   return res
 }
 

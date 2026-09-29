@@ -1,115 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { generateReport, generateReportImage } from '../api/projects.js'
-import styles from '../pages/BoardReportPage.module.css'
+import TasteSpectrum from './TasteSpectrum.jsx'
 import { useTranslation } from '../i18n/index.js'
-
-/* ── RadarChart ─────────────────────────────────────────────────────────── */
-function RadarChart({ scores }) {
-  const cx = 100, cy = 100, R = 80
-  const axes = [
-    { key: 'form', label: 'Form' },
-    { key: 'materiality', label: 'Materiality' },
-    { key: 'scale', label: 'Scale' },
-    { key: 'energy', label: 'Energy' },
-    { key: 'tradition', label: 'Tradition' },
-  ]
-  const N = axes.length
-  const angle = (i) => (Math.PI * 2 * i) / N - Math.PI / 2
-
-  const toXY = (i, r) => ({
-    x: cx + r * Math.cos(angle(i)),
-    y: cy + r * Math.sin(angle(i)),
-  })
-
-  const gridLevels = [0.25, 0.5, 0.75, 1.0]
-
-  const gridPoints = (level) =>
-    axes.map((_, i) => toXY(i, R * level))
-      .map(p => `${p.x},${p.y}`)
-      .join(' ')
-
-  // score -1.0~1.0 → r 0~R
-  const valuePoints = axes
-    .map((ax, i) => {
-      const s = scores[ax.key] ?? 0
-      const r = R * (s + 1.0) / 2.0
-      return toXY(i, r)
-    })
-    .map(p => `${p.x},${p.y}`)
-    .join(' ')
-
-  return (
-    <svg viewBox="0 0 200 200" width="200" height="200">
-      {/* 그리드 */}
-      {gridLevels.map(level => (
-        <polygon
-          key={level}
-          points={gridPoints(level)}
-          fill="none"
-          stroke="var(--color-border-soft)"
-          strokeWidth="0.8"
-        />
-      ))}
-      {/* 축선 */}
-      {axes.map((_, i) => {
-        const outer = toXY(i, R)
-        return (
-          <line
-            key={i}
-            x1={cx} y1={cy}
-            x2={outer.x} y2={outer.y}
-            stroke="var(--color-border-soft)"
-            strokeWidth="0.8"
-          />
-        )
-      })}
-      {/* 값 폴리곤 */}
-      <polygon
-        points={valuePoints}
-        fill="rgba(236,72,153,0.2)"
-        stroke="#ec4899"
-        strokeWidth="1.5"
-      />
-      {/* 레이블 */}
-      {axes.map((ax, i) => {
-        const labelR = R + 16
-        const pos = toXY(i, labelR)
-        return (
-          <text
-            key={ax.key}
-            x={pos.x}
-            y={pos.y}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize="9"
-            fill="var(--color-text-muted)"
-            fontWeight="600"
-          >
-            {ax.label}
-          </text>
-        )
-      })}
-    </svg>
-  )
-}
+import { localizeReport } from '../utils/reportText.js'
+import { isLegacyAxisScores } from '../utils/axisScores.js'
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
-const DEFAULT_AXES = { form: 0, materiality: 0, scale: 0, energy: 0, tradition: 0 }
-
-const SPECTRUM_AXES = [
-  { key: 'form',        leftKey: 'persona.spectrum.form.left',        rightKey: 'persona.spectrum.form.right' },
-  { key: 'materiality', leftKey: 'persona.spectrum.materiality.left', rightKey: 'persona.spectrum.materiality.right' },
-  { key: 'scale',       leftKey: 'persona.spectrum.scale.left',       rightKey: 'persona.spectrum.scale.right' },
-  { key: 'energy',      leftKey: 'persona.spectrum.energy.left',      rightKey: 'persona.spectrum.energy.right' },
-  { key: 'tradition',   leftKey: 'persona.spectrum.tradition.left',   rightKey: 'persona.spectrum.tradition.right' },
-]
+// Form is intentionally excluded — see TasteSpectrum.jsx.
+const DEFAULT_AXES = { materiality: 0, scale: 0, energy: 0, tradition: 0 }
 
 /* ── PersonaReport ──────────────────────────────────────────────────────── */
 /**
  * Props:
  *   boardId         string  - API 호출에 사용 (null이면 재생성 버튼 비활성화)
- *   finalReport     object  - { persona_type, one_liner, description, dominant_programs, dominant_styles, dominant_materials }
- *   axisScores      object  - { form, materiality, scale, energy, tradition } (null이면 DEFAULT_AXES 사용)
+ *   canRegenerate   bool    - 뷰어가 이 보드의 소유자인가. false면 이미지/리포트
+ *                             재생성 버튼을 아예 렌더하지 않는다 — 남의 리포트를
+ *                             덮어쓰는 조작이므로 비활성 표시가 아니라 제거.
+ *                             기본 true: 소유자 화면(ResultsPage 등) 호출부 무영향.
+ *   finalReport     object  - { persona_type, one_liner, description, pattern_paragraph, dominant_programs, dominant_styles, dominant_materials }
+ *   axisScores      object  - { materiality, scale, energy, tradition }; each value is
+ *                             null | number (legacy) | { score, dots, n, iqr, confidence }
+ *                             (null이면 DEFAULT_AXES 사용). form은 표시하지 않음 — TasteSpectrum.jsx 참조.
  *   reportImage     string  - base64 이미지 데이터 (null 가능)
  *   reportImageMime string  - 예: 'image/png'
  *   onReportUpdate  func    - optional. (data: { final_report, axis_scores }) => void
@@ -118,8 +29,9 @@ const SPECTRUM_AXES = [
  *                             its own project state — otherwise a remount/navigate
  *                             back re-renders the stale pre-regenerate report.
  */
-export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime, onReportUpdate }) {
-  const { t } = useTranslation()
+export default function PersonaReport({ boardId, finalReport, axisScores, reportImage, reportImageMime,
+  onReportUpdate, canRegenerate = true }) {
+  const { t, language } = useTranslation()
   const [localImage, setLocalImage] = useState(reportImage || null)
   const [localMime, setLocalMime] = useState(reportImageMime || null)
   const [localAxisScores, setLocalAxisScores] = useState(axisScores || DEFAULT_AXES)
@@ -134,7 +46,10 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
   useEffect(() => { if (reportImage) setLocalImage(reportImage) }, [reportImage])
   useEffect(() => { if (reportImageMime) setLocalMime(reportImageMime) }, [reportImageMime])
 
-  const report = localReport || finalReport || {}
+  // localizeReport swaps persona_type/one_liner/pattern_paragraph/description
+  // to the current UI language from report.i18n when present — instant, no
+  // API call. Old single-language reports (no i18n block) pass through as-is.
+  const report = localizeReport(localReport || finalReport || {}, language)
   const scores = localAxisScores
 
   async function handleGenerateImage() {
@@ -181,20 +96,22 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* PERSONA REPORT 레이블 */}
       <p style={{
         color: 'var(--color-text-muted)',
-        fontSize: 11,
-        fontWeight: 700,
+        fontSize: 'var(--fs-caption)',
+        fontWeight: 'var(--fw-bold)',
         letterSpacing: '0.1em',
         textTransform: 'uppercase',
         margin: '0 0 8px',
       }}>
-        Persona Report
+        {t('detailB3.personaReportEyebrow')}
       </p>
 
-      {/* 페르소나 이름 */}
+      {/* 페르소나 이름 — hero clamp() folded to the fixed --fs-title (24) per
+          the UI-CONSISTENCY-B type-scale decision (display clamp() titles on
+          BuildingDetail/PersonaReport fold to 24 unless separately approved). */}
       <h1 style={{
         color: 'var(--color-text)',
-        fontSize: 'clamp(24px, 5vw, 32px)',
-        fontWeight: 700,
+        fontSize: 'var(--fs-title)',
+        fontWeight: 'var(--fw-bold)',
         margin: '0 0 8px',
         lineHeight: 1.15,
       }}>
@@ -203,20 +120,33 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
 
       {/* 한 줄 설명 */}
       <p style={{
-        color: '#ec4899',
-        fontSize: 15,
-        fontWeight: 600,
+        color: 'var(--accent-1)',
+        fontSize: 'var(--fs-body)',
+        fontWeight: 'var(--fw-semibold)',
         margin: '0 0 12px',
         lineHeight: 1.5,
       }}>
         {report.one_liner}
       </p>
 
+      {/* 패턴 문단 — 스와이프 패턴에 대한 사실적 설명. description 위에 표시.
+          구버전 리포트(pattern_paragraph 없음)는 그대로 description만 렌더. */}
+      {report.pattern_paragraph && (
+        <p style={{
+          color: 'var(--color-text-dim)',
+          fontSize: 14,
+          lineHeight: 1.65,
+          margin: '0 0 12px',
+        }}>
+          {report.pattern_paragraph}
+        </p>
+      )}
+
       {/* 상세 description */}
       {report.description && (
         <p style={{
           color: 'var(--color-text-dim)',
-          fontSize: 14,
+          fontSize: 'var(--fs-body)',
           lineHeight: 1.65,
           margin: '0 0 16px',
         }}>
@@ -229,12 +159,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {(report.dominant_programs || []).map(tag => (
           <span key={tag} style={{
             padding: '4px 10px',
-            borderRadius: 999,
-            background: 'rgba(236,72,153,0.1)',
-            border: '1px solid rgba(236,72,153,0.22)',
-            color: '#ec4899',
-            fontSize: 11,
-            fontWeight: 700,
+            borderRadius: 'var(--radius-pill)',
+            background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-1) 22%, transparent)',
+            color: 'var(--accent-1)',
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
           }}>
             {tag}
           </span>
@@ -242,12 +172,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {(report.dominant_styles || []).map(tag => (
           <span key={tag} style={{
             padding: '4px 10px',
-            borderRadius: 999,
-            background: 'rgba(99,102,241,0.1)',
-            border: '1px solid rgba(99,102,241,0.22)',
-            color: 'var(--color-text-dim)',
-            fontSize: 11,
-            fontWeight: 700,
+            borderRadius: 'var(--radius-pill)',
+            background: 'color-mix(in srgb, var(--accent-2) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-2) 22%, transparent)',
+            color: 'var(--accent-2)',
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
           }}>
             {tag}
           </span>
@@ -255,12 +185,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {(report.dominant_materials || []).map(tag => (
           <span key={tag} style={{
             padding: '4px 10px',
-            borderRadius: 999,
-            background: 'rgba(255,255,255,0.06)',
-            border: '1px solid var(--color-border-soft)',
-            color: 'var(--color-text-dim)',
-            fontSize: 11,
-            fontWeight: 700,
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--color-tag-bg)',
+            border: '1px solid var(--color-tag-border)',
+            color: 'var(--color-tag-label)',
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
           }}>
             {tag}
           </span>
@@ -273,52 +203,46 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* 취향 분석 섹션 */}
       <h2 style={{
         color: 'var(--color-text)',
-        fontSize: 16,
-        fontWeight: 700,
+        fontSize: 'var(--fs-emphasis)',
+        fontWeight: 'var(--fw-bold)',
         margin: '0 0 20px',
         letterSpacing: '-0.01em',
       }}>
         {t('persona.tasteSection')}
       </h2>
 
-      {/* 레이더 차트 */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-        <RadarChart scores={scores} />
-      </div>
+      {/* 취향 스펙트럼 범례 */}
+      <p style={{
+        color: 'var(--color-text-muted)',
+        fontSize: 12,
+        lineHeight: 1.6,
+        margin: '0 0 16px',
+      }}>
+        {t('persona.spectrumLegend').split('\n').map((line, i, arr) => (
+          <Fragment key={i}>
+            {line}
+            {i < arr.length - 1 && <br />}
+          </Fragment>
+        ))}
+      </p>
 
-      {/* 양극 스펙트럼 바 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
-        {SPECTRUM_AXES.map(ax => {
-          const score = scores[ax.key] ?? 0
-          const pct = ((score + 1) / 2) * 100
-          return (
-            <div key={ax.key}>
-              <p style={{
-                color: 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 600,
-                margin: '0 0 4px',
-                textTransform: 'capitalize',
-              }}>
-                {ax.key.charAt(0).toUpperCase() + ax.key.slice(1)}
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
-                  {t(ax.leftKey)}
-                </span>
-                <div className={styles.spectrumBar} style={{ flex: 1 }}>
-                  <div
-                    className={styles.spectrumDot}
-                    style={{ left: `${pct}%` }}
-                  />
-                </div>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48 }}>
-                  {t(ax.rightKey)}
-                </span>
-              </div>
-            </div>
-          )
-        })}
+      {/* 구버전 리포트 안내 — axis_scores가 legacy 형태(flat number/form 키)일 때만.
+          백엔드가 구버전 리포트의 axis_scores를 재계산하지 않기로 결정
+          (2026-09-28) — 저장된 legacy 형태를 그대로 보여주고 안내만 덧붙인다. */}
+      {isLegacyAxisScores(scores) && (
+        <p style={{
+          color: 'var(--color-text-dim)',
+          fontSize: 12,
+          lineHeight: 1.6,
+          margin: '0 0 12px',
+        }}>
+          {t('persona.legacySpectrum')}
+        </p>
+      )}
+
+      {/* 양극 스펙트럼 시각화 */}
+      <div style={{ marginBottom: 24 }}>
+        <TasteSpectrum axisScores={scores} />
       </div>
 
       {/* 구분선 */}
@@ -327,8 +251,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* 이미지 생성 영역 */}
       <h2 style={{
         color: 'var(--color-text)',
-        fontSize: 16,
-        fontWeight: 700,
+        fontSize: 'var(--fs-emphasis)',
+        fontWeight: 'var(--fw-bold)',
         margin: '0 0 16px',
         letterSpacing: '-0.01em',
       }}>
@@ -344,7 +268,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               width: '100%',
               minHeight: 200,
               objectFit: 'cover',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-md)',
               display: 'block',
             }}
           />
@@ -359,13 +283,13 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               alignItems: 'center',
               gap: 5,
               padding: '7px 14px',
-              borderRadius: 999,
-              background: 'rgba(0,0,0,0.55)',
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--color-scrim-soft)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               color: '#fff',
-              fontSize: 12,
-              fontWeight: 700,
+              fontSize: 'var(--fs-caption)',
+              fontWeight: 'var(--fw-bold)',
               textDecoration: 'none',
               fontFamily: 'inherit',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -383,7 +307,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         <div style={{
           width: '100%',
           height: 200,
-          borderRadius: 12,
+          borderRadius: 'var(--radius-md)',
           background: 'var(--color-surface-2)',
           border: '2px dashed var(--color-border-soft)',
           display: 'flex',
@@ -399,6 +323,11 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         </div>
       )}
 
+      {/* Regenerate controls — owner only.
+          These POST to the board's project (image + report overwrite), so a
+          non-owner must not merely see them disabled; they are not rendered.
+          The report itself stays fully readable either way. */}
+      {canRegenerate && (<>
       <button
         type="button"
         onClick={handleGenerateImage}
@@ -407,14 +336,14 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           width: '100%',
           minHeight: 44,
           padding: '12px 24px',
-          borderRadius: 999,
+          borderRadius: 'var(--radius-md)',
           background: (imgGenLoading || !boardId)
             ? 'var(--color-surface-2)'
-            : 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            : 'var(--accent-1)',
           color: (imgGenLoading || !boardId) ? 'var(--color-text-muted)' : '#fff',
           border: 'none',
-          fontSize: 14,
-          fontWeight: 700,
+          fontSize: 'var(--fs-body)',
+          fontWeight: 'var(--fw-bold)',
           cursor: (imgGenLoading || !boardId) ? 'default' : 'pointer',
           fontFamily: 'inherit',
           marginBottom: 16,
@@ -424,7 +353,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       </button>
 
       {imgError && (
-        <p style={{ color: 'var(--color-destructive, #ef4444)', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
+        <p style={{ color: 'var(--color-destructive)', fontSize: 'var(--fs-caption)', marginBottom: 12, lineHeight: 1.5 }}>
           {imgError}
         </p>
       )}
@@ -438,12 +367,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           width: '100%',
           minHeight: 44,
           padding: '12px 24px',
-          borderRadius: 999,
+          borderRadius: 'var(--radius-md)',
           background: 'var(--color-surface)',
           color: 'var(--color-text-muted)',
           border: '1px solid var(--color-border)',
-          fontSize: 13,
-          fontWeight: 600,
+          fontSize: 'var(--fs-body)',
+          fontWeight: 'var(--fw-semibold)',
           cursor: (reportLoading || !boardId) ? 'default' : 'pointer',
           fontFamily: 'inherit',
         }}
@@ -453,15 +382,16 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
 
       {reportError && (
         <p style={{
-          color: 'var(--color-destructive, #D73A49)',
-          fontSize: 13,
-          fontWeight: 600,
+          color: 'var(--color-destructive)',
+          fontSize: 'var(--fs-body)',
+          fontWeight: 'var(--fw-semibold)',
           margin: '10px 0 0',
           textAlign: 'center',
         }}>
           {reportError}
         </p>
       )}
+      </>)}
     </>
   )
 }

@@ -71,6 +71,42 @@ Other themes (the theme switcher changes this in lockstep):
 - GitHub Dark → `#F85149`
 - SynthWave '84 → `#FF6188`
 
+### 1.4 Scrim (themed)
+Black-alpha overlay family for **content-over-content separation** — modal /
+dialog backdrops and the opaque end of photo-caption gradients. Not for
+shadows (see §8.6 `card-shadow`, which stays a literal box-shadow).
+
+| Token | Purpose |
+|---|---|
+| `--color-scrim-modal` | **every modal / dialog / bottom-sheet backdrop** (alpha 0.4 in all themes) |
+| `--color-scrim-strong` | heaviest overlay — opaque end of a photo-caption gradient |
+| `--color-scrim` | photo overlay behind white text (hero / caption gradients) |
+| `--color-scrim-soft` | lighter photo veil / hover veil |
+| `--color-scrim-faint` | barely-there wash — near-transparent end of a gradient |
+
+**Decision 2026-09-26:** modal backdrops use `--color-scrim-modal` (0.4) —
+the page behind stays readable, so a dialog feels like a step within the flow,
+not a hard interruption. The heavier `--color-scrim*` family is reserved for
+**white text on photos**, where legibility needs the darker veil. Never use a
+literal `rgba(0,0,0,…)` backdrop.
+
+Current default (GitHub Light):
+```yaml
+scrim-modal:  "rgba(0,0,0,0.4)"      # SynthWave '84: rgba(26,22,37,0.40)
+scrim-strong: "rgba(0,0,0,0.93)"
+scrim:        "rgba(0,0,0,0.65)"
+scrim-soft:   "rgba(0,0,0,0.55)"
+scrim-faint:  "rgba(0,0,0,0.12)"
+```
+Other themes (the theme switcher changes this in lockstep):
+- Ayu Light → same as GitHub Light (light ground, black-alpha reads correctly as-is)
+- GitHub Dark → alpha raised (`0.94 / 0.78 / 0.68 / 0.18`) — a black veil over an
+  already-dark ground (`#0d1117`) needs more opacity to still read as
+  "deepening further"
+- SynthWave '84 → alpha raised **and** tinted toward the theme's own
+  purple-navy ground (`rgba(26,22,37,…)` instead of neutral black) — a neutral
+  black scrim over this hue reads as muddy grey rather than a deepening
+
 ---
 
 ## 2. Typography
@@ -96,29 +132,35 @@ font-stack-serif:   '"Noto Serif KR", "본명조", "Nanum Myeongjo", "나눔명�
 Korean names (`맑은 고딕`, `본명조`, etc.) are listed alongside the English
 names in case the OS locale fails to match the English name.
 
-### 2.2 Type Scale — Desktop (≥ 769px)
-```yaml
-h1-size-desktop:      48
-h2-size-desktop:      30
-body-size-desktop:    18
-caption-size-desktop: 14
-```
+### 2.2 Type Scale — 5 steps, one scale for every viewport
+Decided 2026-09-26 (UI-CONSISTENCY-B). The earlier 48/30/18/14 desktop +
+32/24/16/13 mobile scale matched nothing the app renders and was unused; it is
+replaced by the sizes the app actually lives on, cut to five steps.
 
-### 2.3 Type Scale — Mobile (≤ 768px)
-```yaml
-h1-size-mobile:      32
-h2-size-mobile:      24
-body-size-mobile:    16
-caption-size-mobile: 13
-```
+| Token | Size | Role |
+|---|---|---|
+| `--fs-title` | 24 | page title (h1) |
+| `--fs-heading` | 20 | section title, modal title (h2/h3) |
+| `--fs-emphasis` | 16 | card title, emphasized line, empty-state title |
+| `--fs-body` | 14 | body text, buttons, inputs |
+| `--fs-caption` | 12 | caption, meta, label, tab / chip label, badge |
 
-### 2.4 Weights (shared across environments)
-```yaml
-h1-weight:      700
-h2-weight:      600
-body-weight:    400
-caption-weight: 500
-```
+- No other font sizes. Retired values fold by role: 9/10/11/13 → 12 or 14,
+  15 → 14 or 16, 17/18 → 16 or 20, 22 → 20 or 24.
+- No mobile override — the same size reads correctly on both; density comes
+  from spacing, not from shrinking text.
+- Display exceptions (a hero `clamp()` on BuildingDetail / PersonaReport) need
+  an explicit decision before they are kept.
+
+### 2.3 (merged into 2.2)
+
+### 2.4 Weights
+| Token | Weight | Use |
+|---|---|---|
+| `--fw-regular` | 400 | body |
+| `--fw-medium` | 500 | captions, secondary labels |
+| `--fw-semibold` | 600 | buttons, tabs, emphasized text |
+| `--fw-bold` | 700 | titles, headings, stat numbers |
 
 ### 2.5 Font-weight discipline
 **Maximum 700. 800/900 forbidden.** The "premium, sleek, confident" tone is
@@ -132,40 +174,74 @@ expressed through letter-spacing, whitespace, and palette — not weight.
 - Pairings like editorial serif headings + sans body are deliberately excluded
   → simpler mental model, consistent user toggle behavior.
 
-### 2.6 Legacy aliases (gradual migration)
-```yaml
-h1-size:      48   # → h1-size-desktop
-h2-size:      30   # → h2-size-desktop
-body-size:    18   # → body-size-desktop
-caption-size: 14   # → caption-size-desktop
-```
+### 2.6 Legacy aliases
+Removed 2026-09-26 (`--fs-h1/h2`, `--fw-h1/h2/body/caption` had no consumers).
 
 ---
 
 ## 3. Layout & Shape
 
 ### 3.1 Border Radius Scale (tokenized)
-```yaml
-radius-sm:   8     # small chips, inputs
-radius-md:   12    # buttons, small cards
-radius-lg:   20    # default card
-radius-xl:   24    # large cards, modals
-radius-pill: 999   # pill shape
-```
+Roles decided 2026-09-26 (UI-CONSISTENCY-B): big photos round, small UI tighter.
 
-### 3.2 Touch Target (per device)
+| Token | Value | Role |
+|---|---|---|
+| `--radius-lg` | 20px | **photo cards, swipe cards, tiles** (anything that is mostly a photo) |
+| `--radius-md` | 12px | panels, surface cards, **all buttons incl. primary CTA**, inputs, modals |
+| `--radius-sm` | 8px | small inner elements — badges, skeleton lines, thumbnails inside a row |
+| `--radius-xl` | 24px | bottom-sheet top corners only |
+| `--radius-pill` | 999px | chips, tags, segmented controls — never a primary CTA |
+
+- **Use the token directly: `border-radius: var(--radius-md)`.** The tokens
+  already carry `px`. `calc(var(--radius-md) * 1px)` is invalid CSS
+  (`px × px`) and silently renders square corners — never use it.
+- Off-scale values are retired: 10 / 14 → `md`, 16 → `lg`, 4 / 6 → `sm`.
+- `50%` stays for circles (avatars, circular icon buttons).
+
+### 3.2 Touch Target
 ```yaml
 touch-target-mobile:  44    # Apple HIG recommendation
 touch-target-desktop: 32    # exploits mouse precision
 ```
 
+**Floating circle buttons** (back, logout, share, bell, settings, carousel
+arrows, modal close, photo-hero buttons) — decided 2026-09-26:
+- Visual size `--icon-btn-size` 28px, icon `--icon-size` 16px, stroke 2.
+- Hit area `--icon-btn-hit` 44px — an invisible expanded target around the
+  28px circle, so the small visual still meets the 44px mobile target.
+- One shared component renders all of them; no page builds its own circle.
+
 ### 3.3 TabBar Height (conditional)
 ```yaml
 tabbar-height-with-label: 64    # icon + keyword (current default)
 tabbar-height-icon-only:  56    # icon only
-tabbar-height:            64    # value currently in use
+tabbar-height:            60    # floating glass capsule (2026-09-26)
 ```
-> ⚠️ If nav labels are removed during development, change `tabbar-height` to 56.
+> 2026-09-26: Instagram-iOS style **floating glass capsule** — icon-only, 취향 =
+> magnifying glass, active = rounded pill highlight (`--tabbar-active-bg`) +
+> filled icon. Capsule floats 16px from the sides (max-width 420 on desktop),
+> safe-area + 10px from the bottom, `blur(24px) saturate(180%)` over a clearly
+> translucent `--tabbar-glass-bg` (light themes 0.55, dark 0.50) with a hairline
+> border + inset top highlight. Content scrolls **behind** it — no reserved band.
+
+Tokens: `--tabbar-height` (60px), `--page-height` (full viewport, `100dvh` with
+`100vh` fallback) and `--tabbar-clearance` (capsule + gap + safe-area + 12px).
+Every page shell is `height: var(--page-height)`; every scroll container ends
+with `padding-bottom: var(--tabbar-clearance)` so the last content scrolls
+above the capsule; viewport-locked stages (Discovery / Swipe / Assessment)
+reserve the clearance so the card is never covered; fixed bottom elements
+(toasts, composers, action bars) sit at `var(--tabbar-clearance)`. Never a
+hand-written `calc(100vh - 64px)`.
+
+### 3.3a Selection controls — one sliding component
+Decided 2026-09-27: every "pick one of N" control is `SegmentedControl`
+(`components/SegmentedControl.jsx`) — the TabBar, the 한/EN and light/dark pills,
+the people/competition toggle, and the underline `Tabs`. A single highlight
+(pill or 2px underline) **slides** to the selected option
+(`transform` + `width`, `var(--motion-normal) var(--motion-ease)`); no
+per-option on/off backgrounds. This is interaction motion — it does not honor
+`prefers-reduced-motion`. No animation on first mount. New selectors must use
+this component, never a hand-rolled active background.
 
 ### 3.4 Legacy aliases (gradual migration)
 ```yaml
@@ -325,7 +401,7 @@ directly below Theme.
 ArchiTinder is mobile-first but must also behave naturally on desktop.
 
 ### 7.1 Mobile (≤ 768px)
-- Bottom-fixed nav bar (Search · Discover · Boards · Profile, 4-column grid).
+- Bottom-fixed nav bar, icon-only (디스커버리 · 취향(돋보기) · 소셜 · 프로필, 4-column grid; labels as aria-label).
 - Page left/right padding 16px.
 - Card grid: 2 columns.
 - iOS Safe Area support (`padding-bottom: env(safe-area-inset-bottom)`).
@@ -350,15 +426,27 @@ breakpoint-desktop-min: 769   # ≥ 769px → desktop layout
 Main action buttons (core CTAs like sign-up / share / purchase).
 
 ```css
-background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+background: var(--accent-1);
 color: #fff;
 border: 0;
-border-radius: calc(var(--radius-md) * 1px);
+border-radius: var(--radius-md);
 padding: 14-16px;
 font-weight: 600;
 min-height: 44px;
 transition: transform 0.22s, background-color 0.22s, box-shadow 0.4s ease-out;
 ```
+
+> **Changed 2026-08-29 — flat, was `linear-gradient(135deg, var(--accent-1), var(--accent-2))`.**
+> User decision during the canvas design port: of the 37 Claude Design boards,
+> **34 draw the primary CTA as flat `var(--accent-1)` and none use the
+> gradient** (the other 3 — `discovery`, `overlay-card-skeleton`,
+> `overlay-swipecard-expanded` — contain no CTA button at all). The gradient is
+> retired as the CTA background. Existing gradient
+> call sites (31 occurrences across 22 files as of this date) migrate to flat
+> **inside their own host-page PR**, so each change is seen before it ships —
+> not in one sweep. Interaction spec below (`:active` glow, transitions) is
+> unchanged. The gradient itself remains valid elsewhere (e.g. decorative
+> surfaces); this rule governs the CTA background only.
 
 **Click moment (`:active`) — glow shadow**
 Like the input focus pattern (§8.5), the glow appears instantly on click and
@@ -371,7 +459,7 @@ fades out over 0.4s.
 }
 ```
 
-- When the theme changes, the gradient colors change with it.
+- When the theme changes, the accent color changes with it.
 - Applied to: Persona "View persona report", Discovery ♥ (Save), AI Search chat
   send ↑.
 - Buttons that already have a depth shadow (e.g. Discovery ♥) stack both
@@ -384,7 +472,7 @@ Secondary actions (close an option that doesn't resonate, Skip, etc.).
 background: var(--surface);
 color: var(--text);
 border: 1px solid var(--border);
-border-radius: calc(var(--radius-md) * 1px);
+border-radius: var(--radius-md);
 padding: 14px 16px;
 font-weight: 500-600;
 min-height: 44px;
@@ -397,7 +485,7 @@ Weakest emphasis (Share, View more, etc.).
 background: transparent;
 color: var(--text);
 border: 1px solid var(--border);
-border-radius: calc(var(--radius-md) * 1px);
+border-radius: var(--radius-md);
 padding: 14px 16px;
 font-weight: 500;
 min-height: 44px;
@@ -410,7 +498,7 @@ Dangerous actions — delete / block / cancel.
 background: transparent;
 color: var(--destructive);
 border: 1px solid var(--destructive);
-border-radius: calc(var(--radius-md) * 1px);
+border-radius: var(--radius-md);
 padding: 14px 16px;
 font-weight: 600;
 min-height: 44px;
@@ -427,7 +515,7 @@ min-height: 44px;
   border: 1px solid var(--border);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: calc(var(--radius-pill) * 1px);  /* or radius-md for square inputs */
+  border-radius: var(--radius-md);
   padding: 12px 18px;
   color: var(--text);
   transition: border-color 0.18s, box-shadow 0.4s ease-out;
@@ -670,12 +758,12 @@ the component level so the user can keep using the rest.
 - Desktop (≥769px): **Centered Modal** — center-aligned, dimmed backdrop.
 
 ```yaml
-sheet-radius-top:    "calc(var(--radius-xl) * 1px)"  # 24px, top corners only
+sheet-radius-top:    "var(--radius-xl)"   # 24px, top corners only
 sheet-handle:        "4px × 36px"                    # top swipe handle bar
 sheet-max-height:    "85vh"                          # up to 85% of the screen
-sheet-backdrop:      "rgba(0,0,0,0.4)"
+sheet-backdrop:      "var(--color-scrim-modal)"   # 0.4, §1.4
 modal-max-width:     "480px"
-modal-radius:        "calc(var(--radius-lg) * 1px)"  # 20px
+modal-radius:        "var(--radius-md)"   # 12px (§3.1 roles)
 modal-padding:       "24px"
 sheet-anim-duration: "var(--motion-flip)"            # 500ms slide-up
 sheet-anim-easing:   "var(--motion-ease)"
@@ -693,7 +781,7 @@ top-right ✕ button.
 
 ```yaml
 toast-position:       "bottom-center"
-toast-bottom-offset:  "calc(var(--tabbar-height) + 16px)"  # mobile: above the nav
+toast-bottom-offset:  "var(--tabbar-clearance)"  # above the floating capsule
 toast-duration:       3000   # ms
 toast-duration-long:  5000   # ms (long / important messages)
 toast-bg:             "color-mix(in srgb, var(--surface) 72%, transparent)"
@@ -722,15 +810,17 @@ Type color tints:
 | Body Font | **IBM Plex Sans KR** | §2.1 ✅ |
 | Font Switching | exposed to end users (Font label rendered in the font it switches to) | §6 ✅ |
 | Font-weight cap | **700** (800/900 forbidden) | §2.5 ✅ |
-| Type Scale | **split per environment (Desktop / Mobile)** | §2.2 / §2.3 ✅ |
+| Type Scale | **one 5-step scale 12/14/16/20/24, no mobile override** (2026-09-26) | §2.2 ✅ |
 | Destructive color | **themed** (an appropriate red per theme) | §1.3 ✅ |
 | Text hierarchy | **4 tiers retained** | §1.1 ✅ |
 | iOS Safe Area | **bottom TabBar / CTA only** | §7.1 ✅ |
 | Implementation | hybrid (inline + CSS variables) | §4 ✅ |
 | Accent policy | **themed (CSS variables)** | §1.2 ✅ |
 | Responsive | **mobile-first + desktop left-sidebar re-layout** | §7 ✅ |
-| TabBar Height | **64px (with label) / 56px (icon only)** | §3.3 ✅ |
-| Border Radius | **4-tier tokenized (sm/md/lg/xl)** | §3.1 ✅ |
+| TabBar | **floating glass capsule (Instagram iOS), icon-only, active = pill + filled icon** (2026-09-26) | §3.3 ✅ |
+| Border Radius | **tokenized by role: photos lg 20 · UI md 12 · inner sm 8 · sheet xl 24 · chips pill** (2026-09-26) | §3.1 ✅ |
+| Floating circle button | **28px visual / 44px hit area / 16px icon stroke 2, one shared component** (2026-09-26) | §3.2 ✅ |
+| Modal backdrop | **`--color-scrim-modal` 0.4; 0.65 family = photo overlay only** (2026-09-26) | §1.4 ✅ |
 | Touch Target | **mobile 44px / desktop 32px+** | §3.2 ✅ |
 | Vibe Keywords | **Glassmorphic · Fluid · Gesture-friendly (hint only)** | §4 ✅ |
 | Folder Card Hover | **lift + 1px accent outline, no shadow/glow** | §8.7 ✅ |

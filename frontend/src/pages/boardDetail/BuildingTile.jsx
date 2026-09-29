@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import InfoCol from '../../components/profile/InfoCol'
+import s from './BuildingTile.module.css'
 
 /**
  * BuildingTile — image-overlay card per §3.5.1 + §3.5.2 RICH PATTERN.
@@ -32,25 +33,16 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
           : { fromBoard: true }
         navigate(`/buildings/${buildingId}`, { state })
       }}
+      className={s.tile}
       style={{
         position: 'relative',
         aspectRatio: '4 / 5',
-        borderRadius: 20,
+        borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
         cursor: 'pointer',
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid transparent',          // §3.5.1: NO default light border
+        background: 'var(--color-surface-2)',
         boxShadow: '0 10px 25px rgba(0,0,0,0.3)', // §3.5.1 mandatory depth (static)
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         userSelect: 'none',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.borderColor = 'transparent'
       }}
     >
       <img
@@ -81,15 +73,15 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
       {isEditMode && (
         <div style={{
           position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: isSelected ? 'rgba(236,72,153,0.28)' : 'rgba(0,0,0,0.18)',
+          background: isSelected ? 'color-mix(in srgb, var(--accent-1) 28%, transparent)' : 'rgba(0,0,0,0.18)',
           transition: 'background 0.15s',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end',
           padding: 12,
         }}>
           <div style={{
             width: 26, height: 26, borderRadius: '50%',
-            border: `2px solid ${isSelected ? '#ec4899' : 'rgba(255,255,255,0.7)'}`,
-            background: isSelected ? '#ec4899' : 'rgba(0,0,0,0.35)',
+            border: `2px solid ${isSelected ? 'var(--accent-1)' : 'rgba(255,255,255,0.7)'}`,
+            background: isSelected ? 'var(--accent-1)' : 'rgba(0,0,0,0.35)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 14, color: '#fff', fontWeight: 700,
             transition: 'all 0.15s',

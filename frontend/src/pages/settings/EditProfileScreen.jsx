@@ -11,13 +11,16 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe } from '../../api/client.js'
 import { updateMyProfile } from '../../api/profiles.js'
-import { IconBack } from '../../components/icons.jsx'
 import EditCardForm from '../../components/profile/EditCardForm.jsx'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import btnStyles from '../../components/Button.module.css'
-import styles from './AccountScreen.module.css'
 
-export default function EditProfileScreen() {
+export default function EditProfileScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -81,39 +84,30 @@ export default function EditProfileScreen() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+  return (
+    <PageShell
+      width="narrow"
+      chrome={<ScreenChrome navigate={navigate} onLogout={onLogout} />}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('profileEdit.title')}</PageTitle>
+
+      {loading ? (
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-text-dim)', fontSize: 14,
         }}>
           {t('profileEdit.loading')}
         </div>
-      </div>
-    )
-  }
-
-  if (fetchError) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
+      ) : fetchError ? (
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-destructive)', fontSize: 14,
         }}>
           {fetchError}
         </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} />
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+      ) : (
+        <>
 
         <EditCardForm
           user={me}
@@ -126,8 +120,8 @@ export default function EditProfileScreen() {
             marginTop: 16,
             padding: '10px 14px',
             borderRadius: 'var(--radius-sm)',
-            background: 'rgba(215,58,73,0.08)',
-            border: '1px solid rgba(215,58,73,0.28)',
+            background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+            border: '1px solid var(--color-destructive)',
             color: 'var(--color-destructive)',
             fontSize: 13,
             lineHeight: 1.45,
@@ -165,27 +159,21 @@ export default function EditProfileScreen() {
           </button>
         </div>
 
-      </div>
+        </>
+      )}
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t }) {
+function ScreenChrome({ navigate, onLogout }) {
   return (
-    <div className={styles.header}>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        className={styles.iconBtn}
-      >
-        <IconBack width={20} height={20} />
-      </button>
-      <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
-      <div style={{ width: 44 }} />
-    </div>
+    <>
+      <PageBackButton onClick={() => navigate(-1)} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
+    </>
   )
 }

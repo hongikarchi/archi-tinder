@@ -71,3 +71,9 @@ from .profile import (  # noqa: F401
 
 # -- meta sub-module names --------------------------------------------------
 from .meta import RolesView  # noqa: F401
+
+# -- personality sub-module names -------------------------------------------
+from .personality import (  # noqa: F401
+    PersonalityAssessmentView,
+    PersonalityMeView,
+)

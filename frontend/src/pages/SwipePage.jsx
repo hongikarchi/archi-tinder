@@ -1,66 +1,83 @@
 import { useRef, useState, useEffect } from 'react'
-import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
-import QuestionCard from '../components/QuestionCard.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
+import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import { isActionCard } from '../utils/appHelpers.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import Modal from '../components/Modal.jsx'
+import {
+  INK,
+  MONO,
+  LS_CAPS,
+  paperFaceStyle,
+  wordmarkStyle,
+  monoLabelStyle,
+  cardMetaStyle,
+} from '../components/cardLanguage.js'
 
 /* ── ActionCard ──────────────────────────────────────────────────────────── */
 // Rendered when card_type === 'action' (backend-emitted when session converges).
 // The user opts in to the report by right-swiping (like), or keeps exploring
 // by left-swiping (pass). The hint text at the bottom makes this explicit.
+// FRONT-FLOW-2: retheme from the indigo-purple gradient card to the paper
+// business-card language (components/cardLanguage.js), mirroring
+// DiscoveryTriggerCard.jsx's composition (wordmark row + mono stamp, ink
+// title, meta body, mono hint row). Swipe semantics/props unchanged.
 function ActionCard({ card }) {
   const { t } = useTranslation()
   const message  = card.action_card_message  || t('swipe.actionCard.message')
   const subtitle = card.action_card_subtitle || t('swipe.actionCard.subtitle')
   return (
     <div style={{
+      ...paperFaceStyle({ radius: 20, padding: '24px 22px' }),
       position: 'absolute', top: 0, left: 0,
       width: CARD_WIDTH, height: CARD_HEIGHT,
-      borderRadius: 20, overflow: 'hidden',
-      background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #4c1d95 100%)',
-      boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 16, padding: '32px 28px',
+      justifyContent: 'space-between',
       userSelect: 'none',
+      boxSizing: 'border-box',
     }}>
-      {/* Decorative sparkle */}
-      <div style={{ fontSize: 56, lineHeight: 1 }}>✨</div>
-
-      {/* Main message */}
-      <h2 style={{
-        color: '#fff', fontSize: 22, fontWeight: 700,
-        textAlign: 'center', margin: 0, lineHeight: 1.35,
-      }}>
-        {message}
-      </h2>
-
-      {/* Subtitle */}
-      {subtitle && (
-        <p style={{
-          color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: 400,
-          textAlign: 'center', margin: 0, lineHeight: 1.5,
-        }}>
-          {subtitle}
-        </p>
-      )}
-
-      {/* Swipe hint — bottom of card */}
-      <div style={{
-        position: 'absolute', bottom: 28, left: 0, right: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        color: 'rgba(255,255,255,0.45)', fontSize: 12, letterSpacing: '0.03em',
-      }}>
-        <span>{t('swipe.actionCard.continueHint')}</span>
-        <span style={{ color: 'rgba(255,255,255,0.25)' }}>·</span>
-        <span>{t('swipe.actionCard.viewResultsHint')}</span>
+      {/* Top: wordmark row + mono stamp */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={wordmarkStyle}>ARCHIBE</span>
+        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid }}>
+          {t('swipe.actionCard.stamp')}
+        </span>
       </div>
+
+      {/* Middle: title + body */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center' }}>
+        <h2 style={{
+          fontFamily: 'var(--font-family)',
+          fontSize: 22,
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          color: INK.strong,
+          lineHeight: 1.35,
+          margin: 0,
+        }}>
+          {message}
+        </h2>
+
+        {subtitle && (
+          <p style={{ ...cardMetaStyle, textAlign: 'center' }}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+
+      {/* Bottom hint */}
+      <p style={{ ...monoLabelStyle, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <span>{t('swipe.actionCard.continueHint')}</span>
+        <span style={{ color: INK.dim }}>·</span>
+        <span>{t('swipe.actionCard.viewResultsHint')}</span>
+      </p>
     </div>
   )
 }
@@ -125,7 +142,7 @@ function ConfidenceBar({ phase, progress }) {
         <div style={{
           height: '100%',
           width: `${pct}%`,
-          background: '#ec4899',
+          background: 'var(--accent-1)',
           borderRadius: 999,
           transition: 'width 300ms ease',
         }} />
@@ -135,69 +152,40 @@ function ConfidenceBar({ phase, progress }) {
 }
 
 /* ── ExitConfirmPopup ────────────────────────────────────────────────────── */
+/* Built on the shared Modal, `centered` (Phase 3 addition — see Modal.jsx doc
+ * comment) so it stays a centered interrupt dialog at every viewport width
+ * instead of auto-switching to a bottom sheet mid-swipe-session. */
 function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
   const primaryBtnRef = useRef(null)
   const { t } = useTranslation()
 
-  // Auto-focus primary button on mount
+  // Auto-focus primary button on mount (after Modal's own panel-focus effect)
   useEffect(() => { primaryBtnRef.current?.focus() }, [])
 
-  // Dismiss on Escape
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
   return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(10,10,12,0.65)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        zIndex: 10001,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '0 24px',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+    <Modal
+      open
+      onClose={onCancel}
+      title={t('swipe.exitConfirm.title')}
+      zIndex={10001}
+      closeLabel={t('modalB3.close')}
+      width={360}
+      centered
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="exit-confirm-title"
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-soft)',
-          borderRadius: 20,
-          padding: '28px 24px 24px',
-          width: '100%',
-          maxWidth: 360,
-          display: 'flex', flexDirection: 'column', gap: 8,
-          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-        }}
-      >
-        <h2 id="exit-confirm-title" style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-          margin: '0 0 4px', textAlign: 'center',
-        }}>
-          {t('swipe.exitConfirm.title')}
-        </h2>
-        <p style={{
-          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
-          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
-        }}>
-          {t('swipe.exitConfirm.body')}
-        </p>
+      <p style={{
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)', fontWeight: 500,
+        textAlign: 'center', margin: '0 0 20px', lineHeight: 1.5,
+      }}>
+        {t('swipe.exitConfirm.body')}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
           ref={primaryBtnRef}
           onClick={onNewProject}
           style={{
-            padding: '13px 24px', borderRadius: 12,
-            background: '#ec4899', color: '#fff',
-            fontSize: 14, fontWeight: 600, border: 'none',
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
+            background: 'var(--accent-1)', color: '#fff',
+            fontSize: 'var(--fs-body)', fontWeight: 600, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
         >
@@ -206,9 +194,9 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
         <button
           onClick={onHome}
           style={{
-            padding: '13px 24px', borderRadius: 12,
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--color-surface-2)', color: 'var(--color-text)',
-            fontSize: 14, fontWeight: 600,
+            fontSize: 'var(--fs-body)', fontWeight: 600,
             border: '1px solid var(--color-border)',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
@@ -218,83 +206,52 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
         <button
           onClick={onCancel}
           style={{
-            padding: '10px 24px', borderRadius: 12,
+            padding: '10px 24px', borderRadius: 'var(--radius-md)',
             background: 'transparent', color: 'var(--color-text-dim)',
-            fontSize: 13, fontWeight: 500, border: 'none',
+            fontSize: 'var(--fs-caption)', fontWeight: 500, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
           }}
         >
           {t('swipe.exitConfirm.cancel')}
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
 /* ── DismissConfirmPopup ─────────────────────────────────────────────────── */
+/* Same centered-always rationale as ExitConfirmPopup above. */
 function DismissConfirmPopup({ onConfirm, onCancel }) {
   const primaryBtnRef = useRef(null)
   const { t } = useTranslation()
 
-  // Auto-focus primary button on mount
+  // Auto-focus primary button on mount (after Modal's own panel-focus effect)
   useEffect(() => { primaryBtnRef.current?.focus() }, [])
 
-  // Dismiss on Escape
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
   return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(10,10,12,0.65)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        zIndex: 10001,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '0 24px',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+    <Modal
+      open
+      onClose={onCancel}
+      title={t('swipe.dismissConfirm.title')}
+      zIndex={10001}
+      closeLabel={t('modalB3.close')}
+      width={360}
+      centered
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dismiss-confirm-title"
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-soft)',
-          borderRadius: 20,
-          padding: '28px 24px 24px',
-          width: '100%',
-          maxWidth: 360,
-          display: 'flex', flexDirection: 'column', gap: 8,
-          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-        }}
-      >
-        <h2 id="dismiss-confirm-title" style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-          margin: '0 0 4px', textAlign: 'center',
-        }}>
-          {t('swipe.dismissConfirm.title')}
-        </h2>
-        <p style={{
-          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
-          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
-        }}>
-          {t('swipe.dismissConfirm.body')}
-        </p>
+      <p style={{
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)', fontWeight: 500,
+        textAlign: 'center', margin: '0 0 20px', lineHeight: 1.5,
+      }}>
+        {t('swipe.dismissConfirm.body')}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
           ref={primaryBtnRef}
           onClick={onConfirm}
           style={{
-            padding: '13px 24px', borderRadius: 12,
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--color-surface-2)', color: 'var(--color-text)',
-            fontSize: 14, fontWeight: 600,
+            fontSize: 'var(--fs-body)', fontWeight: 600,
             border: '1px solid var(--color-border)',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
@@ -304,16 +261,16 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
         <button
           onClick={onCancel}
           style={{
-            padding: '10px 24px', borderRadius: 12,
+            padding: '10px 24px', borderRadius: 'var(--radius-md)',
             background: 'transparent', color: 'var(--color-text-dim)',
-            fontSize: 13, fontWeight: 500, border: 'none',
+            fontSize: 'var(--fs-caption)', fontWeight: 500, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
           }}
         >
           {t('swipe.dismissConfirm.cancel')}
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -321,22 +278,32 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
 export default function SwipePage({
   currentCard, cardResetToken = 0, progress, isCompleted, isLoading, isResultLoading = false, swipePending = 0,
   keepExploringChosen = false,
-  projectName, onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
+  onSwipe, onViewResults, onExtendSession, // eslint-disable-line no-unused-vars
   onExitToNewProject, onExitToHome,
-  questionTrigger = null,
-  onQuestionAnswer,
   nextCard = null,
+  onLogout,
 }) {
   const { t } = useTranslation()
   const cardRef = useRef(null)
-  const questionCardRef = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
   const [localResetTick, setLocalResetTick] = useState(0)
-  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('archithon_tutorial_dismissed'))
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
+  // FRONT-UX-14-SIMPLIFY — scopes the recovery-remount key suffix to the
+  // SPECIFIC card a reset fired on. cardResetToken/localResetTick are
+  // monotonic counters that never reset to 0 — if the suffix were applied
+  // unconditionally whenever `resetTick` is truthy, every card AFTER the
+  // first-ever recovery would carry a stale `-rN` suffix forever, permanently
+  // mismatching the under-card's key and defeating the DOM-reuse promotion
+  // fix. Captured at render time (not in an effect — an effect fires one
+  // render late, after the remount already needed to happen) whenever the
+  // token pair changes, tagged with the CURRENT top card's id.
+  const resetRef = useRef({ t: cardResetToken, l: localResetTick, id: null })
+  if (resetRef.current.t !== cardResetToken || resetRef.current.l !== localResetTick) {
+    resetRef.current = { t: cardResetToken, l: localResetTick, id: currentCard?.image_id }
+  }
 
   const phase            = progress?.phase
   const filter_relaxed   = progress?.filter_relaxed || false
@@ -390,7 +357,7 @@ export default function SwipePage({
       cardRef.current.swipe(dir)
     },
     guardCondition: () =>
-      !!(questionTrigger || isLoading || !cardRef.current || !currentCard || showTutorial || showExitConfirm ||
+      !!(isLoading || !cardRef.current || !currentCard || showExitConfirm ||
          showDismissConfirm || pendingAction.current || swipedCardId.current === currentCard?.image_id),
   })
 
@@ -429,43 +396,33 @@ export default function SwipePage({
     // Show a brief inline prompt; no full-screen takeover.
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         overflow: 'hidden',
         background: 'var(--color-bg)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '20px 16px',
+        padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
+        <PageTopControls onLogout={onLogout} />
+
         {/* Exit button */}
-        <button
+        <FloatingIconButton
           onClick={() => setShowExitConfirm(true)}
-          aria-label="Exit session"
-          style={{
-            position: 'absolute', top: 12, left: 16,
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            zIndex: 10,
-          }}
+          ariaLabel="Exit session"
+          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
-        </button>
+        </FloatingIconButton>
 
-        {/* Header / confidence bar */}
+        {/* Header / confidence bar — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-            {projectName
-              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
-          </h1>
+          <PageLogoHeader padding="0 0 6px" marginBottom={8} />
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />
           </div>
@@ -485,14 +442,14 @@ export default function SwipePage({
                 width: '100%',
                 padding: '13px 20px',
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
                 border: 'none',
                 cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                boxShadow: '0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent)',
                 opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
                 transition: 'opacity 0.2s',
                 minHeight: 44,
@@ -525,7 +482,7 @@ export default function SwipePage({
 
   return (
     <>
-      <TutorialPopup visible={showTutorial} onClose={() => setShowTutorial(false)} />
+      <PageTopControls onLogout={onLogout} />
 
       {showExitConfirm && (
         <ExitConfirmPopup
@@ -544,24 +501,16 @@ export default function SwipePage({
 
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'flex-start', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
-        background: 'var(--color-bg)', padding: '20px 16px',
+        justifyContent: 'flex-start', height: 'var(--page-height)', overflow: 'hidden',
+        background: 'var(--color-bg)', padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
 
         {/* F3 — Exit button, top-left floating (moved from right to avoid Logout button occlusion) */}
-        <button
+        <FloatingIconButton
           onClick={() => setShowExitConfirm(true)}
-          aria-label="Exit session"
-          style={{
-            position: 'absolute', top: 12, left: 16,
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            zIndex: 10,
-          }}
+          ariaLabel="Exit session"
+          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
         >
           {/* Restart / new-session icon */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -569,15 +518,11 @@ export default function SwipePage({
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
-        </button>
+        </FloatingIconButton>
 
-        {/* Header */}
+        {/* Header — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
-            {projectName
-              ? <span style={{ color: 'var(--color-text)' }}>{projectName}</span>
-              : <span style={{ color: 'var(--color-text)', letterSpacing: '0.2em' }}>ARCHIBE</span>}
-          </h1>
+          <PageLogoHeader padding="0 0 6px" marginBottom={8} />
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />
             {filter_relaxed && (
@@ -604,14 +549,14 @@ export default function SwipePage({
                 width: '100%',
                 padding: '12px 20px',
                 borderRadius: 14,
-                background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
                 border: 'none',
                 cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                boxShadow: '0 4px 16px rgba(236,72,153,0.35)',
+                boxShadow: '0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent)',
                 opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
                 transition: 'opacity 0.2s',
               }}
@@ -622,61 +567,73 @@ export default function SwipePage({
         )}
 
         {/* Card */}
-        <SwipeDeck
-          nextCard={!questionTrigger && currentCard && !isActionCard(currentCard) ? nextCard : null}
-          active={!!currentCard}
-        >
+        <SwipeDeck active={!!currentCard}>
           {currentCard ? (
-            questionTrigger ? (
-              /* Wrap QuestionCard in SwipeGestureFrame so right swipe = 'A' (Yes)
-                 and left swipe = 'B' (No). Buttons remain as accessible fallback. */
-              <SwipeGestureFrame
-                ref={questionCardRef}
-                key={`question_${questionTrigger.axis ?? ''}_${questionTrigger.type}`}
-                onSwipe={(dir) => {
-                  if (dir === 'right') onQuestionAnswer('A')
-                  else if (dir === 'left') onQuestionAnswer('B')
-                }}
-                onCardLeftScreen={() => {}}
-              >
-                <QuestionCard
-                  trigger={questionTrigger}
-                  onAnswer={onQuestionAnswer}
-                />
-              </SwipeGestureFrame>
-            ) : (
-              <>
-                <SwipeGestureFrame
-                  ref={cardRef}
-                  key={`${currentCard.image_id}_${cardResetToken}_${localResetTick}`}
-                  onSwipe={onTinderSwipe}
-                  onCardLeftScreen={onCardLeftScreen}
-                >
-                  {isActionCard(currentCard) ? (
-                    <ActionCard card={currentCard} />
-                  ) : (
-                    <SwipeCard
-                      card={currentCard}
-                      onGalleryClose={() => {}}
-                    />
-                  )}
-                </SwipeGestureFrame>
-                {isLoading && (
-                  <div style={{
-                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
-                  }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: '50%',
-                      border: '3px solid rgba(255,255,255,0.2)',
-                      borderTopColor: '#fff',
-                      animation: 'spin 0.8s linear infinite',
-                    }} />
+            <>
+              {/* FRONT-UX-14-SIMPLIFY — full-size under-card stack. Render the
+                  top card AND the next real card (guarded off for action-card
+                  tops, mirroring the old nextCard={...isActionCard?null}
+                  condition) in IDENTICAL wrapper shapes so React reuses the
+                  DOM node when a card moves from under-slot to top-slot
+                  (key = image_id only — no remount). The under card finishes
+                  its LQIP->main image load while hidden (pointerEvents:none,
+                  aria-hidden), and promotion is a pure zIndex/prop flip. */}
+              {[
+                (!isActionCard(currentCard) ? nextCard : null),
+                currentCard,
+              ].filter(Boolean).map(card => {
+                const isTop = card === currentCard
+                // Scope the recovery-remount suffix to the exact card the
+                // reset fired on (see resetRef comment above) so normal
+                // promotion (under -> top) never remounts.
+                const resetSuffix = (isTop && resetRef.current.id === card.image_id)
+                  ? `-r${cardResetToken}_${localResetTick}`
+                  : ''
+                return (
+                  <div
+                    key={card.image_id}
+                    style={{
+                      position: 'absolute', inset: 0,
+                      zIndex: isTop ? 5 : 4,
+                      pointerEvents: isTop ? 'auto' : 'none',
+                    }}
+                    aria-hidden={!isTop}
+                  >
+                    <SwipeGestureFrame
+                      ref={isTop ? cardRef : null}
+                      key={`${card.image_id}${resetSuffix}`}
+                      onSwipe={isTop ? onTinderSwipe : undefined}
+                      onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
+                      preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
+                    >
+                      {isActionCard(card) ? (
+                        <ActionCard card={card} />
+                      ) : (
+                        <SwipeCard
+                          card={card}
+                          onGalleryClose={() => {}}
+                        />
+                      )}
+                    </SwipeGestureFrame>
                   </div>
-                )}
-              </>
-            )
+                )
+              })}
+              {isLoading && (
+                <div style={{
+                  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 20, background: 'rgba(0,0,0,0.15)', pointerEvents: 'none',
+                  zIndex: 6,
+                }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    border: '3px solid rgba(255,255,255,0.2)',
+                    borderTopColor: '#fff',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                </div>
+              )}
+            </>
           ) : isLoading ? (
             <CardSkeleton />
           ) : null}

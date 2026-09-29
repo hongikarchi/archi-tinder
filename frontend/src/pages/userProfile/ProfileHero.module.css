@@ -61,10 +61,10 @@
   opacity: 1;
 }
 
-/* Pink focus ring on keyboard focus — matches existing brand-pink idiom */
+/* Accent focus ring on keyboard focus — themed (DESIGN.md §8.1 accent idiom) */
 .avatarTrigger:focus-within {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.55);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-1) 55%, transparent);
   border-radius: 50%;
 }
 
@@ -86,7 +86,7 @@
   height: 28px;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #ec4899;
+  border-top-color: var(--accent-1);
   /* animation is set inline in JSX to reference global @keyframes spin safely */
 }
 
@@ -99,4 +99,85 @@
   font-weight: 500;
   text-align: center;
   max-width: 200px;
+}
+
+/* ---- External link pills (Instagram / email / website) ---- */
+
+.linkPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft);
+  color: var(--color-text-2);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 44px;
+  transition: transform var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.linkPill:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.linkPill:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Stats row (Boards / Studios / Liked) ---- */
+
+.statBtn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px 14px;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: inherit;
+  color: inherit;
+  border-radius: var(--radius-sm);
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.statBtn:hover {
+  background: var(--color-surface-2);
+}
+
+.statBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.statLabel {
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-weight: 500;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.statBtn:hover .statLabel {
+  color: var(--color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .linkPill,
+  .statBtn,
+  .statLabel {
+    transition: none;
+  }
+  .linkPill:hover {
+    transform: none;
+  }
 }

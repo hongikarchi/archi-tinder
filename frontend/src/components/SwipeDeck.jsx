@@ -1,32 +1,33 @@
-import { useEffect, useState } from 'react'
-import { CARD_WIDTH, CARD_HEIGHT, computeFit } from './SwipeCard.jsx'
+import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
 
-export default function SwipeDeck({ children, nextCard = null, active = false }) {
-  // B2 peek-layer parity — track the peek image's natural ratio so its
-  // objectFit matches SwipeCard's adaptive cover/contain (computeFit) instead
-  // of a hardcoded 'contain'. Prevents a contain->cover pop when the peek
-  // card promotes to active. Reset whenever the peek image changes.
-  const [peekRatio, setPeekRatio] = useState(null)
-
-  useEffect(() => {
-    setPeekRatio(null)
-  }, [nextCard?.image_url])
-
-  function handlePeekLoad(e) {
-    const node = e.target
-    if (node.naturalWidth && node.naturalHeight) {
-      setPeekRatio(node.naturalWidth / node.naturalHeight)
-    }
-  }
-
-  const isDrawing = nextCard?.image_focus === 'drawing' || nextCard?.image_kind === 'drawing'
-  const peekFit = computeFit(peekRatio, isDrawing)
-
+// FRONT-UX-14-SIMPLIFY — SwipeDeck is now a pure decoration shell: two static
+// dummy cards (never animate, never receive image data) plus a children slot.
+// The "next card" is no longer a scaled-up peek image rendered here — callers
+// (SwipePage/DiscoveryPage) render the real next card FULL-SIZE in the same
+// children slot, in an identical keyed wrapper to the top card, so React
+// reuses the DOM node when the card is promoted (no remount = no flicker).
+export default function SwipeDeck({ children, active = false }) {
   return (
     <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
       {active && (
         <>
-          {/* Layer 1 — deepest dummy card */}
+          {/* Layer 0 — static shadow holder (FRONT-UX-14-R5 FIX1). Permanent,
+              never animates, sits below the ladder dummies. Guarantees the
+              scene's ground shadow never blinks out during swipe/promotion,
+              regardless of what the SwipeCard face shadows above do while
+              flying. Gated by `active` same as the ladder dummies — when the
+              deck has no card (loading/empty), no holder renders either; a
+              lone shadow rectangle with nothing on top of it would read as a
+              layout bug, not "ground shadow." */}
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0,
+            borderRadius: 20,
+            background: 'var(--color-surface)',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+            zIndex: 0,
+            pointerEvents: 'none',
+          }} />
+          {/* Layer 1 — deepest dummy card (pure decoration, never animates) */}
           <div aria-hidden="true" style={{
             position: 'absolute', inset: 0,
             borderRadius: 20,
@@ -37,35 +38,20 @@ export default function SwipeDeck({ children, nextCard = null, active = false })
             zIndex: 1,
             pointerEvents: 'none',
           }} />
-          {/* Layer 2 — next card */}
+          {/* Layer 2 — mid dummy card (pure decoration, never animates) */}
           <div aria-hidden="true" style={{
             position: 'absolute', inset: 0,
-            borderRadius: 20, overflow: 'hidden',
+            borderRadius: 20,
             background: 'var(--color-surface-2)',
             border: '1px solid var(--color-border-soft)',
             transform: 'scale(0.95) translateY(10px)',
             transformOrigin: 'bottom center',
             zIndex: 2,
             pointerEvents: 'none',
-          }}>
-            {nextCard?.image_url && (
-              <img
-                src={nextCard.image_url}
-                alt=""
-                draggable={false}
-                onLoad={handlePeekLoad}
-                style={{
-                  width: '100%', height: '100%',
-                  objectFit: peekFit, objectPosition: 'center',
-                  background: isDrawing ? '#fff' : '#111',
-                  display: 'block',
-                }}
-              />
-            )}
-          </div>
+          }} />
         </>
       )}
-      {/* Layer 3 — active card */}
+      {/* Layer 3 — real cards (top + next), rendered by the caller */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
         {children}
       </div>

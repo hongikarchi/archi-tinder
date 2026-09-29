@@ -1,0 +1,235 @@
+.page {
+  height: var(--page-height);
+  overflow: hidden;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Bottom clearance for the floating TabBar capsule (UI-CONSISTENCY-B Phase
+     2c) — this page never scrolls (overflow: hidden), so the deck/result
+     stage must fit above the capsule via padding, not via scroll. */
+  padding: 20px 16px var(--tabbar-clearance);
+  position: relative;
+}
+
+/* Progress bar — matches SwipePage's "Tuning taste" track (4px, pill, flat
+   accent-1 fill). */
+.progressTrack {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-progress-track);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-1);
+  border-radius: 999px;
+  transition: width var(--motion-normal) var(--motion-ease);
+}
+
+/* Body — hosts the swipe deck, centered like DiscoveryPage's card stage.
+   The question prompt and Likert options now live inside the card itself
+   (AssessmentCard.jsx + AssessmentCard.module.css); the old .questionText /
+   .likert* rules moved there and were removed here. */
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* No horizontal padding — `.page` now supplies the 16px side inset (matches
+     SwipePage's card-stage wrapper, which also carries zero horizontal
+     padding of its own). Double-padding here would shrink this container
+     below SwipeDeck's fixed CARD_WIDTH (= vw - 32) and, combined with
+     `.page`'s new `overflow: hidden`, clip the deck instead of just
+     re-centering it. */
+  padding: 24px 0 32px;
+  width: 100%;
+  margin: 0 auto;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* Previous-question control — text button under the deck. */
+.prevBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  background: none;
+  color: var(--color-text-dim);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  min-height: 36px;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.prevBtn:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.prevBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.prevBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.submittingText {
+  font-size: 13px;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+
+.errorBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Submit button (last question) */
+.submitBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-1);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 48px;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.submitBtn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.errorText {
+  font-size: 13px;
+  color: var(--color-destructive);
+  margin: 0;
+  text-align: center;
+}
+
+/* Result screen — `.page` is now viewport-locked (overflow: hidden), so this
+   inner area owns its own scroll (mirrors ResultsPage's locked-page/inner-
+   scroll pattern) to avoid clipping the type code + chart + CTAs on short
+   viewports. */
+.resultBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px 60px;
+  gap: 16px;
+  max-width: 480px;
+  width: 100%;
+  margin: 0 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.typeCode {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--accent-1);
+  margin: 0;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.typeLabel {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin: 0;
+  text-align: center;
+}
+
+.chartWrap {
+  margin: 8px 0;
+}
+
+.description {
+  font-size: 14px;
+  color: var(--color-text);
+  line-height: 1.6;
+  margin: 0;
+  text-align: center;
+  max-width: 360px;
+}
+
+.ctaBtn {
+  width: 100%;
+  max-width: 360px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-1);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 48px;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.ctaBtn:hover {
+  transform: translateY(-2px);
+}
+
+.secondaryBtn {
+  width: 100%;
+  max-width: 360px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease);
+}
+
+.secondaryBtn:hover {
+  border-color: var(--accent-1);
+  transform: translateY(-1px);
+}
+
+/* Resume notice — shown when a saved draft put the user mid-assessment.
+   Restyled to match SwipePage's under-bar note (e.g. filter_relaxed, line
+   ~607): plain small dim text directly under the track, no pill/bg. */
+.resumeNote {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--color-text-dimmer);
+  text-align: center;
+}

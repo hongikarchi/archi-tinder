@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 
 from django.core.cache import cache
 
-from ..models import UserProfile
+from ..models import PersonalityProfile, UserProfile
 from ..serializers import UserSerializer, UserProfileSerializer, UserProfileSelfUpdateSerializer
 from ..throttling import AvatarUploadThrottle
 
@@ -38,7 +38,9 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
       }
 
     Each board card contains: project_id, name, date (created_at), visibility,
-    building_count, cover_image_url, thumbnails (up to 6).
+    building_count, cover_image_url, thumbnails (up to 6),
+    has_report_image + report_image_url (pointer to the persona report
+    image; the card prefers it over cover_image_url).
 
     Cover derivation: first liked_ids building → first saved_ids building → ''.
     Image batch lookup is performed only for the paged slice to avoid N+1 at
@@ -125,6 +127,18 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
             'building_count': building_count,
             'cover_image_url': cover_url,
             'thumbnails':     thumbnails,
+            # FRONT-PEOPLE-THUMB-1: the board card's cover is the persona report
+            # image when the board has one. Only a POINTER ships here —
+            # Project.report_image is base64 TEXT (~200KB each) and page_size
+            # goes up to 50, so inlining would make one profile response
+            # megabytes wide. Same split the /people feed uses.
+            # `p.report_image` is already in memory (the queryset above loads
+            # full rows), so this flag costs no extra query.
+            'has_report_image': bool(p.report_image),
+            'report_image_url': (
+                f'/api/v1/projects/{p.project_id}/report-image/'
+                if p.report_image else ''
+            ),
         })
 
     return {
@@ -180,6 +194,28 @@ class UserProfileDetailView(APIView):
 
         data = UserProfileSerializer(profile).data
         data['boards'] = _build_boards_field(profile, is_owner, page=page, page_size=page_size)
+
+        # Personality field: all 5 axes included — axis_5 (bonus) is needed for
+        # the pentagon SVG shape in the profile overlay comparison view.
+        # FULL-PRIVACY-1: non-owner viewers only see this when the profile
+        # owner has discovery_opt_in=True; the owner always sees their own
+        # personality regardless of the toggle (it's a public-visibility
+        # switch, not a self-visibility one).
+        try:
+            p = profile.personality
+            if is_owner or p.discovery_opt_in:
+                data['personality'] = {
+                    'axis_1': p.axis_1,
+                    'axis_2': p.axis_2,
+                    'axis_3': p.axis_3,
+                    'axis_4': p.axis_4,
+                    'axis_5': p.axis_5,
+                    'type_code': p.type_code,
+                }
+            else:
+                data['personality'] = None
+        except PersonalityProfile.DoesNotExist:
+            data['personality'] = None
 
         # Serialiser returns OrderedDict; cast to plain dict for cache storage
         # so it round-trips cleanly through pickle / JSON.
@@ -444,7 +480,12 @@ class LikedBuildingsView(APIView):
       200:    {"liked_count": N}
       400:    {"detail": "<reason>"}
 
-    GET — return the user's liked buildings as full card objects.
+    GET — return a user's liked buildings as full card objects.
+      Query param: user_id (optional). Omitted -> caller's own liked list.
+        Provided -> that user's liked list (design-parity public-profile
+        tabs; any AUTHENTICATED user may view another user's likes — taste
+        sharing is the product concept, still no anonymous access). Unknown
+        user_id -> 404.
       200:    {"buildings": [...], "total": N}
 
     Ordering: newest first (prepend on POST). Deduped. Capped at
@@ -525,13 +566,30 @@ class LikedBuildingsView(APIView):
         return Response({'liked_count': len(profile.liked_building_ids)})
 
     def get(self, request):
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        target_user_id_raw = request.query_params.get('user_id')
+        if target_user_id_raw is not None:
+            try:
+                target_user_id = int(target_user_id_raw)
+            except (ValueError, TypeError):
+                return Response(
+                    {'detail': 'user_id must be an integer.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                profile = UserProfile.objects.get(user__id=target_user_id)
+            except UserProfile.DoesNotExist:
+                return Response(
+                    {'detail': 'Not found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            try:
+                profile = request.user.profile
+            except UserProfile.DoesNotExist:
+                return Response(
+                    {'detail': 'Profile not found'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         from apps.recommendation import engine
 

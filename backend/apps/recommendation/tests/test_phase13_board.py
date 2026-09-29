@@ -125,6 +125,50 @@ class TestProjectSerializer:
         assert 'disliked_ids' not in resp.json()
 
 
+# ── TestProjectDetailAxisScoresNoRecomputeOnRead ─────────────────────────────
+# 2026-09-28: ProjectDetailView.get must never touch connections['buildings']
+# or write -- a stored (possibly legacy-format) axis_scores is shown as-is.
+# Regression for the recompute-on-read removal (ensure_axis_scores deleted).
+
+@pytest.mark.django_db
+class TestProjectDetailAxisScoresNoRecomputeOnRead:
+
+    def _make_project(self, user_profile, **kwargs):
+        defaults = dict(name='TestBoard', visibility='public')
+        defaults.update(kwargs)
+        return Project.objects.create(user=user_profile, **defaults)
+
+    def test_legacy_axis_scores_returned_unchanged_without_buildings_query(
+        self, auth_client, user_profile,
+    ):
+        legacy_axis = {'form': 0.5, 'materiality': 0.2, 'scale': 0.1, 'energy': 0.0, 'tradition': -0.3}
+        project = self._make_project(user_profile, axis_scores=legacy_axis)
+
+        with patch('apps.recommendation.services.axis_scores.compute_axis_scores') as mock_compute, \
+             patch('apps.recommendation.services.axis_scores.connections') as mock_connections:
+            resp = auth_client.get(f'/api/v1/projects/{project.project_id}/')
+
+        assert resp.status_code == 200
+        assert resp.json()['axis_scores'] == legacy_axis
+        mock_compute.assert_not_called()
+        mock_connections.__getitem__.assert_not_called()
+
+        project.refresh_from_db()
+        assert project.axis_scores == legacy_axis  # unchanged in DB too
+
+    def test_current_shape_axis_scores_returned_unchanged(self, auth_client, user_profile):
+        current_axis = {
+            'materiality': {'score': 0.1, 'dots': [0.1], 'n': 1, 'iqr': 1.0, 'confidence': 0.0},
+            'scale': None, 'energy': None, 'tradition': None,
+        }
+        project = self._make_project(user_profile, axis_scores=current_axis)
+
+        resp = auth_client.get(f'/api/v1/projects/{project.project_id}/')
+
+        assert resp.status_code == 200
+        assert resp.json()['axis_scores'] == current_axis
+
+
 # ── TestProjectDetailView ─────────────────────────────────────────────────────
 
 @pytest.mark.django_db

@@ -107,7 +107,17 @@ export function normalizeCard(card) {
     image_focus: card.image_focus ?? null,
     image_kind:  card.image_kind ?? null,
     source_url:  card.url || null,
-    gallery:     card.gallery || [],
+    // FRONT-UX-14: gallery images render full-bleed at CARD_WIDTH — right-size
+    // to the same 840px default as the cover so the gallery face doesn't pull
+    // full-resolution source images. rightSizeImageUrl is idempotent for
+    // already-sized URLs and a no-op passthrough for non-CDN hosts.
+    gallery:     (card.gallery || []).map(u => rightSizeImageUrl(u)),
+    // FRONT-UX-14-FIX: parallel DPR srcset array, built from the RAW gallery
+    // URLs (buildCardSrcSet must see the un-right-sized w_auto token — see
+    // rightSizeImageUrl.js ~line 91). Computed independently of the `gallery`
+    // map above so existing consumers of `gallery` (right-sized strings) are
+    // unaffected. null entries (non-CDN hosts) degrade to the plain <img src>.
+    gallery_srcset: (card.gallery || []).map(u => buildCardSrcSet(u)),
     gallery_meta: card.gallery_meta || [],
     gallery_drawing_start: card.gallery_drawing_start ?? card.metadata?.gallery_drawing_start ?? null,
     // covers_by_type: jsonb dict {exterior, interior, drawing, aerial, detail}
@@ -116,6 +126,7 @@ export function normalizeCard(card) {
     metadata: {
       axis_typology:        card.metadata?.axis_typology        ?? card.program          ?? null,
       axis_architects:      card.metadata?.axis_architects      ?? null,
+      architect_id:         card.metadata?.architect_id         ?? null,
       axis_country:         card.metadata?.axis_country         ?? card.location_country ?? null,
       axis_city:            card.metadata?.axis_city            ?? card.location_city    ?? null,
       axis_year:            card.metadata?.axis_year            ?? card.project_year     ?? null,

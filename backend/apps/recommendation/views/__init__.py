@@ -32,7 +32,6 @@ from .swipe import (
     ProjectBookmarkView,
     BuildingBatchView,
     DiverseRandomView,
-    QuestionResponseView,
     # Private helpers accessed by tests
     _merge_buffer_into_exposed,
     _async_prefetch_thread,
@@ -51,6 +50,7 @@ from .discovery import (
 from .reports import (
     ProjectReportGenerateView,
     ProjectReportImageView,
+    ProjectReportImageFetchView,
 )
 from .telemetry import (
     ImageLoadTelemetryView,
@@ -85,7 +85,6 @@ __all__ = [
     'ProjectBookmarkView',
     'BuildingBatchView',
     'DiverseRandomView',
-    'QuestionResponseView',
     'ParseQueryView',
     'DiscoveryFeedView',
     'DiscoveryFeedbackView',
@@ -93,6 +92,7 @@ __all__ = [
     'BoardSurpriseView',
     'ProjectReportGenerateView',
     'ProjectReportImageView',
+    'ProjectReportImageFetchView',
     'ImageLoadTelemetryView',
     'ImageLoadTelemetryThrottle',
     'RecommendedArchitectsView',

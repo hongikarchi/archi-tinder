@@ -2,47 +2,48 @@ import { useState, useRef, useEffect, memo } from 'react'
 import * as api from '../api/client.js'
 import { getProject, updateProject } from '../api/projects.js'
 import s from '../components/CalibrationChat.module.css'
+import ps from './LLMSearchPage.module.css'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 
+// Preset query chips — label is translated via t('search.presets.<id>Label');
+// query is the actual text sent to the backend parser, also translated
+// (Korea-first: a Korean UI showing an English query in the user bubble after
+// tapping a chip would look broken) via t('search.presets.<id>Query').
+// NEEDS EYEBALL: localizing the query text changes backend parser input for
+// ko users — the backend is expected to handle Korean queries already
+// (Korea-first parser), but this wasn't previously exercised via presets.
 const PRESETS = [
-  { label: 'Japanese modern museum',  query: 'Modern museum in Japan' },
-  { label: 'Minimalist housing',       query: 'Minimalist residential housing' },
-  { label: 'Landscape architecture',   query: 'Landscape or park architecture' },
-  { label: 'Brutalist office',         query: 'Brutalist office or civic building' },
-  { label: 'Religious architecture',   query: 'Religious or spiritual architecture' },
-  { label: 'Boutique hospitality',     query: 'Small hotel or boutique hospitality' },
+  { id: 'japaneseMuseum' },
+  { id: 'minimalistHousing' },
+  { id: 'landscape' },
+  { id: 'brutalistOffice' },
+  { id: 'religious' },
+  { id: 'boutiqueHospitality' },
 ]
 
-const FILTER_LABELS = {
-  program: 'Program',
-  location_country: 'Location',
-  material: 'Material',
-  style: 'Style',
-  year_min: 'Year',
-  year_max: 'Year',
-}
-
 function FilterChips({ filters }) {
+  const { t } = useTranslation()
   if (!filters) return null
   const chips = []
-  if (filters.program)          chips.push(`${FILTER_LABELS.program}: ${filters.program}`)
-  if (filters.location_country) chips.push(`${FILTER_LABELS.location_country}: ${filters.location_country}`)
-  if (filters.material)         chips.push(`${FILTER_LABELS.material}: ${filters.material}`)
-  if (filters.style)            chips.push(`${FILTER_LABELS.style}: ${filters.style}`)
+  if (filters.program)          chips.push(`${t('search.filterLabels.program')}: ${filters.program}`)
+  if (filters.location_country) chips.push(`${t('search.filterLabels.location')}: ${filters.location_country}`)
+  if (filters.material)         chips.push(`${t('search.filterLabels.material')}: ${filters.material}`)
+  if (filters.style)            chips.push(`${t('search.filterLabels.style')}: ${filters.style}`)
   if (filters.year_min || filters.year_max) {
     const from = filters.year_min || '...'
     const to   = filters.year_max || '...'
-    chips.push(`Year: ${from}-${to}`)
+    chips.push(`${t('search.filterLabels.year')}: ${from}-${to}`)
   }
   if (!chips.length) return null
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px 14px', marginTop: 10 }}>
       {chips.map(c => (
         <span key={c} style={{
-          padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
-          background: 'rgba(236,72,153,0.12)',
-          border: '1px solid rgba(236,72,153,0.25)',
-          color: '#f9a8d4',
+          fontSize: 12, fontWeight: 700,
+          color: 'var(--color-text)',
         }}>{c}</span>
       ))}
     </div>
@@ -50,9 +51,10 @@ function FilterChips({ filters }) {
 }
 
 const Thumbnail = memo(function Thumbnail({ r }) {
+  const { t } = useTranslation()
   const [imgLoading, setImgLoading] = useState(true)
   return (
-    <div style={{ width: '100%', height: 72, position: 'relative', background: 'rgba(255,255,255,0.04)' }}>
+    <div style={{ width: '100%', height: 72, position: 'relative', background: 'var(--color-surface-2)' }}>
       {imgLoading && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
       {r.image_url ? (
         <img
@@ -71,28 +73,29 @@ const Thumbnail = memo(function Thumbnail({ r }) {
           width: '100%', height: 72,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 20,
-        }}>Building</div>
+        }}>{t('search.buildingFallback')}</div>
       )}
     </div>
   )
 })
 
 function ResultStrip({ results, isFallback }) {
+  const { t } = useTranslation()
   if (!results || !results.length) return null
   return (
     <div style={{ marginTop: 12 }}>
       {isFallback && (
         <div style={{
-          fontSize: 11, color: '#9ca3af', marginBottom: 6,
+          fontSize: 11, color: 'var(--color-text-dim)', marginBottom: 6,
           display: 'flex', alignItems: 'center', gap: 4,
         }}>
           <span style={{
             padding: '1px 7px', borderRadius: 999, fontSize: 10,
-            background: 'rgba(251,191,36,0.12)',
-            border: '1px solid rgba(251,191,36,0.25)',
-            color: '#fbbf24',
-          }}>similar</span>
-          <span>showing related results</span>
+            background: 'color-mix(in srgb, var(--accent-3) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--accent-3) 25%, transparent)',
+            color: 'var(--accent-3)',
+          }}>{t('search.similarBadge')}</span>
+          <span>{t('search.similarBadgeBody')}</span>
         </div>
       )}
       <div style={{
@@ -102,8 +105,8 @@ function ResultStrip({ results, isFallback }) {
         {results.slice(0, 12).map(r => (
           <div key={r.image_id} style={{
             flexShrink: 0, width: 100, borderRadius: 10, overflow: 'hidden',
-            background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            background: 'var(--color-tag-bg)',
+            border: '1px solid var(--color-border-soft)',
           }}>
             <Thumbnail r={r} />
             <div style={{ padding: '5px 7px' }}>
@@ -125,8 +128,12 @@ function ResultStrip({ results, isFallback }) {
 }
 
 // eslint-disable-next-line no-unused-vars
-export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate }) {
+export default function LLMSearchPage({ mode, projectId, projectName: initialName, visibility = 'private', onBack, onStart, onUpdate, onLogout }) {
   const { t } = useTranslation()
+  // English pluralizes "building(s)"; Korean's "{n}곳" doesn't inflect, so the
+  // singular/plural key split only matters for the en dict (ko values are
+  // identical in both keys).
+  const foundBuildingsText = (n) => t(n === 1 ? 'search.foundBuilding' : 'search.foundBuildings', { n })
   // Derive storage key once per render cycle (props/sessionStorage are stable for the lifecycle of this route mount)
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
   const storageKey = `archithon_chat_${userId}_${mode}_${projectId || 'new'}`
@@ -136,7 +143,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       const stored = localStorage.getItem(`${storageKey}__messages`)
       if (stored) return JSON.parse(stored)
     } catch { /* ignore */ }
-    return [{ role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }]
+    return [{ role: 'ai', text: t('search.greeting') }]
   })
   const [input, setInput]               = useState('')
   const [isLoading, setIsLoading]       = useState(false)
@@ -505,9 +512,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
         let replyText
         if (results.length > 0 && !isFallback) {
-          replyText = `${probeText}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+          replyText = `${probeText}\n\n${foundBuildingsText(results.length)}`
         } else if (results.length > 0 && isFallback) {
-          replyText = `${probeText}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+          replyText = `${probeText}\n\n${parsed.fallback_note || t('search.noExactMatches')}`
         } else {
           replyText = probeText
         }
@@ -526,11 +533,11 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         // the next fresh query.
         let replyText
         if (results.length > 0 && !isFallback) {
-          replyText = `${parsed.reply}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+          replyText = `${parsed.reply}\n\n${foundBuildingsText(results.length)}`
         } else if (results.length > 0 && isFallback) {
-          replyText = `${parsed.reply}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+          replyText = `${parsed.reply}\n\n${parsed.fallback_note || t('search.noExactMatches')}`
         } else {
-          replyText = `${parsed.reply}\n\nNo buildings found. Try describing it differently.`
+          replyText = `${parsed.reply}\n\n${t('search.noBuildingsFound')}`
         }
 
         setMessages(prev => [...prev, {
@@ -544,7 +551,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         setConversationHistory([])
       }
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
+      setMessages(prev => [...prev, { role: 'ai', text: t('search.somethingWentWrong', { detail: err.message }) }])
     }
 
     setIsLoading(false)
@@ -593,9 +600,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       // Build the AI reply text (mirrors the terminal path).
       let replyText
       if (results.length > 0 && !isFallback) {
-        replyText = `${t('search.chipRerankDone', { label })}\n\nFound ${results.length} building${results.length !== 1 ? 's' : ''} matching your criteria.`
+        replyText = `${t('search.chipRerankDone', { label })}\n\n${foundBuildingsText(results.length)}`
       } else if (results.length > 0 && isFallback) {
-        replyText = `${t('search.chipRerankDone', { label })}\n\n${parsed.fallback_note || 'No exact matches -- here are some similar buildings you might like.'}`
+        replyText = `${t('search.chipRerankDone', { label })}\n\n${parsed.fallback_note || t('search.noExactMatches')}`
       } else {
         replyText = t('search.chipRerankEmpty', { label })
       }
@@ -609,14 +616,14 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
         quickReplies: parsed.suggested_quick_replies || [],
       }])
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: `Something went wrong: ${err.message}. Please try again.` }])
+      setMessages(prev => [...prev, { role: 'ai', text: t('search.somethingWentWrong', { detail: err.message }) }])
     }
 
     setIsLoading(false)
   }
 
   function handleStartSwiping() {
-    const name = initialName || 'Untitled Project'
+    const name = initialName || t('search.untitledProject')
     clearChatStorage()
     // Clear backend blob so a consumed chat does not resurrect next time this
     // project is opened in update mode (backend was source of truth, now reset).
@@ -639,7 +646,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     }
   }
 
-  const INITIAL_MESSAGE = { role: 'ai', text: "Hello! Describe the kind of architecture you're looking for -- country, program, architect, style, year, and so on." }
+  const INITIAL_MESSAGE = { role: 'ai', text: t('search.greeting') }
 
   function handleNewConversation() {
     if (messages.length > 1) {
@@ -670,46 +677,53 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     }
   }
 
-  const bottomOffset = showStart ? 64 + 140 : 64 + 20
+  // UI-CONSISTENCY-B Phase 2c: the old `64` was the previous full-width
+  // TabBar's height; the input bar / start panel now float `var(--tabbar-
+  // clearance)` above the floating capsule instead, so the messages list's
+  // scroll padding is rebased onto that token (deltas 140/20 preserved as-is).
+  const bottomOffset = showStart ? 'calc(var(--tabbar-clearance) + 140px)' : 'calc(var(--tabbar-clearance) + 20px)'
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden', background: 'var(--color-bg)',
+      height: 'var(--page-height)', overflow: 'hidden', background: 'var(--color-bg)',
       display: 'flex', flexDirection: 'column',
-      backgroundImage: 'radial-gradient(circle at 15% 50%, rgba(236,72,153,0.07), transparent 30%), radial-gradient(circle at 85% 30%, rgba(244,63,94,0.07), transparent 30%)',
     }}>
 
-      {/* Header */}
-      <div style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid var(--color-border)',
-        background: 'var(--color-header-bg)',
-        backdropFilter: 'blur(12px)',
-        display: 'flex', alignItems: 'center', gap: 12,
-        position: 'sticky', top: 0, zIndex: 10,
-      }}>
-        <button
-          onClick={handleNewConversation}
-          className={s.newConvBtn}
-          aria-label={t('search.newConversation')}
-          title={t('search.newConversation')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      {/* Floating "new conversation" button — replaces the old sticky header's
+       * left control (canvas-design-port.md §6d item 6; llm-search.html /
+       * llm-search-update.html both show this exact refresh/undo icon at the
+       * floating top-left slot, not a generic back-chevron — this page has
+       * no working back navigation (the `onBack` prop is unused dead code),
+       * so the floating circle is "new conversation" relocated, not "back"). */}
+      <PageBackButton
+        onClick={handleNewConversation}
+        label={t('search.newConversation')}
+        icon={
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.5" />
           </svg>
-        </button>
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <span style={{
-            fontSize: 16, fontWeight: 700,
-            background: 'linear-gradient(90deg, var(--color-text), #f9a8d4)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        }
+      />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
+
+      {/* Update-mode title — a real information loss if dropped silently (which
+       * project is being updated); the mock shows no title here at all, so
+       * this is a deliberate mock deviation for `mode === 'update'` only.
+       * NEEDS EYEBALL. New-session mode drops "archibe AI" per the mock. */}
+      {mode === 'update' && (
+        <div style={{ padding: '0 16px', flexShrink: 0 }}>
+          <h2 style={{
+            fontSize: 20, fontWeight: 700, margin: '0 0 8px',
+            color: 'var(--color-text)', letterSpacing: '-0.01em',
+            maxWidth: 680, marginLeft: 'auto', marginRight: 'auto',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {mode === 'update' ? `Update "${initialName}"` : 'archibe AI'}
-          </span>
+            {t('search.updateTitle', { name: initialName })}
+          </h2>
         </div>
-        <div style={{ width: 40 }} />
-      </div>
+      )}
 
       {/* Messages */}
       <div style={{
@@ -777,26 +791,16 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingLeft: 2 }}>
               {PRESETS.map(p => (
                 <button
-                  key={p.label}
-                  onClick={() => handlePreset(p.query)}
+                  key={p.id}
+                  onClick={() => handlePreset(t(`search.presets.${p.id}Query`))}
+                  className={ps.presetChip}
                   style={{
                     padding: '8px 14px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                    background: 'rgba(236,72,153,0.12)',
-                    border: '1px solid rgba(236,72,153,0.35)',
-                    color: '#f9a8d4', cursor: 'pointer', fontFamily: 'inherit',
-                    transition: 'background 0.15s, border-color 0.15s',
+                    color: 'var(--accent-1)', cursor: 'pointer', fontFamily: 'inherit',
                     whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(236,72,153,0.25)'
-                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.6)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(236,72,153,0.12)'
-                    e.currentTarget.style.borderColor = 'rgba(236,72,153,0.35)'
-                  }}
                 >
-                  {p.label}
+                  {t(`search.presets.${p.id}Label`)}
                 </button>
               ))}
             </div>
@@ -812,7 +816,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               }}>
                 {[0, 0.16, 0.32].map(d => (
                   <div key={d} style={{
-                    width: 6, height: 6, borderRadius: '50%', background: '#6b7280',
+                    width: 6, height: 6, borderRadius: '50%', background: 'var(--color-text-muted)',
                     animation: `bounce 1.4s ${d}s infinite ease-in-out both`,
                   }} />
                 ))}
@@ -826,7 +830,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       {/* Start swiping panel */}
       {showStart && (
         <div style={{
-          position: 'fixed', bottom: 'calc(134px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
+          position: 'fixed', bottom: 'calc(var(--tabbar-clearance) + 70px)', left: 0, right: 0,
           padding: '0 16px', zIndex: 20,
         }}>
           <div style={{
@@ -838,13 +842,13 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           }}>
             <button onClick={handleStartSwiping} style={{
               width: '100%', padding: '13px', borderRadius: 12, border: 'none',
-              background: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+              background: 'var(--accent-1)',
               color: '#fff', fontSize: 14, fontWeight: 700,
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
               {mode === 'update'
-                ? `Update with these results - ${latestResults.length}`
-                : `Start swiping - ${latestResults.length}`}
+                ? t('search.updateWithResults', { n: latestResults.length })
+                : t('search.startSwiping', { n: latestResults.length })}
             </button>
           </div>
         </div>
@@ -852,7 +856,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
       {/* Input */}
       <div style={{
-        position: 'fixed', bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))', left: 0, right: 0,
+        position: 'fixed', bottom: 'var(--tabbar-clearance)', left: 0, right: 0,
         padding: '12px 16px',
         background: 'linear-gradient(to top, var(--color-bg) 80%, transparent)',
         zIndex: 30,
@@ -868,7 +872,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Find a modern museum in Japan..."
+            placeholder={t('search.inputPlaceholder')}
             style={{
               flex: 1, background: 'transparent', border: 'none',
               color: 'var(--color-text-2)', fontSize: 14, outline: 'none',
@@ -878,7 +882,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
           />
           <button type="submit" disabled={isLoading || !input.trim()} style={{
             width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-            background: input.trim() && !isLoading ? '#ec4899' : 'var(--color-border-soft)',
+            background: input.trim() && !isLoading ? 'var(--accent-1)' : 'var(--color-border-soft)',
             border: 'none', cursor: input.trim() && !isLoading ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'background 0.2s',

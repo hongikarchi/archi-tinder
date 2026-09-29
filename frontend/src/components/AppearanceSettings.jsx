@@ -130,17 +130,6 @@ export default function AppearanceSettings() {
 
   return (
     <section style={{ padding: '0 0 24px' }}>
-      <h3 style={{
-        fontSize: 13,
-        fontWeight: 600,
-        color: 'var(--color-text-muted)',
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        margin: '0 0 16px',
-      }}>
-        {t('settings.appearance')}
-      </h3>
-
       {/* Theme row — 2-column swatch grid */}
       <div style={{ marginBottom: 20 }}>
         <p style={{

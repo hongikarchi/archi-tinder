@@ -4,15 +4,24 @@
  * Editable: ID/handle (PATCH /api/v1/users/me/), password (POST /auth/set-password/).
  * Read-only display: email + verified status, is_guest (verified status), providers.
  * Email verify: Google auth-code flow → POST /auth/link-email/.
+ * Discovery opt-in: GET /api/v1/personality/me/ (reused from /assessment, /people) +
+ * PATCH /api/v1/personality/me/ {discovery_opt_in}. Section renders only when the
+ * user has a PersonalityProfile (404/error on GET → section hidden).
  */
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe, updateMyProfile, setPassword as apiSetPassword } from '../../api/client.js'
-import { IconBack } from '../../components/icons.jsx'
+import { getMyPersonality, patchMyPersonality } from '../../api/personality.js'
 import GoogleVerifyButton from '../../components/GoogleVerifyButton.jsx'
 import { hasGoogleLogin } from '../../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.js'
 import { useTranslation } from '../../i18n/index.js'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import PageTopControls from '../../components/PageTopControls.jsx'
+import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
+import Toggle from '../../components/Toggle.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
@@ -41,7 +50,7 @@ const READONLY_VALUE_STYLE = {
   padding: '10px 0',
 }
 
-export default function AccountScreen() {
+export default function AccountScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -63,6 +72,11 @@ export default function AccountScreen() {
   const [passwordCurrentError, setPasswordCurrentError] = useState(null)
   const [savingPassword, setSavingPassword] = useState(false)
   const [passwordSuccess, setPasswordSuccess] = useState(false)
+
+  // Discovery opt-in section — null = no personality profile (assessment not taken); hidden entirely
+  const [personality, setPersonality] = useState(null)
+  const [discoverySaving, setDiscoverySaving] = useState(false)
+  const [discoveryError, setDiscoveryError] = useState(null)
 
   // Email verify — shared hook (must stay identical to VerifyGateModal; see useGoogleEmailVerify.js)
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
@@ -93,6 +107,14 @@ export default function AccountScreen() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false
+    getMyPersonality()
+      .then(data => { if (!cancelled) setPersonality(data) })
+      .catch(() => { if (!cancelled) setPersonality(null) })
+    return () => { cancelled = true }
+  }, [])
 
   async function handleSave() {
     if (saving) return
@@ -180,35 +202,50 @@ export default function AccountScreen() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
-          {t('account.loading')}
-        </div>
-      </div>
-    )
-  }
-
-  if (fetchError) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} />
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
-          {fetchError}
-        </div>
-      </div>
-    )
+  async function handleDiscoveryToggle(next) {
+    if (discoverySaving || !personality) return
+    const previous = personality.discovery_opt_in
+    setDiscoverySaving(true)
+    setDiscoveryError(null)
+    setPersonality(prev => ({ ...prev, discovery_opt_in: next }))
+    try {
+      const updated = await patchMyPersonality({ discovery_opt_in: next })
+      setPersonality(updated)
+    } catch (err) {
+      setPersonality(prev => ({ ...prev, discovery_opt_in: previous }))
+      // DRF field errors arrive as err.data.discovery_opt_in (no .detail/.message),
+      // same shape handleSave/password handlers already parse.
+      const fieldErr = err?.data?.discovery_opt_in
+      if (fieldErr) {
+        setDiscoveryError(Array.isArray(fieldErr) ? fieldErr[0] : fieldErr)
+      } else {
+        setDiscoveryError(err.message || t('account.discoverySaveError'))
+      }
+    } finally {
+      setDiscoverySaving(false)
+    }
   }
 
   const isDirty = handle !== (me?.handle || '')
 
   return (
-    <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} />
+    <PageShell
+      width="narrow"
+      chrome={<ScreenChrome navigate={navigate} onLogout={onLogout} />}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('account.title')}</PageTitle>
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
+          {t('account.loading')}
+        </div>
+      ) : fetchError ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
+          {fetchError}
+        </div>
+      ) : (
+        <>
 
         {/* Read-only info section */}
         <section style={{ marginBottom: 32 }}>
@@ -469,28 +506,76 @@ export default function AccountScreen() {
           </section>
         )}
 
-      </div>
+        {/* Discovery opt-in section — only rendered for users with a personality profile */}
+        {personality && (
+          <section style={{ marginBottom: 32 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+              color: 'var(--color-text-muted)', textTransform: 'uppercase',
+              margin: '0 0 16px',
+            }}>
+              {t('account.discoverySection')}
+            </p>
+
+            {discoveryError && (
+              <div style={{
+                padding: '10px 14px',
+                marginBottom: 12,
+                background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+                border: '1px solid var(--color-destructive)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--color-destructive)',
+                fontWeight: 500,
+              }}>
+                {discoveryError}
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '14px 16px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', display: 'block' }}>
+                  {t('account.discoveryLabel')}
+                </span>
+                <span style={{ ...HINT_STYLE, marginTop: 4 }}>
+                  {t('account.discoveryHint')}
+                </span>
+              </div>
+              <Toggle
+                checked={!!personality.discovery_opt_in}
+                onChange={handleDiscoveryToggle}
+                disabled={discoverySaving}
+                aria-label={t('account.discoveryLabel')}
+              />
+            </div>
+          </section>
+        )}
+
+        </>
+      )}
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t }) {
+function ScreenChrome({ navigate, onLogout }) {
   return (
-    <div className={styles.header}>
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        aria-label="Back"
-        className={styles.iconBtn}
-      >
-        <IconBack width={20} height={20} />
-      </button>
-      <h2 className={styles.headerTitle}>{t('account.title')}</h2>
-      <div style={{ width: 44 }} />
-    </div>
+    <>
+      <PageBackButton onClick={() => navigate(-1)} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
+    </>
   )
 }
 

@@ -1,0 +1,374 @@
+/* CompetitionDetailPage — 공모전 상세 (PROTOTYPE)
+   설계 §7-2. 찜 -> 사람 발견 -> 팀 전환이 한 화면에서 일어난다.
+
+   UI-CONSISTENCY-B Phase 3b-3: page shell + chrome now come from the shared
+   PageShell/PageBackButton/PageTopControls/PageLogoHeader system (no more
+   hand-rolled 56px top-padding spacer hack on .hero) — this module only
+   styles content BELOW that chrome. .title / .sectionTitle / .empty /
+   .emptyTitle were dropped — PageTitle / SectionTitle / EmptyState now own
+   that chrome (see CompetitionDetailPage.jsx). */
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+
+.hero {
+  padding: 0 0 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dday {
+  display: inline-block;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.ddayUrgent {
+  color: var(--color-destructive, #D73A49);
+}
+
+.organizer {
+  font-size: var(--fs-body);
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+}
+
+.theme {
+  font-size: var(--fs-emphasis);
+  color: var(--color-text-dim);
+  margin: 12px 0 0;
+  line-height: 1.55;
+}
+
+.sizeHint {
+  font-size: var(--fs-caption);
+  color: var(--color-text-dim);
+  margin: 8px 0 0;
+}
+
+/* 찜은 부담 0 의 행동이므로 가장 누르기 쉬운 자리에 크게 둔다(§7-2).
+   DESIGN.md §8.1 — primary CTA: radius-md, 44px min-height. */
+.interestCta {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 20px;
+  padding: 13px 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-1);
+  color: #fff;
+  font-family: inherit;
+  font-size: var(--fs-emphasis);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+
+.interestCta:hover {
+  transform: translateY(-1px);
+}
+
+.interestCta:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 3px;
+}
+
+.interestCtaOn {
+  background: var(--color-surface);
+  color: var(--accent-1);
+  border: 1px solid var(--accent-1);
+}
+
+.interestCount {
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+  margin: 10px 0 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sections ───────────────────────────────────────────────────────────── */
+
+.section {
+  padding: 22px 0 0;
+}
+
+.sectionEmpty {
+  font-size: var(--fs-body);
+  color: var(--color-text-dim);
+  margin: 0;
+  padding: 16px 0;
+  text-align: center;
+}
+
+.personList,
+.teamList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Person ─────────────────────────────────────────────────────────────── */
+
+.personCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* 추천은 같은 카드에 테두리만 강조한다. 레이아웃을 달리하면 "추천"이 별개
+   기능처럼 보여 아래 목록과의 연결이 끊긴다. */
+.personCardRec {
+  border-color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 5%, var(--color-surface));
+}
+
+.recommendWrap {
+  margin-bottom: 4px;
+}
+
+.sectionHint {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  margin-left: 6px;
+}
+
+.sectionTitleGap {
+  margin-top: 22px;
+}
+
+.personChart {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.personBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.personHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typeBadge {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-1) 25%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 2px 6px;
+  letter-spacing: 0.04em;
+}
+
+/* 실명을 빼고 아이디가 주 식별자가 됐으므로 부제가 아니라 제목 무게로 올린다.
+   누르면 프로필로 가므로 버튼이되, 링크처럼 보이게 둔다 — 카드 안에 버튼이
+   둘(아이디·제안)이라 둘 다 버튼 모양이면 무엇이 주 행동인지 흐려진다. */
+.handleBtn {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.handleBtn:hover {
+  color: var(--accent-1);
+  text-decoration: underline;
+}
+
+.handleBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 판정이 아니라 관찰. 단정적 표현을 쓰지 않는다(§5-1 기각 사유와 같은 맥락). */
+.fitReason {
+  font-size: var(--fs-caption);
+  color: var(--accent-1);
+  margin: 5px 0 0;
+  font-weight: var(--fw-medium);
+}
+
+.proposeBtn {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  min-height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.proposeBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.proposeBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ── Team ───────────────────────────────────────────────────────────────── */
+
+.teamCard {
+  padding: 13px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.teamHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.teamName {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+/* 희소성이 진짜다 — 실제 팀 구성에서 파생된다(§5). */
+.openSlot {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--accent-1);
+  background: color-mix(in srgb, var(--accent-1) 12%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+}
+
+.fullSlot {
+  flex-shrink: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-dim);
+}
+
+.teamMembers {
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+  margin: 7px 0 0;
+  line-height: 1.5;
+}
+
+.joinBtn {
+  margin-top: 11px;
+  padding: 7px 16px;
+  min-height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.joinBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.joinBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* Ghost/secondary CTA — DESIGN.md §8.3, radius-md. */
+.createTeamBtn {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 12px 24px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.createTeamBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.createTeamBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ── Etc ────────────────────────────────────────────────────────────────── */
+
+.protoNote {
+  margin: 22px 0 24px;
+  font-size: var(--fs-caption);
+  color: var(--color-text-dim);
+  text-align: center;
+}
+
+/* DESIGN.md §8.11 — bottom-center, glassmorphic */
+.toast {
+  position: fixed;
+  bottom: var(--tabbar-clearance);
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 10px 16px;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}

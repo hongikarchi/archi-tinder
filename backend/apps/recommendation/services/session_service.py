@@ -28,7 +28,7 @@ from .. import services  # noqa: import MODULE — patch path apps.recommendatio
 from ..models import Project, AnalysisSession
 from ..caches import evict_projects_list, evict_user_profile_detail, evict_project_detail
 from ..perf_timing import stage
-from ..views._shared import _progress
+from ..views._shared import _progress, _liked_id_only
 from .hydration import hydrate_like_vectors
 from .swipe_service import _build_action_card
 
@@ -549,7 +549,6 @@ def get_session_state(request, session):
                 next_bid = engine.compute_mmr_next(
                     pool_ids, exposed_ids, pool_embeddings,
                     _hydrated_lv, current_round,
-                    question_bias_vector=session.question_bias_vector,
                     multimodal_floor=session.multimodal_floor,
                 )
             else:
@@ -572,7 +571,6 @@ def get_session_state(request, session):
                     pf_id = engine.compute_mmr_next(
                         pool_ids, pf_exposed, pool_embeddings,
                         _hydrated_lv, current_round + 1,
-                        question_bias_vector=session.question_bias_vector,
                         multimodal_floor=session.multimodal_floor,
                     )
                     prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
@@ -634,7 +632,6 @@ def get_session_state(request, session):
                 pool_ids, exposed_ids, pool_embeddings,
                 like_vectors, current_round + 1,
                 multimodal_floor=session.multimodal_floor,
-                question_bias_vector=session.question_bias_vector,
             )
             prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
     except Exception:
@@ -659,7 +656,6 @@ def get_session_state(request, session):
                     pool_ids, temp_exposed, pool_embeddings,
                     like_vectors, current_round + 2,
                     multimodal_floor=session.multimodal_floor,
-                    question_bias_vector=session.question_bias_vector,
                 )
                 prefetch_card_2 = engine.get_building_card(pf2_id, image_focus=image_focus) if pf2_id else None
     except Exception:
@@ -684,8 +680,28 @@ def get_session_state(request, session):
 
 def get_session_result(session):
     """Orchestrate session-result computation. Verbatim from SessionResultView.get."""
-    # Liked buildings (batch fetch — cache-aware, preserves order, applies is_publishable gate)
-    liked_ids   = list(session.swipes.filter(action='like').values_list('canonical_bld_id', flat=True))
+    # Liked buildings (batch fetch — cache-aware, preserves order, applies is_publishable gate).
+    #
+    # BACK-RECOMMEND-7: liked_images is sourced from session.project.liked_ids
+    # (the board's like list — the SAME source the persona report uses), not
+    # from this session's own SwipeEvent rows. A Discovery -> Taste promotion
+    # reuses the draft Project (and its liked_ids), so likes swiped during
+    # Discovery have no SwipeEvent row in this session and were previously
+    # dropped from the result, disagreeing with the persona report. Falls
+    # back to the old session-swipe query if session.project is unset
+    # (defensive — should not happen for a real session).
+    if session.project is not None:
+        liked_ids = _liked_id_only(session.project.liked_ids)
+    else:
+        liked_ids = list(session.swipes.filter(action='like').values_list('canonical_bld_id', flat=True))
+    # Dedupe while preserving stored order (first occurrence wins).
+    _seen_liked = set()
+    _deduped_liked_ids = []
+    for _lid in liked_ids:
+        if _lid not in _seen_liked:
+            _seen_liked.add(_lid)
+            _deduped_liked_ids.append(_lid)
+    liked_ids   = _deduped_liked_ids
     liked_cards = engine.get_buildings_by_ids(liked_ids)
     liked_cards = [c for c in liked_cards if c]
 
@@ -700,14 +716,12 @@ def get_session_result(session):
             k=RC['top_k_results'],
             round_num=session.current_round,
             multimodal_floor=session.multimodal_floor,
-            question_bias_vector=session.question_bias_vector,
         )
     else:
         predicted_cards = engine.get_top_k_results(
             session.preference_vector,
             session.exposed_ids,
             k=RC['top_k_results'],
-            question_bias_vector=session.question_bias_vector,
         )
 
     # Topic 04(b) DPP: when flag ON, over-fetch candidates so DPP MAP can actually narrow.
@@ -723,7 +737,6 @@ def get_session_result(session):
             k=RC['top_k_results'] * _overfetch_mult,
             round_num=session.current_round,
             multimodal_floor=session.multimodal_floor,
-            question_bias_vector=session.question_bias_vector,
         )
 
     # Capture initial cosine order BEFORE any reorder (needed for RRF composition)

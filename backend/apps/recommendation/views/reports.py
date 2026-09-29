@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 
 from ..models import Project
 from .. import services
-from ..caches import evict_projects_list, evict_project_detail
+from ..caches import evict_projects_list, evict_project_detail, evict_user_profile_detail
 from ..services.axis_scores import compute_axis_scores
 from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
@@ -34,14 +34,23 @@ class ProjectReportGenerateView(APIView):
         # on every revisit-triggered POST (was causing silent 429s + nondeterministic
         # report rewrites — reports.py regenerated+overwrote on every call).
         if project.final_report and not request.data.get('regenerate'):
+            # 2026-09-28: no recompute on the cached short-circuit path -- a
+            # legacy-format stored axis_scores is returned as-is (original
+            # BACK-REPORT-CACHE-1 behaviour). It only upgrades to the new
+            # embedding-projection shape via the generate/regenerate path below.
             return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
 
         liked_id_strings = _liked_id_only(project.liked_ids)
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # BACK-LLM-5: ground the report in BOTH sides of the swipe history +
+        # the requesting profile's language preference (fallback 'ko').
+        disliked_id_strings = list(project.disliked_ids or [])
+        language = getattr(profile, 'language', 'ko') or 'ko'
+
         try:
-            report = services.generate_persona_report(liked_id_strings)
+            report = services.generate_persona_report(liked_id_strings, disliked_id_strings, language)
         except (ValueError, RuntimeError) as e:
             return Response(
                 {'detail': str(e), 'error_type': type(e).__name__},
@@ -63,6 +72,51 @@ class ProjectReportGenerateView(APIView):
         evict_project_detail(str(pk))
         logger.info('Persona report generated for project %s', pk)
         return Response({'final_report': report, 'axis_scores': axis_scores})
+
+
+class ProjectReportImageFetchView(APIView):
+    """GET /api/v1/projects/<pk>/report-image/ — serve a board's persona image.
+
+    Split from the generating POST on purpose: board cards need to READ the
+    image, and Project.report_image is base64 TEXT (~200KB). Inlining it in the
+    profile's board list (page_size up to 50) would make one response megabytes
+    wide, so the list ships a pointer and each card fetches lazily. Mirrors the
+    /people feed's report-image endpoint.
+
+    Visibility mirrors the board LIST exactly (accounts/views/profile.py
+    `_build_boards_field`): the owner sees their own boards, everyone else only
+    `visibility='public'` ones. Without this the pointer would become a way to
+    read private boards' images.
+
+    404 when absent — callers treat that as "no image" and fall back, they do
+    not retry.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        project = (
+            Project.objects
+            .filter(project_id=pk)
+            .values('report_image', 'report_image_mime', 'visibility', 'user_id')
+            .first()
+        )
+        if not project:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        profile = _get_profile(request)
+        is_owner = profile is not None and profile.pk == project['user_id']
+        if not is_owner and project['visibility'] != 'public':
+            # Same shape as "missing" so the endpoint never confirms that a
+            # private board exists.
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not project['report_image']:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            'image_data': project['report_image'],
+            'mime_type': project['report_image_mime'] or 'image/png',
+        })
 
 
 class ProjectReportImageView(APIView):
@@ -99,6 +153,7 @@ class ProjectReportImageView(APIView):
         project.save(update_fields=['report_image', 'report_image_mime'])
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
+        evict_user_profile_detail(profile.user.id)
         logger.info('Persona image generated for project %s', pk)
         return Response({
             'image_data': result['image_data'],

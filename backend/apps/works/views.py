@@ -97,16 +97,24 @@ class FinalizeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Return the authenticated user's uploaded works, newest first.
+        """Return a user's uploaded works, newest first.
 
         Query params (BACK-WORKS-1): page (1-indexed, default 1),
         page_size (default + cap 50 — the default equals the cap so the
         current fetch-all frontend, which sends no params, keeps seeing up
         to 50 works with zero frontend change).
 
+        user_id (optional, design-parity public-profile tabs): when omitted,
+        returns the authenticated caller's own works (all, regardless of
+        is_publishable — the owner sees their own processing/rejected works
+        too). When provided, returns that user's PUBLISHABLE-ONLY works —
+        any authenticated user may view another user's published works
+        (taste-sharing is the product concept; still requires auth, no
+        anonymous access). Unknown user_id -> 404.
+
         Response 200:
-          {works: [{upload_id, title, program, cover_url, is_publishable,
-                    gate_reason, created_at}...], total, page, page_size}
+          {works: [{upload_id, title, program, built_status, cover_url,
+                    is_publishable, gate_reason, created_at}...], total, page, page_size}
 
         'total' is the total row count before pagination (not len(works)).
         r2_keys is intentionally omitted from each item — the frontend
@@ -114,6 +122,7 @@ class FinalizeView(APIView):
         server-side from r2_keys[0].
         """
         from .models import Work
+        from apps.accounts.models import UserProfile
 
         try:
             page = max(1, int(request.query_params.get('page', 1)))
@@ -127,8 +136,24 @@ class FinalizeView(APIView):
         except (ValueError, TypeError):
             page_size = _WORKS_PAGE_SIZE_DEFAULT
 
-        profile = request.user.profile
+        target_user_id_raw = request.query_params.get('user_id')
+        is_owner_view = True
+        if target_user_id_raw is not None:
+            try:
+                target_user_id = int(target_user_id_raw)
+            except (ValueError, TypeError):
+                return Response({'detail': 'user_id must be an integer.'}, status=400)
+            try:
+                profile = UserProfile.objects.get(user__id=target_user_id)
+            except UserProfile.DoesNotExist:
+                return Response({'detail': 'Not found.'}, status=404)
+            is_owner_view = (profile.user_id == request.user.id)
+        else:
+            profile = request.user.profile
+
         works_qs = Work.objects.filter(owner=profile).order_by('-created_at')
+        if not is_owner_view:
+            works_qs = works_qs.filter(is_publishable=True)
         total = works_qs.count()
         offset = (page - 1) * page_size
         page_works = works_qs[offset: offset + page_size]
@@ -144,6 +169,7 @@ class FinalizeView(APIView):
                 'upload_id': w.upload_id,
                 'title': w.title,
                 'program': w.program,
+                'built_status': w.built_status,
                 'cover_url': cover_url,
                 'is_publishable': w.is_publishable,
                 'gate_reason': w.gate_reason,
@@ -159,6 +185,7 @@ class FinalizeView(APIView):
 
         title = data.get('title', '')
         program = data.get('program', '')
+        built_status = data.get('built_status', 'built')
         location_city = data.get('location_city', '')
         location_country = data.get('location_country', '')
         project_year_raw = data.get('project_year')
@@ -178,6 +205,16 @@ class FinalizeView(APIView):
             return Response(
                 {'detail': f'Invalid program value: {program!r}. '
                            f'Allowed values: {sorted(valid_programs)}.'},
+                status=400,
+            )
+
+        # 1b2. built_status, when provided, must be one of the two choices.
+        from .models import BUILT_STATUS_CHOICES
+        valid_built_statuses = {key for key, _ in BUILT_STATUS_CHOICES}
+        if built_status not in valid_built_statuses:
+            return Response(
+                {'detail': f'Invalid built_status value: {built_status!r}. '
+                           f'Allowed values: {sorted(valid_built_statuses)}.'},
                 status=400,
             )
 
@@ -273,6 +310,7 @@ class FinalizeView(APIView):
             upload_id=upload_id,
             title=title,
             program=program,
+            built_status=built_status,
             location_city=location_city,
             location_country=location_country,
             project_year=project_year,
@@ -342,6 +380,7 @@ class WorkDetailView(APIView):
             'upload_id': work.upload_id,
             'title': work.title,
             'program': work.program,
+            'built_status': work.built_status,
             'location_city': work.location_city,
             'location_country': work.location_country,
             'project_year': work.project_year,

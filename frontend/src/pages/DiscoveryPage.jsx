@@ -4,12 +4,18 @@ import { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, VerifyRequiredEr
 import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
+import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
+import SwipeDeck from '../components/SwipeDeck.jsx'
+import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import Modal from '../components/Modal.jsx'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -19,7 +25,7 @@ let _discoveryMountedOnce = false
 const PREFETCH_AT_REMAINING = 3   // fetch more when deck.length <= this
 const TASTE_NUDGE_THRESHOLD = 10  // inject trigger card when draftLikeCount reaches this
 const DISCOVERY_LIKE_HARD_CAP = 50  // hard stop — block swiping, force Taste hand-off
-const DECK_CACHE_KEY = 'discovery_deck_v2'
+const DECK_CACHE_KEY = 'discovery_deck_v4' // v4: added gallery_srcset field (FRONT-UX-14-FIX) — invalidate pre-change cached decks
 const DECK_CACHE_TTL_MS = 30 * 60 * 1000  // 30 min
 const DRAFT_ID_KEY = 'discovery_draft_id'
 const DRAFT_LIKES_KEY = 'discovery_draft_likes'
@@ -124,7 +130,7 @@ function _clearDraftSessionStorage() {
   sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
 }
 
-export default function DiscoveryPage({ showToast }) {
+export default function DiscoveryPage({ showToast, onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const isActiveRef = useRef(true)
@@ -140,6 +146,12 @@ export default function DiscoveryPage({ showToast }) {
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [capReached, setCapReached] = useState(false)
+  // FRONT-FLOW-1: shown once on first Discovery entry for newly registered
+  // accounts — flag set by LoginPage's register-success path. DiscoveryPage
+  // owns both localStorage keys end-to-end (component itself stays dumb).
+  const [showTutorial, setShowTutorial] = useState(
+    () => localStorage.getItem('archithon_show_tutorial') === '1'
+  )
   // Leave-warning modal state (DISCOVERY-PERF-3)
   const [leaveModal, setLeaveModal] = useState(null)  // null | { proceed: fn }
   // True while the modal's auto-promote call is in-flight (>=10 path)
@@ -437,8 +449,15 @@ export default function DiscoveryPage({ showToast }) {
 
   useKeyboardSwipe({
     onSwipe: async (dir) => { await cardRef.current?.swipe(dir) },
-    guardCondition: () => !!(capReached || !cardRef.current || !deck.length),
+    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial),
   })
+
+  // FRONT-FLOW-1: tutorial dismiss — removing 'archithon_show_tutorial' (set only
+  // on register success, LoginPage) IS the complete "already seen" record.
+  function handleTutorialClose() {
+    localStorage.removeItem('archithon_show_tutorial')
+    setShowTutorial(false)
+  }
 
   // -- Promote to Taste (triggered by right-swipe on trigger card) --
   async function handlePromoteToTaste() {
@@ -485,18 +504,19 @@ export default function DiscoveryPage({ showToast }) {
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'space-between',
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflow: 'hidden',
       background: 'var(--color-bg)',
-      padding: '20px 16px',
+      padding: '20px 16px var(--tabbar-clearance)',
     }}>
 
-      {/* Header */}
+      <PageTopControls onLogout={onLogout} />
+
+      <TutorialPopup visible={showTutorial} onClose={handleTutorialClose} />
+
+      {/* Header — Arch|ibe logo (DESIGN.md-mock parity, canvas-design-port.md §6d item 1) */}
       <div style={{ textAlign: 'center', width: '100%' }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.01em' }}>
-          <span style={{ color: 'var(--color-text)' }}>Disc</span>
-          <span style={{ color: '#ec4899' }}>overy</span>
-        </h1>
+        <PageLogoHeader padding={0} marginBottom={8} />
 
         {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
             the trigger card (Discovery 계속 선택). Rendered in the header (normal document
@@ -528,8 +548,8 @@ export default function DiscoveryPage({ showToast }) {
                 borderRadius: 'var(--radius-md, 12px)',
                 border: 'none',
                 background: promoteLoading
-                  ? 'rgba(9,105,218,0.4)'
-                  : 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
+                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
+                  : 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 600,
@@ -579,7 +599,7 @@ export default function DiscoveryPage({ showToast }) {
               color: 'var(--color-text)',
               lineHeight: 1.6,
             }}>
-              <span style={{ color: '#ec4899' }}>{t('discovery.capReachedCount', { n: 50 })}</span>
+              <span style={{ color: 'var(--accent-1)' }}>{t('discovery.capReachedCount', { n: 50 })}</span>
               {' '}{t('discovery.capReachedBody')}
             </p>
             <button
@@ -592,8 +612,8 @@ export default function DiscoveryPage({ showToast }) {
                 borderRadius: 12,
                 border: 'none',
                 background: promoteLoading
-                  ? 'rgba(236,72,153,0.4)'
-                  : 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
+                  : 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 15,
                 fontWeight: 700,
@@ -629,7 +649,7 @@ export default function DiscoveryPage({ showToast }) {
             color: 'var(--color-text)', padding: '0 20px',
           }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
-              Couldn&apos;t load Discovery. Tap to retry.
+              {t('discovery.loadError')}
             </p>
             <button
               type="button"
@@ -647,7 +667,7 @@ export default function DiscoveryPage({ showToast }) {
                 fontFamily: 'inherit',
               }}
             >
-              Retry
+              {t('discovery.retry')}
             </button>
           </div>
         ) : deck.length === 0 && loading ? (
@@ -660,7 +680,7 @@ export default function DiscoveryPage({ showToast }) {
             textAlign: 'center', color: 'var(--color-text)', padding: '0 20px',
           }}>
             <p style={{ margin: 0, color: 'var(--color-text)', fontSize: 16, fontWeight: 700 }}>
-              Nothing to show yet
+              {t('discovery.emptyTitle')}
             </p>
             <button
               type="button"
@@ -671,7 +691,7 @@ export default function DiscoveryPage({ showToast }) {
                 padding: '0 18px',
                 borderRadius: 12,
                 border: 'none',
-                background: 'linear-gradient(135deg,#ec4899,#f43f5e)',
+                background: 'var(--accent-1)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,
@@ -679,25 +699,40 @@ export default function DiscoveryPage({ showToast }) {
                 fontFamily: 'inherit',
               }}
             >
-              Start Taste Analysis
+              {t('discovery.startAnalysis')}
             </button>
           </div>
         ) : (
           <>
-            {deck.slice(0, 3).reverse().map((card, idxFromBottom) => {
-              const stackIndex = 2 - idxFromBottom // 0 = top
-              const isTop = stackIndex === 0
-              const id = getCardId(card)
-              const isTrigger = isTriggerCard(card)
-
-              if (isTop) {
-                const isShaking = !isTrigger && shakeCardId === topCardId
+            {/* FRONT-UX-14-SIMPLIFY — full-size under-card stack via the shared
+                SwipeDeck static ladder. Top + next real cards render in
+                IDENTICAL keyed wrappers (key = card id only) so React reuses
+                the DOM node when a card is promoted from under to top — no
+                remount, no flicker. The under card is a real SwipeCard
+                rendered inert (pointerEvents:none, aria-hidden); its image
+                telemetry fires while hidden (acceptable — see report). The
+                trigger card, when it is the under-card, renders inert too. */}
+            <SwipeDeck active>
+              {[deck[1], deck[0]].filter(Boolean).map(card => {
+                const isTop = card === deck[0]
+                const id = getCardId(card)
+                const isTrigger = isTriggerCard(card)
+                const isShaking = isTop && !isTrigger && shakeCardId === topCardId
                 return (
-                  <div key={`top-${id}`} style={{ position: 'absolute', inset: 0, zIndex: 3 }}>
+                  <div
+                    key={id}
+                    style={{
+                      position: 'absolute', inset: 0,
+                      zIndex: isTop ? 5 : 4,
+                      pointerEvents: isTop ? 'auto' : 'none',
+                    }}
+                    aria-hidden={!isTop}
+                  >
                     <SwipeGestureFrame
-                      ref={cardRef}
-                      onSwipe={onTinderSwipe}
-                      onCardLeftScreen={onCardLeftScreen}
+                      ref={isTop ? cardRef : null}
+                      onSwipe={isTop ? onTinderSwipe : undefined}
+                      onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
+                      preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
                       className={isShaking ? 'discovery-shake' : undefined}
                     >
                       {isTrigger ? (
@@ -712,39 +747,18 @@ export default function DiscoveryPage({ showToast }) {
                     </SwipeGestureFrame>
                   </div>
                 )
-              }
-              // Background stack cards: never render trigger card in the stack
-              if (isTrigger) return null
-              return (
-                <div
-                  key={`bg-${id}-${stackIndex}`}
-                  style={{
-                    position: 'absolute', top: 0, left: 0,
-                    width: CARD_WIDTH, height: CARD_HEIGHT,
-                    transform: `scale(${1 - stackIndex * 0.05}) translateY(${stackIndex * 10}px)`,
-                    transformOrigin: 'bottom center',
-                    pointerEvents: 'none',
-                    zIndex: 3 - stackIndex,
-                  }}
-                >
-                  <SwipeCard
-                    card={card}
-                    onGalleryOpen={() => {}}
-                    onGalleryClose={() => {}}
-                  />
-                </div>
-              )
-            })}
+              })}
+            </SwipeDeck>
             {loading && deck.length > 0 && (
               <div style={{
                 position: 'absolute', bottom: -28, left: 0, right: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 4,
+                zIndex: 6,
               }}>
                 <div style={{
                   width: 18, height: 18, borderRadius: '50%',
                   border: '2px solid rgba(255,255,255,0.2)',
-                  borderTopColor: '#ec4899',
+                  borderTopColor: 'var(--accent-1)',
                   animation: 'spin 0.8s linear infinite',
                 }} />
               </div>
@@ -756,170 +770,149 @@ export default function DiscoveryPage({ showToast }) {
       {/* Bottom area: swipe hint */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
         <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          ← skip · tap card · save →&nbsp;&nbsp;·&nbsp;&nbsp;arrow keys supported
+          {t('discovery.swipeHintBar')}
         </p>
       </div>
 
       {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate
-          away or log out while draftLikeCount >= 1. DESIGN.md §8.10: mobile = bottom
-          sheet style (radius-xl top corners), desktop = centered modal (max-width 480px).
-          Backdrop: rgba(0,0,0,0.4) per §8.10 sheet-backdrop. Buttons min-height 44px per §3.2. */}
+          away or log out while draftLikeCount >= 1. Built on the shared Modal
+          (DESIGN.md §8.10): mobile bottom sheet, desktop centered modal (max-width
+          480). Buttons min-height 44px per §3.2. */}
       {leaveModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setLeaveModal(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          }}
+        <Modal
+          open
+          onClose={() => setLeaveModal(null)}
+          zIndex={1000}
+          closeLabel={t('modalB3.close')}
+          width={480}
         >
-          <div
-            onClick={e => e.stopPropagation()}
+          <p style={{
+            margin: '0 0 20px',
+            paddingRight: 40,
+            fontSize: 'var(--fs-body)',
+            fontWeight: 400,
+            color: 'var(--color-text)',
+            lineHeight: 1.6,
+          }}>
+            {draftLikeCount >= TASTE_NUDGE_THRESHOLD
+              ? t('discovery.leaveModalBodyConverged')
+              : t('discovery.leaveModalBodyDraft')}
+          </p>
+
+          {/* Primary action: stay */}
+          <button
+            type="button"
+            onClick={() => setLeaveModal(null)}
+            disabled={leaveModalPromoting}
             style={{
-              width: '100%', maxWidth: 480,
-              background: 'var(--color-surface, #F6F8FA)',
-              borderRadius: '24px 24px 0 0',
-              padding: 24,
-              paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-              boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
+              display: 'block', width: '100%',
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: 'var(--accent-1)',
+              color: '#fff',
+              fontSize: 'var(--fs-body)',
+              fontWeight: 600,
+              cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              marginBottom: 10,
+              opacity: leaveModalPromoting ? 0.6 : 1,
             }}
           >
-            {/* Handle bar */}
-            <div style={{
-              width: 36, height: 4, borderRadius: 999,
-              background: 'var(--color-surface-3, #E1E4E8)',
-              margin: '0 auto 20px',
-            }} />
+            {t('discovery.leaveModalStay')}
+          </button>
 
-            <p style={{
-              margin: '0 0 20px',
-              fontSize: 14,
-              fontWeight: 400,
-              color: 'var(--color-text, #1F2328)',
-              lineHeight: 1.6,
-            }}>
-              {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                ? t('discovery.leaveModalBodyConverged')
-                : t('discovery.leaveModalBodyDraft')}
-            </p>
-
-            {/* Primary action: stay */}
-            <button
-              type="button"
-              onClick={() => setLeaveModal(null)}
-              disabled={leaveModalPromoting}
-              style={{
-                display: 'block', width: '100%',
-                minHeight: 44,
-                padding: '0 16px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'linear-gradient(135deg, var(--accent-1, #0969DA), var(--accent-2, #8250DF))',
-                color: '#fff',
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                marginBottom: 10,
-                opacity: leaveModalPromoting ? 0.6 : 1,
-              }}
-            >
-              {t('discovery.leaveModalStay')}
-            </button>
-
-            {/* Secondary action: leave
-                >=10 likes: auto-promote then navigate to the intended destination.
-                  Dispatches the custom event with skipNav:true so App.jsx persists
-                  the session without forcing navigate('/swipe').
-                1-9 likes: discard draft and proceed immediately. */}
-            <button
-              type="button"
-              disabled={leaveModalPromoting}
-              onClick={async () => {
-                if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
-                  // Auto-promote path: persist the Taste session, then go where the
-                  // user was originally headed (not forced to /swipe).
-                  const proceed = leaveModal.proceed
-                  setLeaveModalPromoting(true)
-                  try {
-                    const result = await promoteToTaste(draftId)
-                    // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
-                    setDraftId(null)
-                    setDraftLikeCount(0)
-                    setContinueAfterTrigger(false)
-                    triggerShownRef.current = false
-                    sessionStorage.removeItem(DRAFT_ID_KEY)
-                    sessionStorage.removeItem(DRAFT_LIKES_KEY)
-                    sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
-                    // Persist the session via App.jsx listener with skipNav:true so
-                    // App stores the project / calls applySessionResponse but does NOT
-                    // force-navigate to /swipe — proceed() will do the real navigation.
-                    window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
-                      detail: { ...result, skipNav: true },
-                    }))
-                  } catch (err) {
-                    console.error('[LeaveModal] auto-promote failed:', err)
-                    // Surface a brief error toast but do NOT trap the user — still let
-                    // them proceed to their intended destination.
-                    if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
-                  } finally {
-                    setLeaveModalPromoting(false)
-                  }
-                  setLeaveModal(null)
-                  proceed()
-                } else {
-                  // 1-9 likes: discard draft, leave immediately
-                  const proceed = leaveModal.proceed
-                  setLeaveModal(null)
-                  proceed()
+          {/* Secondary action: leave
+              >=10 likes: auto-promote then navigate to the intended destination.
+                Dispatches the custom event with skipNav:true so App.jsx persists
+                the session without forcing navigate('/swipe').
+              1-9 likes: discard draft and proceed immediately. */}
+          <button
+            type="button"
+            disabled={leaveModalPromoting}
+            onClick={async () => {
+              if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
+                // Auto-promote path: persist the Taste session, then go where the
+                // user was originally headed (not forced to /swipe).
+                const proceed = leaveModal.proceed
+                setLeaveModalPromoting(true)
+                try {
+                  const result = await promoteToTaste(draftId)
+                  // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
+                  setDraftId(null)
+                  setDraftLikeCount(0)
+                  setContinueAfterTrigger(false)
+                  triggerShownRef.current = false
+                  sessionStorage.removeItem(DRAFT_ID_KEY)
+                  sessionStorage.removeItem(DRAFT_LIKES_KEY)
+                  sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+                  // Persist the session via App.jsx listener with skipNav:true so
+                  // App stores the project / calls applySessionResponse but does NOT
+                  // force-navigate to /swipe — proceed() will do the real navigation.
+                  window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
+                    detail: { ...result, skipNav: true },
+                  }))
+                } catch (err) {
+                  console.error('[LeaveModal] auto-promote failed:', err)
+                  // Surface a brief error toast but do NOT trap the user — still let
+                  // them proceed to their intended destination.
+                  if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
+                } finally {
+                  setLeaveModalPromoting(false)
                 }
-              }}
-              style={{
-                display: 'block', width: '100%',
-                minHeight: 44,
-                padding: '0 16px',
-                borderRadius: 12,
-                border: '1px solid var(--color-border-soft, rgba(0,0,0,0.12))',
-                background: 'var(--color-surface, #F6F8FA)',
-                color: 'var(--color-text-muted, #656D76)',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: leaveModalPromoting ? 0.6 : 1,
-              }}
-            >
-              {leaveModalPromoting ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <span style={{
-                    display: 'inline-block', width: 13, height: 13, borderRadius: '50%',
-                    border: '2px solid var(--color-text-dim, #8C959F)',
-                    borderTopColor: 'var(--accent-1, #0969DA)',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
-                  {t('discovery.tasteSaving')}
+                setLeaveModal(null)
+                proceed()
+              } else {
+                // 1-9 likes: discard draft, leave immediately
+                const proceed = leaveModal.proceed
+                setLeaveModal(null)
+                proceed()
+              }
+            }}
+            style={{
+              display: 'block', width: '100%',
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border-soft)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-muted)',
+              fontSize: 'var(--fs-body)',
+              fontWeight: 500,
+              cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              opacity: leaveModalPromoting ? 0.6 : 1,
+            }}
+          >
+            {leaveModalPromoting ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <span style={{
+                  display: 'inline-block', width: 13, height: 13, borderRadius: '50%',
+                  border: '2px solid var(--color-text-dim)',
+                  borderTopColor: 'var(--accent-1)',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                {t('discovery.tasteSaving')}
+              </span>
+            ) : (
+              <>
+                {t('discovery.leaveModalLeave')}
+                <span style={{
+                  display: 'block',
+                  fontSize: 'var(--fs-caption)',
+                  fontWeight: 400,
+                  color: 'var(--color-text-dim)',
+                  marginTop: 2,
+                }}>
+                  {draftLikeCount >= TASTE_NUDGE_THRESHOLD
+                    ? t('discovery.leaveModalSubConverged')
+                    : t('discovery.leaveModalSubDraft')}
                 </span>
-              ) : (
-                <>
-                  {t('discovery.leaveModalLeave')}
-                  <span style={{
-                    display: 'block',
-                    fontSize: 11,
-                    fontWeight: 400,
-                    color: 'var(--color-text-dim, #8C959F)',
-                    marginTop: 2,
-                  }}>
-                    {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                      ? t('discovery.leaveModalSubConverged')
-                      : t('discovery.leaveModalSubDraft')}
-                  </span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+              </>
+            )}
+          </button>
+        </Modal>
       )}
 
     </div>

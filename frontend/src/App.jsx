@@ -2,13 +2,13 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
 import { useLanguage } from './hooks/useLanguage.js'
+import { useTranslation } from './i18n/index.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
 import SaveBoardModal from './components/SaveBoardModal.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import UserProfilePage from './pages/UserProfilePage.jsx'
-import FirmProfilePage from './pages/FirmProfilePage.jsx'
 import BoardDetailPage from './pages/BoardDetailPage.jsx'
 import BoardReportPage from './pages/BoardReportPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
@@ -17,8 +17,11 @@ import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import VerifyGateModal from './components/VerifyGateModal.jsx'
 import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
 import UploadWorkPage from './pages/UploadWorkPage.jsx'
-import LikedOfficesPage from './pages/LikedOfficesPage.jsx'
 import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
+import AssessmentPage from './pages/AssessmentPage.jsx'
+import PeopleDiscoveryPage from './pages/PeopleDiscoveryPage.jsx'
+import CompetitionListPage from './pages/CompetitionListPage.jsx'
+import CompetitionDetailPage from './pages/CompetitionDetailPage.jsx'
 import SettingsPage from './pages/settings/SettingsPage.jsx'
 import AccountScreen from './pages/settings/AccountScreen.jsx'
 import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
@@ -28,7 +31,6 @@ import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
 import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
-import { reportWriteError } from './utils/reportWriteError.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
 
@@ -42,6 +44,7 @@ export default function App() {
   const location = useLocation()
   const { hydrate } = useTheme()
   const { hydrate: hydrateLanguage } = useLanguage()
+  const { t } = useTranslation()
 
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   // SaveBoardModal — shown when report completes for a temp project
@@ -89,8 +92,6 @@ export default function App() {
   const [surprisePending, setSurprisePending] = useState(false)
   // Global toast state (type: 'info' | 'success' | 'warning' | 'error')
   const [globalToast, setGlobalToast] = useState(null) // {message, type}
-  // Pending in-session question triggered by the backend after a swipe
-  const [pendingQuestion, setPendingQuestion] = useState(null)
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -256,20 +257,11 @@ export default function App() {
   const swipeRetryCount = useRef(0)
   const currentCardRef = useRef(null)
   const activeProjectIdRef = useRef(null)
-  // Records the wall-clock time (ms) when the current card became visible.
-  // Reset every time currentCard changes so latency_ms captures exactly how
-  // long the user looked at the card before swiping it.
-  const cardShownAtRef = useRef(Date.now())
 
   // Keep currentCardRef in sync so setTimeout closures can read live card identity
   useEffect(() => { currentCardRef.current = currentCard }, [currentCard])
   // Keep activeProjectIdRef in sync so setTimeout closures detect project-switch / session-end
   useEffect(() => { activeProjectIdRef.current = activeProjectId }, [activeProjectId])
-  // Reset the card-shown timer whenever the displayed card changes (all paths:
-  // instant-swap, non-instant, question-flush, session resume/start).
-  useEffect(() => {
-    cardShownAtRef.current = Date.now()
-  }, [currentCard?.image_id])
   useEffect(() => {
     if (swipeRestored.current) return
     if (location.pathname === '/swipe' && activeProjectId && userId) {
@@ -350,7 +342,6 @@ export default function App() {
   }
 
   async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false) {
-    setPendingQuestion(null)
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     setKeepExploringChosen(false)
@@ -454,8 +445,10 @@ export default function App() {
   // object at call time.
   function handleReportGenerated(project, data) {
     if (data?.final_report && project?.backendId && project?.isTemp) {
+      // FRONT-RESULTS-SAVE-1: prime the target but do NOT open the sheet.
+      // Auto-opening covered the report the user just waited for; saving is now
+      // driven by the "저장하고 프로필로" CTA in ResultsPage.
       setSaveModalProject({ backendId: project.backendId, finalReport: data.final_report, localId: project.id })
-      setShowSaveModal(true)
     }
   }
 
@@ -586,17 +579,11 @@ export default function App() {
         .map(c => c.image_id)
 
       let result
-      // Compute how long the user looked at the card before swiping.
-      // Clamped to >= 0 to guard against clock skew. Large values are fine —
-      // the backend caps them. latency_ms is omitted on the extend path
-      // (handled separately in handleExtendSession) but always present here.
-      const latency_ms = Math.max(0, Date.now() - cardShownAtRef.current)
       const swipePayload = {
         session_id: project.sessionId,
         image_id: swipedCard.image_id,
         action,
         client_buffer_ids: clientBufferIds,
-        latency_ms,
       }
 
       const _apiT0 = Date.now()
@@ -621,9 +608,6 @@ export default function App() {
 
       swipeRetryCount.current = 0
       setSwipeError(null)
-      if (result.question_trigger) {
-        setPendingQuestion(result.question_trigger)
-      }
       setSessionProgress({
         ...result.progress,
         confidence: result.confidence ?? null,
@@ -664,15 +648,15 @@ export default function App() {
                 ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
               .catch(() => null)  // image failure is non-fatal; report text already shown
           }
-          // Show SaveBoardModal when report completes and the project is temp.
-          // project.isTemp was set in handleStart — check the snapshot captured above.
+          // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
+          // a temp project, but leave the sheet closed — the ResultsPage CTA
+          // opens it. project.isTemp was set in handleStart (snapshot above).
           if (reportData?.final_report && backendId && project?.isTemp) {
             setSaveModalProject({
               backendId,
               finalReport: reportData.final_report,
               localId: activeProjectId,
             })
-            setShowSaveModal(true)
           }
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
@@ -828,46 +812,6 @@ export default function App() {
     } finally {
       setIsSwipeLoading(false)
       swipeLock.current = false
-    }
-  }
-
-  async function handleQuestionAnswer(option) {
-    const q = pendingQuestion
-    setPendingQuestion(null)
-    if (!activeProject?.sessionId) return
-    try {
-      const resp = await api.submitQuestionResponse({
-        session_id: activeProject.sessionId,
-        question_type: q.type,
-        axis: q.axis ?? null,
-        keyword: q.keyword ?? null,
-        selected_option: option,
-      })
-      if (resp.flush_prefetch) {
-        // Flush the entire client-side prefetch queue so the user sees the
-        // server's qbias-reranked deck rather than the 2 stale prefetched cards.
-        // Also clear the preload image cache entries for the old prefetch URLs
-        // so no stale card can flash through instant-swap.
-        if (prefetchCard?.image_url) imagePreloadCache.current.delete(prefetchCard.image_url)
-        if (prefetchCard2?.image_url) imagePreloadCache.current.delete(prefetchCard2.image_url)
-        setPrefetchCard(null)
-        setPrefetchCard2(null)
-        if (resp.next_image) {
-          setCurrentCard(resp.next_image)
-          if (resp.next_image.image_url) preloadImage(resp.next_image)
-          setPrefetchCard(resp.prefetch_image ?? null)
-          setPrefetchCard2(resp.prefetch_image_2 ?? null)
-          if (resp.prefetch_image?.image_url) preloadImage(resp.prefetch_image)
-          if (resp.prefetch_image_2?.image_url) preloadImage(resp.prefetch_image_2)
-        } else {
-          // next_image null → end of stream; mirror the session-completed path
-          setIsSessionCompleted(true)
-          setCurrentCard(null)
-        }
-      }
-    } catch {
-      reportWriteError(setGlobalToast, '답변 전송 실패 — 다시 선택해주세요')
-      setPendingQuestion(q)
     }
   }
 
@@ -1031,6 +975,25 @@ export default function App() {
     setSaveModalProject(null)
     setTempCompletedProject(null)
     setGlobalToast({ message: '보드가 저장되었어요', type: 'success' })
+    // Land the flow on the profile so the run has a visible end — the saved
+    // board is right there in the list. Previously this stayed on the results
+    // screen, which read as "did it even save?".
+    navigate('/user/me')
+  }
+
+  // CTA entry point from ResultsPage. A board that is already saved has nothing
+  // to name, so it skips straight to the profile; a temp one opens the sheet.
+  function handleRequestSave(project) {
+    if (!project?.backendId || !project?.isTemp) {
+      navigate('/user/me')
+      return
+    }
+    setSaveModalProject({
+      backendId: project.backendId,
+      finalReport: project.finalReport,
+      localId: project.id,
+    })
+    setShowSaveModal(true)
   }
 
   function handleBoardSaveClose() {
@@ -1082,8 +1045,6 @@ export default function App() {
     },
     onResumeProject: handleResumeProject,
     onNewProjectSession: handleNewProjectSession,
-    questionTrigger: pendingQuestion,
-    onQuestionAnswer: handleQuestionAnswer,
     nextCard: prefetchCard,
   }
 
@@ -1100,13 +1061,14 @@ export default function App() {
           </ProtectedRoute>
         }>
           <Route index element={<Navigate to="/discovery" replace />} />
-          <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} />} />
+          <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
             <LLMSearchPage
               mode="new"
               onBack={() => navigate('/discovery')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
+              onLogout={handleLogout}
             />
           } />
           <Route path="search/:projectId" element={
@@ -1114,6 +1076,7 @@ export default function App() {
               onBack={() => navigate('/')}
               onStart={handleStart}
               onUpdate={handleUpdateWithImages}
+              onLogout={handleLogout}
             />
           } />
           <Route path="swipe" element={null} />
@@ -1121,21 +1084,26 @@ export default function App() {
           <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
-          <Route path="office/:officeId" element={<FirmProfilePage {...sharedLayoutProps} />} />
-          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} />} />
-          <Route path="buildings/:buildingId" element={<BuildingDetailPage />} />
-          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} />} />
-          <Route path="board/:boardId/report" element={<BoardReportPage />} />
-          <Route path="liked-projects" element={<LikedProjectsPage />} />
-          <Route path="upload" element={<UploadWorkPage />} />
-          <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
-          <Route path="architects/:architectId" element={<ArchitectProfilePage />} />
-          <Route path="notifications" element={<NotificationInboxScreen />} />
-          <Route path="settings" element={<SettingsPage />}>
-            <Route path="edit-profile" element={<EditProfileScreen />} />
-            <Route path="account" element={<AccountScreen />} />
-            <Route path="notifications" element={<NotificationsScreen />} />
-            <Route path="appearance" element={<AppearanceScreen />} />
+          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} onRequestSave={handleRequestSave} />} />
+          <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
+          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
+          <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
+          <Route path="liked-projects" element={<LikedProjectsPage onLogout={handleLogout} />} />
+          <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />
+          <Route path="my/liked-offices" element={<Navigate to="/user/me" replace />} />
+          <Route path="architects/:architectId" element={<ArchitectProfilePage onLogout={handleLogout} />} />
+          <Route path="notifications" element={<NotificationInboxScreen onLogout={handleLogout} />} />
+          <Route path="assessment" element={<AssessmentPage onLogout={handleLogout} />} />
+          <Route path="people" element={<PeopleDiscoveryPage onLogout={handleLogout} />} />
+          {/* FRONT-COMP-PROTO-1 — 공모전 팀빌딩 프로토타입. Social 탭의 두 번째
+              세그먼트. 목 데이터 + localStorage 만 쓰며 백엔드가 없다. */}
+          <Route path="competitions" element={<CompetitionListPage onLogout={handleLogout} />} />
+          <Route path="competitions/:competitionId" element={<CompetitionDetailPage onLogout={handleLogout} />} />
+          <Route path="settings" element={<SettingsPage onLogout={handleLogout} />}>
+            <Route path="edit-profile" element={<EditProfileScreen onLogout={handleLogout} />} />
+            <Route path="account" element={<AccountScreen onLogout={handleLogout} />} />
+            <Route path="notifications" element={<NotificationsScreen onLogout={handleLogout} />} />
+            <Route path="appearance" element={<AppearanceScreen onLogout={handleLogout} />} />
           </Route>
           {/* ADMIN-DBCHECK-1: URL-only internal QA tool, dev builds only — no TabBar/nav link */}
           {import.meta.env.DEV && (
@@ -1152,7 +1120,7 @@ export default function App() {
 
       {swipeError && (
         <div style={{
-          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: 'var(--tabbar-clearance)', left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(220, 38, 38, 0.92)', color: '#fff', padding: '10px 20px',
           borderRadius: 8, fontSize: 14, fontWeight: 500, zIndex: 9999,
           pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -1164,7 +1132,7 @@ export default function App() {
       {globalToast && (
         <div style={{
           position: 'fixed',
-          bottom: 'calc(64px + 16px)',
+          bottom: 'var(--tabbar-clearance)',
           left: '50%',
           transform: 'translateX(-50%)',
           background: 'color-mix(in srgb, var(--color-surface, #F6F8FA) 72%, transparent)',
@@ -1206,7 +1174,7 @@ export default function App() {
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
             border: '1px solid var(--color-border-soft)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-md)',
             padding: '12px 16px',
             display: 'flex',
             alignItems: 'center',
@@ -1215,13 +1183,13 @@ export default function App() {
           }}>
             <p style={{
               margin: 0,
-              fontSize: 13,
+              fontSize: 'var(--fs-body)',
               fontWeight: 600,
               color: 'var(--color-text)',
               flex: 1,
               lineHeight: 1.4,
             }}>
-              이전에 완성된 리포트가 있어요
+              {t('modalB3.reportBanner.body')}
             </p>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
               <button
@@ -1231,11 +1199,11 @@ export default function App() {
                 }}
                 style={{
                   padding: '7px 14px',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   border: 'none',
-                  background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
+                  background: 'var(--accent-1)',
                   color: '#fff',
-                  fontSize: 12,
+                  fontSize: 'var(--fs-caption)',
                   fontWeight: 600,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
@@ -1243,17 +1211,17 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                저장
+                {t('modalB3.reportBanner.save')}
               </button>
               <button
                 onClick={handleTempDelete}
                 style={{
                   padding: '7px 14px',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--color-destructive)',
                   background: 'transparent',
                   color: 'var(--color-destructive)',
-                  fontSize: 12,
+                  fontSize: 'var(--fs-caption)',
                   fontWeight: 600,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
@@ -1261,7 +1229,7 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                삭제
+                {t('modalB3.reportBanner.delete')}
               </button>
             </div>
           </div>

@@ -10,12 +10,22 @@
  *
  * Verify flow: uses useGoogleEmailVerify (same as AccountScreen "구글로 이메일 인증").
  * To change the verify logic, edit src/hooks/useGoogleEmailVerify.js — NOT this file.
+ *
+ * UI-CONSISTENCY-B Phase 2b: rebuilt on the shared `Modal` component (chosen
+ * as the simplest existing modal to prove it out). Visual changes vs. the
+ * previous hand-rolled dialog: backdrop `--color-scrim-soft` (0.55) ->
+ * `--color-scrim-modal` (0.4, DESIGN.md §1.4/§8.10 standard); width 440 ->
+ * 480; radius 16 -> `--radius-md` (12); title 17px -> `--fs-heading` (20px);
+ * gained a top-right (X) close button; now renders as a mobile bottom sheet
+ * (<=768px) instead of always being a centered box. `zIndex={10100}`
+ * preserved so it still stacks above SaveToBoardModal.
  */
 
 import { hasGoogleLogin } from '../utils/loginFlow.js'
 import { useGoogleEmailVerify } from '../hooks/useGoogleEmailVerify.js'
 import { useTranslation } from '../i18n/index.js'
 import GoogleVerifyButton from './GoogleVerifyButton.jsx'
+import Modal from './Modal.jsx'
 
 export default function VerifyGateModal({ onClose, onPromoted }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
@@ -43,118 +53,87 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
   })
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="verify-gate-title"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10100,
-        background: 'rgba(0,0,0,0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-      }}
+    <Modal
+      open
+      onClose={onClose}
+      title={t('auth.gateTitle')}
+      zIndex={10100}
+      closeLabel={t('auth.gateCancelAria')}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(94vw, 440px)',
-          background: 'var(--color-surface)',
-          borderRadius: 16,
-          border: '1px solid var(--color-border)',
-          color: 'var(--color-text)',
-          overflow: 'hidden',
-          boxShadow: '0 18px 40px rgba(0,0,0,0.28)',
-        }}
-      >
-        {/* Body */}
-        <div style={{ padding: '20px 20px 8px' }}>
-          <h2
-            id="verify-gate-title"
-            style={{ fontSize: 17, fontWeight: 700, margin: '0 0 8px', color: 'var(--color-text)' }}
-          >
-            {t('auth.gateTitle')}
-          </h2>
-          <p style={{
-            fontSize: 14,
-            color: 'var(--color-text-dimmer)',
-            margin: '0 0 20px',
-            lineHeight: 1.55,
-          }}>
-            {t('auth.gateBody')}
-          </p>
+      <p style={{
+        fontSize: 14,
+        color: 'var(--color-text-dimmer)',
+        margin: '0 0 20px',
+        lineHeight: 1.55,
+      }}>
+        {t('auth.gateBody')}
+      </p>
 
-          {error && (
-            <p style={{
-              color: 'var(--color-destructive, #D73A49)',
-              fontSize: 13,
-              margin: '0 0 14px',
-              lineHeight: 1.4,
-            }}>
-              {t(error.key, error.params)}
-            </p>
-          )}
-
-          <div style={{ display: 'grid', gap: 10 }}>
-            {/* GoogleVerifyButton conditionally rendered so hook stays inside GoogleOAuthProvider */}
-            {googleConfigured ? (
-              <GoogleVerifyButton
-                onSuccess={handleVerifySuccess}
-                onError={handleVerifyError}
-                onNonOAuthError={handleVerifyNonOAuthError}
-                disabled={loading}
-                loading={loading}
-                label={t('auth.gateVerifyBtn')}
-              />
-            ) : (
-              <p style={{
-                fontSize: 13,
-                color: 'var(--color-text-dimmer)',
-                margin: 0,
-                textAlign: 'center',
-              }}>
-                {t('auth.gateGoogleUnavailable')}
-              </p>
-            )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              aria-label={t('auth.gateCancelAria')}
-              style={{
-                minHeight: 46,
-                borderRadius: 8,
-                border: '1px solid var(--color-border)',
-                background: 'transparent',
-                color: 'var(--color-text)',
-                fontSize: 14,
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                cursor: loading ? 'default' : 'pointer',
-                opacity: loading ? 0.5 : 1,
-              }}
-            >
-              {t('auth.gateLater')}
-            </button>
-          </div>
-        </div>
-
-        {/* Legal footer */}
+      {error && (
         <p style={{
-          fontSize: 11,
-          color: 'var(--color-text-dimmest, #8C959F)',
-          margin: '12px 20px 16px',
-          lineHeight: 1.45,
-          textAlign: 'center',
+          color: 'var(--color-destructive, #D73A49)',
+          fontSize: 13,
+          margin: '0 0 14px',
+          lineHeight: 1.4,
         }}>
-          {t('auth.gateFooter')}
+          {t(error.key, error.params)}
         </p>
+      )}
+
+      <div style={{ display: 'grid', gap: 10 }}>
+        {/* GoogleVerifyButton conditionally rendered so hook stays inside GoogleOAuthProvider */}
+        {googleConfigured ? (
+          <GoogleVerifyButton
+            onSuccess={handleVerifySuccess}
+            onError={handleVerifyError}
+            onNonOAuthError={handleVerifyNonOAuthError}
+            disabled={loading}
+            loading={loading}
+            label={t('auth.gateVerifyBtn')}
+          />
+        ) : (
+          <p style={{
+            fontSize: 13,
+            color: 'var(--color-text-dimmer)',
+            margin: 0,
+            textAlign: 'center',
+          }}>
+            {t('auth.gateGoogleUnavailable')}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={loading}
+          aria-label={t('auth.gateCancelAria')}
+          style={{
+            minHeight: 46,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            background: 'transparent',
+            color: 'var(--color-text)',
+            fontSize: 14,
+            fontWeight: 600,
+            fontFamily: 'inherit',
+            cursor: loading ? 'default' : 'pointer',
+            opacity: loading ? 0.5 : 1,
+          }}
+        >
+          {t('auth.gateLater')}
+        </button>
       </div>
-    </div>
+
+      {/* Legal footer */}
+      <p style={{
+        fontSize: 11,
+        color: 'var(--color-text-dimmest, #8C959F)',
+        margin: '16px 0 0',
+        lineHeight: 1.45,
+        textAlign: 'center',
+      }}>
+        {t('auth.gateFooter')}
+      </p>
+    </Modal>
   )
 }

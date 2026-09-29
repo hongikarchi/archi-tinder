@@ -6,8 +6,8 @@ from .views import (
     DiverseRandomView, BuildingBatchView,
     ParseQueryView,
     ProjectReportGenerateView, ProjectReportImageView,
+    ProjectReportImageFetchView,
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
-    QuestionResponseView,
     RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
     InspectBuildingsListView, InspectBuildingDetailView, InspectSearchView,
 )
@@ -18,6 +18,7 @@ urlpatterns = [
     # Project detail — GET (public/visibility-gated) + PATCH + DELETE
     path('projects/<uuid:pk>/',                               ProjectDetailView.as_view()),
     path('projects/<uuid:pk>/report/generate-image/',         ProjectReportImageView.as_view()),
+    path('projects/<uuid:pk>/report-image/',                  ProjectReportImageFetchView.as_view(), name='project-report-image'),
     path('projects/<uuid:pk>/report/generate/',               ProjectReportGenerateView.as_view()),
     path('projects/<uuid:project_id>/bookmark/',              ProjectBookmarkView.as_view()),
     # User-scoped project list — BOARD1 Phase 13
@@ -27,7 +28,6 @@ urlpatterns = [
     path('analysis/sessions/<uuid:session_id>/state/',   SessionStateView.as_view()),
     path('analysis/sessions/<uuid:session_id>/swipes/',  SwipeView.as_view()),
     path('analysis/sessions/<uuid:session_id>/result/',  SessionResultView.as_view()),
-    path('analysis/sessions/<uuid:session_id>/question-responses/', QuestionResponseView.as_view()),
     # Images
     path('discovery/',                                   DiscoveryFeedView.as_view()),
     path('discovery/feedback/',                          DiscoveryFeedbackView.as_view()),

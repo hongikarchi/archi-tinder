@@ -24,6 +24,15 @@ export async function addLikedBuilding(canonicalBldId) {
   }
 }
 
-export async function getLikedBuildings() {
-  return callApi('GET', '/liked-buildings/')
+/**
+ * Fetch a user's liked buildings.
+ * @param {number|string} [userId] - when omitted, returns the caller's own
+ *   liked list. When provided, returns that user's liked list (design-parity
+ *   public-profile tabs — any authenticated caller may view another user's
+ *   likes; still requires auth).
+ * @returns {Promise<{buildings: Array, total: number}>}
+ */
+export async function getLikedBuildings(userId) {
+  const query = userId != null ? `?user_id=${encodeURIComponent(userId)}` : ''
+  return callApi('GET', `/liked-buildings/${query}`)
 }

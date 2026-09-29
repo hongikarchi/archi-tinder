@@ -1,17 +1,33 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
-import { getMyWorks } from '../api/works.js'
+import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
+import { getMyPersonality } from '../api/personality.js'
 import ShareCardModal from '../components/ShareCardModal.jsx'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
-import ProfileHeader from './userProfile/ProfileHeader'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
-import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
+import PentagonChart from '../components/PentagonChart.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import Tabs from '../components/Tabs.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import PhotoTile from '../components/PhotoTile.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
+import Skeleton from '../components/Skeleton.jsx'
+import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
+import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.jsx'
+
+// Hidden 2026-09-26 per user (design noise); functionality kept, delete
+// entirely if no issue surfaces.
+const SHOW_BOARD_EDIT_BUTTON = false
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -68,6 +84,17 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [worksLoading, setWorksLoading] = useState(false)
   const [selectedWorkId, setSelectedWorkId] = useState(null)
 
+  // Personality profile state (isMe: my personality; !isMe: for overlay comparison)
+  const [myPersonality, setMyPersonality] = useState(null)
+
+  // Own-profile only — bell + unread badge (NOTIF-INAPP-1). Count fetch is
+  // mount + visibilitychange only (no polling) per the hook's own contract.
+  // enabled=isMe so viewing someone else's profile never fires the request.
+  // Relocated from the retired ProfileHeader (Rules of Hooks — before the
+  // loading/error early returns below).
+  const { count: unreadCount } = useUnreadNotifications(isMe)
+  const unreadBadgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
+
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
   // MINOR #3: per-board pending set — blocks rapid double-toggle
@@ -81,13 +108,22 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
-  // Fetch likedCount on mount (isMe only) for ProfileHero stat display
+  // Fetch likedCount on mount for ProfileHero stat display — own list when
+  // isMe, otherwise the viewed user's liked list (design-parity, FRONT-*).
   useEffect(() => {
-    if (!isMe) return
-    getLikedBuildings()
+    if (!effectiveUserId) return
+    getLikedBuildings(isMe ? undefined : effectiveUserId)
       .then(data => setLikedCount(data?.total ?? 0))
       .catch(() => {})
-  }, [isMe])
+  }, [isMe, effectiveUserId])
+
+  // Fetch my personality for overlay comparison (both isMe and !isMe paths)
+  // Empty deps intentional: runs once on mount to load the caller's own personality.
+  useEffect(() => {
+    getMyPersonality()
+      .then(data => setMyPersonality(data))
+      .catch(() => setMyPersonality(null))
+  }, [])
 
   // Fetch architect profiles for buildingsMap whenever savedStudios changes
   useEffect(() => {
@@ -112,7 +148,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (likedBuildings !== null) return
     setLikedLoading(true)
     try {
-      const data = await getLikedBuildings()
+      const data = await getLikedBuildings(isMe ? undefined : effectiveUserId)
       setLikedBuildings(data?.buildings || [])
       setLikedCount(data?.total ?? 0)
     } catch {
@@ -152,7 +188,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     if (works !== null) return  // already loaded
     setWorksLoading(true)
     try {
-      const data = await getMyWorks()
+      const data = isMe ? await getMyWorks() : await getUserWorks(effectiveUserId)
       setWorks(data?.works || [])
     } catch {
       setWorks([])
@@ -167,18 +203,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const handleCreatedTabRef = useRef(handleCreatedTab)
   handleCreatedTabRef.current = handleCreatedTab
 
-  // Deep-link support: /user/me?tab=created lands directly on the Created
-  // tab (used by the upload success-modal confirm). Guarded to fire once,
-  // only after the profile user + isMe are resolved, and only for isMe.
+  // Deep-link support: ?tab=created lands directly on the Created tab.
+  // Originally isMe-only (upload success-modal confirm). The isMe guard is
+  // gone because handleCreatedTab already handles both sides — it calls
+  // getUserWorks() for other people — and the competition prototype links
+  // straight to another user's works from the interested-people list.
   const deepLinkAppliedRef = useRef(false)
   useEffect(() => {
     if (deepLinkAppliedRef.current) return
     if (!user || loading) return
-    if (searchParams.get('tab') === 'created' && isMe) {
+    if (searchParams.get('tab') === 'created') {
       deepLinkAppliedRef.current = true
       handleCreatedTabRef.current()
     }
-  }, [user, loading, isMe, searchParams])
+  }, [user, loading, searchParams])
 
   // Adapter: map project_id -> board_id + format ISO date -> "Month YYYY"
   function adaptBoard(b) {
@@ -198,6 +236,12 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     setBoards([])
     setBoardsPage(1)
     setBoardsHasMore(false)
+    // Reset Liked/Created tab caches on user change — both are now reachable
+    // for !isMe (design-parity), so navigating between two profiles without
+    // an unmount must not leak the previous user's likes/works/count.
+    setLikedBuildings(null)
+    setLikedCount(0)
+    setWorks(null)
     getUserProfile(effectiveUserId, { boardsPage: 1, boardsPageSize: 12 })
       .then(data => {
         if (cancelled) return
@@ -406,43 +450,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     exitSelectMode()
   }, [bulkPending, selectedBoards, boards, boardsTotalCount, exitSelectMode])
 
-  // MINOR #2: shared style helpers for Public / Private bulk action buttons.
-  // Defined here (component-scoped consts) so they close over nothing and stay
-  // stable across renders without needing useCallback/useMemo.
-  function bulkActionButtonStyle(disabled) {
-    return {
-      flex: 1,
-      minHeight: 44, padding: '0 12px',
-      borderRadius: 10, border: '1px solid var(--color-border)',
-      background: 'var(--color-surface)',
-      color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-      cursor: disabled ? 'not-allowed' : 'pointer',
-      fontFamily: 'inherit',
-      opacity: disabled ? 0.5 : 1,
-      transition: 'border-color 0.18s, color 0.18s, opacity 0.18s',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-    }
-  }
-  const bulkBtnHoverEnter = (disabled) => (e) => {
-    if (!disabled) {
-      e.currentTarget.style.borderColor = 'rgba(236,72,153,0.45)'
-      e.currentTarget.style.color = '#ec4899'
-    }
-  }
-  const bulkBtnHoverLeave = (e) => {
-    e.currentTarget.style.borderColor = 'var(--color-border)'
-    e.currentTarget.style.color = 'var(--color-text-2)'
-  }
-
   if (loading) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', fontSize: 14,
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)',
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
-        Loading profile...
+        {t('profileB3.loadingProfile')}
       </div>
     )
   }
@@ -450,36 +467,95 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   if (error || !user) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', fontSize: 14,
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)',
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
-        {error || 'Profile not found.'}
+        {error || t('profileB3.profileNotFound')}
       </div>
     )
   }
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
+      paddingBottom: 'var(--tabbar-clearance)'
     }}>
-      {/* Ambient brand-pink glow — on-brand */}
-      <div style={{
-        position: 'fixed', top: '-10%', left: '-10%', width: '120%', height: '50%',
-        background: 'radial-gradient(circle at 50% 0%, rgba(236,72,153,0.10) 0%, transparent 70%)',
-        pointerEvents: 'none', zIndex: 0,
-      }} />
+      <PageTopControls onLogout={onLogout} />
 
-      <ProfileHeader
-        isMe={isMe}
-        handle={user?.handle}
-        onLogout={onLogout}
-        onShare={() => setShareOpen(true)}
-      />
+      {/* Floating top-left cluster — Claude Design mock conversion.
+          isMe: bell (unread badge) + share + settings, all neutral
+          circles (no destructive tint — mock parity). !isMe: single back
+          circle via PageBackButton (value-for-value match already shipped
+          by the design-port initiative — reused rather than re-authored).
+          Logout lives in PageTopControls (top-right) like every other page. */}
+      {isMe ? (
+        <div style={{
+          position: 'fixed', top: 16, left: 12, zIndex: 300,
+          display: 'flex', gap: 6, alignItems: 'center',
+        }}>
+          {/* Notifications bell + unread badge (NOTIF-INAPP-1). FloatingIconButton's
+              own .btn class already sets position:relative, which is what the
+              badge below anchors to — no extra positioning style needed. */}
+          <FloatingIconButton
+            onClick={() => navigate('/notifications')}
+            ariaLabel={t('profile.notifications')}
+            title={t('profile.notifications')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 01-3.46 0"></path>
+            </svg>
+            {unreadCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute', top: -3, right: -3,
+                  minWidth: 15, height: 15, padding: '0 4px',
+                  borderRadius: 999, background: 'var(--accent-1)', color: '#fff',
+                  fontSize: 9, fontWeight: 700, lineHeight: '15px', textAlign: 'center',
+                }}
+              >
+                {unreadBadgeLabel}
+              </span>
+            )}
+          </FloatingIconButton>
+
+          {/* Share — mock's share-network glyph, SVG paths verbatim from profile.html */}
+          <FloatingIconButton
+            onClick={() => setShareOpen(true)}
+            ariaLabel={t('profile.shareCard')}
+            title={t('profile.shareCard')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="6" r="3"></circle>
+              <circle cx="18" cy="18" r="3"></circle>
+              <path d="M8.6 10.5l6.8-3M8.6 13.5l6.8 3"></path>
+            </svg>
+          </FloatingIconButton>
+
+          {/* Settings */}
+          <FloatingIconButton
+            onClick={() => navigate('/settings')}
+            ariaLabel={t('profile.settings')}
+            title={t('profile.settings')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
+            </svg>
+          </FloatingIconButton>
+        </div>
+      ) : (
+        <PageBackButton onClick={() => navigate(-1)} />
+      )}
+
+      <PageLogoHeader padding="20px 16px 0" />
 
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
@@ -499,98 +575,130 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
 
-        {/* Tab bar — Boards | Studios | Liked (isMe only) */}
-        <div style={{
-          display: 'flex',
-          borderBottom: '1px solid var(--color-border-soft)',
-          marginBottom: 0,
-          marginTop: 8,
-        }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('boards')}
-            style={{
-              flex: 1,
-              padding: '12px 0',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: activeTab === 'boards' ? 700 : 500,
-              color: activeTab === 'boards' ? 'var(--color-text)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'boards' ? '2px solid var(--color-text)' : '2px solid transparent',
-              marginBottom: -1,
-              fontFamily: 'inherit',
-              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-            }}
-          >
-            Boards
-          </button>
-          <button
-            type="button"
-            onClick={handleStudiosTab}
-            style={{
-              flex: 1,
-              padding: '12px 0',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: activeTab === 'studios' ? 700 : 500,
-              color: activeTab === 'studios' ? 'var(--color-text)' : 'var(--color-text-muted)',
-              borderBottom: activeTab === 'studios' ? '2px solid var(--color-text)' : '2px solid transparent',
-              marginBottom: -1,
-              fontFamily: 'inherit',
-              transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-            }}
-          >
-            Studios
-          </button>
-          {isMe && (
-            <button
-              type="button"
-              onClick={handleLikedTab}
-              style={{
-                flex: 1,
-                padding: '12px 0',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontWeight: activeTab === 'liked' ? 700 : 500,
-                color: activeTab === 'liked' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                borderBottom: activeTab === 'liked' ? '2px solid var(--color-text)' : '2px solid transparent',
-                marginBottom: -1,
-                fontFamily: 'inherit',
-                transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-              }}
-            >
-              Liked
-            </button>
-          )}
-          {isMe && (
-            <button
-              type="button"
-              onClick={handleCreatedTab}
-              style={{
-                flex: 1,
-                padding: '12px 0',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 14,
-                fontWeight: activeTab === 'created' ? 700 : 500,
-                color: activeTab === 'created' ? 'var(--color-text)' : 'var(--color-text-muted)',
-                borderBottom: activeTab === 'created' ? '2px solid var(--color-text)' : '2px solid transparent',
-                marginBottom: -1,
-                fontFamily: 'inherit',
-                transition: 'color var(--motion-fast), border-color var(--motion-fast)',
-              }}
-            >
-              Created
-            </button>
-          )}
-        </div>
+        {/* ── Personality section ────────────────────────────────────────── */}
+        {(() => {
+          function vectorFrom(p) {
+            if (!p) return null
+            return [p.axis_1, p.axis_2, p.axis_3, p.axis_4, p.axis_5]
+          }
+
+          // isMe + no personality → CTA to assessment
+          if (isMe && !user.personality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => navigate('/assessment')}
+                  className={styles.personalityCtaSecondary}
+                >
+                  성향 진단 받기
+                </button>
+              </div>
+            )
+          }
+
+          // isMe + has personality → interactive pentagon (myVector only, no overlay)
+          if (isMe && user.personality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <PentagonChart
+                  myVector={vectorFrom(user.personality)}
+                  interactive={true}
+                  onAxisClick={(i) => navigate(`/people?axis=${i}`)}
+                  size={180}
+                />
+                <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0 }}>
+                  {user.personality.type_code} 유형
+                </p>
+                {/* Retest. The backend already upserts (PersonalityProfile
+                    .update_or_create + profile-cache eviction), so this needs no
+                    API of its own — the only thing missing was a way back into
+                    the assessment once a profile existed.
+
+                    No confirm step on purpose: nothing is overwritten until the
+                    new run is submitted, so abandoning midway leaves the current
+                    result intact and there is nothing to protect against.
+
+                    Same styling as the `성향 진단 받기` CTA in the sibling branch
+                    above (isMe + no personality) so the two states read as one
+                    pair; placed under the type label to keep the chart primary. */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/assessment')}
+                  style={{ marginTop: 4 }}
+                  className={styles.personalityCtaSecondary}
+                >
+                  다시 진단받기
+                </button>
+              </div>
+            )
+          }
+
+          // !isMe + both have personality → overlay comparison
+          if (!isMe && user?.personality && myPersonality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <PentagonChart
+                  myVector={vectorFrom(myPersonality)}
+                  theirVector={vectorFrom(user.personality)}
+                  size={180}
+                />
+                <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
+                  실선 = 나, 점선 = 상대방
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {}}
+                  className={styles.personalityCtaPrimary}
+                >
+                  관심 있어요
+                </button>
+              </div>
+            )
+          }
+
+          // !isMe + they have personality, I don't → single graph + CTA
+          if (!isMe && user?.personality && !myPersonality) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <PentagonChart
+                  theirVector={vectorFrom(user.personality)}
+                  size={180}
+                />
+                <button
+                  type="button"
+                  onClick={() => navigate('/assessment')}
+                  className={styles.personalityCtaPrimary}
+                >
+                  나의 성향 확인해보기 →
+                </button>
+              </div>
+            )
+          }
+
+          return null
+        })()}
+        {/* ── End personality section ────────────────────────────────────── */}
+
+        {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
+            viewer, design-parity user-other.html; edit affordances inside
+            each panel stay isMe-gated) */}
+        <Tabs
+          style={{ marginTop: 8 }}
+          tabs={[
+            { id: 'boards', label: t('profileB3.tabBoards') },
+            { id: 'studios', label: t('profileB3.tabStudios') },
+            { id: 'liked', label: t('profileB3.tabLiked') },
+            { id: 'created', label: t('profileB3.tabCreated') },
+          ]}
+          value={activeTab}
+          onChange={(id) => {
+            if (id === 'studios') handleStudiosTab()
+            else if (id === 'liked') handleLikedTab()
+            else if (id === 'created') handleCreatedTab()
+            else setActiveTab('boards')
+          }}
+        />
 
         {activeTab === 'boards' && (<>
 
@@ -598,16 +706,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {boardActionError && (
           <div aria-live="polite" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            padding: '12px 16px', marginBottom: 12, borderRadius: 12,
-            background: 'rgba(239,68,68,0.12)',
-            borderLeft: '3px solid #ef4444',
-            color: 'var(--color-text)', fontSize: 13, fontWeight: 500,
+            padding: '12px 16px', marginBottom: 12, borderRadius: 'var(--radius-md)',
+            background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
+            borderLeft: '3px solid var(--color-destructive)',
+            color: 'var(--color-text)', fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)',
           }}>
             <span>{boardActionError.msg}</span>
             <button
               type="button"
               onClick={() => setBoardActionError(null)}
-              aria-label="Dismiss"
+              aria-label={t('profileB3.dismiss')}
               style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: 'var(--color-text-2)', padding: 4, lineHeight: 0,
@@ -632,23 +740,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <button
               type="button"
               onClick={exitSelectMode}
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'var(--color-text-2)', fontSize: 14, fontWeight: 600,
-                minHeight: 44, padding: '0 4px',
-                fontFamily: 'inherit',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-2)' }}
+              className={styles.cancelBtn}
             >
-              Cancel
+              {t('profileB3.cancel')}
             </button>
             {/* Middle: selection count */}
             <span style={{
-              color: 'var(--color-text)', fontSize: 15, fontWeight: 600,
+              color: 'var(--color-text)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)',
               flex: 1, textAlign: 'center',
             }}>
-              {selectedBoards.size} selected
+              {t('profileB3.selectedCount', { n: selectedBoards.size })}
             </span>
             {/* Right: Select all / Deselect all */}
             <button
@@ -660,69 +761,35 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   setSelectedBoards(new Set(boards.map(b => b.board_id)))
                 }
               }}
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: '#ec4899', fontSize: 13, fontWeight: 600,
-                minHeight: 44, padding: '0 4px',
-                fontFamily: 'inherit',
-                whiteSpace: 'nowrap',
-              }}
+              className={styles.selectAllBtn}
             >
-              {allSelected ? 'Deselect all' : 'Select all'}
+              {allSelected ? t('profileB3.deselectAll') : t('profileB3.selectAll')}
             </button>
           </div>
         ) : (
           // Normal boards section header
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 20, padding: '0 4px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h3 style={{
-                color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
-                margin: 0, letterSpacing: '-0.01em',
-              }}>
-                Curated Boards
-              </h3>
-              <span style={{
-                color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
-              }}>
-                {boardsTotalCount}
-              </span>
-            </div>
-            {/* P6: Edit button — owner-only, only when boards exist */}
-            {isMe && boards.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectMode(true)}
-                aria-label="Edit boards"
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'transparent',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 10, cursor: 'pointer',
-                  color: 'var(--color-text-2)', fontSize: 13, fontWeight: 600,
-                  padding: '0 12px', minHeight: 44,
-                  fontFamily: 'inherit',
-                  transition: 'border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1), color 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(236,72,153,0.55)'
-                  e.currentTarget.style.color = '#ec4899'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-border)'
-                  e.currentTarget.style.color = 'var(--color-text-2)'
-                }}
-              >
-                {/* Pencil icon */}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-                Edit
-              </button>
-            )}
+          <div style={{ marginBottom: 20, padding: '0 4px' }}>
+            <SectionTitle
+              as="h3"
+              count={boardsTotalCount}
+              right={SHOW_BOARD_EDIT_BUTTON && isMe && boards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectMode(true)}
+                  aria-label={t('profileB3.editBoards')}
+                  className={styles.editBtn}
+                >
+                  {/* Pencil icon */}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  {t('profileB3.editBoards')}
+                </button>
+              )}
+            >
+              {t('profileB3.curatedBoards')}
+            </SectionTitle>
           </div>
         )}
 
@@ -743,13 +810,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* P6: sticky bulk action bar — visible when selectMode && selection > 0 */}
         {selectMode && selectedBoards.size > 0 && (
           <div style={{
-            position: 'sticky', bottom: 12, zIndex: 5,
+            position: 'sticky', bottom: 'calc(var(--tabbar-clearance) + 12px)', zIndex: 5,
             margin: '16px 0 0',
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '10px 12px',
-            background: 'rgba(15,15,15,0.80)',
+            background: 'color-mix(in srgb, var(--color-bg) 80%, transparent)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            borderRadius: 16,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--color-border-soft)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}>
@@ -758,32 +825,28 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               type="button"
               disabled={bulkPending}
               onClick={() => handleBulkVisibility('public')}
-              style={bulkActionButtonStyle(bulkPending)}
-              onMouseEnter={bulkBtnHoverEnter(bulkPending)}
-              onMouseLeave={bulkBtnHoverLeave}
+              className={styles.bulkActionBtn}
             >
               {/* Lock-open icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
               </svg>
-              Public
+              {t('profileB3.makePublic')}
             </button>
             {/* Make private */}
             <button
               type="button"
               disabled={bulkPending}
               onClick={() => handleBulkVisibility('private')}
-              style={bulkActionButtonStyle(bulkPending)}
-              onMouseEnter={bulkBtnHoverEnter(bulkPending)}
-              onMouseLeave={bulkBtnHoverLeave}
+              className={styles.bulkActionBtn}
             >
               {/* Lock-closed icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              Private
+              {t('profileB3.makePrivate')}
             </button>
             {/* Delete with 2-step confirm */}
             <button
@@ -801,19 +864,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   handleBulkDelete()
                 }
               }}
-              style={{
-                minHeight: 44, padding: '0 14px',
-                borderRadius: 10, border: 'none',
-                background: confirmingBulkDelete ? '#ef4444' : 'rgba(239,68,68,0.12)',
-                color: confirmingBulkDelete ? '#fff' : '#ef4444',
-                fontSize: 13, fontWeight: 600,
-                cursor: bulkPending ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: bulkPending ? 0.5 : 1,
-                transition: 'background 0.18s, color 0.18s, opacity 0.18s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                whiteSpace: 'nowrap',
-              }}
+              className={`${styles.bulkDeleteBtn} ${confirmingBulkDelete ? styles.bulkDeleteBtnConfirming : ''}`}
             >
               {/* Trash icon */}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -824,8 +875,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
               </svg>
               {confirmingBulkDelete
-                ? `Confirm delete (${selectedBoards.size})?`
-                : `Delete (${selectedBoards.size})`
+                ? t('profileB3.confirmDelete', { n: selectedBoards.size })
+                : t('profileB3.deleteCount', { n: selectedBoards.size })
               }
             </button>
           </div>
@@ -842,7 +893,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <div style={{
               width: 24, height: 24, borderRadius: '50%',
               border: '2px solid var(--color-border)',
-              borderTopColor: '#ec4899',
+              borderTopColor: 'var(--accent-1)',
               animation: 'spin 0.8s linear infinite',
             }} />
           </div>
@@ -853,32 +904,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Studios tab content */}
         {activeTab === 'studios' && (
           <div style={{ padding: '16px 0' }}>
-            <style>{`
-              .building-carousel::-webkit-scrollbar { display: none; }
-              .building-carousel { -ms-overflow-style: none; scrollbar-width: none; }
-            `}</style>
             {studiosLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
               </div>
             ) : !savedStudios || savedStudios.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <BuildingIconEmpty />
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t('profile.noSavedOfficesInline')}
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  {t('profile.followToShowInline')}
-                </p>
-              </div>
+              <EmptyState
+                icon={<BuildingIconEmpty />}
+                title={t('profile.noSavedOfficesInline')}
+                body={t('profile.followToShowInline')}
+              />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {savedStudios.map((office, i) => (
-                  <OfficeCard
+                  <StudioCard
                     key={office.architect_id || i}
                     office={office}
                     buildings={buildingsMap[office.architect_id] ?? null}
@@ -893,12 +932,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Liked tab content */}
         {activeTab === 'liked' && (
           <div style={{ padding: '16px 0' }}>
-            <h3 style={{
-              color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
-              margin: '0 0 20px', letterSpacing: '-0.01em',
-            }}>
-              Liked Projects
-            </h3>
+            <div style={{ marginBottom: 20 }}>
+              <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
+            </div>
             {likedLoading ? (
               <div style={{
                 display: 'grid',
@@ -906,22 +942,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 20,
               }}>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 16, background: 'var(--color-surface-2)' }} />
+                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-2)' }} />
                 ))}
               </div>
             ) : !likedBuildings || likedBuildings.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t('profile.noLikedProjectsInline')}
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  {t('profile.swipeToSaveInline')}
-                </p>
-              </div>
+              <EmptyState
+                title={t('profile.noLikedProjectsInline')}
+                body={t('profile.swipeToSaveInline')}
+              />
             ) : (
               <div style={{
                 display: 'grid',
@@ -929,154 +957,92 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 20,
               }}>
                 {likedBuildings.map((bld, i) => (
-                  <div
+                  <PhotoTile
                     key={bld.canonical_bld_id || i}
+                    imageUrl={bld.image_url || bld.display_cover_url}
+                    title={bld.name || bld.canonical_bld_id}
+                    subtitle={bld.architect_names?.length > 0 ? bld.architect_names.join(', ') : 'Building'}
+                    placeholder={<BuildingIconEmpty />}
                     onClick={() => navigate('/buildings/' + bld.canonical_bld_id)}
-                    style={{ cursor: 'pointer', borderRadius: 16, overflow: 'hidden', background: 'var(--color-surface-2)' }}
-                  >
-                    {(bld.image_url || bld.display_cover_url) ? (
-                      <img
-                        src={bld.image_url || bld.display_cover_url}
-                        alt={bld.name || ''}
-                        loading="lazy"
-                        style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }}
-                      />
-                    ) : (
-                      <div style={{ width: '100%', aspectRatio: '4 / 5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <BuildingIconEmpty />
-                      </div>
-                    )}
-                    <div style={{ padding: '10px 12px 12px' }}>
-                      <p style={{
-                        margin: 0, fontSize: 14, fontWeight: 700,
-                        color: 'var(--color-text)', lineHeight: 1.3,
-                        display: '-webkit-box', WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      }}>
-                        {bld.name || bld.canonical_bld_id}
-                      </p>
-                      {bld.architect_names?.length > 0 && (
-                        <p style={{
-                          margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-muted)',
-                          fontWeight: 500, lineHeight: 1.4,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}>
-                          {bld.architect_names.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  />
                 ))}
               </div>
             )}
           </div>
         )}
 
-        {/* Created tab content */}
-        {activeTab === 'created' && isMe && (
+        {/* Created tab content — isMe: full owner voice (upload CTA, review
+            badges). !isMe: publishable-only works from ?user_id=, cards are
+            NOT clickable into detail (GET /works/<id>/ is owner-only, 403s
+            for other viewers) — rendered as plain non-interactive cards
+            rather than linking anywhere else. */}
+        {activeTab === 'created' && (
           <div style={{ padding: '16px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-                My Works
-              </h3>
-              <button
-                type="button"
-                onClick={() => navigate('/upload')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '8px 16px', borderRadius: 20,
-                  background: 'var(--color-text)', color: 'var(--color-bg)',
-                  border: 'none', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                }}
+            <div style={{ marginBottom: 20 }}>
+              <SectionTitle
+                as="h3"
+                right={isMe && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload')}
+                    className={styles.uploadBtn}
+                  >
+                    {t('profile.uploadButton')}
+                  </button>
+                )}
               >
-                + 업로드
-              </button>
+                {isMe ? t('profile.myWorksTitle') : t('profile.worksTitle')}
+              </SectionTitle>
             </div>
             {worksLoading ? (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '3/4', borderRadius: 12, background: 'var(--color-surface-2)' }} />
+                  <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '4 / 5' }} />
                 ))}
               </div>
             ) : !works || works.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  아직 업로드한 작품이 없어요
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  본인의 건축 작품을 올려보세요
-                </p>
-                <button
-                  type="button"
-                  onClick={() => navigate('/upload')}
-                  style={{
-                    marginTop: 8, padding: '10px 24px', borderRadius: 20,
-                    background: 'var(--color-text)', color: 'var(--color-bg)',
-                    border: 'none', cursor: 'pointer',
-                    fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
-                  }}
-                >
-                  작품 업로드
-                </button>
-              </div>
+              <EmptyState
+                title={t('profile.noWorksTitle')}
+                body={isMe ? t('profile.noWorksBody') : undefined}
+                actionLabel={isMe ? t('profile.uploadWorkAction') : undefined}
+                onAction={isMe ? () => navigate('/upload') : undefined}
+              />
             ) : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
                 {works.map(work => (
-                  <div
+                  <PhotoTile
                     key={work.upload_id}
-                    onClick={() => setSelectedWorkId(work.upload_id)}
-                    style={{
-                      borderRadius: 12, overflow: 'hidden',
-                      background: 'var(--color-surface-2)',
-                      display: 'flex', flexDirection: 'column',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {work.cover_url ? (
-                      <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
-                        <img
-                          src={work.cover_url}
-                          alt={work.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                      </div>
-                    ) : (
-                      <div style={{ aspectRatio: '3/4', background: 'var(--color-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>처리 중</span>
-                      </div>
+                    imageUrl={work.cover_url}
+                    title={work.title}
+                    subtitle={work.program}
+                    placeholder={!work.cover_url && (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)' }}>
+                        {t('profile.workProcessing')}
+                      </span>
                     )}
-                    <div style={{ padding: '10px 12px 12px' }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: 'var(--color-text)', lineHeight: 1.3 }}>
-                        {work.title}
-                      </p>
-                      <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        {work.program}
-                      </p>
-                      {!work.is_publishable && (
-                        <span style={{
-                          display: 'inline-block', marginTop: 6,
-                          padding: '2px 8px', borderRadius: 10,
-                          background: 'rgba(239,68,68,0.12)', color: '#ef4444',
-                          fontSize: 10, fontWeight: 600,
-                        }}>
-                          {work.gate_reason ? '검토 거절' : '검토 중'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
+                    topRight={isMe && !work.is_publishable && (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
+                        color: 'var(--color-destructive)',
+                        fontSize: 'var(--fs-caption)',
+                        fontWeight: 'var(--fw-semibold)',
+                      }}>
+                        {work.gate_reason ? t('workDetail.status.rejected') : t('workDetail.status.processing')}
+                      </span>
+                    )}
+                  />
                 ))}
               </div>
             )}

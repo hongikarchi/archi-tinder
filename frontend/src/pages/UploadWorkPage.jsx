@@ -12,12 +12,17 @@
  * FRONT-UX-13: image editing (crop + rotate), cover image, per-file validation.
  */
 
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ReactCrop from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import { presignFiles, uploadToR2, finalizeWork } from '../api/works.js'
 import { useTranslation } from '../i18n/index.js'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
+import PageTitle from '../components/PageTitle.jsx'
+import Modal from '../components/Modal.jsx'
 import s from './UploadWorkPage.module.css'
 
 // Matches backend MAX_WORK_IMAGES — presign/finalize reject >10 images with a 400.
@@ -203,7 +208,7 @@ async function applyEditToBlob(originalBlob, percentCrop, rotation) {
 
 /* ── Component ──────────────────────────────────────────────────────────── */
 
-export default function UploadWorkPage() {
+export default function UploadWorkPage({ onLogout }) {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const { t } = useTranslation()
@@ -220,6 +225,8 @@ export default function UploadWorkPage() {
     location_country: '',
     project_year: '',
   })
+  const [builtStatus, setBuiltStatus] = useState('built')
+  const [optionalOpen, setOptionalOpen] = useState(false)
   const [copyrightChecked, setCopyrightChecked] = useState(false)
   const [uploadState, setUploadState] = useState('idle')
   const [progress, setProgress] = useState(0)
@@ -503,6 +510,7 @@ export default function UploadWorkPage() {
       const payload = {
         title: formData.title.trim(),
         program: formData.program,
+        built_status: builtStatus,
         location_city: formData.location_city.trim() || undefined,
         location_country: formData.location_country.trim() || undefined,
         project_year: formData.project_year ? parseInt(formData.project_year, 10) : undefined,
@@ -533,101 +541,56 @@ export default function UploadWorkPage() {
 
   /* ── Success modal dismiss ───────────────────────────────────────────── */
   // The underlying form is hidden while uploadState === 'processing', so all
-  // dismiss paths (confirm click, backdrop click, Escape) perform the same
-  // navigation — there is nothing on this page to "return" to.
+  // dismiss paths (confirm click, backdrop click, Escape — the last two now
+  // handled by the shared Modal component) perform the same navigation —
+  // there is nothing on this page to "return" to.
   const goToCreatedWorks = useCallback(() => {
     navigate('/user/me?tab=created')
   }, [navigate])
-
-  // Escape key closes the success modal (matches PhotoLightbox.jsx precedent).
-  useEffect(() => {
-    if (uploadState !== 'processing') return
-    function onKey(e) {
-      if (e.key === 'Escape') goToCreatedWorks()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [uploadState, goToCreatedWorks])
 
   /* ── Render ──────────────────────────────────────────────────────────── */
 
   return (
     <div className={s.page}>
-      {/* Header */}
-      <div className={s.header}>
-        <button
-          type="button"
-          className={s.backBtn}
-          onClick={() => navigate(-1)}
-          aria-label={t('uploadWork.header.backAria')}
-        >
-          ←
-        </button>
-        <h1 className={s.headerTitle}>{t('uploadWork.header.title')}</h1>
-        {/* spacer to balance the back button */}
-        <div style={{ width: 44 }} />
-      </div>
+      <PageBackButton onClick={() => navigate(-1)} label={t('uploadWork.header.backAria')} />
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} />
 
       {/* ── Success modal overlay ──────────────────────────────────────── */}
       {uploadState === 'processing' && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) goToCreatedWorks()
-          }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-          }}
+        <Modal
+          open
+          onClose={goToCreatedWorks}
+          title={t('uploadWork.success.title')}
+          zIndex={1000}
+          closeLabel={t('modalB3.close')}
         >
-          <div
+          <p style={{ margin: '0 0 20px', fontSize: 'var(--fs-body)', color: 'var(--color-text)' }}>
+            {t('uploadWork.success.body')}
+          </p>
+          <button
+            type="button"
+            onClick={goToCreatedWorks}
             style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 20,
-              padding: 24,
-              maxWidth: 480,
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: 0,
+              background: 'var(--accent-1)',
+              color: '#fff',
+              fontSize: 'var(--fs-body)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              minHeight: 44,
               width: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
             }}
           >
-            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--color-text)' }}>
-              {t('uploadWork.success.title')}
-            </p>
-            <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text)' }}>
-              {t('uploadWork.success.body')}
-            </p>
-            <button
-              type="button"
-              onClick={goToCreatedWorks}
-              style={{
-                marginTop: 8,
-                padding: '12px 16px',
-                borderRadius: 12,
-                border: 0,
-                background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: 'pointer',
-                minHeight: 44,
-                alignSelf: 'stretch',
-              }}
-            >
-              {t('uploadWork.success.confirm')}
-            </button>
-          </div>
-        </div>
+            {t('uploadWork.success.confirm')}
+          </button>
+        </Modal>
       )}
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 48px' }}>
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px var(--tabbar-clearance)' }}>
+        <PageTitle>{t('uploadWork.header.title')}</PageTitle>
         {uploadState !== 'processing' && (
           <form onSubmit={handleSubmit} noValidate>
             {/* ── Drop zone ── */}
@@ -762,51 +725,105 @@ export default function UploadWorkPage() {
                 </select>
               </div>
 
-              {/* Location city */}
+              {/* Built/Unbuilt status — required, segmented toggle (mock: upload.html) */}
               <div className={s.formGroup}>
-                <label className={s.label} htmlFor="location_city">{t('uploadWork.form.cityLabel')}</label>
-                <input
-                  id="location_city"
-                  name="location_city"
-                  type="text"
-                  className={s.input}
-                  value={formData.location_city}
-                  onChange={handleFieldChange}
-                  placeholder={t('uploadWork.form.cityPlaceholder')}
-                  disabled={isBusy}
-                />
+                <label className={s.label}>{t('uploadWork.form.statusLabel')}</label>
+                <div className={s.statusToggle}>
+                  <button
+                    type="button"
+                    className={`${s.statusPill} ${builtStatus === 'built' ? s.statusPillActive : ''}`}
+                    onClick={() => setBuiltStatus('built')}
+                    disabled={isBusy}
+                    aria-pressed={builtStatus === 'built'}
+                  >
+                    {t('uploadWork.form.statusBuilt')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${s.statusPill} ${builtStatus === 'unbuilt' ? s.statusPillActive : ''}`}
+                    onClick={() => setBuiltStatus('unbuilt')}
+                    disabled={isBusy}
+                    aria-pressed={builtStatus === 'unbuilt'}
+                  >
+                    {t('uploadWork.form.statusUnbuilt')}
+                  </button>
+                </div>
               </div>
 
-              {/* Location country */}
-              <div className={s.formGroup}>
-                <label className={s.label} htmlFor="location_country">{t('uploadWork.form.countryLabel')}</label>
-                <input
-                  id="location_country"
-                  name="location_country"
-                  type="text"
-                  className={s.input}
-                  value={formData.location_country}
-                  onChange={handleFieldChange}
-                  placeholder={t('uploadWork.form.countryPlaceholder')}
-                  disabled={isBusy}
-                />
-              </div>
+              {/* Optional details — collapsible card wrapping city/country/year
+                  (mock: upload.html). Collapsed by default; fields keep their
+                  values while folded since only the wrapper div unmounts. */}
+              <div className={s.optionalCard}>
+                <button
+                  type="button"
+                  className={s.optionalHeader}
+                  onClick={() => setOptionalOpen(o => !o)}
+                  aria-expanded={optionalOpen}
+                >
+                  <span className={s.optionalTitle}>
+                    {t('uploadWork.form.optionalTitle')}{' '}
+                    <span className={s.optionalSub}>{t('uploadWork.form.optionalSub')}</span>
+                  </span>
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="var(--color-text-dim)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={s.optionalChevron}
+                    style={{ transform: optionalOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
 
-              {/* Project year */}
-              <div className={s.formGroup}>
-                <label className={s.label} htmlFor="project_year">{t('uploadWork.form.yearLabel')}</label>
-                <input
-                  id="project_year"
-                  name="project_year"
-                  type="number"
-                  className={s.input}
-                  value={formData.project_year}
-                  onChange={handleFieldChange}
-                  placeholder={t('uploadWork.form.yearPlaceholder')}
-                  min="1800"
-                  max="2100"
-                  disabled={isBusy}
-                />
+                {optionalOpen && (
+                  <div className={s.optionalBody}>
+                    {/* Location city */}
+                    <div className={s.formGroup}>
+                      <label className={s.label} htmlFor="location_city">{t('uploadWork.form.cityLabel')}</label>
+                      <input
+                        id="location_city"
+                        name="location_city"
+                        type="text"
+                        className={s.input}
+                        value={formData.location_city}
+                        onChange={handleFieldChange}
+                        placeholder={t('uploadWork.form.cityPlaceholder')}
+                        disabled={isBusy}
+                      />
+                    </div>
+
+                    {/* Location country */}
+                    <div className={s.formGroup}>
+                      <label className={s.label} htmlFor="location_country">{t('uploadWork.form.countryLabel')}</label>
+                      <input
+                        id="location_country"
+                        name="location_country"
+                        type="text"
+                        className={s.input}
+                        value={formData.location_country}
+                        onChange={handleFieldChange}
+                        placeholder={t('uploadWork.form.countryPlaceholder')}
+                        disabled={isBusy}
+                      />
+                    </div>
+
+                    {/* Project year */}
+                    <div className={s.formGroup}>
+                      <label className={s.label} htmlFor="project_year">{t('uploadWork.form.yearLabel')}</label>
+                      <input
+                        id="project_year"
+                        name="project_year"
+                        type="number"
+                        className={s.input}
+                        value={formData.project_year}
+                        onChange={handleFieldChange}
+                        placeholder={t('uploadWork.form.yearPlaceholder')}
+                        min="1800"
+                        max="2100"
+                        disabled={isBusy}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Copyright */}

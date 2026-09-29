@@ -19,6 +19,23 @@ export class VerifyRequiredError extends Error {
 }
 
 /**
+ * Shared 403 verify_required check for project write endpoints (POST/PATCH).
+ * If `err` matches the backend's verify-required contract, dispatches the
+ * 'archithon:verify-required' event (global VerifyGateModal listens) and
+ * throws VerifyRequiredError. Otherwise returns without side effects, so the
+ * caller's own catch block continues to handle/rethrow the original error.
+ */
+function throwIfVerifyRequired(err) {
+  if (err?.status === 403 && err?.data?.detail === 'verify_required') {
+    const reason = err?.data?.reason || 'board_limit_reached'
+    window.dispatchEvent(new CustomEvent('archithon:verify-required', {
+      detail: { reason },
+    }))
+    throw new VerifyRequiredError(reason)
+  }
+}
+
+/**
  * Create a new project (board).
  * On 403 verify_required → throws VerifyRequiredError (caller must handle).
  * Also dispatches 'archithon:verify-required' event for the global VerifyGateModal.
@@ -27,14 +44,7 @@ export async function createProject(body) {
   try {
     return await callApi('POST', '/projects/', body)
   } catch (err) {
-    if (err?.status === 403 && err?.data?.detail === 'verify_required') {
-      const reason = err?.data?.reason || 'board_limit_reached'
-      const verifyErr = new VerifyRequiredError(reason)
-      window.dispatchEvent(new CustomEvent('archithon:verify-required', {
-        detail: { reason },
-      }))
-      throw verifyErr
-    }
+    throwIfVerifyRequired(err)
     throw err
   }
 }
@@ -61,10 +71,17 @@ export async function getProject(projectId, { throwOnError = false } = {}) {
   }
 }
 
+/**
+ * Update (PATCH) a project. On 403 verify_required → throws VerifyRequiredError
+ * (same contract/event as createProject, via the shared throwIfVerifyRequired
+ * helper) so callers like SaveBoardModal's confirm-save flow surface the
+ * global VerifyGateModal instead of a generic error string.
+ */
 export async function updateProject(projectId, fields) {
   try {
     return await callApi('PATCH', `/projects/${projectId}/`, fields)
   } catch (err) {
+    throwIfVerifyRequired(err)
     console.error('[api/client] updateProject failed:', err)
     throw err
   }
@@ -148,4 +165,24 @@ export async function bookmarkBuilding(projectId, cardId, action, rank, sessionI
     rank,
     ...(sessionId ? { session_id: sessionId } : {}),
   })
+}
+
+/**
+ * Fetch a board's persona report image.
+ *
+ * Split from the board list on purpose: Project.report_image is base64 TEXT
+ * (~200KB each) and the profile's board page holds up to 50, so the list ships
+ * a `report_image_url` pointer and each card resolves it lazily. Same split the
+ * /people feed uses (see api/people.js getPersonReportImage).
+ *
+ * Returns { image_data, mime_type }, or null when the board has none / is not
+ * visible to the caller (backend answers 404). Callers must treat null as "no
+ * image" and fall back — do not retry.
+ */
+export async function getProjectReportImage(projectId) {
+    try {
+        return await callApi('GET', `/projects/${projectId}/report-image/`)
+    } catch {
+        return null
+    }
 }

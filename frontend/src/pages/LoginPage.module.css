@@ -1,0 +1,111 @@
+/*
+ * LoginPage.module.css
+ * Single home for all LoginPage-scoped visual rules (FRONT-DESIGN-B1).
+ * Migrated from index.css `.lp-*` globals (LOGIN-REWORK-1) — `.lp-skel` /
+ * `lpSkelPulse` stayed in index.css (shared with components/CardSkeleton.jsx).
+ * Tokens: tokens.css CSS variables only — no hardcoded colors/radii/motion.
+ */
+
+/* Page background — plain bg, matches the swipe page tone (drafting-grid
+   experiment removed by user decision 2026-08-15). */
+.page {
+  background: var(--color-bg);
+}
+
+/* ── Card deck entrance ──────────────────────────────────────────────────── */
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+.cardIn { animation: cardIn var(--motion-normal) var(--motion-ease-out); }
+
+/* Choice/consent gesture tutorial — mini card demonstrates the left/right
+   swipe gesture, looping. */
+@keyframes swipeDemo {
+  0%, 8%    { transform: translateX(0) rotate(0deg); }
+  24%       { transform: translateX(-48px) rotate(-13deg); }
+  40%, 50%  { transform: translateX(0) rotate(0deg); }
+  66%       { transform: translateX(48px) rotate(13deg); }
+  82%, 100% { transform: translateX(0) rotate(0deg); }
+}
+.swipeDemo { animation: swipeDemo 3.4s var(--motion-ease) infinite; }
+
+/* Tutorial arrows — dim by default, brighten to ink (--color-text) in sync
+   with the card swipe (swipeDemo: left ≈24%, right ≈66%). */
+@keyframes arrowLeft {
+  0%, 15%   { color: var(--color-text-dim); }
+  22%, 26%  { color: var(--color-text); }
+  34%, 100% { color: var(--color-text-dim); }
+}
+@keyframes arrowRight {
+  0%, 57%   { color: var(--color-text-dim); }
+  64%, 68%  { color: var(--color-text); }
+  76%, 100% { color: var(--color-text-dim); }
+}
+.arrowLeft  { animation: arrowLeft  3.4s var(--motion-ease) infinite; }
+.arrowRight { animation: arrowRight 3.4s var(--motion-ease) infinite; }
+
+/* react-tinder-card root fills the deck so the swipe transform carries the card. */
+.tinder { position: absolute; inset: 0; }
+
+/* ── 1B. Ink buttons — fluid lift (translateY(-3px), DESIGN.md §4) + ink
+   click-glow (§8.1 pattern, monochrome — stays paper identity, not accent). */
+.cta, .btn {
+  transition: transform var(--motion-normal) var(--motion-ease),
+              box-shadow var(--motion-slow) var(--motion-ease-out),
+              border-color var(--motion-fast),
+              opacity var(--motion-fast);
+}
+.cta:hover:not(:disabled),
+.btn:hover:not(:disabled) {
+  transform: translateY(-3px);
+  opacity: 0.92;
+}
+.cta:disabled, .btn:disabled { cursor: default; }
+
+.cta:active:not(:disabled),
+.btn:active:not(:disabled) {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text) 20%, transparent);
+  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
+}
+
+.cta:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ── Paper-flat input — base flat surface + 3-state focus ring. ──────────── */
+.input {
+  transition: border-color var(--motion-fast),
+              box-shadow var(--motion-slow) var(--motion-ease-out);
+}
+.input:focus-visible,
+.input:focus-within,
+.input:focus {
+  outline: none;
+  border-color: var(--color-text);
+}
+.input:active {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-text) 22%, transparent);
+  transition: border-color var(--motion-fast), box-shadow 0s;
+}
+
+/* Role option buttons (ProfileStep) reuse `.btn` above — same -3px lift +
+   ink active-glow + focus-visible ring discipline, no separate class needed. */
+
+/* ── Reduced motion — kill lift/entrance/loop animation. ──────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .cardIn { animation: none; }
+  .swipeDemo,
+  .arrowLeft,
+  .arrowRight { animation: none; }
+  .cta:hover:not(:disabled),
+  .btn:hover:not(:disabled) {
+    transform: none;
+  }
+  .cta, .btn, .input {
+    transition: none;
+  }
+}
