@@ -1,4 +1,6 @@
 import Header from './Header.jsx'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
+import Skeleton from '../../components/Skeleton.jsx'
 
 export default function LoadingState({ onBack }) {
   return (
@@ -10,13 +12,14 @@ export default function LoadingState({ onBack }) {
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <Header onBack={onBack} />
-      <div className="skeleton-shimmer" style={{ height: '50vh', width: '100%' }} />
+      <PageLogoHeader />
+      <Skeleton width="100%" height="50vh" radius="0" />
       <div style={{ padding: '22px 20px' }}>
-        <div className="skeleton-shimmer" style={{ width: '72%', height: 28, borderRadius: 8, marginBottom: 14 }} />
-        <div className="skeleton-shimmer" style={{ width: '46%', height: 16, borderRadius: 8, marginBottom: 24 }} />
+        <Skeleton width="72%" height={28} radius="var(--radius-sm)" style={{ marginBottom: 14 }} />
+        <Skeleton width="46%" height={16} radius="var(--radius-sm)" style={{ marginBottom: 24 }} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {[0, 1, 2, 3].map(i => (
-            <div key={i} className="skeleton-shimmer" style={{ height: 58, borderRadius: 12 }} />
+            <Skeleton key={i} width="100%" height={58} radius="var(--radius-md)" />
           ))}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useTranslation } from '../../i18n/index.js'
 import Header from './Header.jsx'
+import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 
 export default function ErrorState({ message, onBack, onRetry }) {
   const { t } = useTranslation()
@@ -14,6 +15,7 @@ export default function ErrorState({ message, onBack, onRetry }) {
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <Header onBack={onBack} />
+      <PageLogoHeader />
       <div style={{
         flex: 1,
         display: 'flex',
@@ -24,10 +26,10 @@ export default function ErrorState({ message, onBack, onRetry }) {
         padding: 24,
         textAlign: 'center',
       }}>
-        <p style={{ color: 'var(--color-text)', fontSize: 17, fontWeight: 700, margin: 0 }}>
+        <p style={{ color: 'var(--color-text)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-bold)', margin: 0 }}>
           {t('buildingDetail.notFound')}
         </p>
-        <p style={{ color: 'var(--color-text-dim)', fontSize: 13, lineHeight: 1.5, margin: 0 }}>
+        <p style={{ color: 'var(--color-text-dim)', fontSize: 'var(--fs-caption)', lineHeight: 1.5, margin: 0 }}>
           {message}
         </p>
         <button
@@ -36,12 +38,12 @@ export default function ErrorState({ message, onBack, onRetry }) {
           style={{
             minHeight: 44,
             padding: '0 18px',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--color-border-soft)',
             background: 'var(--color-surface)',
             color: 'var(--color-text)',
-            fontSize: 13,
-            fontWeight: 700,
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
             cursor: 'pointer',
             fontFamily: 'inherit',
           }}

@@ -189,20 +189,22 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* PERSONA REPORT 레이블 */}
       <p style={{
         color: 'var(--color-text-muted)',
-        fontSize: 11,
-        fontWeight: 700,
+        fontSize: 'var(--fs-caption)',
+        fontWeight: 'var(--fw-bold)',
         letterSpacing: '0.1em',
         textTransform: 'uppercase',
         margin: '0 0 8px',
       }}>
-        Persona Report
+        {t('detailB3.personaReportEyebrow')}
       </p>
 
-      {/* 페르소나 이름 */}
+      {/* 페르소나 이름 — hero clamp() folded to the fixed --fs-title (24) per
+          the UI-CONSISTENCY-B type-scale decision (display clamp() titles on
+          BuildingDetail/PersonaReport fold to 24 unless separately approved). */}
       <h1 style={{
         color: 'var(--color-text)',
-        fontSize: 'clamp(24px, 5vw, 32px)',
-        fontWeight: 700,
+        fontSize: 'var(--fs-title)',
+        fontWeight: 'var(--fw-bold)',
         margin: '0 0 8px',
         lineHeight: 1.15,
       }}>
@@ -212,8 +214,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* 한 줄 설명 */}
       <p style={{
         color: 'var(--accent-1)',
-        fontSize: 15,
-        fontWeight: 600,
+        fontSize: 'var(--fs-body)',
+        fontWeight: 'var(--fw-semibold)',
         margin: '0 0 12px',
         lineHeight: 1.5,
       }}>
@@ -224,7 +226,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {report.description && (
         <p style={{
           color: 'var(--color-text-dim)',
-          fontSize: 14,
+          fontSize: 'var(--fs-body)',
           lineHeight: 1.65,
           margin: '0 0 16px',
         }}>
@@ -237,12 +239,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {(report.dominant_programs || []).map(tag => (
           <span key={tag} style={{
             padding: '4px 10px',
-            borderRadius: 999,
+            borderRadius: 'var(--radius-pill)',
             background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
             border: '1px solid color-mix(in srgb, var(--accent-1) 22%, transparent)',
             color: 'var(--accent-1)',
-            fontSize: 11,
-            fontWeight: 700,
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
           }}>
             {tag}
           </span>
@@ -250,12 +252,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {(report.dominant_styles || []).map(tag => (
           <span key={tag} style={{
             padding: '4px 10px',
-            borderRadius: 999,
+            borderRadius: 'var(--radius-pill)',
             background: 'color-mix(in srgb, var(--accent-2) 10%, transparent)',
             border: '1px solid color-mix(in srgb, var(--accent-2) 22%, transparent)',
             color: 'var(--accent-2)',
-            fontSize: 11,
-            fontWeight: 700,
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
           }}>
             {tag}
           </span>
@@ -263,12 +265,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {(report.dominant_materials || []).map(tag => (
           <span key={tag} style={{
             padding: '4px 10px',
-            borderRadius: 999,
+            borderRadius: 'var(--radius-pill)',
             background: 'var(--color-tag-bg)',
             border: '1px solid var(--color-tag-border)',
             color: 'var(--color-tag-label)',
-            fontSize: 11,
-            fontWeight: 700,
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-bold)',
           }}>
             {tag}
           </span>
@@ -281,8 +283,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* 취향 분석 섹션 */}
       <h2 style={{
         color: 'var(--color-text)',
-        fontSize: 16,
-        fontWeight: 700,
+        fontSize: 'var(--fs-emphasis)',
+        fontWeight: 'var(--fw-bold)',
         margin: '0 0 20px',
         letterSpacing: '-0.01em',
       }}>
@@ -303,14 +305,14 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
             <div key={ax.key}>
               <p style={{
                 color: 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 600,
+                fontSize: 'var(--fs-body)',
+                fontWeight: 'var(--fw-semibold)',
                 margin: '0 0 4px',
               }}>
                 {t(`persona.axis.${ax.key}`)}
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-semibold)', minWidth: 48, textAlign: 'right' }}>
                   {t(ax.leftKey)}
                 </span>
                 <div className={styles.spectrumBar} style={{ flex: 1 }}>
@@ -319,7 +321,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
                     style={{ left: `${pct}%` }}
                   />
                 </div>
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 10, fontWeight: 600, minWidth: 48 }}>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-semibold)', minWidth: 48 }}>
                   {t(ax.rightKey)}
                 </span>
               </div>
@@ -334,8 +336,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       {/* 이미지 생성 영역 */}
       <h2 style={{
         color: 'var(--color-text)',
-        fontSize: 16,
-        fontWeight: 700,
+        fontSize: 'var(--fs-emphasis)',
+        fontWeight: 'var(--fw-bold)',
         margin: '0 0 16px',
         letterSpacing: '-0.01em',
       }}>
@@ -351,7 +353,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               width: '100%',
               minHeight: 200,
               objectFit: 'cover',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-md)',
               display: 'block',
             }}
           />
@@ -366,13 +368,13 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
               alignItems: 'center',
               gap: 5,
               padding: '7px 14px',
-              borderRadius: 999,
+              borderRadius: 'var(--radius-pill)',
               background: 'var(--color-scrim-soft)',
               backdropFilter: 'blur(8px)',
               WebkitBackdropFilter: 'blur(8px)',
               color: '#fff',
-              fontSize: 12,
-              fontWeight: 700,
+              fontSize: 'var(--fs-caption)',
+              fontWeight: 'var(--fw-bold)',
               textDecoration: 'none',
               fontFamily: 'inherit',
               border: '1px solid rgba(255,255,255,0.18)',
@@ -390,7 +392,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         <div style={{
           width: '100%',
           height: 200,
-          borderRadius: 12,
+          borderRadius: 'var(--radius-md)',
           background: 'var(--color-surface-2)',
           border: '2px dashed var(--color-border-soft)',
           display: 'flex',
@@ -419,14 +421,14 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           width: '100%',
           minHeight: 44,
           padding: '12px 24px',
-          borderRadius: 999,
+          borderRadius: 'var(--radius-md)',
           background: (imgGenLoading || !boardId)
             ? 'var(--color-surface-2)'
             : 'var(--accent-1)',
           color: (imgGenLoading || !boardId) ? 'var(--color-text-muted)' : '#fff',
           border: 'none',
-          fontSize: 14,
-          fontWeight: 700,
+          fontSize: 'var(--fs-body)',
+          fontWeight: 'var(--fw-bold)',
           cursor: (imgGenLoading || !boardId) ? 'default' : 'pointer',
           fontFamily: 'inherit',
           marginBottom: 16,
@@ -436,7 +438,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       </button>
 
       {imgError && (
-        <p style={{ color: 'var(--color-destructive, #ef4444)', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
+        <p style={{ color: 'var(--color-destructive)', fontSize: 'var(--fs-caption)', marginBottom: 12, lineHeight: 1.5 }}>
           {imgError}
         </p>
       )}
@@ -450,12 +452,12 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           width: '100%',
           minHeight: 44,
           padding: '12px 24px',
-          borderRadius: 999,
+          borderRadius: 'var(--radius-md)',
           background: 'var(--color-surface)',
           color: 'var(--color-text-muted)',
           border: '1px solid var(--color-border)',
-          fontSize: 13,
-          fontWeight: 600,
+          fontSize: 'var(--fs-body)',
+          fontWeight: 'var(--fw-semibold)',
           cursor: (reportLoading || !boardId) ? 'default' : 'pointer',
           fontFamily: 'inherit',
         }}
@@ -465,9 +467,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
 
       {reportError && (
         <p style={{
-          color: 'var(--color-destructive, #D73A49)',
-          fontSize: 13,
-          fontWeight: 600,
+          color: 'var(--color-destructive)',
+          fontSize: 'var(--fs-body)',
+          fontWeight: 'var(--fw-semibold)',
           margin: '10px 0 0',
           textAlign: 'center',
         }}>
