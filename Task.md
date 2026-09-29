@@ -312,6 +312,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### UI-CONSISTENCY-B — 디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체 — RESOLVED 2026-09-29 (`cb4b025`, PR 대기)
+- 2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`
+- 1단계 규칙·토큰: radius 역할(사진 20·UI 12·내부 8·시트 24·칩 pill), 5단 글자 12/14/16/20/24 + 굵기 400~700(800 금지), 모달 배경 `--color-scrim-modal` 0.4, 원형 버튼 28px/터치 44px. DESIGN.md의 `calc(var(--radius) * 1px)` 오류(모서리 0 렌더) 제거
+- 2단계 공통 부품: FloatingIconButton, PageTitle/SectionTitle, PageShell, Tabs, EmptyState, Skeleton(반짝임 제거), PhotoTile(4:5·캡션 오버레이), Modal(모바일 시트/데스크탑 중앙), SegmentedControl(선택 표시 슬라이딩 — 탭바·한/EN·라이트/다크·사람/공모전·프로필 탭). 하단 탭바 → 인스타 iOS식 떠 있는 유리 캡슐(아이콘만, 취향=돋보기, 선택=알약+채운 아이콘), `--page-height` 전체 화면 + `--tabbar-clearance`
+- 3단계 페이지: 보드 상세(풀블리드 히어로 제거 → 공통 틀 + 커버 카드, 정보 한 축 정렬, `SHOW_COVER`로 텍스트 헤더 전환 가능), architects(프로필 구조), 프로필·Studios(StudioCard 분리, 죽은 LikedOfficesPage 삭제), 공모전, 건물 상세·결과·리포트, 모달 전체
+- 부수 (FRONT-UX-QUICK-A): 프로필 로그아웃 우측 이동, 보드 Edit 버튼 숨김(`SHOW_BOARD_EDIT_BUTTON`), Studios 화살표, "오피스"→"스튜디오", DevLoginView username 기준 조회(구글 연동으로 이메일 바뀐 테스트 계정 500). 보드 API error는 로컬 DB 컬럼 4개 누락(로컬만) — 로컬 브랜치 복구, 코드 무변경
+- 병렬 5 worktree로 3단계 동시 진행 → 통합 시 locales.js 네임스페이스(`profileB3`/`architectB3`/`competitionB3`/`detailB3`/`modalB3`) 충돌만 수동 해결. eslint 0 error, build 통과, 11개 페이지 콘솔 에러 0
+- Deferred: 보드·리포트 경로 정리 + 데이터 삭제 버그 → `FULL-BOARD-FLOW-1`(HIGH, 별도 PR); locales `*B3` 네임스페이스를 기존 키 체계로 흡수; `--color-nav-inactive` 유리 위 대비(사진 위 비활성 아이콘 약함) 점검.
+
 ### FRONT-COMP-PROTO-1 — 공모전 팀빌딩 화면 프로토타입 — RESOLVED 2026-09-23 (`04d2e90`, PR 리뷰 대기)
 - **완성품이 아니라 판단용**: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정
 - 그래서 **의도적으로 만들지 않은 것** — `Competition`/`CompetitionInterest`/`Team`/`TeamInvite` 모델, 마이그레이션, API. 커뮤니티가 탈락하면 브랜치째 버릴 수 있어야 하는데 마이그레이션이 들어가면 되돌리기 어려움. **백엔드 변경 0줄**
