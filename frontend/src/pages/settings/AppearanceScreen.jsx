@@ -10,24 +10,27 @@ import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
-import styles from './AppearanceScreen.module.css'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 
 export default function AppearanceScreen({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
   return (
-    <div className={styles.page}>
-      <PageBackButton onClick={() => navigate(-1)} />
-      <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
-        <h2 className={styles.headerTitle}>{t('settings.appearance')}</h2>
-        <AppearanceSettings />
-      </div>
+    <PageShell
+      width="narrow"
+      chrome={<>
+        <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
+        <PageTopControls onLogout={onLogout} />
+      </>}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('settings.appearance')}</PageTitle>
+      <AppearanceSettings />
 
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }

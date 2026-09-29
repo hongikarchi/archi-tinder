@@ -10,6 +10,8 @@ import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import Modal from '../components/Modal.jsx'
 import {
   INK,
   MONO,
@@ -150,69 +152,40 @@ function ConfidenceBar({ phase, progress }) {
 }
 
 /* ── ExitConfirmPopup ────────────────────────────────────────────────────── */
+/* Built on the shared Modal, `centered` (Phase 3 addition — see Modal.jsx doc
+ * comment) so it stays a centered interrupt dialog at every viewport width
+ * instead of auto-switching to a bottom sheet mid-swipe-session. */
 function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
   const primaryBtnRef = useRef(null)
   const { t } = useTranslation()
 
-  // Auto-focus primary button on mount
+  // Auto-focus primary button on mount (after Modal's own panel-focus effect)
   useEffect(() => { primaryBtnRef.current?.focus() }, [])
 
-  // Dismiss on Escape
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
   return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(10,10,12,0.65)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        zIndex: 10001,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '0 24px',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+    <Modal
+      open
+      onClose={onCancel}
+      title={t('swipe.exitConfirm.title')}
+      zIndex={10001}
+      closeLabel={t('modalB3.close')}
+      width={360}
+      centered
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="exit-confirm-title"
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-soft)',
-          borderRadius: 20,
-          padding: '28px 24px 24px',
-          width: '100%',
-          maxWidth: 360,
-          display: 'flex', flexDirection: 'column', gap: 8,
-          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-        }}
-      >
-        <h2 id="exit-confirm-title" style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-          margin: '0 0 4px', textAlign: 'center',
-        }}>
-          {t('swipe.exitConfirm.title')}
-        </h2>
-        <p style={{
-          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
-          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
-        }}>
-          {t('swipe.exitConfirm.body')}
-        </p>
+      <p style={{
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)', fontWeight: 500,
+        textAlign: 'center', margin: '0 0 20px', lineHeight: 1.5,
+      }}>
+        {t('swipe.exitConfirm.body')}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
           ref={primaryBtnRef}
           onClick={onNewProject}
           style={{
-            padding: '13px 24px', borderRadius: 12,
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--accent-1)', color: '#fff',
-            fontSize: 14, fontWeight: 600, border: 'none',
+            fontSize: 'var(--fs-body)', fontWeight: 600, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
         >
@@ -221,9 +194,9 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
         <button
           onClick={onHome}
           style={{
-            padding: '13px 24px', borderRadius: 12,
+            padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--color-surface-2)', color: 'var(--color-text)',
-            fontSize: 14, fontWeight: 600,
+            fontSize: 'var(--fs-body)', fontWeight: 600,
             border: '1px solid var(--color-border)',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
@@ -233,83 +206,52 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
         <button
           onClick={onCancel}
           style={{
-            padding: '10px 24px', borderRadius: 12,
+            padding: '10px 24px', borderRadius: 'var(--radius-md)',
             background: 'transparent', color: 'var(--color-text-dim)',
-            fontSize: 13, fontWeight: 500, border: 'none',
+            fontSize: 'var(--fs-caption)', fontWeight: 500, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
           }}
         >
           {t('swipe.exitConfirm.cancel')}
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
 /* ── DismissConfirmPopup ─────────────────────────────────────────────────── */
+/* Same centered-always rationale as ExitConfirmPopup above. */
 function DismissConfirmPopup({ onConfirm, onCancel }) {
   const primaryBtnRef = useRef(null)
   const { t } = useTranslation()
 
-  // Auto-focus primary button on mount
+  // Auto-focus primary button on mount (after Modal's own panel-focus effect)
   useEffect(() => { primaryBtnRef.current?.focus() }, [])
 
-  // Dismiss on Escape
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
   return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        zIndex: 10001,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '0 24px',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+    <Modal
+      open
+      onClose={onCancel}
+      title={t('swipe.dismissConfirm.title')}
+      zIndex={10001}
+      closeLabel={t('modalB3.close')}
+      width={360}
+      centered
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dismiss-confirm-title"
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border-soft)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '28px 24px 24px',
-          width: '100%',
-          maxWidth: 360,
-          display: 'flex', flexDirection: 'column', gap: 8,
-          boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
-        }}
-      >
-        <h2 id="dismiss-confirm-title" style={{
-          color: 'var(--color-text)', fontSize: 17, fontWeight: 700,
-          margin: '0 0 4px', textAlign: 'center',
-        }}>
-          {t('swipe.dismissConfirm.title')}
-        </h2>
-        <p style={{
-          color: 'var(--color-text-dim)', fontSize: 13, fontWeight: 500,
-          textAlign: 'center', margin: '0 0 12px', lineHeight: 1.5,
-        }}>
-          {t('swipe.dismissConfirm.body')}
-        </p>
+      <p style={{
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)', fontWeight: 500,
+        textAlign: 'center', margin: '0 0 20px', lineHeight: 1.5,
+      }}>
+        {t('swipe.dismissConfirm.body')}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
           ref={primaryBtnRef}
           onClick={onConfirm}
           style={{
             padding: '13px 24px', borderRadius: 'var(--radius-md)',
             background: 'var(--color-surface-2)', color: 'var(--color-text)',
-            fontSize: 14, fontWeight: 600,
+            fontSize: 'var(--fs-body)', fontWeight: 600,
             border: '1px solid var(--color-border)',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
@@ -321,14 +263,14 @@ function DismissConfirmPopup({ onConfirm, onCancel }) {
           style={{
             padding: '10px 24px', borderRadius: 'var(--radius-md)',
             background: 'transparent', color: 'var(--color-text-dim)',
-            fontSize: 13, fontWeight: 500, border: 'none',
+            fontSize: 'var(--fs-caption)', fontWeight: 500, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 40,
           }}
         >
           {t('swipe.dismissConfirm.cancel')}
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -454,37 +396,29 @@ export default function SwipePage({
     // Show a brief inline prompt; no full-screen takeover.
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         overflow: 'hidden',
         background: 'var(--color-bg)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '20px 16px',
+        padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
         <PageTopControls onLogout={onLogout} />
 
         {/* Exit button */}
-        <button
+        <FloatingIconButton
           onClick={() => setShowExitConfirm(true)}
-          aria-label="Exit session"
-          style={{
-            position: 'absolute', top: 12, left: 16,
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            zIndex: 10,
-          }}
+          ariaLabel="Exit session"
+          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
-        </button>
+        </FloatingIconButton>
 
         {/* Header / confidence bar — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -567,24 +501,16 @@ export default function SwipePage({
 
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'flex-start', height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', overflow: 'hidden',
-        background: 'var(--color-bg)', padding: '20px 16px',
+        justifyContent: 'flex-start', height: 'var(--page-height)', overflow: 'hidden',
+        background: 'var(--color-bg)', padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
 
         {/* F3 — Exit button, top-left floating (moved from right to avoid Logout button occlusion) */}
-        <button
+        <FloatingIconButton
           onClick={() => setShowExitConfirm(true)}
-          aria-label="Exit session"
-          style={{
-            position: 'absolute', top: 12, left: 16,
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--color-text-dim)', cursor: 'pointer',
-            zIndex: 10,
-          }}
+          ariaLabel="Exit session"
+          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
         >
           {/* Restart / new-session icon */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -592,7 +518,7 @@ export default function SwipePage({
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
           </svg>
-        </button>
+        </FloatingIconButton>
 
         {/* Header — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>

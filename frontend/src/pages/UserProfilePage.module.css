@@ -7,40 +7,8 @@
  * color-destructive replaces the legacy #ef4444).
  */
 
-/* ---- Tab bar (Boards | Studios | Liked | Created) ------------------------
-   Keeps the ink underline (editorial identity) — only color/underline swap
-   on the active modifier, hover adds a color shift on inactive tabs. */
-
-.tab {
-  flex: 1;
-  padding: 12px 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  font-family: inherit;
-  transition: color var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease);
-}
-
-.tab:hover {
-  color: var(--color-text);
-}
-
-.tab:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: -2px;
-}
-
-.tabActive {
-  font-weight: 700;
-  color: var(--color-text);
-  border-bottom-color: var(--color-text);
-}
+/* Tab bar (Boards | Studios | Liked | Created) moved to the shared `Tabs`
+ * component — UI-CONSISTENCY-B Phase 2b. */
 
 /* ---- Cancel (select-mode header) ---- */
 
@@ -198,13 +166,104 @@
   outline-offset: 2px;
 }
 
+/* ---- Upload button (Created tab header, owner-only) ---- */
+/* DESIGN.md §8.2 secondary button — replaces the old black pill
+ * (radius 20, var(--color-text) bg) with the standard secondary spec. */
+
+.uploadBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  padding: 0 16px;
+  min-height: 44px;
+  font-family: inherit;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.uploadBtn:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.uploadBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Personality section CTAs ---- */
+/* DESIGN.md §8.2 Secondary Button — "성향 진단 받기" / "다시 진단받기"
+ * (was: ad hoc radius-pill / 36px-high buttons). */
+
+.personalityCtaSecondary {
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.personalityCtaSecondary:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.personalityCtaSecondary:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* DESIGN.md §8.1 Primary CTA — "관심 있어요" / "나의 성향 확인해보기 →". */
+
+.personalityCtaPrimary {
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: transform var(--motion-normal) var(--motion-ease),
+              background-color var(--motion-normal) var(--motion-ease),
+              box-shadow var(--motion-slow) var(--motion-ease-out);
+}
+
+.personalityCtaPrimary:active {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
+}
+
+.personalityCtaPrimary:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .tab,
   .cancelBtn,
   .selectAllBtn,
   .editBtn,
   .bulkActionBtn,
-  .bulkDeleteBtn {
+  .bulkDeleteBtn,
+  .uploadBtn,
+  .personalityCtaSecondary,
+  .personalityCtaPrimary {
     transition: none;
   }
 }

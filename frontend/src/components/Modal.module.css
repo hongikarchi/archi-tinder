@@ -1,0 +1,86 @@
+/*
+ * Modal.module.css — DESIGN.md §8.10: centered modal (desktop, >=769px),
+ * bottom sheet (mobile, <=768px). Media-query switch on ONE DOM structure,
+ * modeled on WorkDetailModal.module.css's existing pattern (do not add a
+ * `matchMedia` JS branch — the CSS-only switch is the established approach).
+ */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-scrim-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.panel {
+  position: relative;
+  width: 100%;
+  max-width: var(--modal-max-width, 480px);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.3);
+  outline: none;
+}
+
+.handle {
+  display: none;
+}
+
+.title {
+  margin: 0 0 12px;
+  padding-right: 40px;
+  font-size: var(--fs-heading);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.body {
+  color: var(--color-text);
+}
+
+.footer {
+  margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+  /* .centered (Phase 3) opts a caller out of the mobile bottom-sheet layout —
+     it stays a centered modal at every width. See Modal.jsx doc comment. */
+  .backdrop:not(.centered) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .panel:not(.centered) {
+    max-width: 100%;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    max-height: 85vh;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    animation: slideUp var(--motion-flip) var(--motion-ease);
+  }
+
+  .panel:not(.centered) .handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--color-border-soft);
+    margin: 0 auto 16px;
+  }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    animation: none;
+  }
+}

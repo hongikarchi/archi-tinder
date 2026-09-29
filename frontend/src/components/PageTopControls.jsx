@@ -2,6 +2,8 @@ import { useTheme } from '../hooks/useTheme.js'
 import { useLanguage } from '../hooks/useLanguage.js'
 import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import FloatingIconButton from './FloatingIconButton.jsx'
+import SegmentedControl from './SegmentedControl.jsx'
 import styles from './PageTopControls.module.css'
 
 /**
@@ -37,7 +39,7 @@ import styles from './PageTopControls.module.css'
  * LoginPage passes no `onLogout` (unauthenticated page) -> no logout button,
  * even though the mock's markup includes one (meaningless pre-login).
  */
-export default function PageTopControls({ onLogout }) {
+export default function PageTopControls({ onLogout, splitMobile = false }) {
   const { theme, setTheme } = useTheme()
   const { language, setLanguage } = useLanguage()
   const { t } = useTranslation()
@@ -57,71 +59,79 @@ export default function PageTopControls({ onLogout }) {
       onPointerDown={stop}
       onMouseDown={stop}
       onTouchStart={stop}
+      className={`${styles.controls} ${splitMobile ? styles.splitMobile : ''}`}
       style={wrapStyle}
     >
-      {/* Language pill */}
-      <div style={pillStyle}>
-        <button
-          type="button"
-          className="pressable"
-          onClick={() => setLanguage('ko')}
-          style={tgStyle(language === 'ko')}
-        >
-          {t('login.common.langKo')}
-        </button>
-        <button
-          type="button"
-          className="pressable"
-          onClick={() => setLanguage('en')}
-          style={tgStyle(language === 'en')}
-        >
-          {t('login.common.langEn')}
-        </button>
-      </div>
+      {/* Language pill — variant="pill" size="sm": the shared sliding
+          highlight replaces the old per-button background swap (see
+          SegmentedControl docblock); `pillHeight=22` matches the buttons'
+          own height so the highlight fills them exactly (the outer 28px
+          pill height belongs to the track, not the highlight). */}
+      <SegmentedControl
+        as="radio"
+        variant="pill"
+        size="sm"
+        pillHeight={22}
+        className={styles.languagePill}
+        style={pillStyle}
+        options={[
+          { value: 'ko', label: t('login.common.langKo') },
+          { value: 'en', label: t('login.common.langEn') },
+        ]}
+        value={language}
+        onChange={setLanguage}
+        optionClassName="pressable"
+        optionStyle={(opt, isActive) => tgStyle(isActive)}
+        highlightStyle={{ background: 'var(--color-bg)', boxShadow: '0 1px 3px rgba(0,0,0,0.14)' }}
+        renderOption={(opt) => opt.label}
+      />
 
-      {/* Theme pill — sun / moon, mock parity (see module docblock) */}
-      <div style={pillStyle}>
-        <button
-          type="button"
-          className="pressable"
-          aria-label="Light theme"
-          onClick={() => setTheme('github-light')}
-          style={tgIconStyle(theme === 'github-light')}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <circle cx="12" cy="12" r="4" />
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          className="pressable"
-          aria-label="Dark theme"
-          onClick={() => setTheme('github-dark')}
-          style={tgIconStyle(theme === 'github-dark')}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
-        </button>
-      </div>
+      {/* Theme pill — sun / moon, mock parity (see module docblock).
+          "selected" (and the sliding highlight) shows only on an EXACT theme
+          match — `value={theme}` naturally has no match on ayu-light /
+          synthwave-84, which SegmentedControl treats as "nothing selected"
+          rather than falling back to one of the two buttons. */}
+      <SegmentedControl
+        as="radio"
+        variant="pill"
+        size="sm"
+        pillHeight={22}
+        style={pillStyle}
+        options={[
+          { value: 'github-light', ariaLabel: 'Light theme', icon: (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+          ) },
+          { value: 'github-dark', ariaLabel: 'Dark theme', icon: (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          ) },
+        ]}
+        value={theme}
+        onChange={setTheme}
+        optionClassName="pressable"
+        optionStyle={(opt, isActive) => tgIconStyle(isActive)}
+        highlightStyle={{ background: 'var(--color-bg)', boxShadow: '0 1px 3px rgba(0,0,0,0.14)' }}
+        renderOption={(opt) => opt.icon}
+      />
 
       {/* Logout — only when a caller has one to wire up */}
       {onLogout && (
-        <button
-          type="button"
+        <FloatingIconButton
           onClick={handleLogoutClick}
           title="Log out"
-          aria-label="Log out"
-          className={`pressable ${styles.logoutBtn}`}
-          style={logoutStyle}
+          ariaLabel="Log out"
+          className={styles.logoutBtn}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-        </button>
+        </FloatingIconButton>
       )}
     </div>
   )
@@ -134,59 +144,50 @@ export default function PageTopControls({ onLogout }) {
 
 const wrapStyle = {
   position: 'fixed',
-  top: 14,
-  right: 16,
+  top: 16,
+  right: 12,
   zIndex: 300,
   display: 'flex',
-  gap: 8,
+  gap: 6,
   alignItems: 'center',
 }
 
 const pillStyle = {
   display: 'flex',
   alignItems: 'center',
-  height: 34,
+  height: 28,
   boxSizing: 'border-box',
-  padding: 3,
+  padding: 2,
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-pill)',
 }
 
 // Mock .tg base rule, selected state from .tg-ko/.tg-en/.tg-light/.tg-dark.
+// Background + box-shadow moved OUT of here — SegmentedControl's shared
+// sliding highlight now owns that "selected" chrome (see its `highlightStyle`
+// prop at each call site below); this stays foreground-only (color/type),
+// matching the split documented in SegmentedControl's docblock.
 function tgStyle(selected) {
   return {
     border: 0,
-    background: selected ? 'var(--color-bg)' : 'transparent',
+    background: 'transparent',
     color: selected ? 'var(--color-text)' : 'var(--color-text-muted)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 600,
     letterSpacing: '0.04em',
     cursor: 'pointer',
     borderRadius: 'var(--radius-pill)',
-    height: 28,
-    padding: '0 12px',
+    height: 22,
+    padding: '0 8px',
     display: 'flex',
     alignItems: 'center',
     fontFamily: 'inherit',
     lineHeight: 1,
-    boxShadow: selected ? '0 1px 3px rgba(0,0,0,0.14)' : 'none',
   }
 }
 
 // Mock .tg.tgi icon-only variant — same base, tighter horizontal padding.
 function tgIconStyle(selected) {
-  return { ...tgStyle(selected), padding: '0 9px' }
-}
-
-const logoutStyle = {
-  width: 34,
-  height: 34,
-  borderRadius: '50%',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border-soft)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  cursor: 'pointer',
+  return { ...tgStyle(selected), padding: '0 6px' }
 }

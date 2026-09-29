@@ -37,7 +37,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
       style={{
         position: 'relative',
         aspectRatio: '4 / 5',
-        borderRadius: 20,
+        borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
         cursor: 'pointer',
         background: 'var(--color-surface-2)',

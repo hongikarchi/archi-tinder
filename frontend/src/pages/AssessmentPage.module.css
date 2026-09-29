@@ -1,11 +1,14 @@
 .page {
-  height: calc(100vh - 64px - env(safe-area-inset-bottom, 0px));
+  height: var(--page-height);
   overflow: hidden;
   background: var(--color-bg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 16px;
+  /* Bottom clearance for the floating TabBar capsule (UI-CONSISTENCY-B Phase
+     2c) — this page never scrolls (overflow: hidden), so the deck/result
+     stage must fit above the capsule via padding, not via scroll. */
+  padding: 20px 16px var(--tabbar-clearance);
   position: relative;
 }
 

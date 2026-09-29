@@ -89,9 +89,13 @@ export default function BoardReportPage({ onLogout }) {
   /* Loading state (board fetch) OR auto-generate in flight (incl. pre-effect paint) */
   if (loading || shouldAutoGenerate) {
     return (
-      <div className={styles.page} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
+        <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
         <PageTopControls onLogout={onLogout} />
-        <Spinner />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Spinner />
+        </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
@@ -100,12 +104,15 @@ export default function BoardReportPage({ onLogout }) {
   /* Board not found */
   if (!board) {
     return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
         <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
         <PageTopControls onLogout={onLogout} />
-        <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {t('board.notFound')}
-        </p>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0 }}>
+            {t('board.notFound')}
+          </p>
+        </div>
       </div>
     )
   }
@@ -113,29 +120,32 @@ export default function BoardReportPage({ onLogout }) {
   /* Auto-generate failed — distinct copy + retry from the "no report at all" state */
   if (genError) {
     return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
         <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
         <PageTopControls onLogout={onLogout} />
-        <p style={{ color: 'var(--color-destructive, #D73A49)', fontSize: 16, fontWeight: 600, margin: 0, textAlign: 'center' }}>
-          {t('board.reportGenError')}
-        </p>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={handleRetry}
-            style={{
-              padding: '10px 24px',
-              borderRadius: 999,
-              background: 'var(--accent-1)',
-              border: 'none',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            {t('board.retry')}
-          </button>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+          <p style={{ color: 'var(--color-destructive)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0, textAlign: 'center' }}>
+            {t('board.reportGenError')}
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleRetry}
+              style={{
+                padding: '10px 24px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--accent-1)',
+                border: 'none',
+                color: '#fff',
+                fontSize: 'var(--fs-body)',
+                fontWeight: 'var(--fw-semibold)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {t('board.retry')}
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -144,12 +154,15 @@ export default function BoardReportPage({ onLogout }) {
   /* No report available (no liked buildings — generation never attempted) */
   if (!report) {
     return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
         <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
         <PageTopControls onLogout={onLogout} />
-        <p style={{ color: 'var(--color-text-muted)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-          {t('board.noReport')}
-        </p>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0 }}>
+            {t('board.noReport')}
+          </p>
+        </div>
       </div>
     )
   }

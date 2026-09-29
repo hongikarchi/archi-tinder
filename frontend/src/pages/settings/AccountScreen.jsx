@@ -19,6 +19,8 @@ import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import Toggle from '../../components/Toggle.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
@@ -224,35 +226,26 @@ export default function AccountScreen({ onLogout }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
-          {t('account.loading')}
-        </div>
-      </div>
-    )
-  }
-
-  if (fetchError) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
-          {fetchError}
-        </div>
-      </div>
-    )
-  }
-
   const isDirty = handle !== (me?.handle || '')
 
   return (
-    <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
+    <PageShell
+      width="narrow"
+      chrome={<ScreenChrome navigate={navigate} onLogout={onLogout} />}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('account.title')}</PageTitle>
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 16px 24px' }}>
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
+          {t('account.loading')}
+        </div>
+      ) : fetchError ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
+          {fetchError}
+        </div>
+      ) : (
+        <>
 
         {/* Read-only info section */}
         <section style={{ marginBottom: 32 }}>
@@ -567,23 +560,21 @@ export default function AccountScreen({ onLogout }) {
           </section>
         )}
 
-      </div>
+        </>
+      )}
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t, onLogout }) {
+function ScreenChrome({ navigate, onLogout }) {
   return (
     <>
       <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />
       <PageTopControls onLogout={onLogout} />
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 0' }}>
-        <h2 className={styles.headerTitle}>{t('account.title')}</h2>
-      </div>
     </>
   )
 }

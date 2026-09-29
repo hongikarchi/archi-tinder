@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import FloatingIconButton from '../../components/FloatingIconButton.jsx'
 
 async function downloadImage(url, fallbackName = 'image') {
   try {
@@ -65,9 +66,9 @@ export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate
   }
 
   const btnStyle = {
-    width: 44, height: 44, borderRadius: 12,
+    width: 44, height: 44, borderRadius: 'var(--radius-md)',
     border: '1px solid rgba(255,255,255,0.15)',
-    background: 'rgba(0,0,0,0.55)',
+    background: 'var(--color-scrim-soft)',
     backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
     color: '#fff', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -78,7 +79,7 @@ export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 99999,
-        background: 'rgba(0,0,0,0.96)',
+        background: 'var(--color-scrim-strong)',
         display: 'flex', flexDirection: 'column',
       }}
       onClick={onClose}
@@ -116,18 +117,18 @@ export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate
               </svg>
             )}
           </button>
-          {/* Close */}
-          <button
-            type="button"
+          {/* Close — shared FloatingIconButton, onPhoto variant (translucent
+              dark glass + white icon, DESIGN.md §3.2 / §1.4). */}
+          <FloatingIconButton
             onClick={onClose}
-            aria-label="Close"
-            style={btnStyle}
+            ariaLabel="Close"
+            variant="onPhoto"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
-          </button>
+          </FloatingIconButton>
         </div>
       </div>
 

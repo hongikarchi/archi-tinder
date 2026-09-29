@@ -9,6 +9,9 @@ import { isValidRank, kindLabel, metadataItems } from './buildingDetail/helpers.
 import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageTitle from '../components/PageTitle.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import { useTranslation } from '../i18n/index.js'
 import styles from './BuildingDetailPage.module.css'
 
@@ -165,11 +168,11 @@ export default function BuildingDetailPage({ onLogout }) {
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       background: 'var(--color-bg)',
       color: 'var(--color-text)',
       overflowY: 'auto',
-      paddingBottom: 'calc(84px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageTopControls onLogout={onLogout} />
       <PageLogoHeader />
@@ -196,22 +199,25 @@ export default function BuildingDetailPage({ onLogout }) {
       <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 16px' }}>
         <p style={{
           color: 'var(--color-text-muted)',
-          fontSize: 11,
-          fontWeight: 700,
+          fontSize: 'var(--fs-caption)',
+          fontWeight: 'var(--fw-bold)',
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           margin: '0 0 8px',
         }}>
-          Building detail
+          {t('detailB3.buildingDetailEyebrow')}
         </p>
         {/* Title row — save-to-board + bookmark now sit beside the h1
          * (canvas-design-port.md §6d item 6; building-detail.html moves this
          * cluster out of the old sticky header into this exact spot).
-         * Logic transplanted verbatim from the removed buildingDetail/Header.jsx —
-         * only the shell (pill/circle sizing, colors) is restyled to match the
-         * mock's default-state values; isSaved/isBookmarked/pending branches
-         * and their #fbbf24 literals are unchanged (still on the §6c defect
-         * map under the "building" PR, now living in this file instead). */}
+         * UI-CONSISTENCY-B3b-5: h1 → PageTitle (24), bookmark circle →
+         * FloatingIconButton, #fbbf24 literals → var(--accent-3) (reads as
+         * gold/amber in 3 of 4 themes, a burnt-amber "star" tint in GitHub
+         * Light — acceptable per DESIGN.md's own escape clause since no
+         * dedicated amber token exists). The save-to-board pill keeps its
+         * own compact button (has a text label, not an icon-only circle —
+         * doesn't fit FloatingIconButton) but is now token-radius (md) and
+         * token-typed. */}
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -219,15 +225,9 @@ export default function BuildingDetailPage({ onLogout }) {
           gap: 16,
           margin: '0 0 8px',
         }}>
-          <h1 style={{
-            color: 'var(--color-text)',
-            fontSize: 'clamp(28px, 7vw, 42px)',
-            fontWeight: 700,
-            lineHeight: 1.08,
-            margin: 0,
-          }}>
+          <PageTitle style={{ margin: 0, lineHeight: 1.08 }}>
             {title}
-          </h1>
+          </PageTitle>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, paddingTop: 10 }}>
             {/* Save to Board — only on recommended buildings, not on board-saved ones */}
@@ -239,18 +239,18 @@ export default function BuildingDetailPage({ onLogout }) {
                 style={{
                   height: 34,
                   padding: '0 14px',
-                  borderRadius: 999,
-                  border: isSaved ? '1px solid rgba(251,191,36,0.5)' : 'none',
-                  background: isSaved ? 'rgba(251,191,36,0.12)' : 'var(--accent-1)',
-                  color: isSaved ? '#fbbf24' : '#fff',
-                  fontSize: 12,
-                  fontWeight: 700,
+                  borderRadius: 'var(--radius-md)',
+                  border: isSaved ? '1px solid color-mix(in srgb, var(--accent-3) 50%, transparent)' : 'none',
+                  background: isSaved ? 'color-mix(in srgb, var(--accent-3) 12%, transparent)' : 'var(--accent-1)',
+                  color: isSaved ? 'var(--accent-3)' : '#fff',
+                  fontSize: 'var(--fs-caption)',
+                  fontWeight: 'var(--fw-bold)',
                   cursor: isSaved ? 'default' : 'pointer',
                   fontFamily: 'inherit',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  transition: 'background 0.2s, color 0.2s',
+                  transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
                 }}
               >
                 {isSaved ? (
@@ -273,32 +273,28 @@ export default function BuildingDetailPage({ onLogout }) {
             )}
 
             {!!fromProjectId && !!rank && (
-              <button
-                type="button"
+              <FloatingIconButton
                 onClick={handleToggleBookmark}
                 disabled={bookmarkPending}
-                aria-label={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+                ariaLabel={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
                 style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: '50%',
-                  border: isBookmarked ? '1px solid rgba(251,191,36,0.65)' : '1px solid var(--color-border-soft)',
-                  background: isBookmarked ? 'rgba(251,191,36,0.18)' : 'var(--color-surface)',
-                  color: isBookmarked ? '#fbbf24' : 'var(--color-text-dim)',
+                  borderColor: isBookmarked ? 'color-mix(in srgb, var(--accent-3) 65%, transparent)' : undefined,
+                  background: isBookmarked ? 'color-mix(in srgb, var(--accent-3) 18%, transparent)' : undefined,
+                  color: isBookmarked ? 'var(--accent-3)' : undefined,
                   cursor: bookmarkPending ? 'default' : 'pointer',
                   opacity: bookmarkPending ? 0.65 : 1,
                   fontSize: 16,
                 }}
               >
                 {isBookmarked ? '★' : '☆'}
-              </button>
+              </FloatingIconButton>
             )}
           </div>
         </div>
         {architect && (
           <p style={{
             color: 'var(--color-text-dim)',
-            fontSize: 15,
+            fontSize: 'var(--fs-body)',
             fontStyle: 'italic',
             lineHeight: 1.45,
             margin: '0 0 20px',
@@ -324,15 +320,15 @@ export default function BuildingDetailPage({ onLogout }) {
           {items.map(([label, value]) => (
             <div key={label} style={{
               minHeight: 58,
-              borderRadius: 12,
+              borderRadius: 'var(--radius-md)',
               border: '1px solid var(--color-border-soft)',
               background: 'var(--color-surface)',
               padding: '10px 12px',
             }}>
               <div style={{
                 color: 'var(--color-text-muted)',
-                fontSize: 10,
-                fontWeight: 700,
+                fontSize: 'var(--fs-caption)',
+                fontWeight: 'var(--fw-bold)',
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 marginBottom: 4,
@@ -341,8 +337,8 @@ export default function BuildingDetailPage({ onLogout }) {
               </div>
               <div style={{
                 color: 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 700,
+                fontSize: 'var(--fs-body)',
+                fontWeight: 'var(--fw-bold)',
                 lineHeight: 1.3,
               }}>
                 {label === 'Architect' && architectId ? (
@@ -369,13 +365,13 @@ export default function BuildingDetailPage({ onLogout }) {
               alignItems: 'center',
               gap: 6,
               color: 'var(--color-text-dim)',
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 'var(--fs-caption)',
+              fontWeight: 'var(--fw-bold)',
               textDecoration: 'none',
               marginBottom: 24,
             }}
           >
-            View on source
+            {t('detailB3.viewSource')}
             <span aria-hidden="true">↗</span>
           </a>
         )}
@@ -394,9 +390,9 @@ export default function BuildingDetailPage({ onLogout }) {
             boxSizing: 'border-box',
           }}>
             {[
-              { id: 'all', label: 'All' },
-              { id: 'photos', label: 'Photos' },
-              { id: 'drawings', label: 'Drawings' },
+              { id: 'all', label: t('detailB3.filterAll') },
+              { id: 'photos', label: t('detailB3.filterPhotos') },
+              { id: 'drawings', label: t('detailB3.filterDrawings') },
             ].map(chip => {
               const active = galleryFilter === chip.id
               const disabled = (chip.id === 'photos' && photos.length === 0)
@@ -409,12 +405,12 @@ export default function BuildingDetailPage({ onLogout }) {
                   disabled={disabled}
                   style={{
                     padding: '7px 14px',
-                    borderRadius: 999,
+                    borderRadius: 'var(--radius-pill)',
                     border: active ? '1px solid var(--accent-1)' : '1px solid var(--color-border-soft)',
                     background: active ? 'color-mix(in srgb, var(--accent-1) 14%, transparent)' : 'var(--color-surface)',
                     color: disabled ? 'var(--color-text-dimmer)' : (active ? 'var(--accent-1)' : 'var(--color-text)'),
-                    fontSize: 12,
-                    fontWeight: 700,
+                    fontSize: 'var(--fs-caption)',
+                    fontWeight: 'var(--fw-bold)',
                     cursor: disabled ? 'default' : 'pointer',
                     fontFamily: 'inherit',
                     opacity: disabled ? 0.45 : 1,
@@ -436,16 +432,9 @@ export default function BuildingDetailPage({ onLogout }) {
           }}>
             {photos.length > 0 && galleryFilter !== 'drawings' && (
               <section style={{ marginBottom: 24 }}>
-                <h2 style={{
-                  color: 'var(--color-text)',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
-                  margin: '0 0 10px',
-                }}>
-                  Photos
-                </h2>
+                <div style={{ marginBottom: 10 }}>
+                  <SectionTitle>{t('detailB3.photosHeading')}</SectionTitle>
+                </div>
                 <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
                   {photos.map((item, idx) => (
                     <div
@@ -455,7 +444,7 @@ export default function BuildingDetailPage({ onLogout }) {
                         breakInside: 'avoid',
                         marginBottom: 8,
                         position: 'relative',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-sm)',
                         overflow: 'hidden',
                         background: 'var(--color-surface)',
                         cursor: 'zoom-in',
@@ -475,12 +464,12 @@ export default function BuildingDetailPage({ onLogout }) {
                         position: 'absolute',
                         bottom: 6,
                         left: 6,
-                        background: 'rgba(0,0,0,0.6)',
+                        background: 'var(--color-scrim-soft)',
                         color: '#fff',
-                        fontSize: 10,
-                        fontWeight: 700,
+                        fontSize: 'var(--fs-caption)',
+                        fontWeight: 'var(--fw-bold)',
                         padding: '2px 6px',
-                        borderRadius: 4,
+                        borderRadius: 'var(--radius-sm)',
                         letterSpacing: '0.04em',
                       }}>
                         {kindLabel(item.kind)}
@@ -492,16 +481,9 @@ export default function BuildingDetailPage({ onLogout }) {
             )}
             {drawings.length > 0 && galleryFilter !== 'photos' && (
               <section style={{ marginBottom: 24 }}>
-                <h2 style={{
-                  color: 'var(--color-text)',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                  textTransform: 'uppercase',
-                  margin: '0 0 10px',
-                }}>
-                  Drawings
-                </h2>
+                <div style={{ marginBottom: 10 }}>
+                  <SectionTitle>{t('detailB3.drawingsHeading')}</SectionTitle>
+                </div>
                 <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
                   {drawings.map((item, idx) => (
                     <div
@@ -511,9 +493,9 @@ export default function BuildingDetailPage({ onLogout }) {
                         breakInside: 'avoid',
                         marginBottom: 8,
                         position: 'relative',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius-sm)',
                         overflow: 'hidden',
-                        background: '#fff',
+                        background: 'var(--color-surface)',
                         cursor: 'zoom-in',
                       }}
                     >
@@ -532,15 +514,15 @@ export default function BuildingDetailPage({ onLogout }) {
                         position: 'absolute',
                         bottom: 6,
                         left: 6,
-                        background: 'rgba(0,0,0,0.6)',
+                        background: 'var(--color-scrim-soft)',
                         color: '#fff',
-                        fontSize: 10,
-                        fontWeight: 700,
+                        fontSize: 'var(--fs-caption)',
+                        fontWeight: 'var(--fw-bold)',
                         padding: '2px 6px',
-                        borderRadius: 4,
+                        borderRadius: 'var(--radius-sm)',
                         letterSpacing: '0.04em',
                       }}>
-                        Drawing
+                        {kindLabel('drawing')}
                       </span>
                     </div>
                   ))}
@@ -596,17 +578,12 @@ export default function BuildingDetailPage({ onLogout }) {
             paddingTop: 20,
             marginBottom: 20,
           }}>
-            <h2 style={{
-              color: 'var(--color-text)',
-              fontSize: 16,
-              fontWeight: 700,
-              margin: '0 0 10px',
-            }}>
-              Description
-            </h2>
+            <div style={{ marginBottom: 10 }}>
+              <SectionTitle>{t('detailB3.descriptionHeading')}</SectionTitle>
+            </div>
             <p style={{
               color: 'var(--color-text-dim)',
-              fontSize: 15,
+              fontSize: 'var(--fs-body)',
               lineHeight: 1.65,
               margin: 0,
               whiteSpace: 'pre-wrap',
@@ -620,17 +597,12 @@ export default function BuildingDetailPage({ onLogout }) {
           borderTop: '1px solid var(--color-border-soft)',
           paddingTop: 20,
         }}>
-          <h2 style={{
-            color: 'var(--color-text)',
-            fontSize: 16,
-            fontWeight: 700,
-            margin: '0 0 10px',
-          }}>
-            Atmosphere
-          </h2>
+          <div style={{ marginBottom: 10 }}>
+            <SectionTitle>{t('detailB3.atmosphereHeading')}</SectionTitle>
+          </div>
           <p style={{
             color: 'var(--color-text-dim)',
-            fontSize: 15,
+            fontSize: 'var(--fs-body)',
             lineHeight: 1.65,
             margin: 0,
           }}>

@@ -6,142 +6,27 @@ import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
+import BoardCover from './boardDetail/BoardCover'
 import { useTranslation } from '../i18n/index.js'
 import { localizeReport } from '../utils/reportText.js'
 import s from './BoardDetailPage.module.css'
+import PageShell from '../components/PageShell.jsx'
+import PageBackButton from '../components/PageBackButton.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import PageTitle from '../components/PageTitle.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import Skeleton from '../components/Skeleton.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// TODO(claude): Replace MOCK_BOARD with API call to GET /api/v1/boards/${boardId}/
-// Returns: { board_id, name, visibility, owner{user_id, display_name, avatar_url},
-// buildings[], reaction_count, is_reacted }
-// TODO(claude): Backend should add `cover_image_url` to Board Detail response (or
-// derive on the frontend from buildings[0].image_url as fallback). Currently this
-// mockup shows it as a top-level field.
-const MOCK_BOARD = {
-  board_id: "proj_123",
-  name: "Museum References",
-  visibility: "public",
-  cover_image_url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1600&q=80",
-  owner: {
-    user_id: 1,
-    display_name: "Kim Minseo",
-    avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
-  },
-  buildings: [
-    {
-      building_id: "B00042",
-      name_en: "Seattle Central Library",
-      image_url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&q=80",
-      architect: "OMA / Rem Koolhaas",
-      year: 2004,
-      program: "Public",
-      city: "Seattle",
-    },
-    {
-      building_id: "B00109",
-      name_en: "Casa da Musica",
-      image_url: "https://images.unsplash.com/photo-1449844908441-8829872d2607?w=800&q=80",
-      architect: "OMA / Rem Koolhaas",
-      year: 2005,
-      program: "Cultural",
-      city: "Porto",
-    },
-    {
-      building_id: "B00231",
-      name_en: "Heydar Aliyev Center",
-      image_url: "https://images.unsplash.com/photo-1511818966892-d7d671e672a2?w=800&q=80",
-      architect: "Zaha Hadid",
-      year: 2012,
-      program: "Cultural",
-      city: "Baku",
-    },
-    {
-      building_id: "B00358",
-      name_en: "Therme Vals",
-      image_url: "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&q=80",
-      architect: "Peter Zumthor",
-      year: 1996,
-      program: "Sports",
-      city: "Vals",
-    },
-    {
-      building_id: "B00413",
-      name_en: "Centre Pompidou",
-      image_url: "https://images.unsplash.com/photo-1524815340653-53d719ce3660?w=800&q=80",
-      architect: "Renzo Piano",
-      year: 1977,
-      program: "Museum",
-      city: "Paris",
-    },
-    {
-      building_id: "B00504",
-      name_en: "Vitra Fire Station",
-      image_url: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
-      architect: "Zaha Hadid",
-      year: 1993,
-      program: "Public",
-      city: "Weil am Rhein",
-    },
-    {
-      building_id: "B00612",
-      name_en: "Fondazione Prada",
-      image_url: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&q=80",
-      architect: "OMA / Rem Koolhaas",
-      year: 2015,
-      program: "Museum",
-      city: "Milan",
-    },
-    {
-      building_id: "B00718",
-      name_en: "Bruder Klaus Field Chapel",
-      image_url: "https://images.unsplash.com/photo-1506146332389-18140dc7b2fb?w=800&q=80",
-      architect: "Peter Zumthor",
-      year: 2007,
-      program: "Religion",
-      city: "Mechernich",
-    },
-    {
-      building_id: "B00802",
-      name_en: "Milstein Hall",
-      image_url: "https://images.unsplash.com/photo-1486718448742-163732cd1544?w=800&q=80",
-      architect: "OMA / Rem Koolhaas",
-      year: 2011,
-      program: "Public",
-      city: "Ithaca",
-    },
-    {
-      building_id: "B00917",
-      name_en: "Maxxi Museum",
-      image_url: "https://images.unsplash.com/photo-1496564203457-11bb12075d90?w=800&q=80",
-      architect: "Zaha Hadid",
-      year: 2010,
-      program: "Museum",
-      city: "Rome",
-    },
-    {
-      building_id: "B01024",
-      name_en: "Kolumba Museum",
-      image_url: "https://images.unsplash.com/photo-1481026469463-66327c86e544?w=800&q=80",
-      architect: "Peter Zumthor",
-      year: 2007,
-      program: "Museum",
-      city: "Cologne",
-    },
-    {
-      building_id: "B01138",
-      name_en: "Whitney Museum",
-      image_url: "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?w=800&q=80",
-      architect: "Renzo Piano",
-      year: 2015,
-      program: "Museum",
-      city: "New York",
-    },
-  ],
-  reaction_count: 7,
-  is_reacted: false,
-}
+// UI-CONSISTENCY-B Phase 3a, decision 7 (.claude/plans/ui-consistency-b.md):
+// option (a) shipped — cover photo as a contained card below the chrome, no
+// full-bleed hero. Flip this to `false` to switch to option (b) (drop the
+// cover entirely, text-only header) — the only line that needs to change.
+const SHOW_COVER = true
 
 export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
@@ -219,7 +104,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     } catch (err) {
       setIsReacted(wasReacted)
       setReactionCount(previousCount)
-      setReactionError(err.message || 'Failed to update reaction.')
+      setReactionError(err.message || t('board.reactionFailed'))
     } finally {
       setIsReactionPending(false)
     }
@@ -228,7 +113,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   async function handleShare() {
     const report = localizeReport(board?.final_report, language)
     const shareData = {
-      title: (localName || board?.name || 'Board') + (report?.persona_type ? ` · ${report.persona_type}` : ''),
+      title: (localName || board?.name || t('board.defaultName')) + (report?.persona_type ? ` · ${report.persona_type}` : ''),
       text: report?.one_liner || localName || '',
       url: window.location.href,
     }
@@ -316,111 +201,47 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const coverImage = buildings.length > 0
     ? (buildings[0]?.image_url || board?.cover_image_url || null)
     : null
-  const statusMessage = error?.message || (loading ? 'Loading board...' : 'This board is empty')
+  const showBuildingsSkeleton = loading && buildings.length === 0
+  const boardName = localName || board?.name || ''
+  // Header (title / owner row / stats / action buttons) needs the real board
+  // to decide owner vs non-owner — without this gate the non-owner branch
+  // (e.g. the "Love this" button) and an empty/broken owner avatar flash
+  // briefly before `board` arrives.
+  const headerLoading = loading && !board
 
   return (
-    <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
-      overflowY: 'auto',
-      background: 'var(--color-bg)',
-      paddingBottom: 'calc(80px + env(safe-area-inset-bottom))',
-    }}>
-      <PageTopControls onLogout={onLogout} />
-      {/* Hero cover */}
-      <div style={{
-        position: 'relative',
-        width: '100%',
-        height: 'clamp(280px, 42vw, 360px)',
-        overflow: 'hidden',
-        background: 'var(--color-surface)',
-      }}>
-        {coverImage && (
-          <img
-            src={coverImage}
-            alt={board?.name || 'Board cover'}
-            fetchpriority="high"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-        )}
-
-        {/* Bottom gradient overlay (specified in brief) */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(to top, var(--color-bg) 0%, rgba(15,15,15,0.85) 30%, rgba(15,15,15,0.4) 60%, transparent 100%)',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Sticky header bar overlaid on top of cover */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: '12px 16px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          zIndex: 5,
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%)',
-        }}>
-        <div style={{ maxWidth: 680, margin: '0 auto', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button
-            onClick={() => navigate(-1)}
-            aria-label="Back"
-            className={s.heroBtn}
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.4)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 0,
-            }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-          </button>
-
-          <button
+    <PageShell
+      width="medium"
+      // Top padding so the cover card clears the fixed Share button
+      // (top:50/left:12) instead of sitting flush under the logo header
+      // (was the default `padding: '0 20px'` with no top gap at all —
+      // profile-page-visual-parity gap, mirrors UserProfilePage's 32px
+      // content-column top padding).
+      contentStyle={{ padding: '20px 20px 0' }}
+      chrome={
+        <>
+          <PageBackButton onClick={() => navigate(-1)} label={t('board.back')} />
+          <PageTopControls onLogout={onLogout} />
+          <PageLogoHeader />
+          {/* Share — stacked under the back button (ArchitectProfilePage precedent:
+              top:50/left:12, zIndex 299 — one below PageBackButton's 300), so its
+              44px invisible hit area never collides with PageTopControls on the
+              right at 390px width. */}
+          <FloatingIconButton
             onClick={handleShare}
-            aria-label="Share"
-            className={`${s.heroBtn}${shareCopied ? ` ${s.copied}` : ''}`}
+            ariaLabel={t('board.share')}
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              background: 'rgba(0,0,0,0.4)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 0,
+              position: 'fixed', top: 50, left: 12, zIndex: 299,
+              color: shareCopied ? 'var(--accent-2)' : undefined,
+              borderColor: shareCopied ? 'var(--accent-2)' : undefined,
             }}
           >
             {shareCopied ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />
                 <circle cx="6" cy="12" r="3" />
                 <circle cx="18" cy="19" r="3" />
@@ -428,132 +249,113 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                 <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
               </svg>
             )}
-          </button>
-        </div>
-        </div>
+          </FloatingIconButton>
+        </>
+      }
+    >
+      {/* Cover card — option (a). See SHOW_COVER above for the option (b) switch. */}
+      {SHOW_COVER && (
+        <BoardCover imageUrl={coverImage} alt={boardName || t('board.coverAlt')} />
+      )}
 
-        {/* §3.5.3 PRIVATE-only icon-lock chip — small dark blur circle, white-ish lock SVG.
-            PUBLIC renders nothing (public is the default; only flag the exception).
-            Anchored to hero top-right, sits alongside the back/share row at z-index 5. */}
-        {!isPublic && (
-          <div style={{
-            position: 'absolute',
-            top: 68,
-            right: 20,
-            zIndex: 5,
-            background: 'rgba(0,0,0,0.4)',
-            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-            padding: 6, borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          aria-label="Private board"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                 stroke="rgba(255,255,255,0.85)" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
+      {/* Info block — title / meta line / action row, one left-aligned column.
+          A single ternary on `headerLoading` so the 16 / 8 / 20 vertical
+          rhythm lives in exactly one place per branch (real vs skeleton) and
+          the owner-vs-non-owner action row is never guessed before `board`
+          arrives. */}
+      {headerLoading ? (
+        <div style={{ marginTop: 16 }}>
+          <Skeleton width="70%" height={28} radius="var(--radius-sm)" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+            <Skeleton circle height={24} />
+            <Skeleton width={100} height={16} />
+            <Skeleton width={60} height={16} />
+          </div>
+          <div className={s.actionRow} style={{ marginTop: 20 }}>
+            <Skeleton height={44} radius="var(--radius-md)" style={{ flex: 1 }} />
+            <Skeleton height={44} radius="var(--radius-md)" style={{ flex: 1 }} />
+          </div>
+        </div>
+      ) : (
+      <div style={{ marginTop: 16 }}>
+        {/* Title row — board name, editable inline by the owner. The rename
+            pencil sits inline right after the title text (8px gap) instead of
+            being pushed to the far edge; title may wrap, pencil stays
+            vertically centered on the line. */}
+        {isEditingName ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              ref={nameInputRef}
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={handleNameKeyDown}
+              onBlur={commitNameEdit}
+              disabled={nameSaving}
+              maxLength={100}
+              style={{
+                flex: 1,
+                fontSize: 'var(--fs-title)',
+                fontWeight: 'var(--fw-bold)',
+                lineHeight: 1.2,
+                color: 'var(--color-text)',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-md)',
+                padding: '6px 12px',
+                fontFamily: 'inherit',
+                outline: 'none',
+              }}
+            />
+            <FloatingIconButton
+              onMouseDown={e => { e.preventDefault(); commitNameEdit() }}
+              ariaLabel={t('board.save')}
+              disabled={nameSaving}
+              style={{ background: 'var(--accent-1)', borderColor: 'var(--accent-1)', color: '#fff' }}
+            >
+              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)', lineHeight: 1 }}>{nameSaving ? '…' : '✓'}</span>
+            </FloatingIconButton>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* DESIGN.md §4: 2-line clamp is reserved for card titles — the
+                board title here wraps naturally, no line-clamp. `flex: '0 1
+                auto'` (not `flex: 1`) so the pencil sits right after the text
+                instead of being pushed to the far edge by a stretched title. */}
+            <PageTitle style={{ margin: 0, flex: '0 1 auto', minWidth: 0 }}>
+              {boardName}
+            </PageTitle>
+            {isOwner && (
+              <FloatingIconButton onClick={startEditingName} ariaLabel={t('board.editName')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </FloatingIconButton>
+            )}
           </div>
         )}
 
-        {/* Hero content overlapping cover bottom */}
+        {/* Meta line — owner link · private (owner-only visibility) · building
+            count · reaction count, all vertically centered on one wrapping
+            row, dot-separated. */}
         <div style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          maxWidth: 680,
-          margin: '0 auto',
-          padding: '24px 20px',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          columnGap: 6,
+          rowGap: 4,
+          marginTop: 8,
+          fontSize: 'var(--fs-caption)',
+          fontWeight: 'var(--fw-medium)',
+          color: 'var(--color-text-dim)',
         }}>
-          {/* Board name — editable by owner */}
-          {isEditingName ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                ref={nameInputRef}
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-                onKeyDown={handleNameKeyDown}
-                onBlur={commitNameEdit}
-                disabled={nameSaving}
-                maxLength={100}
-                style={{
-                  flex: 1,
-                  fontSize: 'clamp(20px, 5vw, 26px)',
-                  fontWeight: 700,
-                  lineHeight: 1.2,
-                  color: '#fff',
-                  background: 'rgba(255,255,255,0.12)',
-                  border: '1px solid rgba(255,255,255,0.35)',
-                  borderRadius: 10,
-                  padding: '6px 12px',
-                  fontFamily: 'inherit',
-                  outline: 'none',
-                  backdropFilter: 'blur(8px)',
-                }}
-              />
-              <button
-                onMouseDown={e => { e.preventDefault(); commitNameEdit() }}
-                disabled={nameSaving}
-                style={{
-                  width: 36, height: 36, borderRadius: '50%',
-                  background: 'var(--accent-1)', border: 'none',
-                  color: '#fff', fontSize: 16, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                {nameSaving ? '…' : '✓'}
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <h1 style={{
-                color: '#fff',
-                fontSize: 'clamp(24px, 5vw, 28px)',
-                fontWeight: 700,
-                margin: 0,
-                lineHeight: 1.2,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                textShadow: '0 2px 12px rgba(0,0,0,0.4)',
-              }}>
-                {localName || board?.name || ''}
-              </h1>
-              {isOwner && (
-                <button
-                  onClick={startEditingName}
-                  aria-label="Edit board name"
-                  style={{
-                    flexShrink: 0,
-                    marginTop: 4,
-                    width: 32, height: 32, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.35)',
-                    backdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    color: 'rgba(255,255,255,0.8)',
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    padding: 0,
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Owner row */}
+          {/* Owner link. `padding`/negative `margin` expand the tap target to
+              the DESIGN.md §3.2 desktop tier (32px) without affecting the
+              24px visual row height — same "invisible expanded hit area"
+              idea FloatingIconButton uses. Capped at 4px (not the full 10px
+              needed for the 44px mobile tier) so the expansion stays inside
+              the 8px gap above this line and never overlaps the rename
+              pencil's own 44px hit area on the title row. */}
           <div
             onClick={handleNavigateToOwner}
             className={s.ownerRow}
@@ -568,318 +370,291 @@ export default function BoardDetailPage({ onResume, onLogout }) {
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 10,
+              gap: 6,
               cursor: 'pointer',
-              padding: '6px 4px',
-              minHeight: 44,
+              padding: '4px 0',
+              margin: '-4px 0',
               userSelect: 'none',
-              alignSelf: 'flex-start',
             }}
           >
             <img
               src={board?.user?.avatar_url || ''}
-              alt={board?.user?.display_name || 'Board owner'}
+              alt={board?.user?.display_name || t('board.ownerAlt')}
               style={{
-                width: 28,
-                height: 28,
+                width: 24,
+                height: 24,
                 borderRadius: '50%',
                 objectFit: 'cover',
-                border: '1px solid rgba(255,255,255,0.25)',
+                border: '1px solid var(--color-border)',
                 background: 'var(--color-surface)',
               }}
             />
             <span className={s.ownerName} style={{
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
+              color: 'var(--color-text)',
+              fontSize: 'var(--fs-caption)',
+              fontWeight: 'var(--fw-semibold)',
               textUnderlineOffset: 3,
             }}>
               {board?.user?.display_name || ''}
             </span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
               <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
           </div>
 
-          {/* Meta strip */}
-          <p style={{
-            color: 'rgba(255,255,255,0.7)',
-            fontSize: 12,
-            fontWeight: 600,
-            margin: 0,
-            letterSpacing: '0.02em',
-          }}>
-            {buildings.length} {buildings.length === 1 ? 'building' : 'buildings'} · {reactionCount} {String.fromCharCode(0x2764)}
-          </p>
-        </div>
-      </div>
+          {/* PRIVATE-only — plain inline icon + text, no bordered chip. */}
+          {!isPublic && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span aria-label={t('board.privateBoardAria')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                {t('board.private')}
+              </span>
+            </>
+          )}
 
-      {/* Action row — owner sees edit controls, others see Love This; report button when final_report exists */}
-      <div style={{
-        padding: '24px 20px 8px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 10,
-      }}>
-        {isOwner ? (
-          <>
-            <button
-              onClick={() => {
-                if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
-                else { setIsEditMode(true); setSelectedIds(new Set()) }
-              }}
-              disabled={!isEditMode && (!board || buildings.length === 0)}
-              style={{
-                width: '100%',
-                maxWidth: 320,
-                minHeight: 44,
-                padding: '14px 24px',
-                borderRadius: 999,
-                background: isEditMode ? 'var(--color-surface-2)' : 'var(--color-surface)',
-                color: isEditMode ? 'var(--color-text-dim)' : 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: (!isEditMode && buildings.length === 0) ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-                fontFamily: 'inherit',
-                opacity: (!isEditMode && buildings.length === 0) ? 0.4 : 1,
-                transition: 'background 0.2s, color 0.2s',
-              }}
-            >
-              {isEditMode ? (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                  <span>{t('board.cancel')}</span>
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                  <span>Edit Board</span>
-                </>
-              )}
-            </button>
-            {onResume && (
+          <span aria-hidden="true">·</span>
+          <span>{t(buildings.length === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: buildings.length })}</span>
+
+          <span aria-hidden="true">·</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            {reactionCount}
+          </span>
+        </div>
+
+        {/* Action row — owner sees edit controls, others see Love This;
+            report button joins the same row when final_report exists. Each
+            button is flex:1 so the row spans the full column width, left
+            edge aligned with the title. */}
+        <div className={s.actionRow} style={{ marginTop: 20 }}>
+          {isOwner ? (
+            <>
               <button
-                onClick={() => onResume(board?.board_id)}
-                disabled={!board}
+                onClick={() => {
+                  if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
+                  else { setIsEditMode(true); setSelectedIds(new Set()) }
+                }}
+                disabled={!isEditMode && (!board || buildings.length === 0)}
+                className={`${s.ctaSecondary}${isEditMode ? ` ${s.editModeActive}` : ''}`}
                 style={{
-                  width: '100%',
-                  maxWidth: 320,
+                  flex: '1 1 0',
+                  minWidth: 0,
                   minHeight: 44,
-                  padding: '14px 24px',
-                  borderRadius: 999,
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  cursor: !board ? 'default' : 'pointer',
+                  padding: '14px 16px',
+                  fontSize: 'var(--fs-body)',
+                  fontWeight: 'var(--fw-semibold)',
+                  cursor: (!isEditMode && buildings.length === 0) ? 'default' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 10,
-                  fontFamily: 'inherit',
-                  opacity: !board ? 0.4 : 1,
-                  transition: 'background 0.2s, color 0.2s',
+                  gap: 8,
+                  opacity: (!isEditMode && buildings.length === 0) ? 0.4 : 1,
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                <span>{t('board.continueExploring')}</span>
+                {isEditMode ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                    <span>{t('board.cancel')}</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    <span>{t('board.editBoard')}</span>
+                  </>
+                )}
               </button>
-            )}
-          </>
-        ) : (
-          <button
-            onClick={handleToggleReaction}
-            disabled={!board || isReactionPending}
-            className={`${s.reactBtn}${isReacted ? ` ${s.reacted}` : ''}`}
-            style={{
-              width: '100%',
-              maxWidth: 320,
-              minHeight: 44,
-              padding: '14px 24px',
-              borderRadius: 999,
-              background: isReacted
-                ? 'var(--color-surface)'
-                : 'var(--accent-1)',
-              color: isReacted ? 'var(--accent-1)' : '#fff',
-              border: isReacted ? '1px solid var(--accent-1)' : 'none',
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              boxShadow: isReacted ? 'none' : '0 8px 22px color-mix(in srgb, var(--accent-1) 32%, transparent)',
-              fontFamily: 'inherit',
-            }}
-          >
-            <svg
-              width="18" height="18" viewBox="0 0 24 24"
-              fill={isReacted ? 'currentColor' : 'none'}
-              stroke="currentColor"
-              strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+              {onResume && (
+                <button
+                  onClick={() => onResume(board?.board_id)}
+                  disabled={!board}
+                  className={s.ctaPrimary}
+                  style={{
+                    flex: '1 1 0',
+                    minWidth: 0,
+                    minHeight: 44,
+                    padding: '14px 16px',
+                    fontSize: 'var(--fs-body)',
+                    fontWeight: 'var(--fw-semibold)',
+                    cursor: !board ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    opacity: !board ? 0.4 : 1,
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  <span>{t('board.continueExploring')}</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              onClick={handleToggleReaction}
+              disabled={!board || isReactionPending}
+              className={isReacted ? `${s.ctaSecondary} ${s.reacted}` : s.ctaPrimary}
+              style={{
+                flex: '1 1 0',
+                minWidth: 0,
+                minHeight: 44,
+                padding: '14px 16px',
+                fontSize: 'var(--fs-body)',
+                fontWeight: 'var(--fw-semibold)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
             >
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-            <span>{isReacted ? `Loved · ${reactionCount}` : 'Love this'}</span>
-          </button>
-        )}
-        {board?.final_report && (
-          <button
-            onClick={() => navigate(`/board/${board.board_id}/report`)}
-            style={{
-              width: '100%',
-              maxWidth: 320,
-              minHeight: 44,
-              padding: '12px 24px',
-              borderRadius: 999,
-              background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent-1) 12%, transparent), color-mix(in srgb, var(--accent-2) 12%, transparent))',
-              color: 'var(--accent-1)',
-              border: '1px solid color-mix(in srgb, var(--accent-1) 30%, transparent)',
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              fontFamily: 'inherit',
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
-            </svg>
-            <span>{t('board.viewReport')}</span>
-          </button>
+              <svg
+                width="18" height="18" viewBox="0 0 24 24"
+                fill={isReacted ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+              >
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+              <span>{isReacted ? t('board.loved', { r: reactionCount }) : t('board.loveThis')}</span>
+            </button>
+          )}
+          {board?.final_report && (
+            <button
+              onClick={() => navigate(`/board/${board.board_id}/report`)}
+              className={s.ctaSecondary}
+              style={{
+                flex: '1 1 0',
+                minWidth: 0,
+                minHeight: 44,
+                padding: '14px 16px',
+                background: 'color-mix(in srgb, var(--accent-1) 8%, var(--color-surface))',
+                color: 'var(--accent-1)',
+                border: '1px solid color-mix(in srgb, var(--accent-1) 30%, transparent)',
+                fontSize: 'var(--fs-body)',
+                fontWeight: 'var(--fw-semibold)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              <span>{t('board.viewReport')}</span>
+            </button>
+          )}
+        </div>
+        {!isOwner && reactionError && (
+          <div style={{
+            color: 'var(--color-text-muted)',
+            fontSize: 'var(--fs-caption)',
+            fontWeight: 'var(--fw-semibold)',
+            margin: '8px 0 0',
+          }}>
+            {reactionError}
+          </div>
         )}
       </div>
-      {!isOwner && reactionError && (
-        <div style={{
-          color: 'var(--color-text-muted, #999)',
-          fontSize: 12,
-          fontWeight: 600,
-          padding: '0 20px 4px',
-          textAlign: 'center',
-        }}>
-          {reactionError}
-        </div>
       )}
 
       {/* Buildings section */}
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '0' }}>
-        <h3 style={{
-          color: 'var(--color-text)',
-          fontSize: 20,
-          fontWeight: 700,
-          margin: '32px 0 16px',
-          padding: '0 20px',
-          letterSpacing: '-0.01em',
-        }}>
-          Buildings
-        </h3>
+      <div style={{ margin: '32px 0 16px' }}>
+        <SectionTitle count={buildings.length > 0 ? buildings.length : null}>
+          {t('board.buildingsTitle')}
+        </SectionTitle>
+      </div>
 
-        {buildings.length === 0 ? (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '60px 20px',
-            color: 'var(--color-text-muted)',
-            textAlign: 'center',
-            gap: 16,
-          }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+      {showBuildingsSkeleton ? (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: 20,
+        }}>
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '4 / 5' }} />
+          ))}
+        </div>
+      ) : buildings.length === 0 ? (
+        <EmptyState
+          icon={
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5, color: 'var(--color-text-muted)' }}>
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
               <circle cx="8.5" cy="8.5" r="1.5"></circle>
               <polyline points="21 15 16 10 5 21"></polyline>
             </svg>
-            <p style={{
-              color: 'var(--color-text-muted)',
-              fontSize: 14,
-              fontWeight: 600,
-              margin: 0,
-            }}>
-              {statusMessage}
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 20,
-            padding: '0 20px',
-          }}>
-            {buildings.map((building, index) => {
-              const bid = building.image_id || building.canonical_bld_id || building.building_id || building.id
-              return (
-              <BuildingTile
-                key={bid}
-                building={building}
-                fromProjectId={isOwner ? boardId : null}
-                rank={index + 1}
-                savedIds={localSavedIds}
-                referrer={location.pathname}
-                isEditMode={isEditMode}
-                isSelected={selectedIds.has(bid)}
-                onToggleSelect={handleToggleBuildingSelect}
-              />
-              )
-            })}
-          </div>
-        )}
-      </div>
+          }
+          title={error?.message || t('board.emptyBoard')}
+        />
+      ) : (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: 20,
+        }}>
+          {buildings.map((building, index) => {
+            const bid = building.image_id || building.canonical_bld_id || building.building_id || building.id
+            return (
+            <BuildingTile
+              key={bid}
+              building={building}
+              fromProjectId={isOwner ? boardId : null}
+              rank={index + 1}
+              savedIds={localSavedIds}
+              referrer={location.pathname}
+              isEditMode={isEditMode}
+              isSelected={selectedIds.has(bid)}
+              onToggleSelect={handleToggleBuildingSelect}
+            />
+            )
+          })}
+        </div>
+      )}
 
       {(recommended.length > 0 || resultLoading) && (
-        <div style={{ maxWidth: 680, margin: '0 auto', padding: '0' }}>
-          <div style={{ height: 1, background: 'var(--color-border)', margin: '0 20px' }} />
-          <h3 style={{
-            color: 'var(--color-text)',
-            fontSize: 20,
-            fontWeight: 700,
-            margin: '32px 0 16px',
-            padding: '0 20px',
-            letterSpacing: '-0.01em',
-          }}>
-            Recommended
-          </h3>
+        <div style={{ marginTop: 8 }}>
+          <div style={{ height: 1, background: 'var(--color-border)', margin: '0 0 32px' }} />
+          <div style={{ margin: '0 0 4px' }}>
+            <SectionTitle>{t('board.recommendedTitle')}</SectionTitle>
+          </div>
           {resultLoading && recommended.length === 0 ? (
             <div style={{
-              padding: '8px 20px 24px',
-              color: 'var(--color-text-muted)',
-              fontSize: 13,
-              fontWeight: 500,
+              padding: '12px 0 24px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: 12,
             }}>
-              Loading recommendations...
+              {[1, 2, 3, 4].map(i => (
+                <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '3 / 4' }} />
+              ))}
             </div>
           ) : (
             <>
               <p style={{
                 color: 'var(--color-text-dimmer)',
-                fontSize: 13,
-                fontWeight: 500,
-                margin: '0 0 16px',
-                padding: '0 20px',
+                fontSize: 'var(--fs-caption)',
+                fontWeight: 'var(--fw-medium)',
+                margin: '8px 0 16px',
               }}>
-                Based on your preferences
+                {t('board.basedOnPreferences')}
               </p>
               {(() => {
                 const CHUNK_SIZE = 8
@@ -893,9 +668,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                   <div key={chunkIdx}>
                     <div style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
                       gap: 12,
-                      padding: '0 20px',
                     }}>
                       {chunk.map(card => (
                         <RecommendedTile
@@ -906,7 +680,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                       ))}
                     </div>
                     {recommendedArchitects[chunkIdx] && (
-                      <div style={{ padding: '0 20px' }}>
+                      <div style={{ marginTop: 12 }}>
                         <ArchitectSection
                           architect={recommendedArchitects[chunkIdx]}
                           onBuildingClick={id => navigate('/buildings/' + id)}
@@ -922,56 +696,59 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         </div>
       )}
 
-      {/* Edit mode sticky bottom bar */}
+      {/* Edit mode floating action bar — glass capsule, consistent with the TabBar. */}
       {isEditMode && (
         <div style={{
           position: 'fixed',
-          bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-          left: 0, right: 0,
-          padding: '12px 20px',
-          background: 'var(--color-surface)',
-          borderTop: '1px solid var(--color-border)',
-          backdropFilter: 'blur(20px)',
+          left: 16, right: 16,
+          bottom: 'var(--tabbar-clearance)',
+          maxWidth: 420,
+          margin: '0 auto',
+          padding: 10,
+          borderRadius: 'var(--radius-lg)',
+          background: 'var(--tabbar-glass-bg)',
+          border: '1px solid var(--tabbar-glass-border)',
+          boxShadow: 'var(--tabbar-glass-shadow)',
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
           display: 'flex',
           gap: 10,
-          zIndex: 50,
+          zIndex: 200,
         }}>
           <button
             onClick={() => { setIsEditMode(false); setSelectedIds(new Set()) }}
+            className={s.ctaSecondary}
             style={{
-              flex: 1, minHeight: 44, borderRadius: 14,
-              background: 'var(--color-surface-2)',
-              color: 'var(--color-text)',
-              border: '1px solid var(--color-border)',
-              fontSize: 14, fontWeight: 700,
-              cursor: 'pointer', fontFamily: 'inherit',
+              flex: 1, minHeight: 44,
+              fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
+              cursor: 'pointer',
             }}
           >
-            Cancel
+            {t('board.cancel')}
           </button>
           <button
             onClick={handleDeleteSelected}
             disabled={selectedIds.size === 0 || deleteInProgress}
             style={{
-              flex: 2, minHeight: 44, borderRadius: 14,
-              background: selectedIds.size > 0 ? 'var(--color-destructive, #ef4444)' : 'var(--color-surface-2)',
+              flex: 2, minHeight: 44, borderRadius: 'var(--radius-md)',
+              background: selectedIds.size > 0 ? 'var(--color-destructive)' : 'var(--color-surface-2)',
               color: selectedIds.size > 0 ? '#fff' : 'var(--color-text-dim)',
               border: 'none',
-              fontSize: 14, fontWeight: 700,
+              fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
               cursor: selectedIds.size === 0 ? 'default' : 'pointer',
               fontFamily: 'inherit',
               opacity: deleteInProgress ? 0.6 : 1,
-              transition: 'background 0.2s, color 0.2s',
+              transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
             }}
           >
             {deleteInProgress
-              ? 'Deleting...'
+              ? t('board.deleting')
               : selectedIds.size > 0
-                ? `Delete ${selectedIds.size} card${selectedIds.size > 1 ? 's' : ''}`
-                : 'Select cards to delete'}
+                ? t(selectedIds.size === 1 ? 'board.deleteCardOne' : 'board.deleteCardMany', { n: selectedIds.size })
+                : t('board.selectToDelete')}
           </button>
         </div>
       )}
-    </div>
+    </PageShell>
   )
 }

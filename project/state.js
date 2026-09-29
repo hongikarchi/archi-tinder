@@ -23,8 +23,8 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-27 22:36 KST',
-    head: 'a277440',
+    updatedAt: '2026-09-29 23:00 KST',
+    head: '2551611',
     branch: 'feature/algo-persona-report',
   },
   done: [
@@ -59,22 +59,22 @@ window.PROJECT_STATE = {
       note: '질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).',
     },
     {
+      id: 'UI-CONSISTENCY-B',
+      title: '디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체',
+      completedAt: '2026-09-29',
+      note: '2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`',
+    },
+    {
+      id: 'FRONT-COMP-PROTO-1',
+      title: '공모전 팀빌딩 화면 프로토타입',
+      completedAt: '2026-09-23',
+      note: '완성품이 아니라 판단용: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정',
+    },
+    {
       id: 'FRONT-RESULTS-SAVE-1',
       title: '리포트 화면 상단 저장 CTA + 저장 후 프로필 이동',
       completedAt: '2026-09-17',
       note: 'user 지적: Discovery → Taste 리포트 생성 후 끝나는 지점이 없음. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. 기능 결함이 아니라 완결감(closure)의 부재',
-    },
-    {
-      id: 'FRONT-REPORT-OWNER-1',
-      title: '페르소나 리포트 재생성 버튼 소유자 제한',
-      completedAt: '2026-09-10',
-      note: '소셜 탭 → 타인 프로필 → curated 보드 → 리포트 진입 시 남의 리포트 화면에 `이미지 재생성`/`리포트 재생성` 버튼이 그대로 노출됨',
-    },
-    {
-      id: 'INFRA-MOCKS-1',
-      title: '__mocks 픽스처 develop 추적(공개 URL 노출)',
-      completedAt: '2026-09-06',
-      note: '`git rm --cached -r`로 38파일(~900KB) 인덱스만 제거 — 워킹트리 보존, .gitignore:90(#321)이 재유입 차단. 배포 시 Vercel `/__mocks/*.html` 공개 URL 소멸. DEPLOY-BATCH-2 플랜 PR-D',
     },
   ],
   now: [],
@@ -96,6 +96,16 @@ window.PROJECT_STATE = {
         id: 'BACK-RECOMMEND-6',
         title: '태그를 취향좌표에 병합 검토',
         note: '_FULL-RECOMMEND-1에서 보류. 선행: Make DB에서 건물 embedding 입력 텍스트 확인(태그 포함 여부 — 포함 시 이중 계산). 결과에 따라 태그→좌표(해당 태그 건물 embedding 평균, 정규화)를 pref_vector에 병합. 이후 유지 컬럼 `tag_axis_counts` / `recent_like_tag_sets` / `question_bias_vector`의 재사용·삭제를 사용자에게 재질문._',
+      },
+      {
+        id: 'FULL-BOARD-FLOW-1',
+        title: '저장된 보드·진행 세션이 삭제되는 버그 + 보드·리포트 경로 정리',
+        note: '2026-09-27 경로 감사(세션, 코드 확인 완료). UI-CONSISTENCY-B와 분리해 별도 PR로 처리.',
+      },
+      {
+        id: 'DEPLOY-BLOCKER-1',
+        title: 'develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)',
+        note: '_user 결정: 개발 단계라 develop에는 먼저 합치고, 실서비스 배포 전에 반드시 처리. 다음 deploy PR 전에 이 항목 확인._',
       },
       {
         id: 'FRONT-UX-14',
@@ -270,6 +280,48 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 338,
+      title: 'feat(UI-CONSISTENCY-B): 디자인 통일성 정비 — 규칙·토큰 → 공통 부품 → 페이지 교체',
+      mergedAt: '2026-09-29T13:39:33Z',
+      mergedAtKST: '2026-09-29 22:39 KST',
+      sha: '2551611',
+    },
+    {
+      number: 334,
+      title: 'feat(FRONT-HEADER-1): 페이지 상단 크롬 축소·통일 + people 헤더 로고 교체',
+      mergedAt: '2026-09-26T00:57:29Z',
+      mergedAtKST: '2026-09-26 09:57 KST',
+      sha: '811c2e9',
+    },
+    {
+      number: 333,
+      title: 'feat(competition): 공모전 팀빌딩 화면 프로토타입 — 목 데이터, 백엔드 없음',
+      mergedAt: '2026-09-26T01:02:47Z',
+      mergedAtKST: '2026-09-26 10:02 KST',
+      sha: 'a277440',
+    },
+    {
+      number: 332,
+      title: 'docs(plans): 공모전 팀빌딩 — 팀 진단 기각, 축 가중치는 추천 전용',
+      mergedAt: '2026-09-26T00:56:44Z',
+      mergedAtKST: '2026-09-26 09:56 KST',
+      sha: '986ed5b',
+    },
+    {
+      number: 331,
+      title: 'docs(plans): 공모전 팀빌딩 찜 기반 설계 — 팀원 추천 v2 접근 기각',
+      mergedAt: '2026-09-19T00:37:00Z',
+      mergedAtKST: '2026-09-19 09:37 KST',
+      sha: '4975849',
+    },
+    {
+      number: 330,
+      title: 'feat(results): 리포트 화면 상단 저장 CTA — 저장하면 프로필로 이어짐',
+      mergedAt: '2026-09-19T00:31:02Z',
+      mergedAtKST: '2026-09-19 09:31 KST',
+      sha: '631995b',
+    },
+    {
       number: 329,
       title: 'fix(report): 페르소나 리포트 재생성은 보드 소유자만',
       mergedAt: '2026-09-19T00:26:02Z',
@@ -282,48 +334,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-06T16:35:29Z',
       mergedAtKST: '2026-09-07 01:35 KST',
       sha: '4779507',
-    },
-    {
-      number: 327,
-      title: 'feat(FULL-PRIVACY-1): 발견 피드 opt-out — PATCH 쓰기 경로 + 프로필 게이팅 + 계정 토글',
-      mergedAt: '2026-09-06T16:30:14Z',
-      mergedAtKST: '2026-09-07 01:30 KST',
-      sha: 'dc01734',
-    },
-    {
-      number: 326,
-      title: 'fix(FRONT-VERIFY-1): PATCH 경로 verify_required 모달 배선 + 로그인 뒤로가기 draft 유지',
-      mergedAt: '2026-09-06T16:09:50Z',
-      mergedAtKST: '2026-09-07 01:09 KST',
-      sha: '8c89ff0',
-    },
-    {
-      number: 325,
-      title: 'fix(BACK-PRIVACY-1): 비인증 base64 리포트 유출 차단 + 썸네일 캐시 evict 누락',
-      mergedAt: '2026-09-06T15:57:15Z',
-      mergedAtKST: '2026-09-07 00:57 KST',
-      sha: 'd334be4',
-    },
-    {
-      number: 324,
-      title: 'feat(FRONT-PEOPLE-CARD-2): seed_discovery command + Social tab hosting /people',
-      mergedAt: '2026-09-06T14:57:06Z',
-      mergedAtKST: '2026-09-06 23:57 KST',
-      sha: '70851a2',
-    },
-    {
-      number: 323,
-      title: 'feat(FRONT-FUNC-CHECK-1): card-back i18n + motion gate 제거 + 건물→사무소 링크 + /office front 삭제',
-      mergedAt: '2026-09-06T13:13:29Z',
-      mergedAtKST: '2026-09-06 22:13 KST',
-      sha: '5a7cd77',
-    },
-    {
-      number: 322,
-      title: 'feat(FRONT-DESIGN-FT): 디자인 파인튜닝 — vision 전수 감사 + 기능 결정 반영',
-      mergedAt: '2026-09-06T09:38:44Z',
-      mergedAtKST: '2026-09-06 18:38 KST',
-      sha: 'f5cf623',
     },
   ],
   agents: [
@@ -478,6 +488,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: '.claude/plans/ui-consistency-b.md',
+      role: '',
+    },
+    {
       path: '.claude/reviews/2026-05-31-swipe-discovery-review.md',
       role: '스와이프 디스커버리 리뷰 기록',
     },
@@ -600,6 +614,14 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1906,6 +1928,14 @@ window.PROJECT_STATE = {
       role: '프론트 패키지 매니페스트',
     },
     {
+      path: 'frontend/package.json',
+      role: '프론트 패키지 매니페스트',
+    },
+    {
+      path: 'frontend/package.json',
+      role: '프론트 패키지 매니페스트',
+    },
+    {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
     },
@@ -2034,8 +2064,20 @@ window.PROJECT_STATE = {
       role: 'Discovery-Taste 전환 카드',
     },
     {
+      path: 'frontend/src/components/EmptyState.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/ErrorBoundary.jsx',
       role: '에러 바운더리 컴포넌트',
+    },
+    {
+      path: 'frontend/src/components/FloatingIconButton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/FloatingIconButton.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/GoogleLoginButton.jsx',
@@ -2050,11 +2092,27 @@ window.PROJECT_STATE = {
       role: 'LLM 검색 업데이트 모드 래퍼',
     },
     {
+      path: 'frontend/src/components/Modal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/Modal.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/PageBackButton.jsx',
       role: '',
     },
     {
       path: 'frontend/src/components/PageLogoHeader.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PageShell.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PageTitle.jsx',
       role: '',
     },
     {
@@ -2086,8 +2144,32 @@ window.PROJECT_STATE = {
       role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
     },
     {
+      path: 'frontend/src/components/PersonaReport.jsx',
+      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
+    },
+    {
+      path: 'frontend/src/components/PersonaReport.jsx',
+      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
+    },
+    {
+      path: 'frontend/src/components/PhotoTile.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PhotoTile.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/ProtectedRoute.jsx',
       role: '인증 보호 라우트 가드',
+    },
+    {
+      path: 'frontend/src/components/SaveBoardModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SaveBoardModal.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/SaveBoardModal.jsx',
@@ -2102,8 +2184,40 @@ window.PROJECT_STATE = {
       role: '보드 저장 모달',
     },
     {
+      path: 'frontend/src/components/SectionTitle.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SegmentedControl.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SegmentedControl.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/ShareCardModal.jsx',
       role: '프로필 명함 공유 모달',
+    },
+    {
+      path: 'frontend/src/components/Skeleton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SocialSegment.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/SocialSegment.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/StudioCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/StudioCard.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/SurpriseBoardModal.jsx',
@@ -2124,6 +2238,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/TabBar.jsx',
       role: '하단 탭바 내비게이션',
+    },
+    {
+      path: 'frontend/src/components/Tabs.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/Tabs.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/TasteSpectrum.jsx',
@@ -2174,14 +2296,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/profile/ArticleCard.jsx',
-      role: '프로필 아티클 카드',
-    },
-    {
-      path: 'frontend/src/components/profile/ArticleCard.module.css',
-      role: '',
-    },
-    {
       path: 'frontend/src/components/profile/BoardCard.jsx',
       role: '프로필 보드 플립 카드',
     },
@@ -2210,19 +2324,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/profile/ProjectCard.jsx',
-      role: '사무소 프로젝트 카드',
-    },
-    {
-      path: 'frontend/src/components/profile/ProjectCard.module.css',
-      role: '',
-    },
-    {
       path: 'frontend/src/components/swipeGestureConfig.js',
       role: 'swipe 제스처 설정 상수',
     },
     {
       path: 'frontend/src/constants/assessmentQuestions.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/constants/mockCompetitions.js',
       role: '',
     },
     {
@@ -2358,6 +2468,22 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/pages/CompetitionDetailPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionDetailPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionListPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/CompetitionListPage.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/DiscoveryPage.jsx',
       role: '디스커버리 스와이프 피드',
     },
@@ -2370,16 +2496,8 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/LikedOfficesPage.jsx',
-      role: '',
-    },
-    {
       path: 'frontend/src/pages/LikedProjectsPage.jsx',
       role: '좋아요 건물 그리드 페이지',
-    },
-    {
-      path: 'frontend/src/pages/LikedProjectsPage.module.css',
-      role: '',
     },
     {
       path: 'frontend/src/pages/LoginPage.jsx',
@@ -2428,6 +2546,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/boardDetail/ArchitectSection.module.css',
       role: '보드 상세 architect 섹션 CSS 모듈 (#178)',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/BoardCover.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
@@ -2494,10 +2616,6 @@ window.PROJECT_STATE = {
       role: '화면 설정 페이지 (테마·폰트·언어)',
     },
     {
-      path: 'frontend/src/pages/settings/AppearanceScreen.module.css',
-      role: '화면 설정 화면 스타일(CSS Module)',
-    },
-    {
       path: 'frontend/src/pages/settings/EditProfileScreen.jsx',
       role: '프로필 편집 페이지 (이름·직업·소개)',
     },
@@ -2554,6 +2672,18 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/axisScores.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/axisScores.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/competitionInterest.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/discoveryGuard.js',
       role: '',
     },
@@ -2582,6 +2712,14 @@ window.PROJECT_STATE = {
       role: '프로젝트 백엔드 ID 해석 유틸',
     },
     {
+      path: 'frontend/src/utils/teamFit.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/teamFit.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/timeAgo.js',
       role: '',
     },
@@ -2608,6 +2746,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

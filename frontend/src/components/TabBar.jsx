@@ -1,42 +1,126 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
+import SegmentedControl from './SegmentedControl.jsx'
 
+/*
+ * TAB_ICONS — { outline, active } SVG pair per tab.
+ *
+ * UI-CONSISTENCY-B Phase 2a decision log #5 (2026-09-26): Instagram-style
+ * icon-only bar — inactive = outline (stroke 2), active = filled variant.
+ * Icon size 24 (DESIGN.md §7.1).
+ *
+ * Superseded in part by decision log #5b (Phase 2c, same date): the bar is
+ * now a floating glass capsule, and the active tab gets a rounded pill
+ * highlight (`--tabbar-active-bg`) behind the filled icon — see the `<nav>` /
+ * pill-`<span>` markup below. The "no color pill / no underline" clause above
+ * described the flat Phase 2a bar and no longer applies.
+ *
+ * `active` variants reuse the exact same path geometry as `outline`
+ * wherever a shape is already closed (rects, circles) or trivially
+ * closeable (the single-person `profile` body arc, closed with a straight
+ * bottom edge: the outline path already ends in `v2`, the active path just
+ * appends `z`). This deliberately avoids hand-authoring new bezier/arc
+ * geometry that can't be visually verified in this environment (no running
+ * browser for this change) — see the front-maker report for `social`'s
+ * compromise: its two secondary/background-person arcs stay thin strokes
+ * even in the active state rather than force-filling an open arc, which
+ * would render as a stray wedge instead of a body shape.
+ */
 const TAB_ICONS = {
-  discovery: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" />
-      <rect x="14" y="3" width="7" height="7" />
-      <rect x="3" y="14" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" />
-    </svg>
-  ),
-  swipe: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="6" width="16" height="13" rx="2" />
-      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-    </svg>
-  ),
-  social: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  ),
-  profile: (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  ),
+  discovery: {
+    outline: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+      </svg>
+    ),
+    active: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+    ),
+  },
+  // "Taste" tab — replaced the old briefcase/bag icon with a magnifying
+  // glass (search) per user decision (plan §Decisions log #5). Active state
+  // is the same glyph at a heavier stroke (Instagram's own active-search
+  // treatment), not a fill — a magnifying glass has no sensible closed
+  // fill area.
+  swipe: {
+    outline: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="7" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    ),
+    active: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="7" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    ),
+  },
+  social: {
+    outline: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+    active: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2z" fill="currentColor" stroke="none" />
+        <circle cx="9" cy="7" r="4" fill="currentColor" stroke="none" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+  },
+  profile: {
+    outline: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
+    active: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2z" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
+  },
 }
 
+/*
+ * getActiveTab — route -> tab mapping.
+ * UI-CONSISTENCY-B Phase 2a fix (2026-09-26): `/upload`, `/notifications`,
+ * `/liked-projects` previously fell through to the `discovery` default even
+ * though they are profile-cluster screens (see App.jsx routes). Added here.
+ * `/architects/:id`, `/buildings/:id`, `/library*`, `/my/liked-offices`
+ * (dead redirect), `/db-check` (dev-only) intentionally still fall through
+ * to `discovery` — "stay on the tab the user came from" is not tracked by
+ * this pure-function mapping, and discovery is the simplest acceptable
+ * default per the task spec.
+ */
 function getActiveTab(pathname) {
   if (pathname === '/swipe' || pathname.startsWith('/search') || pathname.startsWith('/result')) return 'swipe'
-  if (pathname.startsWith('/people') || pathname.startsWith('/assessment')) return 'social'
-  if (pathname.startsWith('/user') || pathname.startsWith('/board') || pathname.startsWith('/settings')) return 'profile'
+  if (pathname.startsWith('/people') || pathname.startsWith('/assessment') || pathname.startsWith('/competitions')) return 'social'
+  if (
+    pathname.startsWith('/user') ||
+    pathname.startsWith('/board') ||
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/upload') ||
+    pathname.startsWith('/notifications') ||
+    pathname.startsWith('/liked-projects')
+  ) return 'profile'
   return 'discovery'
 }
 
@@ -53,11 +137,9 @@ export default function TabBar() {
     { id: 'profile',   labelKey: 'tabbar.profile',   path: '/user/me' },
   ]
 
-  function handleSelect(tab) {
-    // Already on this tab — tapping the active tab is a no-op; do not invoke
-    // the guard or navigate (prevents false-alarm modal when the user taps the
-    // active Discovery tab while a draft is in progress).
-    if (tab.path === location.pathname) return
+  function handleSelect(tabId) {
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab || tab.path === location.pathname) return
 
     // If the guard is active (Discovery mounted with draft likes >= 1), show the
     // leave-warning modal and defer navigation to the user's choice.
@@ -68,45 +150,50 @@ export default function TabBar() {
     }
   }
 
+  const options = tabs.map(tab => ({ value: tab.id, ariaLabel: t(tab.labelKey) }))
+
   return (
-    <nav style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
-      display: 'flex', zIndex: 100, height: 64,
-      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      boxSizing: 'content-box',
-      background: 'var(--color-nav-bg)',
-      backdropFilter: 'blur(20px)',
-      borderTop: '1px solid var(--color-border)',
-    }}>
-      {tabs.map(tab => {
-        const active = activeTab === tab.id
-        return (
-          <button
-            key={tab.id}
-            onClick={() => handleSelect(tab)}
-            style={{
-              flex: 1, border: 'none', background: 'none',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
-              cursor: 'pointer', fontFamily: 'inherit',
-              color: active ? 'var(--accent-1)' : 'var(--color-nav-inactive)',
-              transition: 'color 0.18s',
-              paddingBottom: 4,
-            }}
-          >
-            <div style={{
-              width: 40, height: 28, borderRadius: 14,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: active ? 'color-mix(in srgb, var(--accent-1) 12%, transparent)' : 'transparent',
-              transition: 'background 0.18s',
-            }}>
-              {TAB_ICONS[tab.id]}
-            </div>
-            <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: '0.02em' }}>
-              {t(tab.labelKey)}
-            </span>
-          </button>
-        )
-      })}
+    <nav
+      aria-label={t('tabbar.nav')}
+      style={{
+        position: 'fixed',
+        left: 16, right: 16,
+        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+        maxWidth: 420, margin: '0 auto',
+        display: 'flex', zIndex: 100, height: 'var(--tabbar-height)',
+        borderRadius: 'var(--radius-pill)',
+        background: 'var(--tabbar-glass-bg)',
+        border: '1px solid var(--tabbar-glass-border)',
+        boxShadow: 'var(--tabbar-glass-shadow)',
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+      }}
+    >
+      {/* variant="pill" / size="lg" / as="nav" — the 4 tabs are real route
+          navigation (not in-page panels), so this deliberately skips the
+          tablist/tab or radiogroup/radio ARIA pattern; see SegmentedControl's
+          docblock. `aria-label` stays on THIS <nav> (unchanged); the group
+          itself renders no role/aria-label of its own in "nav" mode. */}
+      <SegmentedControl
+        as="nav"
+        variant="pill"
+        size="lg"
+        fullWidth
+        pillHeight={44}
+        measureContent
+        options={options}
+        value={activeTab}
+        onChange={handleSelect}
+        style={{ width: '100%', height: '100%' }}
+        optionStyle={(opt, isActive) => ({
+          height: '100%',
+          color: isActive ? 'var(--color-text)' : 'var(--color-nav-inactive)',
+          transition: 'color var(--motion-fast) var(--motion-ease)',
+        })}
+        optionContentStyle={{ width: 68, height: 44 }}
+        highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
+        renderOption={(opt, isActive) => (isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline)}
+      />
     </nav>
   )
 }
