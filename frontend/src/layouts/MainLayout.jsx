@@ -70,9 +70,9 @@ export default function MainLayout({
         <>
           <PageTopControls onLogout={onLogout} />
           <div style={{
-            height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))', background: 'var(--color-bg)', display: 'flex',
+            height: 'var(--page-height)', background: 'var(--color-bg)', display: 'flex',
             flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 12, padding: 24,
+            gap: 12, padding: '24px 24px var(--tabbar-clearance)',
           }}>
             <div style={{ fontSize: 48 }}>🃏</div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>

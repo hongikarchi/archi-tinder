@@ -107,6 +107,12 @@ Implementation map:
 
 ### HIGH
 
+#### FULL-BOARD-FLOW-1 — 저장된 보드·진행 세션이 삭제되는 버그 + 보드·리포트 경로 정리
+2026-09-27 경로 감사(세션, 코드 확인 완료). UI-CONSISTENCY-B와 분리해 별도 PR로 처리.
+- **D1 (데이터 손실)**: 저장 보드 "이어서 탐색하기" 후 오른쪽 스와이프 없이 나가기 → 서버 보드 DELETE. `handleResumeProject` 합성 엔트리 `likedBuildings: []`(App.jsx:~991-1004) + 나가기 삭제 조건이 로컬 likedBuildings 길이 기준(App.jsx:~1092-1105). Discovery promote 엔트리도 likedBuildings []로 시작. 백엔드 DELETE에 is_temp 가드 없음(views/projects.py:~244-251). 수정: 삭제 조건을 `isTemp===true`로, 서버 가드 추가.
+- **D2 (데이터 손실)**: 스와이프 중 취향 탭(/search) → 진행 중 temp 세션 삭제 — /search 재진입 청소(App.jsx:~210-221)가 활성 프로젝트를 제외하지 않음. 수정: 활성 프로젝트 제외.
+- 결정 필요: G1 Discovery→Taste 보드에 저장 시트 미노출(is_temp=False 생성 → `discovery_YYMMDD` 이름·비공개로 남아 /people 미노출); G2 페르소나 이미지 자동 생성이 한 분기뿐(썸네일·people 카드가 수동 생성 의존), G3 Results에서 만든 이미지 재마운트 시 유실; G4 temp 보드가 프로필에 노출(`_build_boards_field` is_temp 필터 없음); G5 리포트 없는 내 보드에서 리포트 진입 경로 없음; G6 BoardCard flip/Resume/Start New 죽은 코드(latest_session_meta 미포함); G7 Results 재진입 불가; G8 좋아요 0 Results 막다른 길; G9 "Finish & View Report →" 영어 하드코딩·세션 없을 때 노출; G10 리포트 로딩 중 뒤로가기 없음; G11 리포트→보드 push로 뒤로가기 루프; G12 Results 뒤로가기=/discovery; G13 공유 링크 새로 열면 뒤로가기가 앱 밖; G14 PersonaReport 두 곳 폭 불일치; G15 보드 커버(첫 건물) ≠ 프로필 썸네일(페르소나 이미지); G16 리포트 버튼 스타일 DESIGN §8.1과 불일치. 리포트 표시 방식(보드 상세 요약 카드 / 버튼만 / 통합)도 이때 결정.
+
 #### DEPLOY-BLOCKER-1 — develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)
 _user 결정: 개발 단계라 develop에는 먼저 합치고, **실서비스 배포 전에 반드시 처리**. 다음 deploy PR 전에 이 항목 확인._
 - ① **#333 공모전 프로토타입 공개 범위** — `/competitions` 라우트 + `SocialSegment` [🏆]가 게이트 없이 모든 사용자에게 노출됨. 배포 전 (a) `import.meta.env.DEV` 게이트, (b) `VITE_ENABLE_COMPETITION_PROTOTYPE` 플래그(프리뷰만 on), (c) 실서비스 공개 중 택1
@@ -306,6 +312,15 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### UI-CONSISTENCY-B — 디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체 — RESOLVED 2026-09-29 (`cb4b025`, PR 대기)
+- 2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`
+- 1단계 규칙·토큰: radius 역할(사진 20·UI 12·내부 8·시트 24·칩 pill), 5단 글자 12/14/16/20/24 + 굵기 400~700(800 금지), 모달 배경 `--color-scrim-modal` 0.4, 원형 버튼 28px/터치 44px. DESIGN.md의 `calc(var(--radius) * 1px)` 오류(모서리 0 렌더) 제거
+- 2단계 공통 부품: FloatingIconButton, PageTitle/SectionTitle, PageShell, Tabs, EmptyState, Skeleton(반짝임 제거), PhotoTile(4:5·캡션 오버레이), Modal(모바일 시트/데스크탑 중앙), SegmentedControl(선택 표시 슬라이딩 — 탭바·한/EN·라이트/다크·사람/공모전·프로필 탭). 하단 탭바 → 인스타 iOS식 떠 있는 유리 캡슐(아이콘만, 취향=돋보기, 선택=알약+채운 아이콘), `--page-height` 전체 화면 + `--tabbar-clearance`
+- 3단계 페이지: 보드 상세(풀블리드 히어로 제거 → 공통 틀 + 커버 카드, 정보 한 축 정렬, `SHOW_COVER`로 텍스트 헤더 전환 가능), architects(프로필 구조), 프로필·Studios(StudioCard 분리, 죽은 LikedOfficesPage 삭제), 공모전, 건물 상세·결과·리포트, 모달 전체
+- 부수 (FRONT-UX-QUICK-A): 프로필 로그아웃 우측 이동, 보드 Edit 버튼 숨김(`SHOW_BOARD_EDIT_BUTTON`), Studios 화살표, "오피스"→"스튜디오", DevLoginView username 기준 조회(구글 연동으로 이메일 바뀐 테스트 계정 500). 보드 API error는 로컬 DB 컬럼 4개 누락(로컬만) — 로컬 브랜치 복구, 코드 무변경
+- 병렬 5 worktree로 3단계 동시 진행 → 통합 시 locales.js 네임스페이스(`profileB3`/`architectB3`/`competitionB3`/`detailB3`/`modalB3`) 충돌만 수동 해결. eslint 0 error, build 통과, 11개 페이지 콘솔 에러 0
+- Deferred: 보드·리포트 경로 정리 + 데이터 삭제 버그 → `FULL-BOARD-FLOW-1`(HIGH, 별도 PR); locales `*B3` 네임스페이스를 기존 키 체계로 흡수; `--color-nav-inactive` 유리 위 대비(사진 위 비활성 아이콘 약함) 점검.
+
 ### FRONT-COMP-PROTO-1 — 공모전 팀빌딩 화면 프로토타입 — RESOLVED 2026-09-23 (`04d2e90`, PR 리뷰 대기)
 - **완성품이 아니라 판단용**: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정
 - 그래서 **의도적으로 만들지 않은 것** — `Competition`/`CompetitionInterest`/`Team`/`TeamInvite` 모델, 마이그레이션, API. 커뮤니티가 탈락하면 브랜치째 버릴 수 있어야 하는데 마이그레이션이 들어가면 되돌리기 어려움. **백엔드 변경 0줄**

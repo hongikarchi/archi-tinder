@@ -15,6 +15,7 @@ import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
+import Modal from '../components/Modal.jsx'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -503,10 +504,10 @@ export default function DiscoveryPage({ showToast, onLogout }) {
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'space-between',
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflow: 'hidden',
       background: 'var(--color-bg)',
-      padding: '20px 16px',
+      padding: '20px 16px var(--tabbar-clearance)',
     }}>
 
       <PageTopControls onLogout={onLogout} />
@@ -774,165 +775,144 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       </div>
 
       {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate
-          away or log out while draftLikeCount >= 1. DESIGN.md §8.10: mobile = bottom
-          sheet style (radius-xl top corners), desktop = centered modal (max-width 480px).
-          Backdrop: rgba(0,0,0,0.4) per §8.10 sheet-backdrop. Buttons min-height 44px per §3.2. */}
+          away or log out while draftLikeCount >= 1. Built on the shared Modal
+          (DESIGN.md §8.10): mobile bottom sheet, desktop centered modal (max-width
+          480). Buttons min-height 44px per §3.2. */}
       {leaveModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setLeaveModal(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          }}
+        <Modal
+          open
+          onClose={() => setLeaveModal(null)}
+          zIndex={1000}
+          closeLabel={t('modalB3.close')}
+          width={480}
         >
-          <div
-            onClick={e => e.stopPropagation()}
+          <p style={{
+            margin: '0 0 20px',
+            paddingRight: 40,
+            fontSize: 'var(--fs-body)',
+            fontWeight: 400,
+            color: 'var(--color-text)',
+            lineHeight: 1.6,
+          }}>
+            {draftLikeCount >= TASTE_NUDGE_THRESHOLD
+              ? t('discovery.leaveModalBodyConverged')
+              : t('discovery.leaveModalBodyDraft')}
+          </p>
+
+          {/* Primary action: stay */}
+          <button
+            type="button"
+            onClick={() => setLeaveModal(null)}
+            disabled={leaveModalPromoting}
             style={{
-              width: '100%', maxWidth: 480,
-              background: 'var(--color-surface, #F6F8FA)',
-              borderRadius: '24px 24px 0 0',
-              padding: 24,
-              paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-              boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
+              display: 'block', width: '100%',
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: 'var(--accent-1)',
+              color: '#fff',
+              fontSize: 'var(--fs-body)',
+              fontWeight: 600,
+              cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              marginBottom: 10,
+              opacity: leaveModalPromoting ? 0.6 : 1,
             }}
           >
-            {/* Handle bar */}
-            <div style={{
-              width: 36, height: 4, borderRadius: 999,
-              background: 'var(--color-surface-3, #E1E4E8)',
-              margin: '0 auto 20px',
-            }} />
+            {t('discovery.leaveModalStay')}
+          </button>
 
-            <p style={{
-              margin: '0 0 20px',
-              fontSize: 14,
-              fontWeight: 400,
-              color: 'var(--color-text, #1F2328)',
-              lineHeight: 1.6,
-            }}>
-              {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                ? t('discovery.leaveModalBodyConverged')
-                : t('discovery.leaveModalBodyDraft')}
-            </p>
-
-            {/* Primary action: stay */}
-            <button
-              type="button"
-              onClick={() => setLeaveModal(null)}
-              disabled={leaveModalPromoting}
-              style={{
-                display: 'block', width: '100%',
-                minHeight: 44,
-                padding: '0 16px',
-                borderRadius: 12,
-                border: 'none',
-                background: 'var(--accent-1)',
-                color: '#fff',
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                marginBottom: 10,
-                opacity: leaveModalPromoting ? 0.6 : 1,
-              }}
-            >
-              {t('discovery.leaveModalStay')}
-            </button>
-
-            {/* Secondary action: leave
-                >=10 likes: auto-promote then navigate to the intended destination.
-                  Dispatches the custom event with skipNav:true so App.jsx persists
-                  the session without forcing navigate('/swipe').
-                1-9 likes: discard draft and proceed immediately. */}
-            <button
-              type="button"
-              disabled={leaveModalPromoting}
-              onClick={async () => {
-                if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
-                  // Auto-promote path: persist the Taste session, then go where the
-                  // user was originally headed (not forced to /swipe).
-                  const proceed = leaveModal.proceed
-                  setLeaveModalPromoting(true)
-                  try {
-                    const result = await promoteToTaste(draftId)
-                    // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
-                    setDraftId(null)
-                    setDraftLikeCount(0)
-                    setContinueAfterTrigger(false)
-                    triggerShownRef.current = false
-                    sessionStorage.removeItem(DRAFT_ID_KEY)
-                    sessionStorage.removeItem(DRAFT_LIKES_KEY)
-                    sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
-                    // Persist the session via App.jsx listener with skipNav:true so
-                    // App stores the project / calls applySessionResponse but does NOT
-                    // force-navigate to /swipe — proceed() will do the real navigation.
-                    window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
-                      detail: { ...result, skipNav: true },
-                    }))
-                  } catch (err) {
-                    console.error('[LeaveModal] auto-promote failed:', err)
-                    // Surface a brief error toast but do NOT trap the user — still let
-                    // them proceed to their intended destination.
-                    if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
-                  } finally {
-                    setLeaveModalPromoting(false)
-                  }
-                  setLeaveModal(null)
-                  proceed()
-                } else {
-                  // 1-9 likes: discard draft, leave immediately
-                  const proceed = leaveModal.proceed
-                  setLeaveModal(null)
-                  proceed()
+          {/* Secondary action: leave
+              >=10 likes: auto-promote then navigate to the intended destination.
+                Dispatches the custom event with skipNav:true so App.jsx persists
+                the session without forcing navigate('/swipe').
+              1-9 likes: discard draft and proceed immediately. */}
+          <button
+            type="button"
+            disabled={leaveModalPromoting}
+            onClick={async () => {
+              if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
+                // Auto-promote path: persist the Taste session, then go where the
+                // user was originally headed (not forced to /swipe).
+                const proceed = leaveModal.proceed
+                setLeaveModalPromoting(true)
+                try {
+                  const result = await promoteToTaste(draftId)
+                  // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
+                  setDraftId(null)
+                  setDraftLikeCount(0)
+                  setContinueAfterTrigger(false)
+                  triggerShownRef.current = false
+                  sessionStorage.removeItem(DRAFT_ID_KEY)
+                  sessionStorage.removeItem(DRAFT_LIKES_KEY)
+                  sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+                  // Persist the session via App.jsx listener with skipNav:true so
+                  // App stores the project / calls applySessionResponse but does NOT
+                  // force-navigate to /swipe — proceed() will do the real navigation.
+                  window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
+                    detail: { ...result, skipNav: true },
+                  }))
+                } catch (err) {
+                  console.error('[LeaveModal] auto-promote failed:', err)
+                  // Surface a brief error toast but do NOT trap the user — still let
+                  // them proceed to their intended destination.
+                  if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
+                } finally {
+                  setLeaveModalPromoting(false)
                 }
-              }}
-              style={{
-                display: 'block', width: '100%',
-                minHeight: 44,
-                padding: '0 16px',
-                borderRadius: 12,
-                border: '1px solid var(--color-border-soft, rgba(0,0,0,0.12))',
-                background: 'var(--color-surface, #F6F8FA)',
-                color: 'var(--color-text-muted, #656D76)',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: leaveModalPromoting ? 0.6 : 1,
-              }}
-            >
-              {leaveModalPromoting ? (
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <span style={{
-                    display: 'inline-block', width: 13, height: 13, borderRadius: '50%',
-                    border: '2px solid var(--color-text-dim, #8C959F)',
-                    borderTopColor: 'var(--accent-1, #0969DA)',
-                    animation: 'spin 0.8s linear infinite',
-                  }} />
-                  {t('discovery.tasteSaving')}
+                setLeaveModal(null)
+                proceed()
+              } else {
+                // 1-9 likes: discard draft, leave immediately
+                const proceed = leaveModal.proceed
+                setLeaveModal(null)
+                proceed()
+              }
+            }}
+            style={{
+              display: 'block', width: '100%',
+              minHeight: 44,
+              padding: '0 16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border-soft)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-muted)',
+              fontSize: 'var(--fs-body)',
+              fontWeight: 500,
+              cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+              opacity: leaveModalPromoting ? 0.6 : 1,
+            }}
+          >
+            {leaveModalPromoting ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <span style={{
+                  display: 'inline-block', width: 13, height: 13, borderRadius: '50%',
+                  border: '2px solid var(--color-text-dim)',
+                  borderTopColor: 'var(--accent-1)',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                {t('discovery.tasteSaving')}
+              </span>
+            ) : (
+              <>
+                {t('discovery.leaveModalLeave')}
+                <span style={{
+                  display: 'block',
+                  fontSize: 'var(--fs-caption)',
+                  fontWeight: 400,
+                  color: 'var(--color-text-dim)',
+                  marginTop: 2,
+                }}>
+                  {draftLikeCount >= TASTE_NUDGE_THRESHOLD
+                    ? t('discovery.leaveModalSubConverged')
+                    : t('discovery.leaveModalSubDraft')}
                 </span>
-              ) : (
-                <>
-                  {t('discovery.leaveModalLeave')}
-                  <span style={{
-                    display: 'block',
-                    fontSize: 11,
-                    fontWeight: 400,
-                    color: 'var(--color-text-dim, #8C959F)',
-                    marginTop: 2,
-                  }}>
-                    {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                      ? t('discovery.leaveModalSubConverged')
-                      : t('discovery.leaveModalSubDraft')}
-                  </span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+              </>
+            )}
+          </button>
+        </Modal>
       )}
 
     </div>

@@ -16,27 +16,18 @@ import PentagonChart from '../components/PentagonChart.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import Tabs from '../components/Tabs.jsx'
+import EmptyState from '../components/EmptyState.jsx'
+import PhotoTile from '../components/PhotoTile.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
+import Skeleton from '../components/Skeleton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
-import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
+import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.jsx'
 
-// Floating top-left cluster button (isMe: bell/share/settings/logout) — mock
-// parity with PageBackButton's shipped shape (DESIGN.md §4 inline layout
-// values). `position: relative` so the bell's absolutely-positioned unread
-// badge anchors correctly; harmless no-op for the other three buttons.
-const topClusterBtnStyle = {
-  position: 'relative',
-  width: 28,
-  height: 28,
-  padding: 0,
-  borderRadius: '50%',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border-soft)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: 'var(--color-text-dim)',
-  cursor: 'pointer',
-}
+// Hidden 2026-09-26 per user (design noise); functionality kept, delete
+// entirely if no issue surfaces.
+const SHOW_BOARD_EDIT_BUTTON = false
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -462,12 +453,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   if (loading) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', fontSize: 14,
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)',
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
-        Loading profile...
+        {t('profileB3.loadingProfile')}
       </div>
     )
   }
@@ -475,45 +467,46 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   if (error || !user) {
     return (
       <div style={{
-        height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+        height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', fontSize: 14,
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)',
+        paddingBottom: 'var(--tabbar-clearance)',
       }}>
-        {error || 'Profile not found.'}
+        {error || t('profileB3.profileNotFound')}
       </div>
     )
   }
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
+      paddingBottom: 'var(--tabbar-clearance)'
     }}>
-      <PageTopControls />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Floating top-left cluster — Claude Design mock conversion.
-          isMe: bell (unread badge) + share + settings + logout, all neutral
+          isMe: bell (unread badge) + share + settings, all neutral
           circles (no destructive tint — mock parity). !isMe: single back
           circle via PageBackButton (value-for-value match already shipped
-          by the design-port initiative — reused rather than re-authored). */}
+          by the design-port initiative — reused rather than re-authored).
+          Logout lives in PageTopControls (top-right) like every other page. */}
       {isMe ? (
         <div style={{
           position: 'fixed', top: 16, left: 12, zIndex: 300,
           display: 'flex', gap: 6, alignItems: 'center',
         }}>
-          {/* Notifications bell + unread badge (NOTIF-INAPP-1) */}
-          <button
-            type="button"
+          {/* Notifications bell + unread badge (NOTIF-INAPP-1). FloatingIconButton's
+              own .btn class already sets position:relative, which is what the
+              badge below anchors to — no extra positioning style needed. */}
+          <FloatingIconButton
             onClick={() => navigate('/notifications')}
-            aria-label={t('profile.notifications')}
+            ariaLabel={t('profile.notifications')}
             title={t('profile.notifications')}
-            className="pressable"
-            style={topClusterBtnStyle}
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
               <path d="M13.73 21a2 2 0 01-3.46 0"></path>
             </svg>
@@ -530,57 +523,33 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 {unreadBadgeLabel}
               </span>
             )}
-          </button>
+          </FloatingIconButton>
 
           {/* Share — mock's share-network glyph, SVG paths verbatim from profile.html */}
-          <button
-            type="button"
+          <FloatingIconButton
             onClick={() => setShareOpen(true)}
-            aria-label={t('profile.shareCard')}
+            ariaLabel={t('profile.shareCard')}
             title={t('profile.shareCard')}
-            className="pressable"
-            style={topClusterBtnStyle}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="12" r="3"></circle>
               <circle cx="18" cy="6" r="3"></circle>
               <circle cx="18" cy="18" r="3"></circle>
               <path d="M8.6 10.5l6.8-3M8.6 13.5l6.8 3"></path>
             </svg>
-          </button>
+          </FloatingIconButton>
 
           {/* Settings */}
-          <button
-            type="button"
+          <FloatingIconButton
             onClick={() => navigate('/settings')}
-            aria-label={t('profile.settings')}
+            ariaLabel={t('profile.settings')}
             title={t('profile.settings')}
-            className="pressable"
-            style={topClusterBtnStyle}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
             </svg>
-          </button>
-
-          {/* Logout — neutral circle (no destructive tint, mock parity).
-              Old ProfileHeader wired this directly to onLogout (no guard) —
-              copied as-is, not reimplemented. */}
-          <button
-            type="button"
-            onClick={onLogout}
-            aria-label="Log out"
-            title="Log out"
-            className="pressable"
-            style={topClusterBtnStyle}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-          </button>
+          </FloatingIconButton>
         </div>
       ) : (
         <PageBackButton onClick={() => navigate(-1)} />
@@ -620,18 +589,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => navigate('/assessment')}
-                  style={{
-                    padding: '10px 20px',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  className={styles.personalityCtaSecondary}
                 >
                   성향 진단 받기
                 </button>
@@ -649,7 +607,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   onAxisClick={(i) => navigate(`/people?axis=${i}`)}
                   size={180}
                 />
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+                <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0 }}>
                   {user.personality.type_code} 유형
                 </p>
                 {/* Retest. The backend already upserts (PersonalityProfile
@@ -667,19 +625,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => navigate('/assessment')}
-                  style={{
-                    marginTop: 4,
-                    padding: '10px 20px',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  style={{ marginTop: 4 }}
+                  className={styles.personalityCtaSecondary}
                 >
                   다시 진단받기
                 </button>
@@ -696,24 +643,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   theirVector={vectorFrom(user.personality)}
                   size={180}
                 />
-                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
+                <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
                   실선 = 나, 점선 = 상대방
                 </p>
                 <button
                   type="button"
                   onClick={() => {}}
-                  style={{
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--accent-1)',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  className={styles.personalityCtaPrimary}
                 >
                   관심 있어요
                 </button>
@@ -732,18 +668,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => navigate('/assessment')}
-                  style={{
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--accent-1)',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  className={styles.personalityCtaPrimary}
                 >
                   나의 성향 확인해보기 →
                 </button>
@@ -758,41 +683,22 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
             viewer, design-parity user-other.html; edit affordances inside
             each panel stay isMe-gated) */}
-        <div style={{
-          display: 'flex',
-          borderBottom: '1px solid var(--color-border-soft)',
-          marginBottom: 0,
-          marginTop: 8,
-        }}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('boards')}
-            className={`${styles.tab} ${activeTab === 'boards' ? styles.tabActive : ''}`}
-          >
-            Boards
-          </button>
-          <button
-            type="button"
-            onClick={handleStudiosTab}
-            className={`${styles.tab} ${activeTab === 'studios' ? styles.tabActive : ''}`}
-          >
-            Studios
-          </button>
-          <button
-            type="button"
-            onClick={handleLikedTab}
-            className={`${styles.tab} ${activeTab === 'liked' ? styles.tabActive : ''}`}
-          >
-            Liked
-          </button>
-          <button
-            type="button"
-            onClick={handleCreatedTab}
-            className={`${styles.tab} ${activeTab === 'created' ? styles.tabActive : ''}`}
-          >
-            Created
-          </button>
-        </div>
+        <Tabs
+          style={{ marginTop: 8 }}
+          tabs={[
+            { id: 'boards', label: t('profileB3.tabBoards') },
+            { id: 'studios', label: t('profileB3.tabStudios') },
+            { id: 'liked', label: t('profileB3.tabLiked') },
+            { id: 'created', label: t('profileB3.tabCreated') },
+          ]}
+          value={activeTab}
+          onChange={(id) => {
+            if (id === 'studios') handleStudiosTab()
+            else if (id === 'liked') handleLikedTab()
+            else if (id === 'created') handleCreatedTab()
+            else setActiveTab('boards')
+          }}
+        />
 
         {activeTab === 'boards' && (<>
 
@@ -800,16 +706,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {boardActionError && (
           <div aria-live="polite" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            padding: '12px 16px', marginBottom: 12, borderRadius: 12,
+            padding: '12px 16px', marginBottom: 12, borderRadius: 'var(--radius-md)',
             background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
             borderLeft: '3px solid var(--color-destructive)',
-            color: 'var(--color-text)', fontSize: 13, fontWeight: 500,
+            color: 'var(--color-text)', fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)',
           }}>
             <span>{boardActionError.msg}</span>
             <button
               type="button"
               onClick={() => setBoardActionError(null)}
-              aria-label="Dismiss"
+              aria-label={t('profileB3.dismiss')}
               style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: 'var(--color-text-2)', padding: 4, lineHeight: 0,
@@ -836,14 +742,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               onClick={exitSelectMode}
               className={styles.cancelBtn}
             >
-              Cancel
+              {t('profileB3.cancel')}
             </button>
             {/* Middle: selection count */}
             <span style={{
-              color: 'var(--color-text)', fontSize: 15, fontWeight: 600,
+              color: 'var(--color-text)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)',
               flex: 1, textAlign: 'center',
             }}>
-              {selectedBoards.size} selected
+              {t('profileB3.selectedCount', { n: selectedBoards.size })}
             </span>
             {/* Right: Select all / Deselect all */}
             <button
@@ -857,44 +763,33 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}
               className={styles.selectAllBtn}
             >
-              {allSelected ? 'Deselect all' : 'Select all'}
+              {allSelected ? t('profileB3.deselectAll') : t('profileB3.selectAll')}
             </button>
           </div>
         ) : (
           // Normal boards section header
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: 20, padding: '0 4px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h3 style={{
-                color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
-                margin: 0, letterSpacing: '-0.01em',
-              }}>
-                Curated Boards
-              </h3>
-              <span style={{
-                color: 'var(--color-text-dimmer)', fontSize: 13, fontWeight: 600,
-              }}>
-                {boardsTotalCount}
-              </span>
-            </div>
-            {/* P6: Edit button — owner-only, only when boards exist */}
-            {isMe && boards.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSelectMode(true)}
-                aria-label="Edit boards"
-                className={styles.editBtn}
-              >
-                {/* Pencil icon */}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                </svg>
-                Edit
-              </button>
-            )}
+          <div style={{ marginBottom: 20, padding: '0 4px' }}>
+            <SectionTitle
+              as="h3"
+              count={boardsTotalCount}
+              right={SHOW_BOARD_EDIT_BUTTON && isMe && boards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectMode(true)}
+                  aria-label={t('profileB3.editBoards')}
+                  className={styles.editBtn}
+                >
+                  {/* Pencil icon */}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                  </svg>
+                  {t('profileB3.editBoards')}
+                </button>
+              )}
+            >
+              {t('profileB3.curatedBoards')}
+            </SectionTitle>
           </div>
         )}
 
@@ -915,13 +810,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* P6: sticky bulk action bar — visible when selectMode && selection > 0 */}
         {selectMode && selectedBoards.size > 0 && (
           <div style={{
-            position: 'sticky', bottom: 12, zIndex: 5,
+            position: 'sticky', bottom: 'calc(var(--tabbar-clearance) + 12px)', zIndex: 5,
             margin: '16px 0 0',
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '10px 12px',
             background: 'color-mix(in srgb, var(--color-bg) 80%, transparent)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            borderRadius: 16,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--color-border-soft)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}>
@@ -937,7 +832,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
               </svg>
-              Public
+              {t('profileB3.makePublic')}
             </button>
             {/* Make private */}
             <button
@@ -951,7 +846,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              Private
+              {t('profileB3.makePrivate')}
             </button>
             {/* Delete with 2-step confirm */}
             <button
@@ -980,8 +875,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
               </svg>
               {confirmingBulkDelete
-                ? `Confirm delete (${selectedBoards.size})?`
-                : `Delete (${selectedBoards.size})`
+                ? t('profileB3.confirmDelete', { n: selectedBoards.size })
+                : t('profileB3.deleteCount', { n: selectedBoards.size })
               }
             </button>
           </div>
@@ -1009,32 +904,20 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Studios tab content */}
         {activeTab === 'studios' && (
           <div style={{ padding: '16px 0' }}>
-            <style>{`
-              .building-carousel::-webkit-scrollbar { display: none; }
-              .building-carousel { -ms-overflow-style: none; scrollbar-width: none; }
-            `}</style>
             {studiosLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
               </div>
             ) : !savedStudios || savedStudios.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <BuildingIconEmpty />
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t('profile.noSavedOfficesInline')}
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  {t('profile.followToShowInline')}
-                </p>
-              </div>
+              <EmptyState
+                icon={<BuildingIconEmpty />}
+                title={t('profile.noSavedOfficesInline')}
+                body={t('profile.followToShowInline')}
+              />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {savedStudios.map((office, i) => (
-                  <OfficeCard
+                  <StudioCard
                     key={office.architect_id || i}
                     office={office}
                     buildings={buildingsMap[office.architect_id] ?? null}
@@ -1049,12 +932,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Liked tab content */}
         {activeTab === 'liked' && (
           <div style={{ padding: '16px 0' }}>
-            <h3 style={{
-              color: 'var(--color-text)', fontSize: 20, fontWeight: 700,
-              margin: '0 0 20px', letterSpacing: '-0.01em',
-            }}>
-              Liked Projects
-            </h3>
+            <div style={{ marginBottom: 20 }}>
+              <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
+            </div>
             {likedLoading ? (
               <div style={{
                 display: 'grid',
@@ -1062,22 +942,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 20,
               }}>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 16, background: 'var(--color-surface-2)' }} />
+                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-2)' }} />
                 ))}
               </div>
             ) : !likedBuildings || likedBuildings.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  {t('profile.noLikedProjectsInline')}
-                </p>
-                <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                  {t('profile.swipeToSaveInline')}
-                </p>
-              </div>
+              <EmptyState
+                title={t('profile.noLikedProjectsInline')}
+                body={t('profile.swipeToSaveInline')}
+              />
             ) : (
               <div style={{
                 display: 'grid',
@@ -1085,43 +957,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 gap: 20,
               }}>
                 {likedBuildings.map((bld, i) => (
-                  <div
+                  <PhotoTile
                     key={bld.canonical_bld_id || i}
+                    imageUrl={bld.image_url || bld.display_cover_url}
+                    title={bld.name || bld.canonical_bld_id}
+                    subtitle={bld.architect_names?.length > 0 ? bld.architect_names.join(', ') : 'Building'}
+                    placeholder={<BuildingIconEmpty />}
                     onClick={() => navigate('/buildings/' + bld.canonical_bld_id)}
-                    style={{ cursor: 'pointer', borderRadius: 16, overflow: 'hidden', background: 'var(--color-surface-2)' }}
-                  >
-                    {(bld.image_url || bld.display_cover_url) ? (
-                      <img
-                        src={bld.image_url || bld.display_cover_url}
-                        alt={bld.name || ''}
-                        loading="lazy"
-                        style={{ width: '100%', aspectRatio: '4 / 5', objectFit: 'cover', display: 'block' }}
-                      />
-                    ) : (
-                      <div style={{ width: '100%', aspectRatio: '4 / 5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <BuildingIconEmpty />
-                      </div>
-                    )}
-                    <div style={{ padding: '10px 12px 12px' }}>
-                      <p style={{
-                        margin: 0, fontSize: 14, fontWeight: 700,
-                        color: 'var(--color-text)', lineHeight: 1.3,
-                        display: '-webkit-box', WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      }}>
-                        {bld.name || bld.canonical_bld_id}
-                      </p>
-                      {bld.architect_names?.length > 0 && (
-                        <p style={{
-                          margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-muted)',
-                          fontWeight: 500, lineHeight: 1.4,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}>
-                          {bld.architect_names.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  />
                 ))}
               </div>
             )}
@@ -1135,114 +978,71 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             rather than linking anywhere else. */}
         {activeTab === 'created' && (
           <div style={{ padding: '16px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-                {isMe ? 'My Works' : 'Works'}
-              </h3>
-              {isMe && (
-                <button
-                  type="button"
-                  onClick={() => navigate('/upload')}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '8px 16px', borderRadius: 20,
-                    background: 'var(--color-text)', color: 'var(--color-bg)',
-                    border: 'none', cursor: 'pointer',
-                    fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                  }}
-                >
-                  + 업로드
-                </button>
-              )}
+            <div style={{ marginBottom: 20 }}>
+              <SectionTitle
+                as="h3"
+                right={isMe && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/upload')}
+                    className={styles.uploadBtn}
+                  >
+                    {t('profile.uploadButton')}
+                  </button>
+                )}
+              >
+                {isMe ? t('profile.myWorksTitle') : t('profile.worksTitle')}
+              </SectionTitle>
             </div>
             {worksLoading ? (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '3/4', borderRadius: 12, background: 'var(--color-surface-2)' }} />
+                  <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '4 / 5' }} />
                 ))}
               </div>
             ) : !works || works.length === 0 ? (
-              <div style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                padding: '80px 20px', gap: 16, textAlign: 'center',
-              }}>
-                <p style={{ color: 'var(--color-text)', fontSize: 16, fontWeight: 600, margin: 0 }}>
-                  아직 업로드한 작품이 없어요
-                </p>
-                {isMe && (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: 13, margin: 0 }}>
-                    본인의 건축 작품을 올려보세요
-                  </p>
-                )}
-                {isMe && (
-                  <button
-                    type="button"
-                    onClick={() => navigate('/upload')}
-                    style={{
-                      marginTop: 8, padding: '10px 24px', borderRadius: 20,
-                      background: 'var(--color-text)', color: 'var(--color-bg)',
-                      border: 'none', cursor: 'pointer',
-                      fontSize: 14, fontWeight: 600, fontFamily: 'inherit',
-                    }}
-                  >
-                    작품 업로드
-                  </button>
-                )}
-              </div>
+              <EmptyState
+                title={t('profile.noWorksTitle')}
+                body={isMe ? t('profile.noWorksBody') : undefined}
+                actionLabel={isMe ? t('profile.uploadWorkAction') : undefined}
+                onAction={isMe ? () => navigate('/upload') : undefined}
+              />
             ) : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 20,
               }}>
                 {works.map(work => (
-                  <div
+                  <PhotoTile
                     key={work.upload_id}
-                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
-                    style={{
-                      borderRadius: 12, overflow: 'hidden',
-                      background: 'var(--color-surface-2)',
-                      display: 'flex', flexDirection: 'column',
-                      cursor: isMe ? 'pointer' : 'default',
-                    }}
-                  >
-                    {work.cover_url ? (
-                      <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
-                        <img
-                          src={work.cover_url}
-                          alt={work.title}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        />
-                      </div>
-                    ) : (
-                      <div style={{ aspectRatio: '3/4', background: 'var(--color-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>처리 중</span>
-                      </div>
+                    imageUrl={work.cover_url}
+                    title={work.title}
+                    subtitle={work.program}
+                    placeholder={!work.cover_url && (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)' }}>
+                        {t('profile.workProcessing')}
+                      </span>
                     )}
-                    <div style={{ padding: '10px 12px 12px' }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: 'var(--color-text)', lineHeight: 1.3 }}>
-                        {work.title}
-                      </p>
-                      <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                        {work.program}
-                      </p>
-                      {isMe && !work.is_publishable && (
-                        <span style={{
-                          display: 'inline-block', marginTop: 6,
-                          padding: '2px 8px', borderRadius: 10,
-                          background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)', color: 'var(--color-destructive)',
-                          fontSize: 10, fontWeight: 600,
-                        }}>
-                          {work.gate_reason ? '검토 거절' : '검토 중'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                    onClick={isMe ? () => setSelectedWorkId(work.upload_id) : undefined}
+                    topRight={isMe && !work.is_publishable && (
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
+                        color: 'var(--color-destructive)',
+                        fontSize: 'var(--fs-caption)',
+                        fontWeight: 'var(--fw-semibold)',
+                      }}>
+                        {work.gate_reason ? t('workDetail.status.rejected') : t('workDetail.status.processing')}
+                      </span>
+                    )}
+                  />
                 ))}
               </div>
             )}

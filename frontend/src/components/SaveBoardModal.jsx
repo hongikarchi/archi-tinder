@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { updateProject, VerifyRequiredError } from '../api/projects.js'
 import styles from './SaveBoardModal.module.css'
 import { useTranslation } from '../i18n/index.js'
+import Modal from './Modal.jsx'
 
 /**
  * SaveBoardModal — shown after report completion (or from re-entry banner).
@@ -13,7 +14,7 @@ import { useTranslation } from '../i18n/index.js'
  *   onClose     — called when user dismisses without saving
  *
  * API: PATCH /api/v1/projects/{projectId}/ { is_temp: false, name, visibility }
- * DESIGN.md §8.10 — Bottom Sheet (mobile ≤768px) / Centered Modal (desktop ≥769px)
+ * Built on the shared Modal component (DESIGN.md §8.10).
  */
 export default function SaveBoardModal({ projectId, finalReport, onSaved, onClose }) {
   const { t } = useTranslation()
@@ -34,6 +35,12 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
   const [visibility, setVisibility] = useState('public')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const nameInputRef = useRef(null)
+
+  // Autofocus the name input — after Modal's own panel-focus effect (this
+  // effect belongs to the parent SaveBoardModal, so it runs after Modal's
+  // child effect), otherwise Modal's panelRef.focus() steals it back.
+  useEffect(() => { nameInputRef.current?.focus() }, [])
 
   async function handleSave() {
     const trimmed = name.trim()
@@ -57,74 +64,67 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
     }
   }
 
-  // Backdrop click still dismisses. The '나중에' button is gone (this sheet is
-  // now opened deliberately from the results CTA, so its one exit is Save),
-  // but a mis-tap must not trap the user — dismissing just returns to the
-  // report, which is still there to save from.
-  function handleBackdropClick(e) {
-    if (e.target === e.currentTarget) onClose()
-  }
-
   return (
-    <div className={styles.backdrop} onClick={handleBackdropClick}>
-      <div className={styles.sheet} role="dialog" aria-modal="true" aria-label={t('board.saveTitle')}>
-        {/* Swipe handle — mobile only */}
-        <div className={styles.handle} />
+    <Modal
+      open
+      onClose={onClose}
+      title={t('board.saveTitle')}
+      closeLabel={t('modalB3.close')}
+      zIndex={1000}
+      closeOnEscape={false}
+    >
+      <p className={styles.subtitle}>
+        {t('board.saveSubtitle')}
+      </p>
 
-        <h2 className={styles.title}>{t('board.saveTitle')}</h2>
-        <p className={styles.subtitle}>
-          {t('board.saveSubtitle')}
-        </p>
+      {/* Board name input */}
+      <label className={styles.label} htmlFor="save-board-name">
+        {t('board.nameLabel')}
+      </label>
+      <input
+        id="save-board-name"
+        ref={nameInputRef}
+        className={styles.input}
+        type="text"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        maxLength={200}
+        placeholder={t('board.namePlaceholder')}
+      />
 
-        {/* Board name input */}
-        <label className={styles.label} htmlFor="save-board-name">
-          {t('board.nameLabel')}
-        </label>
-        <input
-          id="save-board-name"
-          className={styles.input}
-          type="text"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          maxLength={200}
-          placeholder={t('board.namePlaceholder')}
-          autoFocus
-        />
-
-        {/* Visibility toggle */}
-        <span className={styles.label}>{t('board.visibilityLabel')}</span>
-        <div className={styles.toggleRow}>
-          {[
-            { value: 'private', labelKey: 'board.private' },
-            { value: 'public',  labelKey: 'board.public' },
-          ].map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              className={[
-                styles.toggleBtn,
-                visibility === opt.value ? styles.toggleBtnActive : '',
-              ].join(' ')}
-              onClick={() => setVisibility(opt.value)}
-            >
-              {t(opt.labelKey)}
-            </button>
-          ))}
-        </div>
-
-        {error && <p className={styles.error}>{error}</p>}
-
-        <div className={styles.actions}>
+      {/* Visibility toggle */}
+      <span className={styles.label}>{t('board.visibilityLabel')}</span>
+      <div className={styles.toggleRow}>
+        {[
+          { value: 'private', labelKey: 'board.private' },
+          { value: 'public',  labelKey: 'board.public' },
+        ].map(opt => (
           <button
-            className={styles.saveBtn}
-            onClick={handleSave}
-            disabled={saving || !name.trim()}
+            key={opt.value}
+            type="button"
+            className={[
+              styles.toggleBtn,
+              visibility === opt.value ? styles.toggleBtnActive : '',
+            ].join(' ')}
+            onClick={() => setVisibility(opt.value)}
           >
-            {saving ? t('board.saving') : t('board.save')}
+            {t(opt.labelKey)}
           </button>
-
-        </div>
+        ))}
       </div>
-    </div>
+
+      {error && <p className={styles.error}>{error}</p>}
+
+      <div className={styles.actions}>
+        <button
+          className={styles.saveBtn}
+          onClick={handleSave}
+          disabled={saving || !name.trim()}
+        >
+          {saving ? t('board.saving') : t('board.save')}
+        </button>
+
+      </div>
+    </Modal>
   )
 }

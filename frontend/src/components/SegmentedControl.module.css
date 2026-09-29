@@ -1,0 +1,128 @@
+/*
+ * SegmentedControl.module.css — shared sliding-highlight control.
+ * UI-CONSISTENCY-B Phase 2d. See SegmentedControl.jsx docblock for the
+ * highlight/foreground split and the `as` role-set modes.
+ */
+
+/* `position:relative` is load-bearing (containing block for the absolute
+ * highlight) and stays at normal specificity. `display`/`align-items` are
+ * cosmetic defaults a consumer's own root className commonly re-declares
+ * (e.g. SocialSegment's `.row` wants `display:flex`, not `inline-flex`, to
+ * span full width for its border-bottom divider) — zero-specificity via
+ * :where() so that single-class selector always wins regardless of which CSS
+ * module file the bundler injects first (see the :where(.option) note below). */
+.container {
+  position: relative;
+}
+
+:where(.container) {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.container.fullWidth {
+  display: flex;
+  width: 100%;
+}
+
+/* Per-size cosmetic defaults ONLY — every current adoption site (TabBar,
+ * PageTopControls, SocialSegment, Tabs) fully overrides padding/font-size via
+ * `optionStyle`/`optionClassName`, so these exist to make `size` a real,
+ * functional prop for a bare-bones consumer that doesn't override anything.
+ * Zero-specificity via :where() on the .option side so a real consumer class
+ * (single-class selector, same as this one) always wins regardless of CSS
+ * module injection order (see PageTopControls.module.css's own note on this).
+ *
+ * No default `gap` here (deliberately — Phase 2d fix): a `gap` value applies
+ * even when a consumer doesn't declare its own (there's no competing
+ * declaration to win against, so :where()'s zero specificity doesn't help).
+ * PageTopControls' pills never had a gap between "한"/"EN" — a `gap:4px`
+ * default silently spread them apart. Gap stays each consumer's own explicit
+ * choice (SocialSegment's `.row` already sets `gap:6px`). */
+:where(.container[data-size='sm'] .option) { padding: 0 8px; font-size: var(--fs-caption); }
+:where(.container[data-size='md'] .option) { padding: 0 12px; font-size: var(--fs-body); }
+:where(.container[data-size='lg'] .option) { padding: 0; }
+
+/* The sliding highlight. Only `transform: translateX()` + `width` animate —
+ * this is INTERACTION motion (see docblock): never gated by
+ * prefers-reduced-motion. `.noAnimate` (applied for mount + geometry
+ * corrections) suspends the transition for exactly one render. */
+.highlight {
+  position: absolute;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: transform var(--motion-normal) var(--motion-ease),
+              width var(--motion-normal) var(--motion-ease);
+}
+
+.highlight.noAnimate {
+  transition: none;
+}
+
+.highlightPill {
+  border-radius: var(--radius-pill);
+}
+
+.highlightUnderline {
+  bottom: -1px;
+  height: 2px;
+}
+
+/* Structural rules (position/layout the geometry math depends on) stay at
+ * normal specificity. Cosmetic reset properties a consumer's own option class
+ * commonly re-declares (padding, border, background, font, cursor) live in a
+ * zero-specificity :where() block below so that class always wins regardless
+ * of which CSS module file the bundler injects first. */
+/* `align-items: center` (not `stretch`) — Phase 2d fix: per the flexbox spec,
+ * `stretch` does NOT stretch a child whose cross-size is already definite
+ * (not `auto`) — instead that child aligns as `flex-start`. TabBar's content
+ * span has an explicit fixed height (68x44, via `optionContentStyle`, smaller
+ * than the ~58px button), so under `stretch` it silently sank to `flex-start`
+ * (the button's TOP) instead of being centered — the pill highlight (which
+ * IS correctly centered, via `top:50%`/`translateY(-50%)`) stayed centered
+ * while the icon on top of it drifted upward. `center` fixes this and is a
+ * no-op for every consumer whose content span fills the full button height. */
+.option {
+  position: relative;
+  z-index: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.container.fullWidth .option {
+  flex: 1;
+}
+
+:where(.option) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* The measured target for the highlight's geometry — sits ABOVE the
+ * highlight (z-index 2 > highlight's 1) so icon/label content is never
+ * hidden behind an opaque highlight background (e.g. SocialSegment's `.seg`
+ * has its own opaque surface bg). `.option` itself carries no z-index, so it
+ * doesn't trap this above the highlight's stacking position. */
+.optionContent {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}

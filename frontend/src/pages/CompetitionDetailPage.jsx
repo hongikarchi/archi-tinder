@@ -11,12 +11,24 @@
  * 사람"과 달리 1·2축은 보완, 3·4축은 일치를 본다(§4).
  *
  * 백엔드 없음. 목 데이터 + localStorage 찜.
+ *
+ * UI-CONSISTENCY-B Phase 3b-3: onto the shared chrome system — PageShell
+ * ('medium', 680, same precedent as BoardDetailPage) + PageBackButton +
+ * PageTopControls + PageLogoHeader replace the hand-rolled 56px top-padding
+ * spacer hack on .hero. h1 → PageTitle, section headers → SectionTitle,
+ * not-found → EmptyState.
  */
 
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import PageTopControls from '../components/PageTopControls.jsx'
+import { useTranslation } from '../i18n/index.js'
+import PageShell from '../components/PageShell.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
+import PageTopControls from '../components/PageTopControls.jsx'
+import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import PageTitle from '../components/PageTitle.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
+import EmptyState from '../components/EmptyState.jsx'
 import PentagonChart from '../components/PentagonChart.jsx'
 import {
   competitionById,
@@ -31,21 +43,26 @@ import styles from './CompetitionDetailPage.module.css'
 
 export default function CompetitionDetailPage({ onLogout }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { competitionId } = useParams()
   const competition = competitionById(competitionId)
 
   const [interests, setInterests] = useState(() => loadInterests())
   const [toast, setToast] = useState(null)
 
+  const chrome = (
+    <>
+      <PageBackButton onClick={() => navigate('/competitions')} />
+      <PageTopControls onLogout={onLogout} />
+      <PageLogoHeader />
+    </>
+  )
+
   if (!competition) {
     return (
-      <div className={styles.page}>
-        <PageBackButton onClick={() => navigate('/competitions')} />
-        <PageTopControls onLogout={onLogout} />
-        <div className={styles.empty}>
-          <p className={styles.emptyTitle}>공모전을 찾을 수 없어요</p>
-        </div>
-      </div>
+      <PageShell width="medium" chrome={chrome}>
+        <EmptyState title={t('competitionB3.detail.notFound')} />
+      </PageShell>
     )
   }
 
@@ -90,7 +107,7 @@ export default function CompetitionDetailPage({ onLogout }) {
               type="button"
               className={styles.handleBtn}
               onClick={() => navigate(`/user/${p.user_id}?tab=created`)}
-              aria-label={`@${p.handle} 프로필 보기`}
+              aria-label={t('competitionB3.detail.viewProfileAria', { handle: p.handle })}
             >
               @{p.handle}
             </button>
@@ -101,125 +118,133 @@ export default function CompetitionDetailPage({ onLogout }) {
         <button
           type="button"
           className={styles.proposeBtn}
-          onClick={() => showToast(`@${p.handle}에게 제안을 보냈어요`)}
+          onClick={() => showToast(t('competitionB3.detail.proposeSent', { handle: p.handle }))}
         >
-          제안
+          {t('competitionB3.detail.proposeBtn')}
         </button>
       </article>
     )
   }
 
   return (
-    <div className={styles.page}>
-      <PageBackButton onClick={() => navigate('/competitions')} />
-      <PageTopControls onLogout={onLogout} />
-
-      <div className={styles.content}>
-        {/* ── 상단: 공모전 정보 ── */}
-        <header className={styles.hero}>
-          <span className={`${styles.dday} ${d <= 7 ? styles.ddayUrgent : ''}`}>D-{d}</span>
-          <h1 className={styles.title}>{competition.title}</h1>
-          <p className={styles.organizer}>{competition.organizer}</p>
-          <p className={styles.theme}>{competition.theme}</p>
-          <p className={styles.sizeHint}>
-            권장 {competition.teamSizeMin}~{competition.teamSizeMax}인
-          </p>
-
-          <button
-            type="button"
-            className={`${styles.interestCta} ${saved ? styles.interestCtaOn : ''}`}
-            onClick={handleToggleInterest}
-            aria-pressed={saved}
-          >
-            {saved ? '관심 등록됨 ✓' : '관심 있어요'}
-          </button>
-          <p className={styles.interestCount}>
-            {competition.interestCount + (saved ? 1 : 0)}명이 이 공모전을 보고 있어요
-          </p>
-        </header>
-
-        {/* ── 섹션 A: 찜한 사람 — 추천 1명 + 전체 ── */}
-        <section className={styles.section}>
-          {recommended && (
-            <>
-              <h2 className={styles.sectionTitle}>
-                추천 <span className={styles.sectionHint}>성향이 잘 맞아요</span>
-              </h2>
-              <div className={styles.recommendWrap}>
-                {renderPerson(recommended, true)}
-              </div>
-            </>
-          )}
-
-          <h2 className={`${styles.sectionTitle} ${recommended ? styles.sectionTitleGap : ''}`}>
-            관심 있는 사람 {ranked.length > 0 && <span className={styles.sectionHint}>{ranked.length}명</span>}
-          </h2>
-          {rest.length === 0 ? (
-            <p className={styles.sectionEmpty}>
-              {ranked.length === 0 ? '아직 관심을 표시한 사람이 없어요' : '다른 사람은 아직 없어요'}
-            </p>
-          ) : (
-            <ul className={styles.personList}>
-              {rest.map(p => <li key={p.user_id}>{renderPerson(p, false)}</li>)}
-            </ul>
-          )}
-        </section>
-
-        {/* ── 섹션 B: 모집 중인 팀 ── */}
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>모집 중인 팀</h2>
-          {teams.length === 0 ? (
-            <p className={styles.sectionEmpty}>아직 만들어진 팀이 없어요</p>
-          ) : (
-            <ul className={styles.teamList}>
-              {teams.map(t => {
-                // 빈 자리는 저장하지 않고 파생한다(설계 §6-3).
-                const open = t.capacity - t.members.length
-                return (
-                  <li key={t.id}>
-                    <article className={styles.teamCard}>
-                      <div className={styles.teamHead}>
-                        <span className={styles.teamName}>{t.name}</span>
-                        {open > 0 ? (
-                          <span className={styles.openSlot}>{open}자리 남음</span>
-                        ) : (
-                          <span className={styles.fullSlot}>마감</span>
-                        )}
-                      </div>
-                      <p className={styles.teamMembers}>
-                        {t.members.map(m => `@${m.handle}`).join(' · ')}
-                      </p>
-                      {open > 0 && (
-                        <button
-                          type="button"
-                          className={styles.joinBtn}
-                          onClick={() => showToast(`${t.name} 팀에 참여 요청을 보냈어요`)}
-                        >
-                          참여 요청
-                        </button>
-                      )}
-                    </article>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
-          <button
-            type="button"
-            className={styles.createTeamBtn}
-            onClick={() => showToast('팀 만들기는 준비 중이에요')}
-          >
-            팀 만들기
-          </button>
-        </section>
-
-        <p className={styles.protoNote}>
-          프로토타입 — 공모전 정보와 참가자는 예시 데이터입니다
+    <PageShell width="medium" contentStyle={{ padding: '20px 20px 0' }} chrome={chrome}>
+      {/* ── 상단: 공모전 정보 ── */}
+      <header className={styles.hero}>
+        <span className={`${styles.dday} ${d <= 7 ? styles.ddayUrgent : ''}`}>
+          {t('competitionB3.dday', { d })}
+        </span>
+        <PageTitle style={{ margin: '0 0 6px' }}>{competition.title}</PageTitle>
+        <p className={styles.organizer}>{competition.organizer}</p>
+        <p className={styles.theme}>{competition.theme}</p>
+        <p className={styles.sizeHint}>
+          {t('competitionB3.detail.teamSizeHint', {
+            min: competition.teamSizeMin,
+            max: competition.teamSizeMax,
+          })}
         </p>
-      </div>
+
+        <button
+          type="button"
+          className={`${styles.interestCta} ${saved ? styles.interestCtaOn : ''}`}
+          onClick={handleToggleInterest}
+          aria-pressed={saved}
+        >
+          {t(saved ? 'competitionB3.detail.interestCtaOn' : 'competitionB3.detail.interestCtaOff')}
+        </button>
+        <p className={styles.interestCount}>
+          {t('competitionB3.detail.interestCount', {
+            count: competition.interestCount + (saved ? 1 : 0),
+          })}
+        </p>
+      </header>
+
+      {/* ── 섹션 A: 찜한 사람 — 추천 1명 + 전체 ── */}
+      <section className={styles.section}>
+        {recommended && (
+          <>
+            <SectionTitle>
+              {t('competitionB3.detail.recommendedTitle')}{' '}
+              <span className={styles.sectionHint}>{t('competitionB3.detail.recommendedHint')}</span>
+            </SectionTitle>
+            <div className={styles.recommendWrap}>
+              {renderPerson(recommended, true)}
+            </div>
+          </>
+        )}
+
+        <SectionTitle
+          className={recommended ? styles.sectionTitleGap : undefined}
+          count={ranked.length > 0 ? t('competitionB3.detail.interestedCount', { count: ranked.length }) : null}
+        >
+          {t('competitionB3.detail.interestedTitle')}
+        </SectionTitle>
+        {rest.length === 0 ? (
+          <p className={styles.sectionEmpty}>
+            {ranked.length === 0
+              ? t('competitionB3.detail.emptyAll')
+              : t('competitionB3.detail.emptyRest')}
+          </p>
+        ) : (
+          <ul className={styles.personList}>
+            {rest.map(p => <li key={p.user_id}>{renderPerson(p, false)}</li>)}
+          </ul>
+        )}
+      </section>
+
+      {/* ── 섹션 B: 모집 중인 팀 ── */}
+      <section className={styles.section}>
+        <SectionTitle>{t('competitionB3.detail.teamsTitle')}</SectionTitle>
+        {teams.length === 0 ? (
+          <p className={styles.sectionEmpty}>{t('competitionB3.detail.noTeams')}</p>
+        ) : (
+          <ul className={styles.teamList}>
+            {teams.map(team => {
+              // 빈 자리는 저장하지 않고 파생한다(설계 §6-3).
+              const open = team.capacity - team.members.length
+              return (
+                <li key={team.id}>
+                  <article className={styles.teamCard}>
+                    <div className={styles.teamHead}>
+                      <span className={styles.teamName}>{team.name}</span>
+                      {open > 0 ? (
+                        <span className={styles.openSlot}>
+                          {t('competitionB3.detail.openSlots', { count: open })}
+                        </span>
+                      ) : (
+                        <span className={styles.fullSlot}>{t('competitionB3.detail.full')}</span>
+                      )}
+                    </div>
+                    <p className={styles.teamMembers}>
+                      {team.members.map(m => `@${m.handle}`).join(' · ')}
+                    </p>
+                    {open > 0 && (
+                      <button
+                        type="button"
+                        className={styles.joinBtn}
+                        onClick={() => showToast(t('competitionB3.detail.joinSent', { team: team.name }))}
+                      >
+                        {t('competitionB3.detail.joinBtn')}
+                      </button>
+                    )}
+                  </article>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        <button
+          type="button"
+          className={styles.createTeamBtn}
+          onClick={() => showToast(t('competitionB3.detail.createTeamComingSoon'))}
+        >
+          {t('competitionB3.detail.createTeamBtn')}
+        </button>
+      </section>
+
+      <p className={styles.protoNote}>{t('competitionB3.protoNote')}</p>
 
       {toast && <div className={styles.toast} role="status">{toast}</div>}
-    </div>
+    </PageShell>
   )
 }

@@ -16,8 +16,9 @@ import { useTranslation } from '../../i18n/index.js'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import btnStyles from '../../components/Button.module.css'
-import styles from './AccountScreen.module.css'
 
 export default function EditProfileScreen({ onLogout }) {
   const navigate = useNavigate()
@@ -83,39 +84,30 @@ export default function EditProfileScreen({ onLogout }) {
     }
   }
 
-  if (loading) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
+  return (
+    <PageShell
+      width="narrow"
+      chrome={<ScreenChrome navigate={navigate} onLogout={onLogout} />}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('profileEdit.title')}</PageTitle>
+
+      {loading ? (
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-text-dim)', fontSize: 14,
         }}>
           {t('profileEdit.loading')}
         </div>
-      </div>
-    )
-  }
-
-  if (fetchError) {
-    return (
-      <div className={styles.page}>
-        <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
+      ) : fetchError ? (
         <div style={{
           display: 'flex', justifyContent: 'center',
           padding: 48, color: 'var(--color-destructive)', fontSize: 14,
         }}>
           {fetchError}
         </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className={styles.page}>
-      <ScreenHeader navigate={navigate} t={t} onLogout={onLogout} />
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '0 16px 24px' }}>
+      ) : (
+        <>
 
         <EditCardForm
           user={me}
@@ -167,23 +159,21 @@ export default function EditProfileScreen({ onLogout }) {
           </button>
         </div>
 
-      </div>
+        </>
+      )}
       <div style={{ height: 24 }} />
-    </div>
+    </PageShell>
   )
 }
 
 /* ── Internal helpers ────────────────────────────────────────────────── */
 
-function ScreenHeader({ navigate, t, onLogout }) {
+function ScreenChrome({ navigate, onLogout }) {
   return (
     <>
       <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />
       <PageTopControls onLogout={onLogout} />
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px 0' }}>
-        <h2 className={styles.headerTitle}>{t('profileEdit.title')}</h2>
-      </div>
     </>
   )
 }

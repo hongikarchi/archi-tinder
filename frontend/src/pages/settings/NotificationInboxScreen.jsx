@@ -21,6 +21,8 @@ import Avatar from '../../components/Avatar.jsx'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
+import PageShell from '../../components/PageShell.jsx'
+import PageTitle from '../../components/PageTitle.jsx'
 import styles from './NotificationInboxScreen.module.css'
 
 const PAGE_SIZE = 20
@@ -121,13 +123,16 @@ export default function NotificationInboxScreen({ onLogout }) {
   }
 
   return (
-    <div className={styles.page}>
-      <PageBackButton onClick={() => navigate(-1)} />
-      <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '8px 12px 24px' }}>
-        <h2 className={styles.headerTitle}>{t('notifications.title')}</h2>
+    <PageShell
+      width="narrow"
+      chrome={<>
+        <PageBackButton onClick={() => navigate(-1)} />
+        <PageLogoHeader />
+        <PageTopControls onLogout={onLogout} />
+      </>}
+      contentStyle={{ padding: '8px 12px 24px' }}
+    >
+      <PageTitle style={{ margin: '0 0 12px', padding: '0 14px' }}>{t('notifications.title')}</PageTitle>
 
         {loading && (
           <div>
@@ -219,7 +224,6 @@ export default function NotificationInboxScreen({ onLogout }) {
           </div>
         )}
 
-      </div>
-    </div>
+    </PageShell>
   )
 }

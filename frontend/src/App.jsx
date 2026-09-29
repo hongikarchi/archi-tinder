@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
 import { useLanguage } from './hooks/useLanguage.js'
+import { useTranslation } from './i18n/index.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import LLMSearchPage from './pages/LLMSearchPage.jsx'
@@ -44,6 +45,7 @@ export default function App() {
   const location = useLocation()
   const { hydrate } = useTheme()
   const { hydrate: hydrateLanguage } = useLanguage()
+  const { t } = useTranslation()
 
   const [userId, setUserId] = useState(() => sessionStorage.getItem('archithon_user') || null)
   // SaveBoardModal — shown when report completes for a temp project
@@ -1152,7 +1154,7 @@ export default function App() {
           <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
           <Route path="liked-projects" element={<LikedProjectsPage onLogout={handleLogout} />} />
           <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />
-          <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
+          <Route path="my/liked-offices" element={<Navigate to="/user/me" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage onLogout={handleLogout} />} />
           <Route path="notifications" element={<NotificationInboxScreen onLogout={handleLogout} />} />
           <Route path="assessment" element={<AssessmentPage onLogout={handleLogout} />} />
@@ -1182,7 +1184,7 @@ export default function App() {
 
       {swipeError && (
         <div style={{
-          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', bottom: 'var(--tabbar-clearance)', left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(220, 38, 38, 0.92)', color: '#fff', padding: '10px 20px',
           borderRadius: 8, fontSize: 14, fontWeight: 500, zIndex: 9999,
           pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -1194,7 +1196,7 @@ export default function App() {
       {globalToast && (
         <div style={{
           position: 'fixed',
-          bottom: 'calc(64px + 16px)',
+          bottom: 'var(--tabbar-clearance)',
           left: '50%',
           transform: 'translateX(-50%)',
           background: 'color-mix(in srgb, var(--color-surface, #F6F8FA) 72%, transparent)',
@@ -1236,7 +1238,7 @@ export default function App() {
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
             border: '1px solid var(--color-border-soft)',
-            borderRadius: 12,
+            borderRadius: 'var(--radius-md)',
             padding: '12px 16px',
             display: 'flex',
             alignItems: 'center',
@@ -1245,13 +1247,13 @@ export default function App() {
           }}>
             <p style={{
               margin: 0,
-              fontSize: 13,
+              fontSize: 'var(--fs-body)',
               fontWeight: 600,
               color: 'var(--color-text)',
               flex: 1,
               lineHeight: 1.4,
             }}>
-              이전에 완성된 리포트가 있어요
+              {t('modalB3.reportBanner.body')}
             </p>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
               <button
@@ -1261,11 +1263,11 @@ export default function App() {
                 }}
                 style={{
                   padding: '7px 14px',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   border: 'none',
                   background: 'var(--accent-1)',
                   color: '#fff',
-                  fontSize: 12,
+                  fontSize: 'var(--fs-caption)',
                   fontWeight: 600,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
@@ -1273,17 +1275,17 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                저장
+                {t('modalB3.reportBanner.save')}
               </button>
               <button
                 onClick={handleTempDelete}
                 style={{
                   padding: '7px 14px',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--color-destructive)',
                   background: 'transparent',
                   color: 'var(--color-destructive)',
-                  fontSize: 12,
+                  fontSize: 'var(--fs-caption)',
                   fontWeight: 600,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
@@ -1291,7 +1293,7 @@ export default function App() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                삭제
+                {t('modalB3.reportBanner.delete')}
               </button>
             </div>
           </div>

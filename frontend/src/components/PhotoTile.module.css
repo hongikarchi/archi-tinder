@@ -1,0 +1,97 @@
+/*
+ * PhotoTile.module.css — shared 4:5 photo-overlay grid tile.
+ * Hover lift + accent outline extracted verbatim from LikedProjectsPage's
+ * `.card` / BoardDetail's BuildingTile `.tile` (identical rules in both).
+ */
+.tile {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+/* Hover lift + outline only when the tile is actually clickable (`onClick`
+ * set) — a non-interactive tile (no onClick) stays a plain static block. */
+.interactive {
+  transition: transform var(--motion-normal) var(--motion-ease),
+              border-color var(--motion-normal) var(--motion-ease);
+}
+
+.interactive:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .interactive {
+    transition: none;
+  }
+  .interactive:hover {
+    transform: none;
+  }
+}
+
+.image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-2);
+}
+
+/* Bottom caption scrim — DESIGN.md §1.4 scrim family (white-text-on-photo). */
+.scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--color-scrim-strong) 0%, var(--color-scrim-soft) 50%, transparent 100%);
+}
+
+.topRight {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 18px 20px;
+  z-index: 1;
+}
+
+.title {
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  margin: 0 0 3px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+  margin: 0;
+}

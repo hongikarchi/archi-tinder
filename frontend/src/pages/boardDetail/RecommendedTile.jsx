@@ -6,7 +6,7 @@ export default function RecommendedTile({ card, onClick }) {
   const title = card.image_title || card.name_en
   return (
     <div onClick={onClick} className={s.tile} style={{
-      position: 'relative', aspectRatio: '3 / 4', borderRadius: 16, overflow: 'hidden', cursor: 'pointer',
+      position: 'relative', aspectRatio: '3 / 4', borderRadius: 'var(--radius-lg)', overflow: 'hidden', cursor: 'pointer',
       background: 'var(--color-surface-2)',
       boxShadow: '0 8px 20px rgba(0,0,0,0.25)',
       userSelect: 'none',

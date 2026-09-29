@@ -16,6 +16,7 @@ import { generateReport } from '../api/projects.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
+import SectionTitle from '../components/SectionTitle.jsx'
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
@@ -57,12 +58,12 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
         top: 14,
         left: 14,
         padding: '3px 5px',
-        borderRadius: 999,
-        background: 'rgba(0,0,0,0.48)',
+        borderRadius: 'var(--radius-pill)',
+        background: 'var(--color-scrim-soft)',
         border: '1px solid rgba(255,255,255,0.12)',
         color: '#fff',
-        fontSize: 9,
-        fontWeight: 800,
+        fontSize: 'var(--fs-caption)',
+        fontWeight: 'var(--fw-bold)',
       }}>
         #{rank}
       </div>
@@ -81,10 +82,10 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
           width: 32,
           height: 32,
           borderRadius: '50%',
-          border: saved ? '1px solid rgba(251,191,36,0.65)' : '1px solid rgba(255,255,255,0.16)',
-          background: saved ? 'rgba(251,191,36,0.18)' : 'rgba(0,0,0,0.45)',
-          color: saved ? '#fbbf24' : '#fff',
-          fontSize: 14,
+          border: saved ? '1px solid color-mix(in srgb, var(--accent-3) 65%, transparent)' : '1px solid rgba(255,255,255,0.16)',
+          background: saved ? 'color-mix(in srgb, var(--accent-3) 18%, transparent)' : 'var(--color-scrim-soft)',
+          color: saved ? 'var(--accent-3)' : '#fff',
+          fontSize: 'var(--fs-body)',
           cursor: pending ? 'default' : 'pointer',
           opacity: pending ? 0.65 : 1,
           backdropFilter: 'blur(12px)',
@@ -106,10 +107,10 @@ function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
           {[country, year].filter(Boolean).map(value => (
             <span key={value} style={{
               color: 'rgba(255,255,255,0.72)',
-              fontSize: 9,
-              fontWeight: 700,
+              fontSize: 'var(--fs-caption)',
+              fontWeight: 'var(--fw-bold)',
               padding: '2px 4px',
-              borderRadius: 999,
+              borderRadius: 'var(--radius-pill)',
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.10)',
             }}>
@@ -256,10 +257,10 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
 
   return (
     <div style={{
-      height: 'calc(100vh - 64px - env(safe-area-inset-bottom, 0px))',
+      height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
-      paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'var(--tabbar-clearance)',
     }}>
       <PageBackButton onClick={() => navigate('/')} />
       <PageLogoHeader />
@@ -282,12 +283,12 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
               width: '100%',
               minHeight: 44,
               padding: '12px 24px',
-              borderRadius: 999,
+              borderRadius: 'var(--radius-md)',
               background: 'var(--accent-1)',
               color: '#fff',
               border: 'none',
-              fontSize: 14,
-              fontWeight: 700,
+              fontSize: 'var(--fs-body)',
+              fontWeight: 'var(--fw-bold)',
               cursor: 'pointer',
               fontFamily: 'inherit',
             }}
@@ -297,14 +298,19 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
         </div>
       )}
       {project?.finalReport && backendId ? (
-        <PersonaReport
-          boardId={backendId}
-          finalReport={project.finalReport}
-          axisScores={project.axisScores || null}
-          reportImage={project.reportImage || null}
-          reportImageMime={project.reportImageMime || null}
-          onReportUpdate={handleReportUpdate}
-        />
+        // UI-CONSISTENCY-B3b-5: same padded centered column as
+        // BoardReportPage's .container (20px sides, 20px top) so
+        // PersonaReport renders at identical width/inset in both places.
+        <div style={{ padding: '20px 20px 24px' }}>
+          <PersonaReport
+            boardId={backendId}
+            finalReport={project.finalReport}
+            axisScores={project.axisScores || null}
+            reportImage={project.reportImage || null}
+            reportImageMime={project.reportImageMime || null}
+            onReportUpdate={handleReportUpdate}
+          />
+        </div>
       ) : reportRepairError ? (
         <section style={{ padding: '18px', borderBottom: '1px solid var(--color-border-soft)' }}>
           <p style={{ color: 'var(--color-destructive, #D73A49)', fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>
@@ -344,12 +350,10 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
       {result?.liked_images?.length > 0 && (
         <section style={{ padding: '18px 0 24px', borderBottom: '1px solid var(--color-border-soft)' }}>
           <div style={{ padding: '0 18px 14px' }}>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
-              My Likes
+            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
+              {t('detailB3.myLikesEyebrow')}
             </p>
-            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0 }}>
-              {result.liked_images.length} buildings you liked
-            </h2>
+            <SectionTitle>{t('detailB3.buildingsYouLiked', { n: result.liked_images.length })}</SectionTitle>
           </div>
           <div className="hide-scrollbar" style={{
             display: 'flex',
@@ -375,7 +379,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
                     flex: '0 0 min(82vw, 320px)',
                     height: 'min(58vh, 480px)',
                     minHeight: 380,
-                    borderRadius: 20,
+                    borderRadius: 'var(--radius-lg)',
                     overflow: 'hidden',
                     background: 'var(--color-surface)',
                     border: '1px solid var(--color-border-soft)',
@@ -399,7 +403,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
                   }} />
                   <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 16px 16px' }}>
                     <h3 style={{
-                      color: '#fff', fontSize: 16, fontWeight: 700, lineHeight: 1.2,
+                      color: '#fff', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-bold)', lineHeight: 1.2,
                       margin: 0,
                       display: '-webkit-box', WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical', overflow: 'hidden',
@@ -418,18 +422,19 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
         minHeight: '60vh',
         padding: '18px 0 24px',
       }}>
-        <div style={{ padding: '0 18px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <div>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
-              Top-K recommendations
-            </p>
-            <h2 style={{ color: 'var(--color-text)', fontSize: 20, fontWeight: 700, margin: 0 }}>
-              {t('results.rankRange', { n: Math.max(visibleCount, 10) })}
-            </h2>
-          </div>
-          <span style={{ color: 'var(--color-text-dimmer)', fontSize: 12, fontWeight: 700 }}>
-            {topCards.length}/{Math.max(cappedTotal, 10)}
-          </span>
+        <div style={{ padding: '0 18px 14px' }}>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
+            {t('detailB3.topKEyebrow')}
+          </p>
+          <SectionTitle
+            right={
+              <span style={{ color: 'var(--color-text-dimmer)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)' }}>
+                {topCards.length}/{Math.max(cappedTotal, 10)}
+              </span>
+            }
+          >
+            {t('results.rankRange', { n: Math.max(visibleCount, 10) })}
+          </SectionTitle>
         </div>
 
         {loading && topCards.length === 0 ? (

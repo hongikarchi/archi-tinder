@@ -13,6 +13,7 @@
  * 데스크탑 hover 양쪽에서 뜻이 드러나야 한다.
  */
 import { useNavigate } from 'react-router-dom'
+import SegmentedControl from './SegmentedControl.jsx'
 import styles from './SocialSegment.module.css'
 
 const ICONS = {
@@ -37,28 +38,42 @@ const ICONS = {
 }
 
 const ITEMS = [
-  { id: 'people', label: '사람', path: '/people' },
-  { id: 'competitions', label: '공모전', path: '/competitions' },
+  { value: 'people', label: '사람', path: '/people' },
+  { value: 'competitions', label: '공모전', path: '/competitions' },
 ]
 
 export default function SocialSegment({ active }) {
   const navigate = useNavigate()
   return (
-    <div className={styles.row} role="tablist" aria-label="소셜 보기 전환">
-      {ITEMS.map(it => (
-        <button
-          key={it.id}
-          type="button"
-          role="tab"
-          aria-selected={active === it.id}
-          aria-label={it.label}
-          title={it.label}
-          className={`${styles.seg} ${active === it.id ? styles.segActive : ''}`}
-          onClick={() => { if (active !== it.id) navigate(it.path) }}
-        >
-          {ICONS[it.id]}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      as="tabs"
+      variant="pill"
+      pillHeight={32}
+      ariaLabel="소셜 보기 전환"
+      className={styles.row}
+      options={ITEMS}
+      value={active}
+      onChange={(next) => {
+        const item = ITEMS.find((it) => it.value === next)
+        if (item) navigate(item.path)
+      }}
+      optionClassName={styles.seg}
+      // Foreground (icon color) only — the shared highlight now owns the
+      // border + tinted background that `.segActive` used to draw itself
+      // (see SocialSegment.module.css). Content box left at the default
+      // (100%/100% of the button) so the highlight covers the full 40x32
+      // button, not just the 18px icon inside it. `.seg`'s own gray border is
+      // hidden (transparent) when active — the content span it's measured
+      // from sits 1px inset from the button's own border (border-box
+      // sizing), so without this the button's gray ring would still show
+      // just outside the highlight's accent ring (a double-border artifact).
+      optionStyle={(opt, isActive) => (isActive ? { color: 'var(--accent-1)', borderColor: 'transparent' } : undefined)}
+      highlightStyle={{
+        borderRadius: 'var(--radius-md)',
+        background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+        border: '1px solid var(--accent-1)',
+      }}
+      renderOption={(opt) => ICONS[opt.value]}
+    />
   )
 }
