@@ -23,7 +23,7 @@ import PhotoTile from '../components/PhotoTile.jsx'
 import SectionTitle from '../components/SectionTitle.jsx'
 import Skeleton from '../components/Skeleton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
-import { OfficeCard, SkeletonCard, BuildingIconEmpty } from './LikedOfficesPage.jsx'
+import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.jsx'
 
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
 // entirely if no issue surfaces.
@@ -456,10 +456,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', fontSize: 14,
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)',
         paddingBottom: 'var(--tabbar-clearance)',
       }}>
-        Loading profile...
+        {t('profileB3.loadingProfile')}
       </div>
     )
   }
@@ -470,10 +470,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         height: 'var(--page-height)',
         background: 'var(--color-bg)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--color-text-dim)', fontSize: 14,
+        color: 'var(--color-text-dim)', fontSize: 'var(--fs-body)',
         paddingBottom: 'var(--tabbar-clearance)',
       }}>
-        {error || 'Profile not found.'}
+        {error || t('profileB3.profileNotFound')}
       </div>
     )
   }
@@ -589,18 +589,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => navigate('/assessment')}
-                  style={{
-                    padding: '10px 20px',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  className={styles.personalityCtaSecondary}
                 >
                   성향 진단 받기
                 </button>
@@ -618,7 +607,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   onAxisClick={(i) => navigate(`/people?axis=${i}`)}
                   size={180}
                 />
-                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
+                <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0 }}>
                   {user.personality.type_code} 유형
                 </p>
                 {/* Retest. The backend already upserts (PersonalityProfile
@@ -636,19 +625,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => navigate('/assessment')}
-                  style={{
-                    marginTop: 4,
-                    padding: '10px 20px',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  style={{ marginTop: 4 }}
+                  className={styles.personalityCtaSecondary}
                 >
                   다시 진단받기
                 </button>
@@ -665,24 +643,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   theirVector={vectorFrom(user.personality)}
                   size={180}
                 />
-                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
+                <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
                   실선 = 나, 점선 = 상대방
                 </p>
                 <button
                   type="button"
                   onClick={() => {}}
-                  style={{
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--accent-1)',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  className={styles.personalityCtaPrimary}
                 >
                   관심 있어요
                 </button>
@@ -701,18 +668,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => navigate('/assessment')}
-                  style={{
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: 'var(--radius-pill)',
-                    background: 'var(--accent-1)',
-                    color: '#fff',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
+                  className={styles.personalityCtaPrimary}
                 >
                   나의 성향 확인해보기 →
                 </button>
@@ -730,10 +686,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         <Tabs
           style={{ marginTop: 8 }}
           tabs={[
-            { id: 'boards', label: 'Boards' },
-            { id: 'studios', label: 'Studios' },
-            { id: 'liked', label: 'Liked' },
-            { id: 'created', label: 'Created' },
+            { id: 'boards', label: t('profileB3.tabBoards') },
+            { id: 'studios', label: t('profileB3.tabStudios') },
+            { id: 'liked', label: t('profileB3.tabLiked') },
+            { id: 'created', label: t('profileB3.tabCreated') },
           ]}
           value={activeTab}
           onChange={(id) => {
@@ -750,16 +706,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {boardActionError && (
           <div aria-live="polite" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            padding: '12px 16px', marginBottom: 12, borderRadius: 12,
+            padding: '12px 16px', marginBottom: 12, borderRadius: 'var(--radius-md)',
             background: 'color-mix(in srgb, var(--color-destructive) 12%, transparent)',
             borderLeft: '3px solid var(--color-destructive)',
-            color: 'var(--color-text)', fontSize: 13, fontWeight: 500,
+            color: 'var(--color-text)', fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-medium)',
           }}>
             <span>{boardActionError.msg}</span>
             <button
               type="button"
               onClick={() => setBoardActionError(null)}
-              aria-label="Dismiss"
+              aria-label={t('profileB3.dismiss')}
               style={{
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: 'var(--color-text-2)', padding: 4, lineHeight: 0,
@@ -786,14 +742,14 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               onClick={exitSelectMode}
               className={styles.cancelBtn}
             >
-              Cancel
+              {t('profileB3.cancel')}
             </button>
             {/* Middle: selection count */}
             <span style={{
-              color: 'var(--color-text)', fontSize: 15, fontWeight: 600,
+              color: 'var(--color-text)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)',
               flex: 1, textAlign: 'center',
             }}>
-              {selectedBoards.size} selected
+              {t('profileB3.selectedCount', { n: selectedBoards.size })}
             </span>
             {/* Right: Select all / Deselect all */}
             <button
@@ -807,7 +763,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               }}
               className={styles.selectAllBtn}
             >
-              {allSelected ? 'Deselect all' : 'Select all'}
+              {allSelected ? t('profileB3.deselectAll') : t('profileB3.selectAll')}
             </button>
           </div>
         ) : (
@@ -820,7 +776,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <button
                   type="button"
                   onClick={() => setSelectMode(true)}
-                  aria-label="Edit boards"
+                  aria-label={t('profileB3.editBoards')}
                   className={styles.editBtn}
                 >
                   {/* Pencil icon */}
@@ -828,11 +784,11 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                   </svg>
-                  Edit
+                  {t('profileB3.editBoards')}
                 </button>
               )}
             >
-              Curated Boards
+              {t('profileB3.curatedBoards')}
             </SectionTitle>
           </div>
         )}
@@ -860,7 +816,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             padding: '10px 12px',
             background: 'color-mix(in srgb, var(--color-bg) 80%, transparent)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            borderRadius: 16,
+            borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--color-border-soft)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}>
@@ -876,7 +832,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
               </svg>
-              Public
+              {t('profileB3.makePublic')}
             </button>
             {/* Make private */}
             <button
@@ -890,7 +846,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              Private
+              {t('profileB3.makePrivate')}
             </button>
             {/* Delete with 2-step confirm */}
             <button
@@ -919,8 +875,8 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
               </svg>
               {confirmingBulkDelete
-                ? `Confirm delete (${selectedBoards.size})?`
-                : `Delete (${selectedBoards.size})`
+                ? t('profileB3.confirmDelete', { n: selectedBoards.size })
+                : t('profileB3.deleteCount', { n: selectedBoards.size })
               }
             </button>
           </div>
@@ -948,10 +904,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {/* Studios tab content */}
         {activeTab === 'studios' && (
           <div style={{ padding: '16px 0' }}>
-            <style>{`
-              .building-carousel::-webkit-scrollbar { display: none; }
-              .building-carousel { -ms-overflow-style: none; scrollbar-width: none; }
-            `}</style>
             {studiosLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
@@ -965,7 +917,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {savedStudios.map((office, i) => (
-                  <OfficeCard
+                  <StudioCard
                     key={office.architect_id || i}
                     office={office}
                     buildings={buildingsMap[office.architect_id] ?? null}
@@ -981,7 +933,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         {activeTab === 'liked' && (
           <div style={{ padding: '16px 0' }}>
             <div style={{ marginBottom: 20 }}>
-              <SectionTitle as="h3">Liked Projects</SectionTitle>
+              <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
             </div>
             {likedLoading ? (
               <div style={{

@@ -198,13 +198,72 @@
   outline-offset: 2px;
 }
 
+/* ---- Personality section CTAs ---- */
+/* DESIGN.md §8.2 Secondary Button — "성향 진단 받기" / "다시 진단받기"
+ * (was: ad hoc radius-pill / 36px-high buttons). */
+
+.personalityCtaSecondary {
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.personalityCtaSecondary:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.personalityCtaSecondary:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* DESIGN.md §8.1 Primary CTA — "관심 있어요" / "나의 성향 확인해보기 →". */
+
+.personalityCtaPrimary {
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: transform var(--motion-normal) var(--motion-ease),
+              background-color var(--motion-normal) var(--motion-ease),
+              box-shadow var(--motion-slow) var(--motion-ease-out);
+}
+
+.personalityCtaPrimary:active {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
+}
+
+.personalityCtaPrimary:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cancelBtn,
   .selectAllBtn,
   .editBtn,
   .bulkActionBtn,
   .bulkDeleteBtn,
-  .uploadBtn {
+  .uploadBtn,
+  .personalityCtaSecondary,
+  .personalityCtaPrimary {
     transition: none;
   }
 }

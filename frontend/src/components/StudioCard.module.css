@@ -1,0 +1,178 @@
+/*
+ * StudioCard.module.css
+ * Architect header row + building carousel (UserProfilePage Studios tab).
+ * Per DESIGN.md §3.1: photo cards/tiles = --radius-lg; small inner
+ * elements (logo circle, skeleton lines) = --radius-sm / 50% circle.
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ---- Header row ---- */
+
+.header {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.logo {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.logoImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.textBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--fs-emphasis);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subtitle {
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+  font-weight: var(--fw-medium);
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+/* ---- Carousel ---- */
+
+.carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 8px;
+}
+
+/* Each slide is capped well below the 1100px centered column's width —
+ * the original `flex: 0 0 80%` at a 16:10 ratio rendered ~850px-wide
+ * slides; `min(80%, 320px)` keeps the carousel affordance readable on
+ * mobile while never ballooning on desktop. */
+.slide {
+  flex: 0 0 min(80%, 320px);
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  background: var(--color-surface-2);
+  cursor: pointer;
+}
+
+.slideImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fallbackSlide {
+  width: 100%;
+  max-width: min(80%, 320px);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fallbackImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ---- Prev/next arrows ---- */
+/* Fine-pointer only (mouse/trackpad): touch devices keep plain swipe per
+ * DESIGN.md §4 (gesture-friendly). The circle chrome itself comes from the
+ * shared FloatingIconButton — this file only owns position + the
+ * touch-vs-fine-pointer visibility toggle. Written as the double-class
+ * selector `.arrow.arrowPrev` / `.arrow.arrowNext` (specificity 2 classes)
+ * because CSS-module injection order between two different component files
+ * is not guaranteed by import order, and a bare `.arrow` (1 class) could
+ * lose to FloatingIconButton's own `.btn` (also 1 class) depending on load
+ * order — which would show the arrows on touch devices.
+ */
+.arrow.arrowPrev,
+.arrow.arrowNext {
+  display: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .arrow.arrowPrev,
+  .arrow.arrowNext {
+    display: flex;
+  }
+}
+
+.arrowPrev {
+  left: 6px;
+}
+
+.arrowNext {
+  right: 6px;
+}
+
+/* ---- Skeleton ---- */
+
+.skeletonBlock {
+  background: var(--color-surface-2);
+}
+
+.skeletonLineWide {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  width: 55%;
+}
+
+.skeletonLineNarrow {
+  height: 11px;
+  border-radius: var(--radius-sm);
+  width: 38%;
+}
+
+.skeletonCarousel {
+  height: 200px;
+  border-radius: var(--radius-lg);
+}

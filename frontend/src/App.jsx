@@ -1152,7 +1152,7 @@ export default function App() {
           <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
           <Route path="liked-projects" element={<LikedProjectsPage onLogout={handleLogout} />} />
           <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />
-          <Route path="my/liked-offices" element={<Navigate to="/my/profile" replace />} />
+          <Route path="my/liked-offices" element={<Navigate to="/user/me" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage onLogout={handleLogout} />} />
           <Route path="notifications" element={<NotificationInboxScreen onLogout={handleLogout} />} />
           <Route path="assessment" element={<AssessmentPage onLogout={handleLogout} />} />
