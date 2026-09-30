@@ -14,17 +14,24 @@ buildCommand = "pip install -r requirements.txt && python manage.py collectstati
 # (engine embedding/centroid caches under a lock, telemetry stats thread-local,
 # lazy LLM clients built once under a lock) -- see tests/test_gthread_safety.py.
 #
-# DB connection math (Neon max_connections = 901) -- PERF-CONN-1 (2026-09-30):
-#   Both aliases ('default' app DB, 'buildings' Make-DB) use CONN_MAX_AGE=600, so
-#   Django keeps ONE persistent connection per request THREAD per alias:
-#     per alias up to workers x threads = 3 x 4 = 12 request-thread connections,
-#     x2 aliases = up to 24 persistent connections per replica.
+# DB connection math (Neon max_connections = 901) -- INFRA-PY-2 (2026-09-30):
+#   Driver = psycopg 3. Both aliases ('default' app DB, 'buildings' Make-DB) use
+#   Django's built-in psycopg pool (OPTIONS['pool'], CONN_MAX_AGE=0), one pool per
+#   alias per gunicorn worker (no --preload, so pools are created after fork):
+#     max_size = 12 (4 request threads + SSE worker + background-thread headroom)
+#     3 workers x 12 x 2 aliases = up to 72 connections per replica << 901.
+#   min_size = 1, so an idle worker holds only 1 connection per alias.
 #   Background threads (swipe prefetch + telemetry, search Stage 2 + parse-query
-#   stream worker, board-name update, works uploads) open their own transient
-#   connections and connections.close_all() in a `finally` at exit, so they never
-#   accumulate (a few extra, short-lived). Far below 901. Re-check this arithmetic
-#   before raising --workers/--threads or adding replicas, and keep close_all() in
-#   any NEW thread that touches the DB.
+#   stream worker, board-name update, works uploads) check a connection out of the
+#   pool and connections.close_all() in a `finally` at exit RETURNS it (a missed
+#   close_all would permanently leak a pool slot). If a burst exhausts a pool, the
+#   checkout waits up to `timeout` (10s) then raises PoolTimeout.
+#   Ops rollback without a deploy: env DB_POOL_ENABLED=false -> persistent
+#   per-thread connections (CONN_MAX_AGE=600; <= 3 x 4 x 2 = 24, plus transient
+#   background-thread ones). Tuning envs: DB_POOL_MIN_SIZE / DB_POOL_MAX_SIZE /
+#   DB_POOL_TIMEOUT. Re-check this arithmetic before raising --workers/--threads,
+#   DB_POOL_MAX_SIZE or adding replicas, and keep close_all() in any NEW thread
+#   that touches the DB.
 # --timeout 120: gunicorn's 30s default kills a worker whose heartbeat stalls, and
 # would SIGKILL a slow cold-cache request before it can finish and warm the
 # in-process pool/KMeans cache. gthread's main thread keeps the heartbeat while

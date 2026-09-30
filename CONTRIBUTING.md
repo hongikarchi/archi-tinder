@@ -218,33 +218,56 @@ runtime role has no DDL. `make migrate-prod` is the one-command wrapper:
     mechanism), then the drop after the new code is live. For pre-launch /
     low-traffic, one `make migrate-prod` right after the deploy is fine.
 
-### Buildings-DB connection pooling — persistent connections (PERF-CONN-1)
+### DB connection pooling — psycopg 3 pool (INFRA-PY-2, builds on PERF-CONN-1)
 
-**Decision (2026-09-30, user):** `DATABASES['buildings']` uses persistent
-connections — `CONN_MAX_AGE = 600` + `CONN_HEALTH_CHECKS = True`, identical to
-`'default'`. This reverses the 2026-06 ownership decision that the Make-DB-owned
-project must not hold app-level persistent connections.
+**Decision (2026-09-30, user):** both aliases (`'default'` app DB and
+`'buildings'` Make-DB) reuse connections. PERF-CONN-1 first did this with
+persistent per-thread connections (`CONN_MAX_AGE = 600`), reversing the 2026-06
+ownership decision that the Make-DB-owned project must not hold app-level
+persistent connections. INFRA-PY-2 moved the driver from `psycopg2-binary` to
+**psycopg 3** (`psycopg[binary,pool]`) and replaced the persistent connections
+with **Django's built-in psycopg pool** (`OPTIONS['pool']`).
 
-- **Why:** the <1s page-load mandate postdates that decision. Every request that
-  touched the buildings DB paid a fresh TLS connect (measured ~37 ms in-region,
-  ~600 ms from Korea locally), 1-4x on the swipe/session hot path.
-- **Capacity:** Neon `max_connections = 901`. Django keeps one connection per
-  request thread per alias: prod gunicorn is gthread 3 workers x 4 threads, so
-  <= 12 per alias, x2 aliases = <= 24 persistent per replica (math also in
-  `backend/railway.toml`). Re-check before raising workers/threads/replicas.
-- **Keep `BUILDINGS_DB_HOST` on the DIRECT endpoint, not the pooler.** The Neon
-  pooler (PgBouncer, transaction mode) was tried 2026-07 and reverted 2026-07-16
-  because tail latency got worse, and the `hnsw.iterative_scan=strict_order`
-  libpq startup option (`settings.py`, PERF-SWIPE-1) requires a direct endpoint.
-  A persistent connection applies that option once per connect.
-- **Thread hygiene rule:** any thread you spawn that touches the DB (either
-  alias) MUST call `django.db.connections.close_all()` in a `finally` at exit;
-  otherwise its per-thread persistent connections leak. Audited entry points
-  (all covered by `backend/tests/test_conn_hygiene.py`): swipe telemetry + async
-  prefetch (`views/swipe.py`), search Stage 2 + parse-query stream worker
+- **Why:** the <1s page-load mandate postdates the 2026-06 decision. Every request
+  that touched the buildings DB paid a fresh TLS connect (measured ~37 ms
+  in-region, ~600 ms from Korea locally), 1-4x on the swipe/session hot path.
+- **Config (`settings.py` `_apply_db_pooling`):** per alias
+  `OPTIONS['pool'] = {min_size: 1, max_size: 8, timeout: 10}` and
+  `CONN_MAX_AGE = 0` (Django raises `ImproperlyConfigured` for a pool with a
+  non-zero `CONN_MAX_AGE`; the pool replaces persistent connections).
+  `CONN_HEALTH_CHECKS = True` becomes `ConnectionPool.check_connection` on each
+  checkout. Knobs: `DB_POOL_MIN_SIZE`, `DB_POOL_MAX_SIZE`, `DB_POOL_TIMEOUT`.
+- **Ops rollback without a code deploy:** set `DB_POOL_ENABLED=false` on Railway
+  and restart -> both aliases fall back to PERF-CONN-1 persistent connections
+  (`CONN_MAX_AGE = 600`, no pool).
+- **Capacity:** Neon `max_connections = 901`. One pool per alias per gunicorn
+  worker: 3 workers x `max_size` 8 x 2 aliases = **<= 48** connections per replica
+  (math also in `backend/railway.toml`). Re-check before raising
+  workers/`DB_POOL_MAX_SIZE`/replicas. A checkout waits up to `timeout` seconds
+  for a free pooled connection, then raises `PoolTimeout` (surfaces as a Django
+  `OperationalError`).
+- **Keep `BUILDINGS_DB_HOST` on the DIRECT endpoint, not the Neon pooler.** The
+  Neon pooler (PgBouncer, transaction mode) was tried 2026-07 and reverted
+  2026-07-16 because tail latency got worse, and the
+  `hnsw.iterative_scan=strict_order` libpq startup option (`settings.py`,
+  PERF-SWIPE-1) requires a direct endpoint. The option is passed as the psycopg
+  conninfo `options` key, so every physical pool connection carries it.
+- **Thread hygiene rule (stricter with a pool):** any thread you spawn that
+  touches the DB (either alias) MUST call `django.db.connections.close_all()` in
+  a `finally` at exit. With a pool, `close_all()` RETURNS the thread's connection
+  to the pool; a thread that exits without it never returns the checkout, so that
+  pool slot is lost for good (pool exhaustion -> `PoolTimeout`). Request threads
+  are handled by Django (`CONN_MAX_AGE = 0` returns the connection at request
+  end). Audited entry points (all covered by
+  `backend/tests/test_conn_hygiene.py`): swipe telemetry + async prefetch
+  (`views/swipe.py`), search Stage 2 + parse-query stream worker
   (`views/search.py`), board-name update (`services/session_service.py`), works
   upload validation (`works/services.py`). DB-free threads (Gemini timeout
   runners in `services/_gemini.py`, works `head_object` executor) are exempt.
+- **psycopg 3 raw-SQL rules:** use `= ANY(%s)` with a Python list (or explicit
+  `%s, %s, ...` placeholders) -- tuple adaptation for `IN %s` does not exist;
+  do not import `psycopg2.*`; a literal `%` in SQL executed with a params list
+  must be `%%`; there is no `cursor.mogrify` on the default client cursor.
 
 ## Commit message convention
 

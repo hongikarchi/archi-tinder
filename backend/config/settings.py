@@ -80,8 +80,8 @@ DATABASES = {
         'NAME':     os.environ['DB_NAME'],
         'USER':     os.environ['DB_USER'],
         'PASSWORD': os.environ['DB_PASSWORD'],
-        'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 minutes
-        'CONN_HEALTH_CHECKS': True,  # Django 4.2+: close broken pooled connections proactively
+        # CONN_MAX_AGE / CONN_HEALTH_CHECKS / OPTIONS['pool'] are applied by
+        # _apply_db_pooling() below (pool vs persistent-connection modes).
         'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
@@ -98,15 +98,10 @@ DATABASES = {
         'NAME':     os.environ['BUILDINGS_DB_NAME'],
         'USER':     os.environ['BUILDINGS_DB_USER'],
         'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
-        # PERF-CONN-1 (2026-09-30): persistent connections, same as 'default'. Reverses
-        # the 2026-06 "no persistent buildings connection" decision -- a fresh TLS
-        # connect (~37ms in-region, ~600ms from KR) was paid 1-4x per hot-path request.
-        # Django keeps ONE connection per thread per alias; short-lived background
-        # threads must close_all() on exit (see CONTRIBUTING.md § Buildings-DB
-        # connection pooling). The HNSW startup option below is applied once per
-        # connect, so a reused connection keeps it.
-        'CONN_MAX_AGE': 600,
-        'CONN_HEALTH_CHECKS': True,  # drop a server-side-closed idle conn instead of erroring
+        # Connection reuse for this alias is configured by _apply_db_pooling() below
+        # (INFRA-PY-2: psycopg 3 pool by default; PERF-CONN-1 persistent connections
+        # as the DB_POOL_ENABLED=false fallback). The HNSW startup option below is
+        # applied once per physical connect, so pooled/reused connections keep it.
         'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
@@ -130,6 +125,60 @@ if DATABASES['buildings']['ENGINE'].endswith('postgresql'):
     _existing_pg_options = _bldg_options.get('options', '').strip()
     if _HNSW_STARTUP_OPTION not in _existing_pg_options:
         _bldg_options['options'] = f'{_existing_pg_options} {_HNSW_STARTUP_OPTION}'.strip()
+
+# -- Connection pooling (INFRA-PY-2) ---------------------------------------
+# Driver is psycopg 3. Django's built-in psycopg pool (OPTIONS['pool'], needs
+# `psycopg[pool]`) replaces PERF-CONN-1's per-thread persistent connections:
+# a request/background thread checks a connection out of the per-process pool on
+# first DB use and Django returns it at request end (CONN_MAX_AGE = 0) or on
+# `connections.close_all()` in a background thread's `finally`. Each gunicorn
+# worker owns one pool per alias, so the DB-side cap is
+# workers x DB_POOL_MAX_SIZE x aliases (3 x 12 x 2 = 72 << Neon's 901; see
+# railway.toml). Django REQUIRES CONN_MAX_AGE == 0 when a pool is configured.
+#
+# Ops rollback WITHOUT a code deploy: set DB_POOL_ENABLED=false on Railway ->
+# both aliases fall back to PERF-CONN-1 persistent connections
+# (CONN_MAX_AGE=600). CONN_HEALTH_CHECKS stays on in both modes: with a pool it
+# becomes ConnectionPool.check_connection on checkout; without, Django's
+# per-request SELECT 1.
+# Pool tuning knobs (all optional): DB_POOL_MIN_SIZE (1), DB_POOL_MAX_SIZE (12),
+# DB_POOL_TIMEOUT seconds to wait for a free connection (10).
+
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+DB_POOL_ENABLED = os.getenv('DB_POOL_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+DB_POOL_OPTIONS = {
+    'min_size': _env_int('DB_POOL_MIN_SIZE', 1),
+    'max_size': _env_int('DB_POOL_MAX_SIZE', 12),
+    'timeout': _env_int('DB_POOL_TIMEOUT', 10),
+}
+
+
+def _apply_db_pooling(databases, pool_enabled, pool_options):
+    """Set connection-reuse settings on every PostgreSQL alias (mutates in place).
+
+    Non-PostgreSQL aliases (the SQLite test override) are left untouched: they
+    have no pool option and SQLite ignores CONN_MAX_AGE semantics we rely on.
+    """
+    for cfg in databases.values():
+        if not cfg['ENGINE'].endswith('postgresql'):
+            continue
+        cfg['CONN_HEALTH_CHECKS'] = True
+        if pool_enabled:
+            cfg['CONN_MAX_AGE'] = 0  # Django: pooling doesn't support persistent connections
+            cfg.setdefault('OPTIONS', {})['pool'] = dict(pool_options)
+        else:
+            cfg['CONN_MAX_AGE'] = 600  # PERF-CONN-1 fallback: one persistent conn per thread
+            cfg.setdefault('OPTIONS', {}).pop('pool', None)
+
+
+_apply_db_pooling(DATABASES, DB_POOL_ENABLED, DB_POOL_OPTIONS)
 
 DATABASE_ROUTERS = ['config.db_router.MakeWebRouter']
 

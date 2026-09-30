@@ -1,7 +1,8 @@
-"""PERF-CONN-1 -- persistent buildings connections + background-thread hygiene.
+"""PERF-CONN-1 / INFRA-PY-2 -- psycopg pool settings + background-thread hygiene.
 
-With CONN_MAX_AGE > 0 Django keeps one connection per THREAD per alias, so every
-short-lived thread that touches the DB must connections.close_all() in a finally.
+Connections are checked out per THREAD per alias (pool, or persistent when
+DB_POOL_ENABLED=false), so every short-lived thread that touches the DB must
+connections.close_all() in a finally (with a pool that returns the checkout).
 All tests are DB-free: django.db.connections is mocked, and each thread entry point
 is driven directly (synchronously) with a BaseException as the "work raises" case so
 the assertion proves the close sits in a `finally`, not in an `except Exception`.
@@ -23,17 +24,74 @@ def _fresh_settings_module():
     return probe
 
 
-class TestBuildingsPersistentConnection:
+class TestDbPoolSettings:
+    """INFRA-PY-2: Django psycopg pool on both aliases, env-switchable."""
 
-    def test_buildings_conn_max_age_and_health_checks(self):
-        bldg = _fresh_settings_module().DATABASES['buildings']
-        assert bldg['CONN_MAX_AGE'] == 600
-        assert bldg['CONN_HEALTH_CHECKS'] is True
+    def test_pool_enabled_by_default_on_both_aliases(self, monkeypatch):
+        monkeypatch.delenv('DB_POOL_ENABLED', raising=False)
+        dbs = _fresh_settings_module().DATABASES
+        for alias in ('default', 'buildings'):
+            cfg = dbs[alias]
+            assert cfg['CONN_MAX_AGE'] == 0  # Django requires 0 when a pool is set
+            assert cfg['CONN_HEALTH_CHECKS'] is True
+            pool = cfg['OPTIONS']['pool']
+            assert pool == {'min_size': 1, 'max_size': 12, 'timeout': 10}
 
-    def test_buildings_matches_default_alias_persistence(self):
+    def test_pool_options_are_independent_dicts(self, monkeypatch):
+        monkeypatch.delenv('DB_POOL_ENABLED', raising=False)
+        dbs = _fresh_settings_module().DATABASES
+        assert dbs['default']['OPTIONS']['pool'] is not dbs['buildings']['OPTIONS']['pool']
+
+    def test_pool_size_env_overrides(self, monkeypatch):
+        monkeypatch.delenv('DB_POOL_ENABLED', raising=False)
+        monkeypatch.setenv('DB_POOL_MAX_SIZE', '5')
+        monkeypatch.setenv('DB_POOL_TIMEOUT', '3')
+        monkeypatch.setenv('DB_POOL_MIN_SIZE', 'not-a-number')  # falls back to default
+        pool = _fresh_settings_module().DATABASES['buildings']['OPTIONS']['pool']
+        assert pool == {'min_size': 1, 'max_size': 5, 'timeout': 3}
+
+    @pytest.mark.parametrize('value', ['false', 'False', '0', 'no', 'off'])
+    def test_pool_disabled_falls_back_to_persistent_connections(self, monkeypatch, value):
+        monkeypatch.setenv('DB_POOL_ENABLED', value)
+        dbs = _fresh_settings_module().DATABASES
+        for alias in ('default', 'buildings'):
+            cfg = dbs[alias]
+            assert cfg['CONN_MAX_AGE'] == 600  # PERF-CONN-1 behaviour
+            assert cfg['CONN_HEALTH_CHECKS'] is True
+            assert 'pool' not in cfg['OPTIONS']
+
+    def test_non_postgres_alias_untouched(self):
+        mod = _fresh_settings_module()
+        dbs = {'x': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}}
+        mod._apply_db_pooling(dbs, True, {'min_size': 1, 'max_size': 8, 'timeout': 10})
+        assert dbs['x'] == {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}
+
+    def test_django_accepts_pool_config_with_zero_conn_max_age(self, monkeypatch):
+        """Django raises ImproperlyConfigured for pool + CONN_MAX_AGE != 0 -- build the
+        pool object (open=False, no network) from the real settings to prove it doesn't."""
+        import psycopg_pool  # noqa: F401 -- must fail, not skip, if the pool dep is missing
+        from django.db.backends.postgresql.base import DatabaseWrapper
+        monkeypatch.delenv('DB_POOL_ENABLED', raising=False)
+        cfg = _fresh_settings_module().DATABASES['buildings']
+        DatabaseWrapper._connection_pools.pop('probe_pool_alias', None)
+        wrapper = DatabaseWrapper(dict(cfg, ENGINE='django.db.backends.postgresql'),
+                                  alias='probe_pool_alias')
+        try:
+            assert wrapper.pool is not None
+            assert wrapper.pool.max_size == 12
+            # The HNSW startup option must reach psycopg.connect() as conninfo kwargs.
+            assert '-c hnsw.iterative_scan=strict_order' in wrapper.get_connection_params()['options']
+        finally:
+            DatabaseWrapper._connection_pools.pop('probe_pool_alias', None)
+
+
+class TestBuildingsConnectionOptions:
+
+    def test_buildings_matches_default_alias_reuse_settings(self):
         dbs = _fresh_settings_module().DATABASES
         assert dbs['buildings']['CONN_MAX_AGE'] == dbs['default']['CONN_MAX_AGE']
         assert dbs['buildings']['CONN_HEALTH_CHECKS'] == dbs['default']['CONN_HEALTH_CHECKS']
+        assert dbs['buildings']['OPTIONS']['pool'] == dbs['default']['OPTIONS']['pool']
 
     def test_options_keep_sslmode_and_hnsw_startup_option(self):
         options = _fresh_settings_module().DATABASES['buildings']['OPTIONS']
@@ -44,6 +102,9 @@ class TestBuildingsPersistentConnection:
         mod = _fresh_settings_module()
         opts = mod.DATABASES['buildings']['OPTIONS']
         assert opts['options'].count('hnsw.iterative_scan') == 1
+
+    def test_default_alias_has_no_hnsw_option(self):
+        assert 'options' not in _fresh_settings_module().DATABASES['default']['OPTIONS']
 
 
 class _Boom(BaseException):

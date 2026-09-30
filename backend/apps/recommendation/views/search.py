@@ -81,8 +81,8 @@ def _spawn_stage2(filters, raw_query, user_id):
     - daemon=True: prevents process-exit deadlock if thread outlives server process
     - fire-and-forget (no join): caller returns Stage 1 response immediately
     - connections.close_all() in finally: releases this thread's DB connections at exit
-      (CONN_MAX_AGE > 0 keeps them open per thread; a short-lived thread must
-      explicitly release them or they leak until the server closes them)
+      (with the psycopg pool this RETURNS the checked-out connection to the
+      pool; a short-lived thread that skips it leaks a pool slot for good)
     - All exceptions caught: Stage 2 failure is silent; SessionCreate falls through
       to filter-only pool (graceful degrade per spec v1.5 Topic 01)
     """

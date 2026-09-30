@@ -101,7 +101,7 @@ def _resolve_architect_name(architect_id, architect_names, architect_canonical_i
     """Find the name for architect_id from a parallel arrays pair.
 
     architect_canonical_ids and architect_names are TEXT[] columns returned
-    as Python lists by psycopg2.  Returns '' on any mismatch.
+    as Python lists by the driver (psycopg).  Returns '' on any mismatch.
     """
     if not architect_canonical_ids or not architect_names:
         return ''

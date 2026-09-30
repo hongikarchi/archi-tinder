@@ -10,7 +10,7 @@ to every ``/api/`` response so client-vs-server time can be attributed exactly:
   request). Registered right after CorsMiddleware so it covers all other middleware.
 - ``db``    -- summed SQL execution time across EVERY connection alias in use
   (``default`` and ``buildings``), measured with ``connection.execute_wrapper``.
-  Excludes psycopg2's implicit BEGIN/COMMIT and CONN_HEALTH_CHECKS' ``SELECT 1``
+  Excludes the driver's implicit BEGIN/COMMIT and the pool/CONN_HEALTH_CHECKS liveness check
   (both bypass ``execute_wrapper``), so it is statement time only.
 - ``dbq``   -- number of statements that went through the wrapper.
 
