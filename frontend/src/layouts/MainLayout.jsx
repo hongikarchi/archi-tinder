@@ -1,7 +1,9 @@
+import { Suspense } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import TabBar from '../components/TabBar.jsx'
 import DebugOverlay from '../components/DebugOverlay.jsx'
-import SwipePage from '../pages/SwipePage.jsx'
+import RouteFallback from '../components/RouteFallback.jsx'
+import { SwipePage } from '../lazyPages.js'
 import PageTopControls from '../components/PageTopControls.jsx'
 
 export default function MainLayout({
@@ -35,11 +37,14 @@ export default function MainLayout({
 
       {/* Home sub-routes — only visible when not on swipe */}
       <div style={{ display: !isSwipe ? 'block' : 'none' }}>
-        <Outlet />
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
       </div>
 
       {/* SwipePage — always mounted, shown/hidden via display */}
       <div style={{ display: isSwipe && activeProject ? 'block' : 'none' }}>
+        <Suspense fallback={isSwipe && activeProject ? <RouteFallback /> : null}>
         <SwipePage
           key={activeProjectId}
           onLogout={onLogout}
@@ -59,6 +64,7 @@ export default function MainLayout({
           onExitToHome={onExitToHome}
           nextCard={nextCard}
         />
+        </Suspense>
       </div>
 
       {/* No active project on swipe tab */}
