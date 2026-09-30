@@ -57,7 +57,10 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — BACK-LLM-5 완료 2026-09-26, ## Done 참조)_
+### PERF-SWIPE-1 — 스와이프 핫패스 DB·캐시 왕복 축소 + HNSW 후보 부족 수정
+
+- 기준값: `docs/research/perf-baseline-2026-09-30.md` (스와이프 14 왕복, 캐시 ~16회, HNSW LIMIT 60 → 32행).
+- 재측정: `tools/perf/bench.py` (로컬 DB `make migrate-local` 선행).
 
 ## Next
 
