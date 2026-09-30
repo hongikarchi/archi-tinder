@@ -7,9 +7,24 @@
 buildCommand = "pip install -r requirements.txt && python manage.py collectstatic --noinput"
 
 [deploy]
-# --workers 3: a single sync worker serializes every request, so one slow
-# request (cold recommendation `discovery`, LLM `parse-query`) blocks the
-# whole backend and queues everything behind it.
-# --timeout 120: gunicorn's 30s default SIGKILLs a slow cold-cache request
-# before it can finish and warm the in-process pool/KMeans cache.
-startCommand = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120"
+# PERF-ROUND2: --worker-class gthread --workers 3 --threads 4 (12 concurrent requests).
+# Sync workers serialise: one slow request (cold recommendation `discovery`, LLM
+# `parse-query`) blocked its whole worker, and DB / LLM / R2 waits are I/O that
+# threads overlap. Module-level per-request state was audited for threads
+# (engine embedding/centroid caches under a lock, telemetry stats thread-local,
+# lazy LLM clients built once under a lock) -- see tests/test_gthread_safety.py.
+#
+# DB connection math (Neon max_connections = 901):
+#   'default'   CONN_MAX_AGE=600 => each request thread keeps ONE persistent
+#               connection => up to workers x threads = 3 x 4 = 12 held open.
+#   'buildings' CONN_MAX_AGE=0 (default) => connect/close per request, so at most
+#               one transient connection per in-flight request (<= 12).
+#   background threads (swipe prefetch, telemetry, search, works uploads) open their
+#   own short-lived connections and close_all() at exit => a few extra, transient.
+#   Worst case is a few dozen connections per replica -- far below 901. Re-check
+#   this arithmetic before raising --workers/--threads or adding replicas.
+# --timeout 120: gunicorn's 30s default kills a worker whose heartbeat stalls, and
+# would SIGKILL a slow cold-cache request before it can finish and warm the
+# in-process pool/KMeans cache. gthread's main thread keeps the heartbeat while
+# request threads run, but keep the generous ceiling for the cold LLM/KMeans paths.
+startCommand = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 3 --threads 4 --timeout 120"

@@ -21,7 +21,7 @@ module-import time).
 import logging
 import queue
 import time
-from threading import Thread as _Thread
+from threading import Lock as _Lock, Thread as _Thread
 
 from django.conf import settings
 from google import genai
@@ -36,6 +36,10 @@ logger = logging.getLogger('apps.recommendation')
 # capture, a leaked synchronous Thread mock would make hung Gemini calls
 # return their value before the deadline can fire, breaking the timeout
 # guarantee that production depends on.
+
+# gthread: guards the lazy singleton builds below (double-checked). Building two
+# clients on a race is not corrupting, but it leaks one and doubles cold-start work.
+_client_init_lock = _Lock()
 
 _client = None
 
@@ -128,13 +132,15 @@ def _get_client():
     public function is introduced.
     """
     global _client
-    if settings.LLM_PROVIDER == 'openai':
-        if _client is None:
-            import openai  # noqa: PLC0415 -- lazy: zero import cost on the gemini path
-            _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    if _client is not None:
         return _client
-    if _client is None:
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    with _client_init_lock:   # gthread: build the singleton once, not once per racing thread
+        if _client is None:
+            if settings.LLM_PROVIDER == 'openai':
+                import openai  # noqa: PLC0415 -- lazy: zero import cost on the gemini path
+                _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+            else:
+                _client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _client
 
 
@@ -151,7 +157,9 @@ def _get_gemini_client():
     """
     global _gemini_client
     if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        with _client_init_lock:
+            if _gemini_client is None:
+                _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _gemini_client
 
 
@@ -168,8 +176,10 @@ def _get_openai_client():
     """
     global _openai_client
     if _openai_client is None:
-        import openai  # noqa: PLC0415 -- lazy: zero import cost when LLM_IMAGE_PROVIDER=gemini
-        _openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        with _client_init_lock:
+            if _openai_client is None:
+                import openai  # noqa: PLC0415 -- lazy: zero import cost when LLM_IMAGE_PROVIDER=gemini
+                _openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     return _openai_client
 
 

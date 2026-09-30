@@ -63,11 +63,12 @@ def _async_prefetch_thread(
     may have been further mutated by the time the bg thread runs; prefetch
     should reflect the state at swipe-response-emit time.
 
-    CPython GIL note: engine module globals (_building_embedding_cache,
-    _last_embedding_call_stats) are shared across threads. Dict ops are GIL-
-    protected so the embedding cache is safe to read/write concurrently. The
-    primary thread reads _last_embedding_call_stats before spawning (line ~716
-    in SwipeView.post) so the swipe event payload is already captured.
+    Thread-safety note: engine._building_embedding_cache is shared across
+    threads; single dict ops are GIL-atomic and its compound mutations (insert +
+    FIFO evict) are serialised by engine._cache_lock. The embedding/clustering
+    telemetry stats are threading.local (engine._telemetry), so this bg thread
+    never overwrites the request thread's stats; the primary thread reads them
+    before spawning anyway so the swipe event payload is already captured.
 
     Race handling: if the next swipe arrives before this thread finishes, the
     primary path runs standalone (cache miss) -- same behavior as today.

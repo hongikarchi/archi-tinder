@@ -9,7 +9,7 @@ Only run against prod with explicit approval.
 
 Usage: python tools/perf/prod_bench.py --base https://archi-tinder.up.railway.app --label before [--runs 2] [--swipes 20]
 """
-import argparse, datetime, json, os, random, statistics, time
+import argparse, datetime, json, os, random, re, statistics, time
 import requests
 
 ap = argparse.ArgumentParser()
@@ -26,11 +26,27 @@ QUERIES = ['제주도 돌로 지은 명상 공간', '따뜻한 목재 주택', '
 recs, notes = [], []
 
 
+_ST_RE = re.compile(r'([A-Za-z0-9_-]+)(?:;desc="?[^;,"]*"?)?;dur=([\d.]+)')
+
+
+def parse_server_timing(header):
+    """Server-Timing header -> {'total': ms, 'db': ms, ...}. Missing/garbled header -> {}."""
+    out = {}
+    for name, dur in _ST_RE.findall(header or ''):
+        try:
+            out[name] = float(dur)
+        except ValueError:
+            pass
+    return out
+
+
 def call(s, kind, method, path, **kw):
     t0 = time.perf_counter()
     r = s.request(method, API + path, timeout=120, **kw)
     ms = (time.perf_counter() - t0) * 1000
-    recs.append({'kind': kind, 'ms': round(ms, 1), 'status': r.status_code, 'label': A.label})
+    st = parse_server_timing(r.headers.get('Server-Timing'))
+    recs.append({'kind': kind, 'ms': round(ms, 1), 'status': r.status_code, 'label': A.label,
+                 'srv_total': st.get('total'), 'srv_db': st.get('db')})
     return r
 
 
@@ -97,12 +113,17 @@ for ri in range(A.runs):
         time.sleep(21)  # guest_login throttle 3/min
 os.makedirs(A.out, exist_ok=True)
 stamp = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-lines = [f'# prod bench {A.label} {stamp} base={A.base}', '', '| endpoint | n | p50 ms | p95 ms | max ms | non-2xx |', '|---|---|---|---|---|---|']
+lines = [f'# prod bench {A.label} {stamp} base={A.base}', '', '| endpoint | n | p50 ms | p95 ms | max ms | non-2xx | srv total p50 | srv db p50 |', '|---|---|---|---|---|---|---|---|']
 for k in ['guest_login', 'parse_query', 'session_create', 'swipe', 'swipe_extend', 'session_result']:
-    v = [r['ms'] for r in recs if r['kind'] == k and r['status'] < 300]
+    ok = [r for r in recs if r['kind'] == k and r['status'] < 300]
+    v = [r['ms'] for r in ok]
     bad = sum(1 for r in recs if r['kind'] == k and r['status'] >= 300)
+
+    def srv_p50(field):
+        x = [r[field] for r in ok if r.get(field) is not None]
+        return f'{statistics.median(x):.0f}' if x else '-'
     if v or bad:
-        lines.append(f'| {k} | {len(v)} | {statistics.median(v):.0f} | {pct(v, 95):.0f} | {max(v):.0f} | {bad} |' if v else f'| {k} | 0 | - | - | - | {bad} |')
+        lines.append(f'| {k} | {len(v)} | {statistics.median(v):.0f} | {pct(v, 95):.0f} | {max(v):.0f} | {bad} | {srv_p50("srv_total")} | {srv_p50("srv_db")} |' if v else f'| {k} | 0 | - | - | - | {bad} | - | - |')
 lines += ['', 'notes: ' + ('; '.join(notes) or 'none')]
 open(os.path.join(A.out, f'prod_{A.label}.md'), 'w', encoding='utf-8').write('\n'.join(lines))
 json.dump({'recs': recs, 'notes': notes}, open(os.path.join(A.out, f'prod_{A.label}.json'), 'w'), indent=1)

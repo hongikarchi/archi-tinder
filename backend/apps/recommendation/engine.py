@@ -67,6 +67,10 @@ RC = settings.RECOMMENDATION  # shorthand for constants
 _building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _centroid_cache = {}
+# gthread (PERF-ROUND2): request threads in one worker share the two dict caches
+# above. Single dict ops are GIL-atomic, but check-then-act sequences (FIFO
+# evict, clear-at-20, `in` then `[]`) are not -- serialise the compound mutations.
+_cache_lock = threading.Lock()
 _AVAILABLE_COLUMNS = None                  # frozenset of column names in canonical_v2_buildings; None = not yet probed
 
 # Per-thread telemetry storage (Finding #17).
@@ -210,7 +214,7 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
     # Parse embeddings
     for row in rows:
         raw = row['embedding']
-        row['_vec'] = [float(x) for x in raw.strip('[]').split(',')]
+        row['_vec'] = np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64).tolist()
 
     # Greedy farthest-point sampling
     selected = [rows[0]]
@@ -1283,16 +1287,22 @@ def get_pool_embeddings(pool_ids):
                 rows = _dictfetchall(cur)
 
         with stage('embeddings_parse_normalize', n=len(rows)):
+            parsed = []
             for row in rows:
                 embedding = _parse_embedding_text(row['embedding'])
                 if embedding is not None:
-                    _building_embedding_cache[row['canonical_bld_id']] = embedding
+                    parsed.append((row['canonical_bld_id'], embedding))
 
-            # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
-            if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
-                excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
-                for old_bid in list(_building_embedding_cache.keys())[:excess]:
-                    del _building_embedding_cache[old_bid]
+            # Insert + FIFO eviction as one critical section: unlocked, two threads
+            # could both compute `excess` and delete the same keys (KeyError).
+            with _cache_lock:
+                for bid, embedding in parsed:
+                    _building_embedding_cache[bid] = embedding
+                # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
+                if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+                    excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+                    for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                        _building_embedding_cache.pop(old_bid, None)
 
     # Record stats for §6 swipe telemetry (most-recent call on this thread; overwritten per call)
     _telemetry.embedding_call_stats = {
@@ -1302,7 +1312,14 @@ def get_pool_embeddings(pool_ids):
     }
 
     with stage('embeddings_assemble', n=len(pool_ids)):
-        return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
+        # .get() not `in` + `[]`: a concurrent thread's eviction between the two
+        # would raise KeyError.
+        assembled = {}
+        for bid in pool_ids:
+            vec = _building_embedding_cache.get(bid)
+            if vec is not None:
+                assembled[bid] = vec
+        return assembled
 
 
 def get_last_embedding_call_stats():
@@ -1389,12 +1406,14 @@ def precompute_pool_embeddings(pool_ids):
 
 def clear_pool_embedding_cache():
     """Clear the per-building-id embedding cache (for testing)."""
-    _building_embedding_cache.clear()
+    with _cache_lock:
+        _building_embedding_cache.clear()
 
 
 def clear_centroid_cache():
     """Clear the centroid cache (for testing)."""
-    _centroid_cache.clear()
+    with _cache_lock:
+        _centroid_cache.clear()
 
 
 def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
@@ -1434,6 +1453,14 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     return candidate_ids[best_idx]
 
 
+def _centroid_cache_put(cache_key, result):
+    """Clear-at-20 + insert as one critical section (thread-safe under gthread)."""
+    with _cache_lock:
+        if len(_centroid_cache) > 20:
+            _centroid_cache.clear()
+        _centroid_cache[cache_key] = result
+
+
 def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     """
     Compute taste cluster centroids with recency weighting.
@@ -1453,8 +1480,8 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         round_num,
         multimodal_floor,
     )
-    if cache_key in _centroid_cache:
-        result = _centroid_cache[cache_key]
+    result = _centroid_cache.get(cache_key)   # single atomic read; `in` then `[]` races clear()
+    if result is not None:
         # Re-set stats from cached extended entry (3-tuple) or recompute minimally.
         # Extended cache entries are (centroids, global_centroid, stats_dict).
         # Legacy entries (from before this change) are 2-tuples; fall through to minimal stats.
@@ -1486,9 +1513,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         }
         _telemetry.clustering_stats = stats
         result = (centroids, centroid, stats)
-        if len(_centroid_cache) > 20:
-            _centroid_cache.clear()
-        _centroid_cache[cache_key] = result
+        _centroid_cache_put(cache_key, result)
         return centroids, centroid
 
     like_embeddings = np.array([w[0] for w in weighted_likes])
@@ -1512,9 +1537,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         }
         _telemetry.clustering_stats = stats
         result = (centroids, global_centroid, stats)
-        if len(_centroid_cache) > 20:
-            _centroid_cache.clear()
-        _centroid_cache[cache_key] = result
+        _centroid_cache_put(cache_key, result)
         return centroids, global_centroid
 
     # Path 2 & 3: Topic 06 silhouette-based adaptive k (flag-gated, N>=4 required)
@@ -1549,9 +1572,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         }
         _telemetry.clustering_stats = stats
         result = (centroids, global_centroid, stats)
-        if len(_centroid_cache) > 20:
-            _centroid_cache.clear()
-        _centroid_cache[cache_key] = result
+        _centroid_cache_put(cache_key, result)
         return centroids, global_centroid
 
     # Path 4: Default k=min(k_clusters, N) KMeans (flag off or N<4)
@@ -1567,9 +1588,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     }
     _telemetry.clustering_stats = stats
     result = (centroids, global_centroid, stats)
-    if len(_centroid_cache) > 20:
-        _centroid_cache.clear()
-    _centroid_cache[cache_key] = result
+    _centroid_cache_put(cache_key, result)
     return centroids, global_centroid
 
 
@@ -1717,51 +1736,52 @@ def get_top_k_mmr(
     if not rows:
         return []
 
-    # Parse embeddings
-    for row in rows:
-        embedding_str = row['embedding']
-        row['_vec'] = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+    # Parse embeddings (vectorised text -> float64; NOT unit-normalised on purpose:
+    # the MMR math below must stay numerically equivalent (within float ulp) to the per-pair np.dot loop).
+    vecs = np.stack([
+        np.fromstring(row['embedding'].strip('[]'), sep=',', dtype=np.float64)
+        for row in rows
+    ])                                                    # (n, 384)
+    n_rows = vecs.shape[0]
 
-    # MMR selection
-    selected = []
-    remaining = rows.copy()
+    # Collapse bit-identical embeddings (duplicate buildings) to one row before any
+    # matrix product. BLAS mat-vec/mat-mat kernels can differ by 1 ulp between rows at
+    # different positions even for identical data, which would break the exact score
+    # tie (and so the first-index-wins tie-break) the per-pair np.dot loop had.
+    # Computing on unique rows and expanding through `inv` keeps duplicates exactly tied.
+    uniq_of = {}
+    first_idx = []
+    inv = np.empty(n_rows, dtype=np.intp)
+    for i in range(n_rows):
+        u = uniq_of.setdefault(vecs[i].tobytes(), len(uniq_of))
+        if u == len(first_idx):
+            first_idx.append(i)
+        inv[i] = u
+    uvecs = vecs[first_idx]                                   # (u, 384), row u == unique id u
 
-    # Select first item with best relevance (multi-modal: max over all centroids)
-    if remaining:
-        best_idx = 0
-        best_relevance = -1
-        for i, row in enumerate(remaining):
-            relevance = max(np.dot(row['_vec'], c) for c in centroids)
-            if relevance > best_relevance:
-                best_relevance = relevance
-                best_idx = i
-        selected.append(remaining.pop(best_idx))
+    # Relevance (multi-modal: max cosine over all centroids) is constant per
+    # candidate -- compute once for the whole candidate matrix.
+    relevance = (uvecs @ np.stack(centroids).T).max(axis=1)[inv]    # (n,)
+    penalty = RC['mmr_penalty']
 
-    # Greedy MMR selection for remaining items
-    while len(selected) < k and remaining:
-        best_idx = 0
-        best_score = -float('inf')
+    # First pick: best relevance. Original scan started at best_relevance=-1 with
+    # strict '>' (first index wins ties; index 0 if nothing beats -1).
+    best_idx = int(np.argmax(relevance)) if relevance.max() > -1 else 0
+    selected_idx = [best_idx]
 
-        for i, row in enumerate(remaining):
-            candidate_emb = row['_vec']
+    # Greedy MMR for the remaining items. redundancy = max(0, max sim to selected),
+    # kept as a running vector updated with one mat-vec per pick.
+    available = np.ones(n_rows, dtype=bool)
+    available[best_idx] = False
+    redundancy = np.maximum(0.0, (uvecs @ uvecs[inv[best_idx]])[inv])
+    while len(selected_idx) < k and available.any():
+        scores = np.where(available, relevance - penalty * redundancy, -np.inf)
+        best_idx = int(np.argmax(scores))     # first max wins == strict '>' scan
+        selected_idx.append(best_idx)
+        available[best_idx] = False
+        redundancy = np.maximum(redundancy, (uvecs @ uvecs[inv[best_idx]])[inv])
 
-            # Relevance: max cosine similarity to any centroid (multi-modal)
-            relevance = max(np.dot(candidate_emb, c) for c in centroids)
-
-            # Redundancy: max similarity to already selected
-            redundancy = 0
-            for sel in selected:
-                sel_emb = sel['_vec']
-                redundancy = max(redundancy, np.dot(candidate_emb, sel_emb))
-
-            # MMR score
-            mmr_score = relevance - RC['mmr_penalty'] * redundancy
-
-            if mmr_score > best_score:
-                best_score = mmr_score
-                best_idx = i
-
-        selected.append(remaining.pop(best_idx))
+    selected = [rows[i] for i in selected_idx]
 
     # Convert to ImageCard format
     return [_row_to_card(row, image_focus=image_focus) for row in selected]

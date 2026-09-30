@@ -541,7 +541,7 @@ def build_discovery_chunk(
         raw = row.get('embedding')
         if not raw:
             continue
-        vec = [float(x) for x in raw.strip('[]').split(',')]
+        vec = np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64).tolist()
         row['_vec'] = vec
         parsed_rows.append(row)
 

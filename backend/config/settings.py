@@ -39,6 +39,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    # Right after CORS so `total` covers every other middleware. /api/ only; fail-open.
+    'config.middleware.ServerTimingMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -187,6 +189,8 @@ SIMPLE_JWT = {
 # -- CORS ------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174').split(',')
 CORS_ALLOW_CREDENTIALS = True
+# Let browser JS read the Server-Timing header (ServerTimingMiddleware) on cross-origin calls.
+CORS_EXPOSE_HEADERS = ['server-timing']
 
 # -- Cache (required for DRF throttling, IMP-5 Gemini context-cache, IMP-8 async prefetch) --
 # INFRA-REDIS-1 (2026-05-26): Redis is the prod cache backend so PR 3 (BACK-AUTH-1 JWT user-row cache)
