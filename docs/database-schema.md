@@ -85,6 +85,18 @@ CREATE TABLE canonical_v2_buildings (
 );
 ```
 
+## Indexes / pgvector
+
+`idx_canonical_v2_buildings_embedding_hnsw` (`hnsw (embedding vector_cosine_ops)`)
+serves every `ORDER BY embedding <=> ... LIMIT k` query. Make Web sets
+`hnsw.iterative_scan=strict_order` per **buildings** connection as a libpq startup
+option (`DATABASES['buildings']['OPTIONS']['options']`, pgvector >= 0.8; zero extra
+round trips), so filtered top-k queries (`is_publishable`, `NOT IN (exposed)`) keep
+scanning until `LIMIT` rows are found instead of stopping at `hnsw.ef_search`
+(40) candidates. **Caveat:** switching `BUILDINGS_DB_HOST` to the Neon pooler
+endpoint (PgBouncer transaction mode) may reject or ignore the `options` startup
+parameter (connection failures, or the scan silently off) -- keep the direct endpoint.
+
 ## Image resolution semantics
 
 The frontend renders one cover image per card. `_row_to_card()` resolves the

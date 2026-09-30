@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — BACK-LLM-5 완료 2026-09-26, ## Done 참조)_
+_(비어 있음 — PERF-SWIPE-1 완료 2026-09-30, ## Done 참조)_
 
 ## Next
 
@@ -179,6 +179,18 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+
+#### PERF-RESULT-1 — 결과 조회 458KB 전송 병목
+세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.
+
+#### PERF-SERVER-1 — 서버 방식 실험 (Python 고정·gthread·연결 유지)
+Python 3.12 고정(`.python-version`, prod 미고정·CI 3.9·로컬 3.11), gunicorn `gthread` (공유 dict 캐시 스레드 안전 검토 선행), buildings `CONN_MAX_AGE` (Make-DB 연결 점유 금지 결정 뒤집기 — 사용자 결정 필요), Django 5.2 → psycopg3. 각 단계 `tools/perf/bench.py` 전후 비교.
+
+#### INFRA-IMG-2 — prod 이미지 r2.dev → 커스텀 도메인
+prod `IMAGE_BASE_URL`이 속도 제한 있는 개발용 `r2.dev`. 출시 전 R2 커스텀 도메인 연결.
+
+#### INFRA-RAILWAY-1 — Railway 하드닝
+`railway.toml`에 `healthcheckPath` + `restartPolicyType`, 이식용 Dockerfile, 배포 런북에 "전 서비스 SEA 리전" 체크. Railway 유지 결론 근거: `docs/research/perf-baseline-2026-09-30.md` §5.
 
 #### BACK-RECOMMEND-8 — 형태 축(정형↔비정형) 근거 부재
 _FULL-PERSONA-1에서 제외. 임베딩이 기하학 형태 정보를 약하게 담아 기준 문장 투영 AUC 0.63~0.75. 후보: Gemini 건물별 정형도 채점(표본 200~300개로 AUC 검증 후 전체 일괄), 건물 사진 임베딩, Make DB에 형태 필드 요청. 태그로 양 끝 정의는 사용자 반대._
@@ -322,6 +334,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### PERF-SWIPE-1 — 스와이프 왕복 축소 + HNSW 후보 부족 수정 — RESOLVED 2026-09-30 (`78932f0`)
+- HNSW 필터 top-k가 `ef_search` 40 후보에서 끊겨 후보가 모자라던 정확도 버그 수정: buildings 연결 시작옵션 `hnsw.iterative_scan=strict_order` (왕복 추가 0). 실측 LIMIT 60 → off 8행 / on 60행.
+- 스와이프 캐시 무효화 9 delete → `delete_many` 1회, `transaction.on_commit`으로 행 잠금 밖 실행 (무효화 키 동일).
+- pool 소속 카드(클라 시드 제외)는 buildings 존재확인 SELECT 생략, 미확인 id는 기존 404 그대로.
+- 기준 측정 `docs/research/perf-baseline-2026-09-30.md` + 재실행 `tools/perf/bench.py`·`probe.sh` (`084c1d6`). prod 확인: HNSW 인덱스 존재, pgvector 0.8.0, max_connections 901, IMAGE_BASE_URL=r2.dev.
+- 로컬 검증 한계: DB 필요 테스트는 로컬 Postgres 부재로 미실행 — CI 판정 필요. app-test 스킵(Playwright MCP 미연결), drift 없음.
+- Deferred: `PERF-RESULT-1`, `PERF-SERVER-1`, `INFRA-IMG-2`, `INFRA-RAILWAY-1` (## Next MEDIUM).
+
 ### FULL-REPORT-2 — 리포트가 언어 전환에 안 따라옴 — RESOLVED 2026-09-27 (`e13c9b9`, 푸시됨 · PR 대기 — `feature/algo-persona-report`)
 - 리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).
 - 최상위 필드 = 생성 시 언어(하위 호환), `dominant_*` 영어 유지, 한쪽 누락 시 다른 쪽으로 채움. 적용: PersonaReport, ResultsPage, BoardDetailPage 공유 문구, SaveBoardModal 기본 이름. 기존 리포트는 재생성 시 두 판 생성.
