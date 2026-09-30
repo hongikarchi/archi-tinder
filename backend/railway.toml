@@ -14,15 +14,17 @@ buildCommand = "pip install -r requirements.txt && python manage.py collectstati
 # (engine embedding/centroid caches under a lock, telemetry stats thread-local,
 # lazy LLM clients built once under a lock) -- see tests/test_gthread_safety.py.
 #
-# DB connection math (Neon max_connections = 901):
-#   'default'   CONN_MAX_AGE=600 => each request thread keeps ONE persistent
-#               connection => up to workers x threads = 3 x 4 = 12 held open.
-#   'buildings' CONN_MAX_AGE=0 (default) => connect/close per request, so at most
-#               one transient connection per in-flight request (<= 12).
-#   background threads (swipe prefetch, telemetry, search, works uploads) open their
-#   own short-lived connections and close_all() at exit => a few extra, transient.
-#   Worst case is a few dozen connections per replica -- far below 901. Re-check
-#   this arithmetic before raising --workers/--threads or adding replicas.
+# DB connection math (Neon max_connections = 901) -- PERF-CONN-1 (2026-09-30):
+#   Both aliases ('default' app DB, 'buildings' Make-DB) use CONN_MAX_AGE=600, so
+#   Django keeps ONE persistent connection per request THREAD per alias:
+#     per alias up to workers x threads = 3 x 4 = 12 request-thread connections,
+#     x2 aliases = up to 24 persistent connections per replica.
+#   Background threads (swipe prefetch + telemetry, search Stage 2 + parse-query
+#   stream worker, board-name update, works uploads) open their own transient
+#   connections and connections.close_all() in a `finally` at exit, so they never
+#   accumulate (a few extra, short-lived). Far below 901. Re-check this arithmetic
+#   before raising --workers/--threads or adding replicas, and keep close_all() in
+#   any NEW thread that touches the DB.
 # --timeout 120: gunicorn's 30s default kills a worker whose heartbeat stalls, and
 # would SIGKILL a slow cold-cache request before it can finish and warm the
 # in-process pool/KMeans cache. gthread's main thread keeps the heartbeat while

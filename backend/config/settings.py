@@ -98,6 +98,15 @@ DATABASES = {
         'NAME':     os.environ['BUILDINGS_DB_NAME'],
         'USER':     os.environ['BUILDINGS_DB_USER'],
         'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
+        # PERF-CONN-1 (2026-09-30): persistent connections, same as 'default'. Reverses
+        # the 2026-06 "no persistent buildings connection" decision -- a fresh TLS
+        # connect (~37ms in-region, ~600ms from KR) was paid 1-4x per hot-path request.
+        # Django keeps ONE connection per thread per alias; short-lived background
+        # threads must close_all() on exit (see CONTRIBUTING.md § Buildings-DB
+        # connection pooling). The HNSW startup option below is applied once per
+        # connect, so a reused connection keeps it.
+        'CONN_MAX_AGE': 600,
+        'CONN_HEALTH_CHECKS': True,  # drop a server-side-closed idle conn instead of erroring
         'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),

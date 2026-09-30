@@ -218,34 +218,33 @@ runtime role has no DDL. `make migrate-prod` is the one-command wrapper:
     mechanism), then the drop after the new code is live. For pre-launch /
     low-traffic, one `make migrate-prod` right after the deploy is fine.
 
-### Buildings-DB connection pooling (Neon pooler) — recommended, user-applied
+### Buildings-DB connection pooling — persistent connections (PERF-CONN-1)
 
-Context: `DATABASES['buildings']` deliberately carries **no `CONN_MAX_AGE`**
-(ownership decision, Task.md 2026-06: don't hold persistent app-level
-connections on the Make-DB-owned project). Django therefore opens a fresh
-TLS connection to Neon on every request that touches the buildings DB —
-the swipe/session hot path pays that handshake 1-4x per request. The <1s
-page-load mandate postdates that decision.
+**Decision (2026-09-30, user):** `DATABASES['buildings']` uses persistent
+connections — `CONN_MAX_AGE = 600` + `CONN_HEALTH_CHECKS = True`, identical to
+`'default'`. This reverses the 2026-06 ownership decision that the Make-DB-owned
+project must not hold app-level persistent connections.
 
-**Ownership-safe alternative — Neon's server-side pooler** (PgBouncer,
-transaction mode): the app still "connects per request", but the handshake
-terminates at Neon's pooler which reuses real DB connections. No app-level
-persistent connection, no connection-slot squatting on the Make-DB project.
-
-- **How:** change the `BUILDINGS_DB_HOST` env value from
-  `ep-<endpoint>.<region>.aws.neon.tech` to
-  `ep-<endpoint>-pooler.<region>.aws.neon.tech` (insert `-pooler` after the
-  endpoint ID). Railway: edit the service env var; local: `backend/.env`.
-- **Compatibility:** transaction-mode pooling forbids session state
-  (LISTEN/NOTIFY, advisory locks, temp tables, session-level prepared
-  statements). Make Web's buildings usage is stateless read-only SELECTs —
-  compatible. The app-DB alias (`default`) keeps `CONN_MAX_AGE=600` and is
-  NOT part of this change.
-- **Measured 2026-07-07 (local dev box in KR → Neon SG, 10 fresh
-  connect+query cycles each):** connect p50 450ms (direct) ≈ 457ms (pooler),
-  but tail max **2059ms → 517ms** — the pooler flattens the handshake tail.
-  Same-region prod (Railway SG → Neon SG) has far smaller absolute connect
-  cost; re-measure there before/after flipping the Railway var.
+- **Why:** the <1s page-load mandate postdates that decision. Every request that
+  touched the buildings DB paid a fresh TLS connect (measured ~37 ms in-region,
+  ~600 ms from Korea locally), 1-4x on the swipe/session hot path.
+- **Capacity:** Neon `max_connections = 901`. Django keeps one connection per
+  request thread per alias: prod gunicorn is gthread 3 workers x 4 threads, so
+  <= 12 per alias, x2 aliases = <= 24 persistent per replica (math also in
+  `backend/railway.toml`). Re-check before raising workers/threads/replicas.
+- **Keep `BUILDINGS_DB_HOST` on the DIRECT endpoint, not the pooler.** The Neon
+  pooler (PgBouncer, transaction mode) was tried 2026-07 and reverted 2026-07-16
+  because tail latency got worse, and the `hnsw.iterative_scan=strict_order`
+  libpq startup option (`settings.py`, PERF-SWIPE-1) requires a direct endpoint.
+  A persistent connection applies that option once per connect.
+- **Thread hygiene rule:** any thread you spawn that touches the DB (either
+  alias) MUST call `django.db.connections.close_all()` in a `finally` at exit;
+  otherwise its per-thread persistent connections leak. Audited entry points
+  (all covered by `backend/tests/test_conn_hygiene.py`): swipe telemetry + async
+  prefetch (`views/swipe.py`), search Stage 2 + parse-query stream worker
+  (`views/search.py`), board-name update (`services/session_service.py`), works
+  upload validation (`works/services.py`). DB-free threads (Gemini timeout
+  runners in `services/_gemini.py`, works `head_object` executor) are exempt.
 
 ## Commit message convention
 
