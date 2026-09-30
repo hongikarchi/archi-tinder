@@ -62,7 +62,7 @@ These files are touched by 2+ roles. Default merge strategy is **append-only** w
 Django migrations are numbered per app. Two devs creating `<app>/migrations/0042_*.py` simultaneously will produce duplicate numbers and a broken migration graph.
 
 **Per-feature workflow:**
-1. `git checkout develop && git pull origin develop` immediately before `python manage.py makemigrations <app>`.
+1. `tools/git-sync-develop.sh` immediately before `python manage.py makemigrations <app>`.
 2. Don't sit on locally-generated migrations for days — merge within ~24h or rebase.
 3. The local `hooks/pre-push` (installed via `./tools/install-hooks.sh`) catches duplicate-number conflicts before push. GHA CI also runs `makemigrations --check` as backup.
 4. If conflict happens at merge time anyway: second-to-merge regenerates the migration on their branch.
@@ -103,7 +103,7 @@ feature/codex-<topic>     ← local Codex        (§ Concurrent agents)
 
 ```bash
 # 1. Sync from develop
-git checkout develop && git pull origin develop
+tools/git-sync-develop.sh
 
 # 2. New branch
 git checkout -b feature/algo-mmr-lambda-tuning
@@ -130,7 +130,7 @@ EOF
 #    for the sole admin → bypassed until collaborators join; see Branch model).
 
 # 8. Local cleanup
-git checkout develop && git pull origin develop
+tools/git-sync-develop.sh
 git branch -d feature/algo-mmr-lambda-tuning
 ```
 
@@ -146,7 +146,7 @@ Local agent branches use `feature/claude-<topic>` or `feature/codex-<topic>`.
 After cloning + running `./tools/install-hooks.sh`, do one tiny verification PR
 to confirm your local + GitHub setup works end-to-end:
 
-1. `git checkout develop && git pull origin develop`
+1. `tools/git-sync-develop.sh`
 2. `git checkout -b feature/<role>-onboarding-check`
 3. Make a trivial edit (e.g., a typo fix or a comment in a file your role owns)
 4. `git add . && git commit -m "chore: <role> onboarding check"`

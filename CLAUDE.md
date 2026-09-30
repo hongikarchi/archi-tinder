@@ -31,7 +31,7 @@
   1. **Never commit directly to `main` or `develop`.** Server-side branch protection will reject the push, but you should not even try. Always work on a `feature/*` branch.
   2. **Before any code edit, run `git status`** to confirm the current branch. If on `main` or `develop`, do not proceed with edits — first sync develop and create a feature branch:
      ```bash
-     git checkout develop && git pull origin develop
+     tools/git-sync-develop.sh          # not `git pull`: survives the post-deploy develop force-reset
      git checkout -b feature/<role>-<topic>
      ```
   3. **Never run `git push origin main` or `git push origin develop`** — pushes go from `feature/*` branches only, then to `develop` via PR, then to `main` via PR.

@@ -239,6 +239,7 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 | Issue | Severity | Workaround |
 |---|---|---|
 | `tools/git-new-feature.sh` refuses a dirty working tree without auto-stash | LOW | `git stash push <paths>` → `git-new-feature.sh` → `git stash pop` |
+| Local `develop` diverges after a deploy run from another clone (squash + origin force-reset) — `git pull` conflicts | LOW | `tools/git-sync-develop.sh` (ff, else reset to origin + `backup/develop-<sha>`); used by `git-new-feature.sh` + `git-publish` Step 5 |
 | Local `pytest` gives a false-pass signal — `backend/conftest.py`'s SQLite override is not load-bearing for direct-DB tests | MEDIUM | CI is the validation gate — green CI, not local pytest |
 | `reporter-inline`'s `meta.head` in `state.js` is the pre-squash develop SHA, lags one PR | LOW (by design) | Self-correcting next pass |
 | Workflow `agent()` model defaults to inherit (Opus) — an unpinned worker silently runs Opus | MEDIUM | Pin `model` on every `agent()` call in `.claude/workflows/*.js` (§ 1.1) |
