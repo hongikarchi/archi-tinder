@@ -10,7 +10,7 @@ Code measured: local `develop` @ `2551611` (#338, pre-#339 release code).
 
 ## 1. Network — Korea → prod (curl, median of 10)
 
-Script: `tools/perf/probe.sh`.
+Script: `tools/perf/probe.sh` (writes *.txt into the current directory — run it from a scratch dir).
 
 | Target | cold connect / TLS / TTFB (ms) | warm (reused conn) |
 |---|---|---|
@@ -105,6 +105,45 @@ per-request counts are the signal.
 Prod estimate: swipe gains ~15-25 ms (1 buildings round trip + ~8 Redis ops), and
 cache eviction now runs after COMMIT, outside the row locks. HNSW fix: filtered
 `LIMIT 60` returns 60 rows instead of 8 (iterative scan off vs on, same query).
+
+## 4c. Prod before/after deploy (#342 → main `405a537`, 2026-09-30)
+
+Client side from Korea, `tools/perf/prod_bench.py` (guest login → 3 queries × session
+create → 20 swipes → result, 2 runs = 120 swipes each). Network floor was unchanged
+(warm TTFB 110 → 114 ms).
+
+| p50 ms | before (dbfe598) | after, right after deploy | after, 2nd run |
+|---|---|---|---|
+| swipe (n=120) | 202 | 227 | 245 |
+| session create | 280 | 447 | 286 |
+| session result | 695 | 1193 | 601 |
+| parse-query (LLM) | 3532 (p95 21.7 s) | 3801 | 3669 |
+
+Server-side swipe `timing_breakdown` from prod `SessionEvent` (median, before n=120 /
+after n=240):
+
+| stage | before | after |
+|---|---|---|
+| lock_ms (up to row lock; incl. existence check) | 30.3 | **8.2** |
+| select_ms | 20.6 | 26.6 |
+| prefetch_ms | 15.8 | 30.7 |
+| total_ms (marked span) | 70.0 | 71.7 |
+
+Reading:
+- The code change shows up where expected: the pre-lock span dropped ~22 ms (buildings
+  existence check skipped).
+- `select`/`prefetch` are CPU-side (MMR / farthest-point, code unchanged) and grew
+  ~21 ms; the client-side swipe also grew ~25-40 ms outside the marked span. Not
+  explained by the change: the buildings startup option adds 0 ms to connect (A/B:
+  607 vs 608 ms locally), and session create/result returned to baseline on the 2nd run.
+  Most likely a new-container/host effect after redeploy — unproven.
+- HNSW iterative scan: when the exposed set covers the first 40 index candidates the old
+  query returned **0 rows**; with `strict_order` it returns 60. Server exec is ~2-4 ms
+  warm; the first cold call is ~1 s (buffer cache), which explains the post-deploy
+  session-create/result spike.
+- Next: add a `Server-Timing` header (or extend `timing_breakdown` to the full request,
+  incl. card hydration + on_commit eviction) so client-vs-server attribution is exact,
+  then re-measure on a settled container.
 
 ## 5. Railway replacement review (summary)
 
