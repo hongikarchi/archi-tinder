@@ -135,10 +135,16 @@ The top commit should be the squash, with message `<PR title> (#<PR_NUMBER>)`.
 ## Step 5 — Post-merge local cleanup
 
 ```bash
-git checkout develop
-git pull origin develop
+tools/git-sync-develop.sh
 git branch -D feature/<branch-name> 2>/dev/null || true
 ```
+
+`tools/git-sync-develop.sh` fast-forwards local `develop`, or — when another clone ran
+a deploy and `origin/develop` was force-reset (post-squash) — resets local `develop` to
+`origin/develop` and keeps the old tip as `backup/develop-<sha>`. A plain `git pull`
+fails or produces a conflict-ridden merge in that case. `gh pr merge` also tries to
+fast-forward local `develop` and prints "not possible to fast-forward" — harmless; this
+step fixes it.
 
 Verify final state:
 ```bash
