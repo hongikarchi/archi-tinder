@@ -91,6 +91,21 @@ scan. With pgvector 0.8 the fix is `SET hnsw.iterative_scan = relaxed_order` (or
 higher `ef_search`) for that query. Correctness issue (fewer candidates than asked),
 not only speed — check which call sites hit it.
 
+## 4b. PERF-SWIPE-1 before/after (local harness, same session, back to back)
+
+before = `origin/develop` `dbfe598`, after = `78932f0`. Local RTT ~73 ms, so the
+per-request counts are the signal.
+
+| Endpoint (warm) | wall p50 before → after | buildings queries | cache ops |
+|---|---|---|---|
+| swipe (like+dislike) | 1011 → 904 ms | 1 → 0 (cold 2 → 1) | 15 → 7 |
+| session create | 734 → 747 ms | unchanged | 14 → 11 |
+| session result | 907 → 902 ms | unchanged | unchanged |
+
+Prod estimate: swipe gains ~15-25 ms (1 buildings round trip + ~8 Redis ops), and
+cache eviction now runs after COMMIT, outside the row locks. HNSW fix: filtered
+`LIMIT 60` returns 60 rows instead of 8 (iterative scan off vs on, same query).
+
 ## 5. Railway replacement review (summary)
 
 | Option | Per API call | Per swipe | Monthly | Effort |
