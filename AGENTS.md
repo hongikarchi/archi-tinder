@@ -104,7 +104,7 @@
 
   ## Target Structure
   frontend/   <- React 18 + Vite
-  backend/    <- Django 4.2 LTS + DRF + pgvector + Gemini + social auth
+  backend/    <- Django 5.2 LTS + DRF + pgvector + Gemini + social auth
   web-testing/ <- Playwright E2E visual test runner + dashboard
 
   ## Current State
@@ -121,7 +121,7 @@
   - Do NOT rewrite inline styles arbitrarily; treat existing inline styles as load-bearing unless `DESIGN.md` rules say otherwise — when in doubt, consult `DESIGN.md` and surface the change in the PR description.
 
   ## Backend Conventions
-  - Django 4.2 LTS required (Python 3.9.6 on this machine; Django 5+ needs Python 3.10+).
+  - Django 5.2 LTS required (INFRA-PY-1, 2026-09-30); Python 3.12 pinned in `backend/.python-version` + CI + prod (Django 5.2 supports 3.10+; local dev may run 3.11).
   - All URL patterns must have trailing slashes -- Django APPEND_SLASH only redirects GET, not POST.
   - Neon PostgreSQL: use `sslmode=require`; psycopg2-binary (not asyncpg).
   - **Two `DATABASES` aliases**: `'default'` = the Make Web app DB (`DB_*` env vars) — Django ORM + migrations target this only; `'buildings'` = the Make-DB-owned building DB (`BUILDINGS_DB_*` env vars) — read-only raw SQL via `connections['buildings']`, NEVER ORM or migrate. `config/db_router.py` blocks `migrate` on `'buildings'`.
