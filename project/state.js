@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-29 23:00 KST',
-    head: '2551611',
-    branch: 'feature/algo-persona-report',
+    updatedAt: '2026-09-30 10:47 KST',
+    head: 'dbfe598',
+    branch: 'feature/claude-perf-baseline',
   },
   done: [
+    {
+      id: 'PERF-SWIPE-1',
+      title: '스와이프 왕복 축소 + HNSW 후보 부족 수정',
+      completedAt: '2026-09-30',
+      note: 'HNSW 필터 top-k가 `ef_search` 40 후보에서 끊겨 후보가 모자라던 정확도 버그 수정: buildings 연결 시작옵션 `hnsw.iterative_scan=strict_order` (왕복 추가 0). 실측 LIMIT 60 → off 8행 / on 60행.',
+    },
     {
       id: 'FULL-REPORT-2',
       title: '리포트가 언어 전환에 안 따라옴',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '공모전 팀빌딩 화면 프로토타입',
       completedAt: '2026-09-23',
       note: '완성품이 아니라 판단용: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정',
-    },
-    {
-      id: 'FRONT-RESULTS-SAVE-1',
-      title: '리포트 화면 상단 저장 CTA + 저장 후 프로필 이동',
-      completedAt: '2026-09-17',
-      note: 'user 지적: Discovery → Taste 리포트 생성 후 끝나는 지점이 없음. 저장은 이미 되고 있었으나 `SaveBoardModal`이 자동으로 떠서 방금 기다린 리포트를 가렸고, 저장을 마쳐도 결과 화면에 머물러 뒤로가기로 빠져나가야 했음 → "저장이 안 된 것 같은" 느낌. 기능 결함이 아니라 완결감(closure)의 부재',
     },
   ],
   now: [],
@@ -134,6 +134,26 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'PERF-RESULT-1',
+        title: '결과 조회 458KB 전송 병목',
+        note: '세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.',
+      },
+      {
+        id: 'PERF-SERVER-1',
+        title: '서버 방식 실험 (Python 고정·gthread·연결 유지)',
+        note: 'Python 3.12 고정(`.python-version`, prod 미고정·CI 3.9·로컬 3.11), gunicorn `gthread` (공유 dict 캐시 스레드 안전 검토 선행), buildings `CONN_MAX_AGE` (Make-DB 연결 점유 금지 결정 뒤집기 — 사용자 결정 필요), Django 5.2 → psycopg3. 각 단계 `tools/perf/bench.py` 전후 비교.',
+      },
+      {
+        id: 'INFRA-IMG-2',
+        title: 'prod 이미지 r2.dev → 커스텀 도메인',
+        note: 'prod `IMAGE_BASE_URL`이 속도 제한 있는 개발용 `r2.dev`. 출시 전 R2 커스텀 도메인 연결.',
+      },
+      {
+        id: 'INFRA-RAILWAY-1',
+        title: 'Railway 하드닝',
+        note: '`railway.toml`에 `healthcheckPath` + `restartPolicyType`, 이식용 Dockerfile, 배포 런북에 "전 서비스 SEA 리전" 체크. Railway 유지 결론 근거: `docs/research/perf-baseline-2026-09-30.md` §5.',
+      },
       {
         id: 'BACK-RECOMMEND-8',
         title: '형태 축(정형↔비정형) 근거 부재',
@@ -287,6 +307,13 @@ window.PROJECT_STATE = {
       sha: '2551611',
     },
     {
+      number: 337,
+      title: 'Feature/algo persona report',
+      mergedAt: '2026-09-29T14:21:40Z',
+      mergedAtKST: '2026-09-29 23:21 KST',
+      sha: 'fe90b2b',
+    },
+    {
       number: 334,
       title: 'feat(FRONT-HEADER-1): 페이지 상단 크롬 축소·통일 + people 헤더 로고 교체',
       mergedAt: '2026-09-26T00:57:29Z',
@@ -327,13 +354,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-19T00:26:02Z',
       mergedAtKST: '2026-09-19 09:26 KST',
       sha: 'ab473f5',
-    },
-    {
-      number: 328,
-      title: 'chore(INFRA-MOCKS-1): __mocks 디자인 픽스처 38종 untrack — 공개 URL 노출 차단',
-      mergedAt: '2026-09-06T16:35:29Z',
-      mergedAtKST: '2026-09-07 01:35 KST',
-      sha: '4779507',
     },
   ],
   agents: [
@@ -614,14 +634,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1748,6 +1760,10 @@ window.PROJECT_STATE = {
       role: '스와이프 목표 달성 테스트',
     },
     {
+      path: 'backend/tests/test_swipe_perf.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_taste_calibration.py',
       role: '',
     },
@@ -1900,6 +1916,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/research/perf-baseline-2026-09-30.md',
+      role: '',
+    },
+    {
       path: 'docs/specs/architect-unification.md',
       role: '스튜디오 통합 아키텍처 스펙',
     },
@@ -1922,14 +1942,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/package-lock.json',
       role: '의존성 잠금 파일',
-    },
-    {
-      path: 'frontend/package.json',
-      role: '프론트 패키지 매니페스트',
-    },
-    {
-      path: 'frontend/package.json',
-      role: '프론트 패키지 매니페스트',
     },
     {
       path: 'frontend/package.json',
@@ -2144,14 +2156,6 @@ window.PROJECT_STATE = {
       role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
     },
     {
-      path: 'frontend/src/components/PersonaReport.jsx',
-      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
-    },
-    {
-      path: 'frontend/src/components/PersonaReport.jsx',
-      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
-    },
-    {
       path: 'frontend/src/components/PhotoTile.jsx',
       role: '',
     },
@@ -2162,14 +2166,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/ProtectedRoute.jsx',
       role: '인증 보호 라우트 가드',
-    },
-    {
-      path: 'frontend/src/components/SaveBoardModal.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/SaveBoardModal.jsx',
-      role: '',
     },
     {
       path: 'frontend/src/components/SaveBoardModal.jsx',
@@ -2752,14 +2748,6 @@ window.PROJECT_STATE = {
       role: '대시보드 상태 데이터',
     },
     {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
       path: 'tools/.smoke.sh',
       role: 'git 스크립트 환경 스모크 검사',
     },
@@ -2818,6 +2806,14 @@ window.PROJECT_STATE = {
     {
       path: 'tools/onboarding.sh',
       role: '협업자 온보딩 스크립트',
+    },
+    {
+      path: 'tools/perf/bench.py',
+      role: '',
+    },
+    {
+      path: 'tools/perf/probe.sh',
+      role: '',
     },
     {
       path: 'tools/test-backend.sh',

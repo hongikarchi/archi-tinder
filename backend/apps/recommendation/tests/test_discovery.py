@@ -1098,12 +1098,14 @@ def test_swipe_nonexistent_building_returns_404(auth_client, user_profile):
         user=user_profile,
         project=project,
         phase='exploring',
-        pool_ids=['bld_999999'],
-        pool_scores={'bld_999999': 1.0},
+        # PERF-SWIPE-1: pool members skip the existence SELECT, so the swiped id
+        # must be OUTSIDE the pool (client-forged id) to exercise the 404 guard.
+        pool_ids=['bld_000001'],
+        pool_scores={'bld_000001': 1.0},
         current_round=0,
         preference_vector=[],
         exposed_ids=[],
-        initial_batch=['bld_999999'],
+        initial_batch=['bld_000001'],
         like_vectors=[],
         convergence_history=[],
         previous_pref_vector=[],

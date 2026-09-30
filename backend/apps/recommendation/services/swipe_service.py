@@ -30,11 +30,11 @@ from .. import engine  # noqa: import MODULE — patch via apps.recommendation.v
 from .. import event_log  # noqa: import MODULE
 from ..models import Project, AnalysisSession, SwipeEvent
 from ..caches import (
-    evict_taste,
     evict_projects_list,
     evict_discovery_feed,
     evict_user_profile_detail,
     evict_project_detail,
+    evict_swipe_caches_after_commit,
 )
 from ..views._shared import _progress, _liked_id_only
 from .hydration import hydrate_like_vectors, cache_embedding
@@ -79,6 +79,24 @@ def _merge_buffer_into_exposed(exposed_ids, client_buffer_ids):
             merged.append(bid)
             exposed_set.add(bid)
     return merged
+
+
+def _building_id_is_trusted(session, canonical_bld_id):
+    """True when canonical_bld_id is provably a publishable building without a DB check.
+
+    pool_ids are produced by is_publishable-gated queries, so a pool member needs
+    no per-swipe existence SELECT. Two client-controlled leaks make the naive
+    "pool_ids or exposed_ids" rule unsafe, so they are excluded:
+      - original_seed_ids: client `seed_ids` are injected into pool_ids unvalidated
+        (session create only checks type/length).
+      - exposed_ids: client_buffer_ids are merged into it unvalidated.
+    Every server-selected exposed id is a pool member anyway, so exposed_ids adds
+    nothing legitimate. Trade-off: a building flipped non-publishable after pool
+    creation is still accepted for that session.
+    """
+    if canonical_bld_id in (session.original_seed_ids or []):
+        return False
+    return canonical_bld_id in (session.pool_ids or [])
 
 
 def _recent_actions(session, window):
@@ -331,8 +349,13 @@ def handle_swipe_normal(
 
     # Validate building exists and is publishable before acquiring the row lock.
     # '__action_card__' is a synthetic sentinel — never hits the buildings DB.
+    # Pool members (server-produced, publishable-gated; client seeds excluded) skip
+    # the per-swipe buildings SELECT 1 — see _building_id_is_trusted.
     _is_action_card = canonical_bld_id == _ACTION_CARD_ID
-    if canonical_bld_id and not _is_action_card:
+    if (
+        canonical_bld_id and not _is_action_card
+        and not _building_id_is_trusted(session, canonical_bld_id)
+    ):
         with connections['buildings'].cursor() as cur:
             cur.execute(
                 'SELECT 1 FROM canonical_v2_buildings'
@@ -421,11 +444,10 @@ def handle_swipe_normal(
                 if canonical_bld_id not in project.disliked_ids:
                     project.disliked_ids = project.disliked_ids + [canonical_bld_id]
             project.save(update_fields=['liked_ids', 'disliked_ids', 'updated_at'])
-            evict_taste(profile.id)
-            evict_discovery_feed(profile.id)
-            # Fix 1: evict /projects/ cache — liked_ids/disliked_ids counts changed.
-            evict_projects_list(profile.id)
-            evict_project_detail(str(project.project_id))
+            # Taste + discovery feed + /projects/ list (counts changed) + project
+            # detail: one batched delete_many, deferred to after COMMIT so the
+            # cache round trips happen outside the session/project row locks.
+            evict_swipe_caches_after_commit(profile.id, project.project_id)
 
         # 4. Increment round (action-card swipe does NOT count as a real round)
         if not _is_action_card:

@@ -118,9 +118,8 @@ if [ -n "$SAFE" ]; then
     STASHED=1
 fi
 
-# Sync develop
-git checkout develop
-git pull origin develop
+# Sync develop (survives the post-deploy force-reset — see git-sync-develop.sh)
+"$(dirname "$0")/git-sync-develop.sh"
 
 # Create feature branch
 git checkout -b "${BRANCH}"

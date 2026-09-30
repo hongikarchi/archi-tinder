@@ -210,8 +210,10 @@ class TestCacheEviction:
     # -----------------------------------------------------------------------
     # Fix 1b: swipe write evicts /projects/ cache
     # -----------------------------------------------------------------------
-    def test_cache_evicted_on_swipe_write(self, auth_client, user_profile):
-        """POST swipe (like) → cache key deleted after save."""
+    def test_cache_evicted_on_swipe_write(
+        self, auth_client, user_profile, django_capture_on_commit_callbacks,
+    ):
+        """POST swipe (like) → cache key deleted after save (on_commit, PERF-SWIPE-1)."""
         # Create project + session first (no cache seeding yet — avoid evict in setup)
         project = Project.objects.create(user=user_profile, name='Swipe Cache Test', filters={})
         patchers = _apply_patches()
@@ -231,14 +233,16 @@ class TestCacheEviction:
         _seed_projects_cache(user_profile.id)
         assert not _cache_is_evicted(user_profile.id)
 
-        # POST a swipe
+        # POST a swipe (eviction is deferred to transaction.on_commit; the test's
+        # wrapping transaction never commits, so execute the captured callbacks).
         patchers = _apply_patches()
         try:
-            swipe_resp = auth_client.post(
-                f'/api/v1/analysis/sessions/{session_id}/swipes/',
-                {'canonical_bld_id': first_card_id, 'action': 'like'},
-                format='json',
-            )
+            with django_capture_on_commit_callbacks(execute=True):
+                swipe_resp = auth_client.post(
+                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
+                    {'canonical_bld_id': first_card_id, 'action': 'like'},
+                    format='json',
+                )
         finally:
             _stop_patches(patchers)
         assert swipe_resp.status_code == 200, f'Swipe failed: {swipe_resp.json()}'

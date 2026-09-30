@@ -5,7 +5,7 @@ import logging
 import numpy as np
 from django.core.cache import cache
 from django.conf import settings
-from django.db import connections
+from django.db import connections, transaction
 
 from . import engine
 
@@ -49,9 +49,14 @@ def get_or_build_taste(profile):
     return arr
 
 
+def taste_evict_keys(profile_id):
+    """Cache keys removed by evict_taste (key-list form for batched deletes)."""
+    return [_taste_key(profile_id)]
+
+
 def evict_taste(profile_id):
     """Immediately invalidate the cached taste vector for a UserProfile PK."""
-    cache.delete(_taste_key(profile_id))
+    cache.delete_many(taste_evict_keys(profile_id))
 
 
 # ── Projects list cache ───────────────────────────────────────────────────────
@@ -76,16 +81,19 @@ def get_or_build_projects_list(profile, page, page_size, builder):
     return data
 
 
+def projects_list_evict_keys(profile_id):
+    """Cache keys removed by evict_projects_list (key-list form for batched deletes)."""
+    # Canonical page (page=1, page_size=50) + common page_size variants.
+    return [_projects_list_key(profile_id, 1, ps) for ps in (50, 10, 20, 25)]
+
+
 def evict_projects_list(profile_id):
     """Invalidate the canonical page-1 cache entry for a profile.
 
     Other page sizes / pages will self-expire via the TTL. The canonical
     page (page=1, page_size=50) covers the App.jsx default fetch.
     """
-    cache.delete(_projects_list_key(profile_id, 1, 50))
-    # Also evict common page_size variants to be safe
-    for ps in (10, 20, 25):
-        cache.delete(_projects_list_key(profile_id, 1, ps))
+    cache.delete_many(projects_list_evict_keys(profile_id))
 
 
 # ── User profile detail cache ────────────────────────────────────────────────
@@ -162,16 +170,50 @@ def get_or_build_discovery_feed(profile, cursor, limit, builder):
     return data
 
 
+def discovery_feed_evict_keys(profile_id):
+    """Cache keys removed by evict_discovery_feed (key-list form for batched deletes)."""
+    # Canonical entry (cursor=0, limit=12) + common limit variants.
+    return [_discovery_feed_key(profile_id, 0, limit) for limit in (12, 10, 20, 30)]
+
+
 def evict_discovery_feed(profile_id):
     """Invalidate the canonical cursor=0, limit=12 discovery-feed cache entry.
 
     Other cursor offsets / limits self-expire via the TTL. The canonical entry
     (cursor=0, limit=12) covers the Discovery-tab default fetch.
     """
-    cache.delete(_discovery_feed_key(profile_id, 0, 12))
-    # Also evict common limit variants
-    for limit in (10, 20, 30):
-        cache.delete(_discovery_feed_key(profile_id, 0, limit))
+    cache.delete_many(discovery_feed_evict_keys(profile_id))
+
+
+def evict_swipe_caches_after_commit(profile_id, project_uuid):
+    """Per-swipe invalidation, batched and deferred until the DB transaction commits.
+
+    Invalidates exactly what the swipe path used to evict inline
+    (evict_taste + evict_discovery_feed + evict_projects_list +
+    evict_project_detail) but as ONE cache.delete_many for the plain deletes
+    (+ the project-detail version bump), run via transaction.on_commit so it
+    happens after COMMIT, outside the session/project row locks.
+
+    Outside an atomic block on_commit runs the callback immediately. Cache
+    errors are logged and swallowed: all entries are short-TTL (60s-5min) and
+    self-heal; failing the request after the swipe already committed would
+    only turn a durable success into a 500.
+    """
+    keys = (
+        taste_evict_keys(profile_id)
+        + discovery_feed_evict_keys(profile_id)
+        + projects_list_evict_keys(profile_id)
+    )
+    project_uuid = str(project_uuid)
+
+    def _run():
+        try:
+            cache.delete_many(keys)
+            evict_project_detail(project_uuid)
+        except Exception as exc:  # noqa: BLE001 — TTL self-heals; never fail a committed swipe
+            logger.warning('evict_swipe_caches_after_commit failed: %s', exc)
+
+    transaction.on_commit(_run)
 
 
 # ── Project detail cache (BACK-BOARD-PERF-1) ─────────────────────────────────

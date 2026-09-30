@@ -103,6 +103,23 @@ DATABASES = {
     },
 }
 
+# pgvector >= 0.8 iterative HNSW scan for the 'buildings' alias ONLY. Without it,
+# `WHERE is_publishable AND id NOT IN (...) ORDER BY embedding <=> v LIMIT k`
+# only sees the first hnsw.ef_search (40) index candidates BEFORE the filters
+# run and can return fewer than k rows. strict_order keeps exact distance order
+# and scans on until LIMIT is met (bounded by hnsw.max_scan_tuples, default
+# 20000). Set as a libpq startup option => zero extra round trips per query.
+# Postgres accepts dotted custom-GUC placeholders at startup even before the
+# extension is loaded. Caveat: PgBouncer transaction pooling (the Neon pooler
+# endpoint) may reject or ignore startup options -- keep BUILDINGS_DB_HOST on the direct
+# endpoint (see docs/database-schema.md). PostgreSQL engines only.
+_HNSW_STARTUP_OPTION = '-c hnsw.iterative_scan=strict_order'
+if DATABASES['buildings']['ENGINE'].endswith('postgresql'):
+    _bldg_options = DATABASES['buildings'].setdefault('OPTIONS', {})
+    _existing_pg_options = _bldg_options.get('options', '').strip()
+    if _HNSW_STARTUP_OPTION not in _existing_pg_options:
+        _bldg_options['options'] = f'{_existing_pg_options} {_HNSW_STARTUP_OPTION}'.strip()
+
 DATABASE_ROUTERS = ['config.db_router.MakeWebRouter']
 
 # -- Auth ------------------------------------------------------------------
