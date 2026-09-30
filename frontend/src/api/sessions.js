@@ -3,7 +3,8 @@
  * Analysis session lifecycle: start, resume, swipe, query parse, results.
  */
 
-import { callApi } from './core.js'
+import { callApi, getToken, BASE } from './core.js'
+import { createSseParser } from './sse.js'
 import { normalizeCard } from './images.js'
 import { VerifyRequiredError } from './projects.js'
 
@@ -105,7 +106,13 @@ export async function recordSwipe({ session_id, image_id, action, client_buffer_
  * Response (probe_needed=false): { reply, structured_filters, filter_priority, suggestions, results: [ImageCard] }
  * Response (priority_axis set):  deterministic re-rank — { results, structured_filters, suggested_quick_replies, ... }
  */
-export async function parseQuery(input, { prior_filters, priority_axis, raw_query } = {}) {
+export async function parseQuery(input, opts = {}) {
+  const body = _buildParseQueryBody(input, opts)
+  const result = await callApi('POST', '/parse-query/', body, true, PARSE_QUERY_TIMEOUT_MS)
+  return _normalizeParsed(result)
+}
+
+function _buildParseQueryBody(input, { prior_filters, priority_axis, raw_query } = {}) {
   const body = typeof input === 'string'
     ? { query: input }
     : { conversation_history: input }
@@ -119,12 +126,144 @@ export async function parseQuery(input, { prior_filters, priority_axis, raw_quer
   if (raw_query) {
     body.raw_query = raw_query
   }
+  return body
+}
 
-  const result = await callApi('POST', '/parse-query/', body, true, PARSE_QUERY_TIMEOUT_MS)
+function _normalizeParsed(result) {
   return {
     ...result,
     results: (result.results || []).map(normalizeCard),
   }
+}
+
+function _safeCall(fn, arg) {
+  if (typeof fn !== 'function') return
+  try { fn(arg) } catch { /* UI callback errors must never break the stream */ }
+}
+
+// Marker for stream failures where retrying via the blocking endpoint is safe
+// (no LLM result was lost / the blocking path owns the recovery flow).
+class StreamFallbackError extends Error {}
+
+/**
+ * Consume POST /parse-query/stream/ (SSE over fetch + ReadableStream).
+ * Resolves with the raw `final` payload.
+ *
+ * Failure handling (the caller falls back to the blocking parseQuery() ONLY for
+ * StreamFallbackError, so the LLM is never run twice for a result we already
+ * paid for):
+ *   - 401                                   -> StreamFallbackError (blocking call runs the token refresh flow)
+ *   - fetch/network failure before a response, missing stream support,
+ *     network break / EOF before `final`   -> StreamFallbackError
+ *   - 400 / 403 / 429 / other non-200       -> same error shape as callApi (`status`, `data`)
+ *   - server `error` event / bad payload    -> Error with `status` 500, `data`
+ *   - timeout (abort)                       -> the AbortError, like the blocking call
+ */
+async function _streamParseQuery(body, { onReply, onFilters } = {}) {
+  const token = getToken()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), PARSE_QUERY_TIMEOUT_MS)
+  let reader = null
+  try {
+    let res
+    try {
+      res = await fetch(`${BASE}/parse-query/stream/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      if (controller.signal.aborted) throw err // timeout: surface, do not re-run
+      throw new StreamFallbackError('stream network failure')
+    }
+
+    if (res.status === 401) throw new StreamFallbackError('stream 401')
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw Object.assign(new Error(data.detail || data.message || 'API error'), { status: res.status, data })
+    }
+    if (!res.body || typeof res.body.getReader !== 'function') {
+      throw new StreamFallbackError('stream unsupported')
+    }
+
+    let final = null
+    let serverError = null
+    const parser = createSseParser((event, data) => {
+      let payload
+      try { payload = JSON.parse(data) } catch {
+        serverError = { detail: 'Malformed stream payload' }
+        return
+      }
+      if (event === 'reply') _safeCall(onReply, payload?.text || '')
+      else if (event === 'filters') _safeCall(onFilters, payload)
+      else if (event === 'final') final = payload
+      else if (event === 'error') serverError = payload || {}
+    })
+
+    reader = res.body.getReader()
+    const decoder = new TextDecoder('utf-8')
+    try {
+      while (!final && !serverError) {
+        const { done, value } = await reader.read()
+        if (done) break
+        parser.push(decoder.decode(value, { stream: true }))
+      }
+      if (!final && !serverError) {
+        parser.push(decoder.decode())
+        parser.flush()
+      }
+    } catch (err) {
+      if (controller.signal.aborted) throw err // timeout: surface, do not re-run
+      throw new StreamFallbackError('stream broke before final')
+    }
+
+    if (final) return final
+    if (serverError) {
+      throw Object.assign(
+        new Error(serverError.detail || 'Search stream failed'),
+        { status: 500, data: serverError },
+      )
+    }
+    throw new StreamFallbackError('stream ended without final')
+  } finally {
+    clearTimeout(timer)
+    if (reader) reader.cancel().catch(() => {})
+  }
+}
+
+/**
+ * Streaming variant of parseQuery. Same input/options and SAME resolved shape
+ * as parseQuery(); additionally reports progress through callbacks:
+ *   onReply(textDelta)   -- incremental reply text (concatenation == final.reply)
+ *   onFilters({structured_filters, filter_priority}) -- once, before `final`
+ *   onFallback()         -- the blocking parse-query call is about to run, so the
+ *                           caller should discard any partially streamed text
+ * Falls back to parseQuery() only on 401 (token refresh), network failure /
+ * missing stream support, or a network break before `final`. HTTP errors
+ * (400/403/429/...), server `error` events and timeouts are thrown with the same
+ * shape as parseQuery() errors, without a second LLM call. Priority-axis
+ * re-rank requests (single `final`, no LLM) skip streaming entirely.
+ */
+export async function parseQueryStream(input, opts = {}, callbacks = {}) {
+  const canStream = !opts.priority_axis
+    && typeof fetch === 'function'
+    && typeof ReadableStream !== 'undefined'
+    && typeof TextDecoder !== 'undefined'
+  if (canStream) {
+    try {
+      const final = await _streamParseQuery(_buildParseQueryBody(input, opts), callbacks)
+      return _normalizeParsed(final)
+    } catch (err) {
+      if (!(err instanceof StreamFallbackError)) throw err
+      _safeCall(callbacks.onFallback)
+    }
+  }
+  return parseQuery(input, opts)
 }
 
 /**
