@@ -145,6 +145,22 @@ Reading:
   incl. card hydration + on_commit eviction) so client-vs-server attribution is exact,
   then re-measure on a settled container.
 
+## 4d. Jev (TypeSafe) PoC — not adopted
+
+30 Korean queries, reference = production `parse_query_stage1` (gpt-5.4-mini). Opus
+adjudicated every disagreement.
+
+| | gpt-5.4-mini | Jev 1.13 |
+|---|---|---|
+| latency p50 | ~3.0 s (full) / filters at 1.45 s when streamed | 0.2-0.4 s |
+| hard filter fields (program/material/style/country) | 99.1% | 93.9% |
+| all fields | 96.2% | 93.6% |
+
+Jev's hard-field errors (e.g. inferring South Korea for 한옥/중정, "서울 제외" → Korea)
+carried confidence 0.42-1.0, so confidence gating cannot filter them. Decision: stream
+gpt-5.4-mini instead (PERF-SEARCH-1). Side finding: material vocab mismatch
+(`wood` 8,544 rows vs `timber` 2,625) → BACK-VOCAB-2.
+
 ## 5. Railway replacement review (summary)
 
 | Option | Per API call | Per swipe | Monthly | Effort |
