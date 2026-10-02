@@ -22,7 +22,7 @@ buildCommand = "pip install -r requirements.txt && python manage.py collectstati
 #     3 workers x 12 x 2 aliases = up to 72 connections per replica << 901.
 #   min_size = 1, so an idle worker holds only 1 connection per alias.
 #   Background threads (swipe prefetch + telemetry, search Stage 2 + parse-query
-#   stream worker, board-name update, works uploads) check a connection out of the
+#   stream worker, works uploads, boot pre-warm) check a connection out of the
 #   pool and connections.close_all() in a `finally` at exit RETURNS it (a missed
 #   close_all would permanently leak a pool slot). If a burst exhausts a pool, the
 #   checkout waits up to `timeout` (10s) then raises PoolTimeout.
@@ -32,8 +32,12 @@ buildCommand = "pip install -r requirements.txt && python manage.py collectstati
 #   DB_POOL_TIMEOUT. Re-check this arithmetic before raising --workers/--threads,
 #   DB_POOL_MAX_SIZE or adding replicas, and keep close_all() in any NEW thread
 #   that touches the DB.
+# PERF-MISC-1: `-c gunicorn.conf.py` -> post_worker_init pre-warms each worker (imports
+# the URLconf synchronously, then loads vocab / corpus tag stats / publishable-id list
+# / LLM client singletons on a daemon thread; no paid calls; closes its DB connections).
+# Disable without a deploy: env PREWARM_ENABLED=false.
 # --timeout 120: gunicorn's 30s default kills a worker whose heartbeat stalls, and
 # would SIGKILL a slow cold-cache request before it can finish and warm the
 # in-process pool/KMeans cache. gthread's main thread keeps the heartbeat while
 # request threads run, but keep the generous ceiling for the cold LLM/KMeans paths.
-startCommand = "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 3 --threads 4 --timeout 120"
+startCommand = "gunicorn -c gunicorn.conf.py config.wsgi:application --bind 0.0.0.0:$PORT --worker-class gthread --workers 3 --threads 4 --timeout 120"

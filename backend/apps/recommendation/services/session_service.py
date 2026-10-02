@@ -13,12 +13,10 @@ Mock-patch discipline (CRITICAL):
 """
 import logging
 from collections import defaultdict
-from threading import Thread
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -37,62 +35,22 @@ RC = settings.RECOMMENDATION
 
 
 # ---------------------------------------------------------------------------
-# TASTE-BOARD-NAME (PERF-HOTPATH-1): async Gemini name update, post-commit
+# TASTE-BOARD-NAME (PERF-MISC-1): deterministic board names, no LLM
 # ---------------------------------------------------------------------------
-# The synchronous path never waits on Gemini: the Project is inserted with a
-# cheap deterministic fallback name immediately. When the client sent a
-# placeholder name, ONE post-commit daemon thread attempts to upgrade the
-# name to a Gemini-generated one. It passes PKs (never ORM objects) across
-# the thread boundary and re-opens its own DB connections (telemetry-thread
-# pattern — views/swipe.py `_emit_telemetry_thread`).
+# A placeholder board name is replaced synchronously by a deterministic
+# name-from-filters (services._deterministic_board_name + _dedup_board_name).
+# The former post-commit Gemini "name upgrade" thread was removed: the name it
+# produced was never seen (SaveBoardModal overwrites it) and cost one LLM call
+# (~0.8-1.5 s background) per session. services.generate_taste_board_name stays
+# importable for tooling/tests but create_session no longer calls it.
 
-def _async_board_name_update(project_pk, fallback_name, filters_for_name, raw_query, profile_pk):
-    """Fire-and-forget: upgrade a placeholder board name to a Gemini name.
-
-    Runs on its own daemon thread, registered via transaction.on_commit so it
-    only starts once the Project row is durably committed. Never raises —
-    any failure (Gemini error, empty result, concurrent manual rename) just
-    leaves the deterministic fallback name in place.
-    """
-    from django.db import connections as _connections
-    _connections.close_all()
-    try:
-        result = services._gemini_board_name_raw(filters_for_name, raw_query)
-        if not result:
-            logger.info(
-                'Async board name update: Gemini returned empty for project=%s; keeping fallback %r',
-                project_pk, fallback_name,
-            )
-            return
-
-        from apps.accounts.models import UserProfile  # noqa: PLC0415 -- local import, avoid cycle
-        try:
-            profile = UserProfile.objects.get(pk=profile_pk)
-        except UserProfile.DoesNotExist:
-            logger.info('Async board name update: profile %s no longer exists', profile_pk)
-            return
-
-        new_name = services._dedup_board_name(result, profile)
-
-        # Conditional atomic update: only overwrite if the row still holds the
-        # fallback name we inserted at create time. Protects a concurrent
-        # manual rename via ProjectDetailView.patch — if the user already
-        # renamed the board, leave their choice alone.
-        updated = Project.objects.filter(pk=project_pk, name=fallback_name).update(
-            name=new_name, updated_at=timezone.now(),
-        )
-        if not updated:
-            logger.info(
-                'Async board name update: project=%s name changed since insert; skipping Gemini name %r',
-                project_pk, new_name,
-            )
-    except Exception:
-        logger.exception(
-            'Async board name update failed for project=%s; fallback name %r stays',
-            project_pk, fallback_name,
-        )
-    finally:
-        _connections.close_all()
+# Names the clients send when the user has not named the board:
+#   ''                    -- no name
+#   'untitled'            -- frontend api/sessions.js fallback ('Untitled')
+#   'untitled project'    -- en locale search.untitledProject
+#   '제목 없는 프로젝트'  -- ko locale search.untitledProject
+# Compared against `_raw_name.lower()`.
+_PLACEHOLDER_NAMES = frozenset({'', 'untitled', 'untitled project', '제목 없는 프로젝트'})
 
 
 # Known filter keys for filter_priority validation (canonical_v2 schema)
@@ -122,7 +80,6 @@ def create_session(request, profile, recent_cutoff):
     project_id      = request.data.get('project_id')
     _raw_name       = (request.data.get('name') or '').strip()[:100]
     # Detect placeholder names that should be replaced with an auto-generated name.
-    _PLACEHOLDER_NAMES = {'', 'untitled', 'untitled project'}
     _is_placeholder_name = _raw_name.lower() in _PLACEHOLDER_NAMES
     project_name    = _raw_name or 'Untitled'
     filters         = request.data.get('filters') or {}
@@ -291,11 +248,8 @@ def create_session(request, profile, recent_cutoff):
     elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
         active_filters.pop('image_focus', None)
 
-    # TASTE-BOARD-NAME (PERF-HOTPATH-1): the auto-name is computed synchronously
-    # from filters ONLY (cheap, DB-dedup-read but no Gemini call) at insert time
-    # below, so it never blocks the request. When the client sent a placeholder
-    # name, a post-commit background thread later attempts a Gemini upgrade —
-    # see the `transaction.on_commit` registration after the Project insert.
+    # TASTE-BOARD-NAME (PERF-MISC-1): the auto-name is computed synchronously from
+    # filters ONLY (cheap, DB-dedup-read, NO LLM call) at insert time below.
     _filters_for_name = dict(active_filters)
     _filters_for_name.pop('image_focus', None)
 
@@ -355,15 +309,17 @@ def create_session(request, profile, recent_cutoff):
         # Fix 2: wrap both creates in a savepoint so a session-insert failure
         # rolls back the project create, leaving no orphan row.
 
-        # TASTE-BOARD-NAME (PERF-HOTPATH-1): compute the fallback name
-        # synchronously WITHOUT Gemini — deterministic-from-filters + a cheap
-        # DB-dedup read. The request never blocks on the Gemini network call;
-        # see _async_board_name_update for the post-commit upgrade path.
+        # TASTE-BOARD-NAME (PERF-MISC-1): deterministic-from-filters name + a cheap
+        # DB-dedup read -- no LLM call, no background thread, all languages.
+        # With no usable filter the deterministic name is the generic 'Untitled';
+        # keep the client's own label instead (e.g. the Korean placeholder) so a
+        # Korean user does not get an English 'Untitled' board.
         _is_new_project = project is None
         if _is_placeholder_name and _is_new_project:
-            project_name = services._dedup_board_name(
-                services._deterministic_board_name(_filters_for_name), profile,
-            )
+            _base_name = services._deterministic_board_name(_filters_for_name)
+            if _base_name == 'Untitled' and _raw_name:
+                _base_name = _raw_name
+            project_name = services._dedup_board_name(_base_name, profile)
 
         with transaction.atomic():
             if project is None:
@@ -371,29 +327,6 @@ def create_session(request, profile, recent_cutoff):
                     user=profile, name=project_name, filters=filters, raw_query=raw_query,
                     is_temp=True,
                 )
-                # TASTE-BOARD-NAME: register the Gemini name-upgrade thread to
-                # run ONLY after this transaction actually commits (so the
-                # thread's re-fetch of the Project row is guaranteed to find
-                # it). Passes PKs, never ORM objects, across the thread
-                # boundary. Never blocks the response — fire-and-forget.
-                if _is_placeholder_name:
-                    _project_pk = project.pk
-                    _fallback_name = project_name
-                    _filters_for_name_thread = dict(_filters_for_name)
-                    _raw_query_for_thread = raw_query
-                    _profile_pk = profile.pk
-
-                    def _register_name_thread():
-                        Thread(
-                            target=_async_board_name_update,
-                            args=(
-                                _project_pk, _fallback_name, _filters_for_name_thread,
-                                _raw_query_for_thread, _profile_pk,
-                            ),
-                            daemon=True,
-                        ).start()
-
-                    transaction.on_commit(_register_name_thread)
             session = AnalysisSession.objects.create(
                 user                     = profile,
                 project                  = project,

@@ -41,6 +41,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     # Right after CORS so `total` covers every other middleware. /api/ only; fail-open.
     'config.middleware.ServerTimingMiddleware',
+    # PERF-MISC-1: gzip JSON >= 1 KB (never SSE / streaming / /api/v1/auth/*). Listed
+    # AFTER ServerTiming (its `total` covers compression) and BEFORE Common/Security
+    # so it compresses last on the way out (Django docs: gzip near the top).
+    'config.middleware.ApiGZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -151,6 +155,14 @@ def _env_int(name, default):
     except (TypeError, ValueError):
         return default
 
+
+# PERF-MISC-1: per-worker pre-warm (gunicorn.conf.py post_worker_init ->
+# apps/recommendation/prewarm.py). Env PREWARM_ENABLED=false disables it; always off
+# under pytest. Not an AppConfig hook, so manage.py / collectstatic never trigger it.
+PREWARM_ENABLED = (
+    os.getenv('PREWARM_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+    and 'pytest' not in sys.modules
+)
 
 DB_POOL_ENABLED = os.getenv('DB_POOL_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
 DB_POOL_OPTIONS = {

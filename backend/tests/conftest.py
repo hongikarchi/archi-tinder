@@ -79,5 +79,9 @@ def _patch_swipe_service_connections():
     # default stub counts no tags (tests needing specific tags override this patch).
     mock_cursor.fetchone.return_value = (None, None, [], None, [], [])
     mock_conn.__getitem__.return_value.cursor.return_value = mock_cursor
+    # Load the views package first so the patch target resolves even when this is the
+    # first test collected (importing swipe_service directly first is a circular import;
+    # views -> session_service -> swipe_service is the working order).
+    import apps.recommendation.views  # noqa: F401
     with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
         yield

@@ -375,9 +375,14 @@ def _parse_body(parsed, conversation_history, user_id, speculative=None):
 
     # IMP-6 Commit 2: spawn Stage 2 thread on terminal turn (probe_needed=False)
     # Stage 2 generates visual_description -> V_initial -> caches for SessionCreate.
-    # Only fires when stage_decouple_enabled=True (default OFF).
+    # Only fires when stage_decouple_enabled=True (default OFF) AND
+    # hyde_vinitial_enabled=True (PERF-MISC-1): V_initial has exactly one consumer
+    # (engine.create_pool_with_relaxation, gated on hyde_vinitial_enabled), so with
+    # HyDE off Stage 2 would burn 1 LLM + 1 HF call + 2 DB writes for a product
+    # nobody reads. stage_decouple_enabled still selects the cheaper Stage-1 prompt
+    # (parse_query) independent of this gate.
     # Probe turns are excluded above (unstable filter set — do not spawn Stage 2).
-    if RC.get('stage_decouple_enabled', False):
+    if RC.get('stage_decouple_enabled', False) and RC.get('hyde_vinitial_enabled', False):
         _spawn_stage2(
             filters=parsed_filters,
             raw_query=raw_query,

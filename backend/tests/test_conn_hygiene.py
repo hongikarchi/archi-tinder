@@ -201,14 +201,6 @@ class TestBackgroundThreadsCloseConnections:
         conns.close_all.assert_called()
         assert events[-1] == 'error'
 
-    def test_board_name_thread_closes_on_raise(self):
-        from apps.recommendation.services import session_service
-        with patch('django.db.connections') as conns, \
-                patch.object(session_service.services, '_gemini_board_name_raw', side_effect=_Boom):
-            with pytest.raises(_Boom):
-                session_service._async_board_name_update(1, 'fb', {}, 'q', 1)
-        _assert_closed(conns)
-
     def test_works_process_thread_closes_on_raise(self):
         from apps.works import services as works_services
         with patch('django.db.connections') as conns, \

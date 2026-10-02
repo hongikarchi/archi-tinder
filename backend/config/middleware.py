@@ -28,6 +28,7 @@ import time
 from contextlib import ExitStack
 
 from django.db import connections
+from django.middleware.gzip import GZipMiddleware
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -87,3 +88,42 @@ class ServerTimingMiddleware:
         except Exception as exc:  # noqa: BLE001
             logger.debug('ServerTimingMiddleware: header build failed: %s', exc)
         return response
+
+
+class ApiGZipMiddleware(GZipMiddleware):
+    """gzip for JSON API responses only (PERF-MISC-1 item d).
+
+    Django's stock GZipMiddleware is too broad for this API, so this subclass
+    compresses a response ONLY when ALL of these hold (otherwise it is returned
+    untouched):
+
+    - not a streaming response -- SSE (``text/event-stream``, the parse-query
+      stream) must be delivered incrementally; gzip would buffer it.
+      ``response.streaming`` is the primary guard, the content-type check is a
+      belt-and-braces for any non-streaming event-stream response.
+    - ``Content-Type`` is ``application/json`` (never HTML/static/images).
+    - path is not under ``/api/v1/auth/`` -- those responses carry access/refresh
+      tokens next to attacker-influenced reflected data; compressing secrets that
+      share a body with reflected input is the BREACH pattern. Every token-issuing
+      endpoint lives under that prefix (apps/accounts/urls.py).
+    - body >= ``min_length`` (1 KB): below that the gzip header + CPU outweigh
+      the saving (stock Django's floor is only 200 bytes).
+
+    Register in MIDDLEWARE right after ServerTimingMiddleware (so Server-Timing's
+    ``total`` still covers compression) and before CommonMiddleware.
+    """
+
+    min_length = 1024
+    no_compress_prefixes = ('/api/v1/auth/',)
+
+    def process_response(self, request, response):
+        if response.streaming:
+            return response
+        content_type = (response.get('Content-Type') or '').split(';')[0].strip().lower()
+        if content_type != 'application/json':  # also excludes text/event-stream
+            return response
+        if request.path.startswith(self.no_compress_prefixes):
+            return response
+        if len(response.content) < self.min_length:
+            return response
+        return super().process_response(request, response)

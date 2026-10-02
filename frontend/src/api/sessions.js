@@ -279,14 +279,44 @@ export async function parseQueryStream(input, opts = {}, callbacks = {}) {
   return parseQuery(input, opts)
 }
 
-/**
- * Fetch final session results.
- */
-export async function getResult({ session_id }) {
+// PERF-MISC-1(f): the result endpoint is hit by goToResults (App.jsx) AND the
+// useResults mount effect (plus StrictMode's double effect) for one arrival, and
+// the backend persists provenance fields on every call. Share one in-flight
+// request per session id, and keep the settled promise a few seconds so a lazy
+// ResultsPage chunk that mounts just after goToResults resolved reuses it too.
+// Failures are evicted immediately so retries re-fetch.
+const _RESULT_REUSE_MS = 4000
+const _resultInflight = new Map()
+
+export function _resetResultCache() { _resultInflight.clear() }
+
+async function _fetchResult(session_id) {
   const result = await callApi('GET', `/analysis/sessions/${session_id}/result/`)
   return {
     ...result,
     liked_images:           (result.liked_images || []).map(normalizeCard),
     predicted_like_images:  (result.predicted_images || []).map(normalizeCard),
   }
+}
+
+/**
+ * Fetch final session results (deduped per session id, see above).
+ */
+export function getResult({ session_id }) {
+  const hit = _resultInflight.get(session_id)
+  if (hit) return hit.promise
+  const promise = _fetchResult(session_id)
+  const entry = { promise }
+  _resultInflight.set(session_id, entry)
+  promise.then(
+    () => {
+      setTimeout(() => {
+        if (_resultInflight.get(session_id) === entry) _resultInflight.delete(session_id)
+      }, _RESULT_REUSE_MS)
+    },
+    () => {
+      if (_resultInflight.get(session_id) === entry) _resultInflight.delete(session_id)
+    },
+  )
+  return promise
 }

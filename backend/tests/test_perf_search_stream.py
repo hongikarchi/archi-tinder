@@ -171,7 +171,8 @@ def parse_env():
             patch('apps.recommendation.views.search.engine.get_diverse_random',
                   return_value=list(RESULTS)), \
             patch('apps.recommendation.views.search._spawn_stage2') as spawn, \
-            patch.dict('django.conf.settings.RECOMMENDATION', {'stage_decouple_enabled': True}):
+            patch.dict('django.conf.settings.RECOMMENDATION',
+                       {'stage_decouple_enabled': True, 'hyde_vinitial_enabled': True}):
         yield SimpleNamespace(events=emitted, search=search, spawn=spawn)
 
 
