@@ -55,14 +55,23 @@ ALL_ENDPOINTS = [
 
 class TestFeatureFlag:
     def test_default_is_off(self):
-        """Settings default (env unset) is OFF — checked in a clean subprocess."""
+        """Settings default (env unset) is OFF — checked in a clean subprocess.
+
+        The subprocess has no `pytest` in sys.modules, so settings.py's guard
+        would load backend/.env (a local MESSAGING_ENABLED=true would leak in).
+        Stub dotenv.load_dotenv before settings import so only the env passed
+        here is seen.
+        """
         import os
         import subprocess
         import sys
         env = {k: v for k, v in os.environ.items() if k != 'MESSAGING_ENABLED'}
+        script = (
+            'import dotenv; dotenv.load_dotenv = lambda *a, **k: False; '
+            'from django.conf import settings; print(settings.MESSAGING_ENABLED)'
+        )
         out = subprocess.run(
-            [sys.executable, '-c',
-             'import django.conf; from django.conf import settings; print(settings.MESSAGING_ENABLED)'],
+            [sys.executable, '-c', script],
             env=env, capture_output=True, text=True, check=True,
         )
         assert out.stdout.strip().splitlines()[-1] == 'False'
