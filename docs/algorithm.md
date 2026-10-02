@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-09-27 e13c9b9
+**Last Synced (Reporter):** 2026-10-02 836bc60
 
 ---
 
@@ -188,6 +188,9 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | `pool_embedding_cache_max_size` | int | 1000-10000 | 5000 |
 | `async_prefetch_enabled` | bool | True/False | True |
 | `async_prefetch_cache_timeout_seconds` | int | 10-300 | 60 |
+| `taste_pool_overfetch` | int | | 3 |
+| `taste_pool_mmr_penalty` | float | | 1.0 |
+| `taste_pool_random_fraction` | float | | 0.2 |
 | `context_caching_enabled` | bool | True/False | False |
 | `context_caching_ttl_seconds` | int | 60-7200 | 3600 |
 | `stage_decouple_enabled` | bool | True/False | False |

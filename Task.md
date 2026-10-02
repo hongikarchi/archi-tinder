@@ -334,6 +334,13 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### PERF-ROUND3 — 취향분석 pool 버그 + 검색 카드 선표시 + 정리 묶음 — RESOLVED 2026-10-02 (`836bc60`)
+- BACK-PROMOTE-1: 취향 분석(promote-to-taste) pool이 빈 필터 조기반환으로 150개 균등 무작위였음 → 선호 벡터 HNSW 이웃 3x 오버페치 + MMR + 20% 무작위 탐색. 실DB 취향 유사도 0.60→0.77, 브루탈리즘 좋아요 시 pool 내 0→29개 (`c9aa0f1`).
+- PERF-SEARCH-2: filters 시점 참고건물 선검색 → SSE `results`, final 입력 같으면 재사용. LLM 출력 4필드 서버 계산으로 이전(~350→~245 토큰; A/B 핵심필터 일치 87.6% = 재실행 노이즈 88.0%). 로컬 카드 1.97-2.06s, 완료 2.11-2.20s (이전 3.7-4.8s) (`dcd1429`).
+- PERF-MISC-1: 미사용 HyDE Stage-2 중단, 보드명 LLM → 필터 규칙(한국어 placeholder 처리), gunicorn 워커 프리워밍, JSON gzip(SSE·auth 제외), Discovery FPS numpy, 결과 API 1회 호출 (`836bc60`).
+- 측정 근거: 검색 LLM 시간의 최대 구간은 출력 디코딩(~1.25s); nano·4.1-mini·reasoning low 모두 더 느리거나 부정확. Discovery/취향분석은 prod 추정 0.2-0.3s (로컬 1-2.5s는 RTT 73ms 탓).
+- 검증 한계: DB 통합 테스트 로컬 미실행 — CI 판정. app-test 스킵.
+
 ### PERF-ROUND2 — 속도 개선 2차 (스트리밍·풀·코드분할·런타임) — RESOLVED 2026-09-30 (`49cb015`)
 - 검색 해석 SSE 스트리밍(`/parse-query/stream/`): 필터 먼저 → 답변 타이핑 → 기존과 동일한 final. 로컬 실측 필터 1.4-2.6s (기존 전체 3.1-3.6s). 스키마·few-shot 필터 우선 순서.
 - Server-Timing 헤더(total/db/쿼리수, CORS 노출) + `prod_bench.py` 서버시간 열.

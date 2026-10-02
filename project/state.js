@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-30 22:27 KST',
+    updatedAt: '2026-10-02 18:23 KST',
     head: '405a537',
     branch: 'feature/claude-perf-round2',
   },
   done: [
+    {
+      id: 'PERF-ROUND3',
+      title: '취향분석 pool 버그 + 검색 카드 선표시 + 정리 묶음',
+      completedAt: '2026-10-02',
+      note: 'BACK-PROMOTE-1: 취향 분석(promote-to-taste) pool이 빈 필터 조기반환으로 150개 균등 무작위였음 → 선호 벡터 HNSW 이웃 3x 오버페치 + MMR + 20% 무작위 탐색. 실DB 취향 유사도 0.60→0.77, 브루탈리즘 좋아요 시 pool 내 0→29개 (`c9aa0f1`).',
+    },
     {
       id: 'PERF-ROUND2',
       title: '속도 개선 2차 (스트리밍·풀·코드분할·런타임)',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '질문카드가 리포트에 무영향·순위만 과왜곡',
       completedAt: '2026-09-25',
       note: '질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).',
-    },
-    {
-      id: 'UI-CONSISTENCY-B',
-      title: '디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체',
-      completedAt: '2026-09-29',
-      note: '2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`',
     },
   ],
   now: [],
@@ -1176,6 +1176,10 @@ window.PROJECT_STATE = {
       role: '단계별 성능 타이밍 계측',
     },
     {
+      path: 'backend/apps/recommendation/prewarm.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/serializers.py',
       role: 'Project 보드 직렬화기',
     },
@@ -1560,6 +1564,10 @@ window.PROJECT_STATE = {
       role: '태그-축 가중치 픽스처',
     },
     {
+      path: 'backend/gunicorn.conf.py',
+      role: '',
+    },
+    {
       path: 'backend/manage.py',
       role: 'Django 관리 명령 진입점',
     },
@@ -1620,6 +1628,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/tests/test_discovery_fps_vectorised.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_discovery_perf.py',
       role: '디스커버리 성능 테스트',
     },
@@ -1666,6 +1678,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_guest_auth.py',
       role: '게스트 인증 테스트',
+    },
+    {
+      path: 'backend/tests/test_gzip_middleware.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_hybrid_retrieval.py',
@@ -1740,6 +1756,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/tests/test_prewarm.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_profile_perf.py',
       role: '프로필 성능 테스트',
     },
@@ -1750,6 +1770,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_projects_n_plus_one.py',
       role: '프로젝트 N+1 쿼리 테스트',
+    },
+    {
+      path: 'backend/tests/test_promote_taste_pool.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_rerank_shape.py',
@@ -2006,6 +2030,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/api/discovery.js',
       role: '디스커버리 피드 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/getResult.test.mjs',
+      role: '',
     },
     {
       path: 'frontend/src/api/images.js',
