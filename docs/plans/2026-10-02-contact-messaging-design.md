@@ -29,6 +29,7 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 | D9 | 요청·메시지는 **알림 화면에서 완전히 제외**, 메시지함에만 존재. `Notification` row 생성 안 함 | 배지 중복 카운트 원천 차단 |
 | D10 | 무시된 요청: **30일간 재요청 불가**. 보낸 사람에게는 계속 **"보냄"**으로만 표시 (무시 사실 비공개) | 거절 통보로 인한 부담 제거 + 반복 요청 방지 |
 | D11 | 요청 수신 가능 대상 = **성향 진단 완료(`PersonalityProfile` 존재) AND `discovery_opt_in = true`** | 발견 피드 노출에 동의한 사람만 연락 받음 |
+| D12 | **기능 플래그 `MESSAGING_ENABLED`** 하나로 메시지 기능 전체(요청·메시지·차단·신고 API + 모든 UI) on/off. 기본 OFF | 구현을 develop에 합치되 검증 전 prod 노출을 막고, 문제 시 재배포 없이 env만 바꿔 끌 수 있게 (§6) |
 
 ## 3. 사용자 흐름
 
@@ -85,14 +86,33 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 ## 5. 프론트엔드 (PR 2, `DESIGN.md` 준수)
 
 1. **다른 유저 프로필 "관심 있어요"** — 기존 빈 `onClick` 교체. 상태 `none` → 인사말 시트, `sent` → 비활성 "보냄", `connected` → "메시지 보내기"(메시지함 시트의 해당 대화로). 수신 불가(D11 미충족) 유저에게는 버튼 숨김. 하드코딩 한국어(`실선 = 나…`, `다시 진단받기` 등 인접 문구 포함) i18n 키로 이동
-2. **내 프로필 메시지 버튼** — 콘텐츠 컨테이너(max-width 1100) 우측 상단, ≥44px 알약, 숫자 배지. 상단 고정 컨트롤(`PageTopControls`, top-left 클러스터)과 겹치지 않게 콘텐츠 흐름 안에 배치
+2. **내 프로필 메시지 버튼** — 콘텐츠 컨테이너(max-width 1100) 우측 상단, ≥44px 알약, 숫자 배지. 현재 `/user/me` 상단은 고정 컨트롤 두 묶음이다 (코드 기준):
+   - **우측 상단** `PageTopControls` (`components/PageTopControls.jsx` `wrapStyle`: `position: fixed; top: 16; right: 12; zIndex: 300`) — 언어 pill + 테마 pill (높이 28px) + 로그아웃. 프로필은 `splitMobile` 없이 쓰므로 ≤600px에서도 언어 pill이 왼쪽으로 옮겨가지 않고 우측에 그대로 있다
+   - **좌측 상단** isMe 클러스터 (`UserProfilePage.jsx`: `position: fixed; top: 16; left: 12; zIndex: 300`) — 알림 / 공유 / 설정
+   - 메시지 버튼은 **fixed가 아니라 콘텐츠 흐름 안**(`PageLogoHeader` 아래, 콘텐츠 컨테이너 상단 우측 정렬)에 둔다. 우측 고정 컨트롤(y ≈ 16–48px)과 세로로 겹치지 않도록 초기 위치는 그보다 아래. 스크롤 시에는 콘텐츠와 함께 올라가며 고정 컨트롤(z 300) 밑으로 지나간다 — 의도된 동작
 3. **탭바 프로필 점** — 앱 공용 `useUnreadMessages` hook (NOTIF-INAPP-1과 같은 계약: mount + `visibilitychange` + 라우트 변경 시 갱신, `setInterval` 없음). `TabBar`의 profile 아이콘에 점
 4. **메시지함 시트** — 기존 `Modal` sheet 모드 재사용. 상단 받은 요청 카드(인사말 + 수락/무시), 아래 대화방 목록. 빈 상태·로딩·에러 상태 포함
 5. **대화 화면 (시트 내부)** — 말풍선, 하단 입력창. 열려 있는 동안만 3~5초 `after=` 폴링, 시트 닫힘/탭 숨김 시 중지. 진입 시 read 호출. 모바일 키보드: `visualViewport` 기준으로 시트 높이 조정 (body는 viewport-lock)
 6. **⋯ 메뉴** — 차단 / 신고 (대화 화면, 다른 유저 프로필)
 7. **i18n** — 신규 문구 전부 ko/en 키
 
-## 6. 범위 밖 (YAGNI)
+## 6. 기능 플래그 (D12)
+
+기존 컨벤션(`STAGE_DECOUPLE_ENABLED`, `PERF_TIMING_ENABLED` — `backend/config/settings.py`의 env 기반 bool)을 따른다. **진실의 원천은 백엔드 하나**, 프론트는 런타임에 받아서 따른다 (VITE 빌드 플래그 아님 — 빌드 플래그는 끄려면 재빌드가 필요하고 백엔드와 어긋날 수 있다).
+
+- **백엔드**: `MESSAGING_ENABLED = os.getenv('MESSAGING_ENABLED', 'false').lower() == 'true'`
+  - OFF면 §4의 모든 엔드포인트(`contact-requests/*`, `conversations/*`, `messages/unread-count/`, `users/<id>/block/`, `reports/`)가 **404** — 공용 permission/mixin 하나로 일괄 적용
+  - OFF여도 **모델·마이그레이션은 그대로 적용** (스키마는 플래그와 무관). 데이터는 보존되고 ON하면 그대로 이어짐
+  - 차단(Block)의 발견 피드 제외 조건은 플래그와 무관하게 항상 적용 (OFF 중 기존 차단이 풀리면 안 됨)
+- **노출**: 기존 `MeView` (`accounts/views/auth.py`) 응답에 `features: { messaging: bool }` 추가 — 추가 요청 없이 로그인 시 함께 받음
+- **프론트**: `features.messaging === false`면
+  - 다른 유저 프로필 **"관심 있어요" 버튼 숨김** (빈 버튼 상태로 되돌리지 않음)
+  - 내 프로필 메시지 버튼, 탭바 프로필 점, 메시지함 시트, ⋯ 메뉴의 차단/신고 **렌더 안 함**
+  - `useUnreadMessages`는 **요청 자체를 보내지 않음**
+- **운영**: 로컬 `.env`에서 ON으로 개발·검증 → prod는 OFF로 배포 → `app-test` 통과 후 Railway env에서 ON. 끌 때도 env만 바꾸면 됨 (재시작만, 재배포 불필요)
+- **테스트**: OFF 시 전 엔드포인트 404, ON 시 정상 동작, `MeView`의 `features.messaging` 값 (`override_settings`)
+
+## 7. 범위 밖 (YAGNI)
 
 - 실시간 말풍선/토스트, WebSocket
 - 이메일·푸시 알림 (NOTIF-CHANNELS-1, 신규 외부 의존 승인 필요)
@@ -100,14 +120,15 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 - 신고 처리 관리자 UI (DB 조회로 대응)
 - 공모전 팀 초대와의 연동 (DEPLOY-BLOCKER-1에서 별도 처리)
 
-## 7. 연관 항목
+## 8. 연관 항목
 
 - **FULL-LEGAL-1**: 개인정보처리방침에 메시지 보관·신고 데이터 처리 명시 필요 (이 기능 출시 전후로 함께)
 - **DEPLOY-BLOCKER-1 ④**: D5로 반복 방지
 - **NOTIF-INAPP-1 §3**: D8로 정책 유지
 
-## 8. 검증과 배포
+## 9. 검증과 배포
 
-- `app-test` FEATURE-SCOPED: 계정 2개로 요청 → 수락 → 대화 → 무시(쿨다운) → 차단 체크리스트
-- 마이그레이션 포함 → 배포 후 `make migrate-prod` 필수
+- `app-test` FEATURE-SCOPED (로컬 `MESSAGING_ENABLED=true`): 계정 2개로 요청 → 수락 → 대화 → 무시(쿨다운) → 차단 체크리스트 + **플래그 OFF 시 관련 UI 전부 미노출·API 404** 확인
+- 마이그레이션 포함 → 배포 후 `make migrate-prod` 필수 (플래그 OFF여도 스키마는 적용)
+- prod는 플래그 OFF로 배포 → 운영 확인 후 Railway env에서 ON
 - 브랜치 `feature/sns-contact-messaging`, PR 1(백엔드) → PR 2(프론트) 순서
