@@ -32,6 +32,12 @@ export function markUnblocked(userId) {
   emit()
 }
 
+export function clearBlocked() {
+  if (blocked.size === 0) return
+  blocked.clear()
+  emit()
+}
+
 export function isBlockedLocally(userId) {
   const k = key(userId)
   return k != null && blocked.has(k)

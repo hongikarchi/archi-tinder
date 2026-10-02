@@ -34,6 +34,7 @@ import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, ex
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
+import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 
 // ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
@@ -110,6 +111,7 @@ export default function App() {
   // no messaging UI renders and no messaging endpoint is called.
   useEffect(() => {
     resetUnreadMessages()
+    clearBlocked()
     if (!userId || !api.getToken()) {
       resetMessagingFeature()
       return

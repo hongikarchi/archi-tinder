@@ -73,20 +73,26 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
   }
 
   async function handleUnblock() {
-    setMenuOpen(false)
+    if (busy) return
+    setBusy(true)
+    setError(null)
     try {
       await unblockUser(userId)
       markUnblocked(userId)
+      setMenuOpen(false)
       onUnblocked?.()
     } catch {
-      /* best-effort — the item stays "Unblock" so the user can retry */
+      // keep the menu open so the failure is visible and the user can retry
+      setError('messaging.unblockError')
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
     <div className={styles.menuWrap} ref={wrapRef}>
       <FloatingIconButton
-        onClick={() => setMenuOpen(o => !o)}
+        onClick={() => { setError(null); setMenuOpen(o => !o) }}
         ariaLabel={t('messaging.more')}
         title={t('messaging.more')}
         aria-haspopup="menu"
@@ -102,7 +108,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
       {menuOpen && (
         <div className={styles.menu} role="menu">
           {blocked ? (
-            <button type="button" role="menuitem" className={styles.menuItem} onClick={handleUnblock}>
+            <button type="button" role="menuitem" className={styles.menuItem} onClick={handleUnblock} disabled={busy}>
               {t('messaging.unblock')}
             </button>
           ) : (
@@ -115,6 +121,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
               {t('messaging.block')}
             </button>
           )}
+          {error && !confirmOpen && <p className={styles.composeError} role="alert">{t(error)}</p>}
           <button
             type="button"
             role="menuitem"

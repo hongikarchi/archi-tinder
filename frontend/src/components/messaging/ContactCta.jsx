@@ -27,16 +27,26 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
   useEffect(() => {
     if (!enabled || !userId || hidden) return undefined
     let cancelled = false
-    setStatus(null)
     getContactStatus(userId)
       .then(data => { if (!cancelled) setStatus(data) })
       .catch(() => { if (!cancelled) setStatus(null) })
     return () => { cancelled = true }
   }, [enabled, userId, hidden])
 
-  if (!enabled || hidden || !status) return null
+  // New profile -> drop the previous user's status (render-time reset, no
+  // effect flicker); a hidden toggle keeps the rendered state.
+  const [statusUser, setStatusUser] = useState(userId)
+  if (statusUser !== userId) {
+    setStatusUser(userId)
+    setStatus(null)
+    setGreetingOpen(false)
+    setSheet(null)
+  }
 
-  const { state, can_request: canRequest } = status
+  const sheetsOpen = greetingOpen || !!sheet
+  if (!enabled || (!status && !sheetsOpen)) return null
+
+  const { state, can_request: canRequest } = status || {}
 
   function handleSent(res) {
     setGreetingOpen(false)
@@ -49,7 +59,9 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
   }
 
   let button = null
-  if (state === 'sent') {
+  if (hidden) {
+    button = null // peer blocked: hide the button only; open sheets stay mounted
+  } else if (state === 'sent') {
     button = (
       <button type="button" className={buttonClassName} disabled>
         {t('messaging.interestSent')}
