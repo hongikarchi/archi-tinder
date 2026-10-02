@@ -34,6 +34,16 @@ import styles from './Modal.module.css'
  * Modal because it stacks under another open Modal that should own Escape
  * (e.g. SaveBoardModal staying open under VerifyGateModal at zIndex 10100 so
  * the user's in-progress name/visibility choices survive verification).
+ *
+ * FULL-MESSAGING-1 additions (all backward-compatible, default off):
+ *  - `ariaLabel`  — accessible name when no `title` is rendered (a caller that
+ *    draws its own header row inside the body).
+ *  - `fill`       — fixed-height flex-column panel (body fills the remaining
+ *    height and the caller scrolls inside it) for chat-style sheets whose
+ *    composer must stay pinned at the bottom.
+ *  - `panelStyle` — extra inline style on the panel; used to pass the
+ *    `--modal-max-h` / `--modal-kb-inset` custom properties from
+ *    `useVisualViewportSheetStyle` so a mobile sheet clears the keyboard.
  */
 export default function Modal({
   open,
@@ -47,6 +57,9 @@ export default function Modal({
   className = '',
   centered = false,
   closeOnEscape = true,
+  ariaLabel,
+  fill = false,
+  panelStyle,
 }) {
   const titleId = useId()
   const panelRef = useRef(null)
@@ -81,9 +94,10 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
         tabIndex={-1}
-        className={`${styles.panel} ${centered ? styles.centered : ''} ${className}`}
-        style={{ '--modal-max-width': `${width}px` }}
+        className={`${styles.panel} ${centered ? styles.centered : ''} ${fill ? styles.fill : ''} ${className}`}
+        style={{ '--modal-max-width': `${width}px`, ...panelStyle }}
       >
         <div className={styles.handle} aria-hidden="true" />
 

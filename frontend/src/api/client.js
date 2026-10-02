@@ -19,3 +19,8 @@ export { addLikedBuilding, getLikedBuildings } from './liked.js'
 export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.js'
 export { listNotifications, getUnreadCount, markRead } from './notifications.js'
 export { getInspectBuildings, getInspectBuilding, inspectSearch } from './inspect.js'
+export {
+  sendContactRequest, listReceivedRequests, getContactStatus, acceptContactRequest, ignoreContactRequest,
+  listConversations, listMessages, sendMessage, markConversationRead, getMessagesUnreadCount,
+  blockUser, unblockUser, reportTarget,
+} from './messaging.js'

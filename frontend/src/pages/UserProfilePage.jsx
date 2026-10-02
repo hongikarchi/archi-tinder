@@ -23,6 +23,10 @@ import PhotoTile from '../components/PhotoTile.jsx'
 import SectionTitle from '../components/SectionTitle.jsx'
 import Skeleton from '../components/Skeleton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
+import { useMessagingEnabled } from '../hooks/useMessagingFeature.js'
+import MessagesEntry from '../components/messaging/MessagesEntry.jsx'
+import ContactCta from '../components/messaging/ContactCta.jsx'
+import UserActionsMenu from '../components/messaging/UserActionsMenu.jsx'
 import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.jsx'
 
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
@@ -94,6 +98,11 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   // loading/error early returns below).
   const { count: unreadCount } = useUnreadNotifications(isMe)
   const unreadBadgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
+
+  // FULL-MESSAGING-1: flag-gated messaging surfaces. `blockedPeer` hides the
+  // contact CTA after the viewer blocks this user from the profile menu.
+  const messagingEnabled = useMessagingEnabled()
+  const [blockedPeer, setBlockedPeer] = useState(false)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -560,6 +569,22 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       {/* Unified responsive container (max-width 1100) */}
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
 
+        {/* FULL-MESSAGING-1: in-flow (NOT fixed) so it can never overlap the
+            fixed PageTopControls / isMe cluster; both render nothing while the
+            messaging flag is OFF. isMe -> message pill (>=44px, unread badge);
+            !isMe -> block/report "..." menu. */}
+        {isMe && <MessagesEntry />}
+        {!isMe && messagingEnabled && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-12px 0 12px', minHeight: 44, alignItems: 'center' }}>
+            <UserActionsMenu
+              userId={effectiveUserId}
+              name={user.display_name || t('messaging.unknownUser')}
+              onBlocked={() => setBlockedPeer(true)}
+              onUnblocked={() => setBlockedPeer(false)}
+            />
+          </div>
+        )}
+
         <ProfileHero
           user={user}
           boardsTotalCount={boardsTotalCount}
@@ -591,7 +616,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   onClick={() => navigate('/assessment')}
                   className={styles.personalityCtaSecondary}
                 >
-                  성향 진단 받기
+                  {t('profilePersonality.takeAssessment')}
                 </button>
               </div>
             )
@@ -608,7 +633,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   size={180}
                 />
                 <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0 }}>
-                  {user.personality.type_code} 유형
+                  {t('profilePersonality.typeSuffix', { type: user.personality.type_code })}
                 </p>
                 {/* Retest. The backend already upserts (PersonalityProfile
                     .update_or_create + profile-cache eviction), so this needs no
@@ -628,7 +653,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   style={{ marginTop: 4 }}
                   className={styles.personalityCtaSecondary}
                 >
-                  다시 진단받기
+                  {t('profilePersonality.retake')}
                 </button>
               </div>
             )
@@ -644,15 +669,16 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   size={180}
                 />
                 <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
-                  실선 = 나, 점선 = 상대방
+                  {t('profilePersonality.legend')}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {}}
-                  className={styles.personalityCtaPrimary}
-                >
-                  관심 있어요
-                </button>
+                {/* Contact CTA — reflects contact-requests/status/ (none ->
+                    greeting sheet, sent -> disabled, connected -> open
+                    conversation); hidden entirely while the flag is OFF. */}
+                <ContactCta
+                  userId={effectiveUserId}
+                  buttonClassName={styles.personalityCtaPrimary}
+                  hidden={blockedPeer}
+                />
               </div>
             )
           }
@@ -670,7 +696,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                   onClick={() => navigate('/assessment')}
                   className={styles.personalityCtaPrimary}
                 >
-                  나의 성향 확인해보기 →
+                  {t('profilePersonality.checkMine')}
                 </button>
               </div>
             )

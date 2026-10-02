@@ -250,6 +250,12 @@
   transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
 }
 
+.personalityCtaPrimary:disabled {
+  opacity: 0.55;
+  cursor: default;
+  box-shadow: none;
+}
+
 .personalityCtaPrimary:focus-visible {
   outline: 2px solid var(--accent-1);
   outline-offset: 2px;
