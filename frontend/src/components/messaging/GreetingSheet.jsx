@@ -49,6 +49,7 @@ export default function GreetingSheet({ recipientId, onClose, onSent }) {
       title={t('messaging.greetingTitle')}
       closeLabel={t('messaging.close')}
       panelStyle={sheetStyle}
+      portal
     >
       <p className={styles.dialogText}>{t('messaging.greetingBody')}</p>
       <textarea

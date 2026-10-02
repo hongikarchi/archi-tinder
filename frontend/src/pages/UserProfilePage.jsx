@@ -27,6 +27,7 @@ import { useMessagingEnabled } from '../hooks/useMessagingFeature.js'
 import MessagesEntry from '../components/messaging/MessagesEntry.jsx'
 import ContactCta from '../components/messaging/ContactCta.jsx'
 import UserActionsMenu from '../components/messaging/UserActionsMenu.jsx'
+import { useBlockedUser } from '../components/messaging/blockedUsers.js'
 import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.jsx'
 
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
@@ -102,7 +103,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   // FULL-MESSAGING-1: flag-gated messaging surfaces. `blockedPeer` hides the
   // contact CTA after the viewer blocks this user from the profile menu.
   const messagingEnabled = useMessagingEnabled()
-  const [blockedPeer, setBlockedPeer] = useState(false)
+  const blockedPeer = useBlockedUser(effectiveUserId)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
@@ -579,8 +580,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             <UserActionsMenu
               userId={effectiveUserId}
               name={user.display_name || t('messaging.unknownUser')}
-              onBlocked={() => setBlockedPeer(true)}
-              onUnblocked={() => setBlockedPeer(false)}
             />
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import FloatingIconButton from './FloatingIconButton.jsx'
 import styles from './Modal.module.css'
 
@@ -44,6 +45,13 @@ import styles from './Modal.module.css'
  *  - `panelStyle` — extra inline style on the panel; used to pass the
  *    `--modal-max-h` / `--modal-kb-inset` custom properties from
  *    `useVisualViewportSheetStyle` so a mobile sheet clears the keyboard.
+ *  - `portal`     — render backdrop+panel into `document.body` via
+ *    `createPortal`. Needed when the caller sits inside a stacking context
+ *    (e.g. a `position:relative; z-index:1` page container) that would trap the
+ *    Modal's z-index below the root-level fixed TabBar (z 100) on mobile.
+ *    Default false: every other caller renders in place, unchanged. Escape /
+ *    focus handling is unaffected (document listener + ref focus); React
+ *    synthetic events still bubble through the portal to React ancestors.
  */
 export default function Modal({
   open,
@@ -60,6 +68,7 @@ export default function Modal({
   ariaLabel,
   fill = false,
   panelStyle,
+  portal = false,
 }) {
   const titleId = useId()
   const panelRef = useRef(null)
@@ -83,7 +92,7 @@ export default function Modal({
     if (e.target === e.currentTarget) onClose()
   }
 
-  return (
+  const node = (
     <div
       className={`${styles.backdrop} ${centered ? styles.centered : ''}`}
       style={{ zIndex }}
@@ -120,4 +129,6 @@ export default function Modal({
       </div>
     </div>
   )
+
+  return portal && typeof document !== 'undefined' ? createPortal(node, document.body) : node
 }

@@ -156,6 +156,7 @@ export default function MessagesSheet({ onClose, initialConversationId = null, i
       closeLabel={t('messaging.close')}
       closeOnEscape={!overlayOpen}
       panelStyle={sheetStyle}
+      portal
     >
       {active ? (
         <ConversationView

@@ -45,6 +45,7 @@ export default function ReportDialog({ targetType, targetId, onClose }) {
       centered
       onClose={onClose}
       zIndex={320}
+      portal
       title={t('messaging.reportTitle')}
       closeLabel={t('messaging.close')}
     >

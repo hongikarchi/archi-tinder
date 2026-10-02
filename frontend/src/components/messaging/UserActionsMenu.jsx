@@ -5,6 +5,7 @@ import ReportDialog from './ReportDialog.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import { blockUser, unblockUser } from '../../api/messaging.js'
 import { VerifyRequiredError } from '../../api/projects.js'
+import { markBlocked, markUnblocked, useBlockedUser } from './blockedUsers.js'
 import styles from './Messaging.module.css'
 
 /**
@@ -15,7 +16,9 @@ import styles from './Messaging.module.css'
  *
  * `onBlocked` fires after a successful block (parent closes the conversation
  * UI / hides the contact CTA); `onUnblocked` after a successful unblock. After blocking, the same menu item flips to
- * "Unblock" for the rest of the session — the API has no block-status read.
+ * "Unblock" for the rest of the session — the API has no block-status read, so
+ * the state lives in the shared `blockedUsers` store (every menu instance for
+ * this user agrees, even after the conversation sheet is reopened).
  * `onOverlayChange(open)` lets a host sheet suspend its own ESC-to-close while
  * the dropdown or a dialog owns Escape.
  */
@@ -24,7 +27,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
-  const [blocked, setBlocked] = useState(false)
+  const blocked = useBlockedUser(userId)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const wrapRef = useRef(null)
@@ -58,7 +61,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
     setError(null)
     try {
       await blockUser(userId)
-      setBlocked(true)
+      markBlocked(userId)
       setConfirmOpen(false)
       onBlocked?.()
     } catch (err) {
@@ -73,7 +76,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
     setMenuOpen(false)
     try {
       await unblockUser(userId)
-      setBlocked(false)
+      markUnblocked(userId)
       onUnblocked?.()
     } catch {
       /* best-effort — the item stays "Unblock" so the user can retry */
@@ -129,6 +132,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
           centered
           onClose={() => setConfirmOpen(false)}
           zIndex={320}
+          portal
           title={t('messaging.blockConfirmTitle', { name })}
           closeLabel={t('messaging.close')}
         >
