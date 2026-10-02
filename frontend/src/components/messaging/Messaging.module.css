@@ -73,12 +73,14 @@
 /* ---- Profile entry pill (>=44px, in content flow) ------------------------ */
 
 .pill {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: var(--radius-pill);
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
   background: var(--color-surface);
   border: 1px solid var(--color-border-soft);
   color: var(--color-text);
@@ -101,6 +103,12 @@
 }
 
 /* ---- Badges -------------------------------------------------------------- */
+
+.pill .badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
 
 .badge {
   display: inline-block;
