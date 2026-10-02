@@ -42,20 +42,20 @@ logger = logging.getLogger('apps.recommendation')
 
 # FULL-LANGUAGE-1: per-user language override directive injected into system_instruction.
 # Scoped to `reply` and `probe_question` only.
-# Does NOT override rule 3 (visual_description ALWAYS English) or rule 4 (raw_query verbatim).
+# Does NOT override rule 3 (visual_description ALWAYS English).
 # language=None (default) leaves current inference-from-message behaviour intact.
 _LANG_DIRECTIVE = {
     'ko': (
         '\n\n## Language override (user preference)\n'
         'The user has set their language preference to Korean. '
         'Write `reply` and `probe_question` in Korean regardless of the language of their message. '
-        '`visual_description` remains English (rule 3). `raw_query` is verbatim (rule 4).'
+        '`visual_description` remains English (rule 3).'
     ),
     'en': (
         '\n\n## Language override (user preference)\n'
         'The user has set their language preference to English. '
         'Write `reply` and `probe_question` in English regardless of the language of their message. '
-        '`visual_description` remains English (rule 3). `raw_query` is verbatim (rule 4).'
+        '`visual_description` remains English (rule 3).'
     ),
 }
 
@@ -457,6 +457,17 @@ def _apply_filter_delta(data, prior_filters):
     return filters, filter_priority, filter_delta
 
 
+_IMAGE_FOCUS_VALUES = ('exterior', 'interior', 'drawing', 'aerial', 'detail')
+
+
+def normalise_image_focus(value):
+    """Allowlist the model's image_focus; anything else -> None.
+
+    Shared by _finalize_parsed and the streaming endpoint's early search
+    (PERF-SEARCH-2) so both see the identical value."""
+    return value if value in _IMAGE_FOCUS_VALUES else None
+
+
 def _finalize_parsed(data, prior_filters, first_user_text, _user_turn_count, *,
                      stage1, log_label):
     """Post-process the LLM's parsed JSON `data` into the parse_query result dict.
@@ -483,12 +494,14 @@ def _finalize_parsed(data, prior_filters, first_user_text, _user_turn_count, *,
     # raw_query: spec §3 says always verbatim first user message
     raw_query = data.get('raw_query') or first_user_text
 
-    image_focus = data.get('image_focus')
-    if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
-        image_focus = None
+    image_focus = normalise_image_focus(data.get('image_focus'))
 
     # TASTE-CALIBRATION-1: extract calibration fields
     calibration = _extract_calibration_fields(data, filters, probe_needed)
+    # PERF-SEARCH-2: priority_ordered is no longer requested from the model (no consumer
+    # reads it beyond echoing it back); it is exactly the validated filter_priority.
+    if not calibration['priority_ordered']:
+        calibration['priority_ordered'] = list(filter_priority)
 
     result = {
         'probe_needed': probe_needed,

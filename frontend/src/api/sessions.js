@@ -159,7 +159,7 @@ class StreamFallbackError extends Error {}
  *   - server `error` event / bad payload    -> Error with `status` 500, `data`
  *   - timeout (abort)                       -> the AbortError, like the blocking call
  */
-async function _streamParseQuery(body, { onReply, onFilters } = {}) {
+async function _streamParseQuery(body, { onReply, onFilters, onResults } = {}) {
   const token = getToken()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PARSE_QUERY_TIMEOUT_MS)
@@ -201,6 +201,15 @@ async function _streamParseQuery(body, { onReply, onFilters } = {}) {
       }
       if (event === 'reply') _safeCall(onReply, payload?.text || '')
       else if (event === 'filters') _safeCall(onFilters, payload)
+      else if (event === 'results') {
+        // Speculative early cards (OpenAI streaming path only); `final.results`
+        // stays authoritative. Normalized exactly like the final payload.
+        _safeCall(onResults, {
+          results: (payload?.results || []).map(normalizeCard),
+          is_fallback: Boolean(payload?.is_fallback),
+          fallback_note: payload?.fallback_note || '',
+        })
+      }
       else if (event === 'final') final = payload
       else if (event === 'error') serverError = payload || {}
     })
@@ -241,6 +250,10 @@ async function _streamParseQuery(body, { onReply, onFilters } = {}) {
  * as parseQuery(); additionally reports progress through callbacks:
  *   onReply(textDelta)   -- incremental reply text (concatenation == final.reply)
  *   onFilters({structured_filters, filter_priority}) -- once, before `final`
+ *   onResults({results, is_fallback, fallback_note}) -- at most once, right after
+ *                           `filters` and before any reply text (OpenAI stream path
+ *                           only). SPECULATIVE: the resolved `final.results` is
+ *                           authoritative and may differ.
  *   onFallback()         -- the blocking parse-query call is about to run, so the
  *                           caller should discard any partially streamed text
  * Falls back to parseQuery() only on 401 (token refresh), network failure /

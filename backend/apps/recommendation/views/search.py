@@ -14,7 +14,7 @@ from rest_framework.utils.encoders import JSONEncoder
 from rest_framework.views import APIView
 
 from .. import engine, services
-from ..services.parse_query import _build_axis_chips, _STRONG_AXES
+from ..services.parse_query import _build_axis_chips, _STRONG_AXES, normalise_image_focus
 from ..throttles import LLMSearchThrottle
 
 logger = logging.getLogger('apps.recommendation')
@@ -271,14 +271,21 @@ def _parsed_filters_and_priority(parsed):
     return parsed_filters, parsed_priority
 
 
-def _parse_body(parsed, conversation_history, user_id):
-    """Search + payload for a parse_query() result (Branch B tail).
+def _search_inputs(parsed_filters, priority, raw_query, image_focus):
+    """The exact argument set the results search is a pure function of.
 
-    Runs the scored search, spawns Stage 2 on terminal turns and returns the exact
-    response body dict of POST /parse-query/ (probe or terminal shape)."""
-    parsed_filters, parsed_priority = _parsed_filters_and_priority(parsed)
-    raw_query = _first_user_text(conversation_history) or parsed.get('raw_query', '')
+    Used as the equality key between the early (speculative) search and the final
+    one (PERF-SEARCH-2): equal key => identical SQL => the early result tuple can
+    be reused verbatim at `final`."""
+    return (dict(parsed_filters), tuple(priority), raw_query or '', image_focus or None)
 
+
+def _run_results_search(parsed_filters, priority, raw_query, image_focus):
+    """Scored search + last-resort fallback -> (results, is_fallback, fallback_note).
+
+    Shared by the final payload (_parse_body) and the speculative early search of
+    the streaming endpoint so both run the very same code for the same inputs.
+    """
     # Compute results for EVERY turn (probe and terminal alike).
     # Product rule: every parse-query response shows ~20 references; the
     # probe question/chips are a supplementary overlay, never a replacement.
@@ -287,7 +294,6 @@ def _parse_body(parsed, conversation_history, user_id):
     filters = dict(parsed_filters)
     # image_focus lives outside the WHERE-clause filter dict but rides along
     # so cards get the user-requested cover variant.
-    image_focus = parsed.get('image_focus')
     if image_focus:
         filters['image_focus'] = image_focus
 
@@ -303,7 +309,7 @@ def _parse_body(parsed, conversation_history, user_id):
         results = engine.search_by_filters_scored(
             filters,
             raw_query=raw_query,
-            filter_priority=parsed_priority,
+            filter_priority=priority,
             limit=20,
             image_focus=image_focus,
         )
@@ -318,6 +324,32 @@ def _parse_body(parsed, conversation_history, user_id):
         results = engine.get_diverse_random(n=20, image_focus=image_focus)
         is_fallback = True
         fallback_note = _FALLBACK_NOTE
+    return results, is_fallback, fallback_note
+
+
+def _parse_body(parsed, conversation_history, user_id, speculative=None):
+    """Search + payload for a parse_query() result (Branch B tail).
+
+    Runs the scored search, spawns Stage 2 on terminal turns and returns the exact
+    response body dict of POST /parse-query/ (probe or terminal shape).
+
+    `speculative` (PERF-SEARCH-2, streaming only): `(inputs, (results, is_fallback,
+    fallback_note))` from the early search. Reused verbatim when `inputs` equals the
+    final search inputs (no second SQL, and the fallback's random cards are not
+    re-rolled); otherwise the search runs again and the final carries the
+    authoritative results.
+    """
+    parsed_filters, parsed_priority = _parsed_filters_and_priority(parsed)
+    raw_query = _first_user_text(conversation_history) or parsed.get('raw_query', '')
+    image_focus = parsed.get('image_focus')
+
+    final_inputs = _search_inputs(parsed_filters, parsed_priority, raw_query, image_focus)
+    if speculative is not None and speculative[0] == final_inputs:
+        results, is_fallback, fallback_note = speculative[1]
+    else:
+        results, is_fallback, fallback_note = _run_results_search(
+            parsed_filters, parsed_priority, raw_query, image_focus,
+        )
 
     # Probe turn: return probe payload with real results already computed above.
     # Stage 2 is NOT spawned on probe turns — the filter set is still unstable.
@@ -437,14 +469,50 @@ def _stream_worker(emit, conversation_history, language, prior_filters, user_id)
     Runs in a background thread (the LLM stream is consumed here while the response
     generator drains the queue), so it owns its DB connections and closes them.
     Always ends with exactly one `final` or one `error` event.
+
+    PERF-SEARCH-2 early results: the moment the early `filters` event is resolved the
+    results search is started speculatively (same function + args the final path
+    uses) and its cards are pushed as a `results` event, ~1.2 s before `final`. At
+    `final` the speculative tuple is reused verbatim when the final search inputs
+    (cleaned filters, filter_priority, raw_query, image_focus) are equal; otherwise
+    the search is re-run and `final.results` is authoritative (the client replaces
+    the early cards). The final payload is identical either way. Probe turns need no
+    special casing: `final` carries results on EVERY turn (see _parse_body), so early
+    results never have to be withdrawn.
     """
+    spec = {}  # 'value' -> (inputs, (results, is_fallback, fallback_note)) once computed
+
     def _on_filters_ready(partial):
         filters, priority = services.resolve_filters_from_partial(partial, prior_filters)
         cleaned = _clean_filters(filters)
+        cleaned_priority = _clean_filter_priority(priority, cleaned)
         emit('filters', {
             'structured_filters': cleaned,
-            'filter_priority': _clean_filter_priority(priority, cleaned),
+            'filter_priority': cleaned_priority,
         })
+        # Speculative search AFTER the filters event is out, and fully isolated: a
+        # failure here must neither re-trigger the post-parse `filters` fallback
+        # (the callback must not raise) nor break the stream -- final just recomputes.
+        try:
+            inputs = _search_inputs(
+                cleaned, cleaned_priority,
+                _first_user_text(conversation_history),
+                normalise_image_focus(partial.get('image_focus')),
+            )
+            outcome = _run_results_search(
+                cleaned, cleaned_priority, inputs[2], inputs[3],
+            )
+            spec['value'] = (inputs, outcome)
+            results, is_fallback, fallback_note = outcome
+            emit('results', {
+                'results': results,
+                'is_fallback': is_fallback,
+                'fallback_note': fallback_note,
+            })
+        except Exception:  # noqa: BLE001 -- speculative only; final recomputes
+            spec.pop('value', None)
+            logger.warning('parse-query stream: speculative results search failed',
+                           exc_info=True)
 
     def _on_reply_delta(text):
         emit('reply', {'text': text})
@@ -465,11 +533,14 @@ def _stream_worker(emit, conversation_history, language, prior_filters, user_id)
         if not sink.filters_emitted:
             # Gemini / non-stream fallback / non-conforming key order: derive the
             # filters event from the finished parse, just before `final`.
+            # (No early `results` on this path -- nothing would be gained.)
             parsed_filters, parsed_priority = _parsed_filters_and_priority(parsed)
             emit('filters', {
                 'structured_filters': parsed_filters, 'filter_priority': parsed_priority,
             })
-        emit('final', _parse_body(parsed, conversation_history, user_id))
+        emit('final', _parse_body(
+            parsed, conversation_history, user_id, speculative=spec.get('value'),
+        ))
     except Exception:  # noqa: BLE001 -- the stream must always terminate cleanly
         logger.exception('parse-query stream worker failed')
         emit('error', {'detail': _STREAM_ERROR_DETAIL})
@@ -504,6 +575,11 @@ class ParseQueryStreamView(APIView):
     Same auth, throttle scope and request body as ParseQueryView. Validation errors
     are ordinary JSON 400s (before any stream starts). Events:
         filters {structured_filters, filter_priority}   as soon as the model closes them
+        results {results, is_fallback, fallback_note}    PERF-SEARCH-2: speculative cards for
+                                                         those filters, right after `filters`
+                                                         (same card shape as final.results;
+                                                         final.results is authoritative and
+                                                         replaces them when it differs)
         reply   {text}                                   incremental reply text
         final   <exact ParseQueryView response body>
         error   {detail}                                 instead of final on failure

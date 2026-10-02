@@ -481,10 +481,18 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       // transparently on any stream failure).
       const parsed = await api.parseQueryStream(nextHistory, queryOptions, {
         onReply: delta => setStreamingReply(prev => ({
-          filters: prev?.filters, text: (prev?.text || '') + delta,
+          ...prev, text: (prev?.text || '') + delta,
         })),
         onFilters: data => setStreamingReply(prev => ({
-          text: prev?.text || '', filters: data?.structured_filters,
+          ...prev, text: prev?.text || '', filters: data?.structured_filters,
+        })),
+        // Speculative early cards: shown in the live bubble until `final`
+        // arrives; the final message then replaces them (final is authoritative).
+        onResults: data => setStreamingReply(prev => ({
+          ...prev,
+          text: prev?.text || '',
+          results: data?.results || [],
+          isFallback: Boolean(data?.is_fallback),
         })),
         onFallback: () => setStreamingReply(null),
       })
@@ -821,7 +829,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             </div>
           )}
 
-          {isLoading && streamingReply?.text && (
+          {isLoading && (streamingReply?.text || streamingReply?.results?.length > 0) && (
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'flex-start', alignSelf: 'flex-start', maxWidth: '100%',
@@ -835,11 +843,12 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
               }}>
                 {streamingReply.text}
                 <FilterChips filters={streamingReply.filters} />
+                <ResultStrip results={streamingReply.results} isFallback={streamingReply.isFallback} />
               </div>
             </div>
           )}
 
-          {isLoading && !streamingReply?.text && (
+          {isLoading && !streamingReply?.text && !(streamingReply?.results?.length > 0) && (
             <div style={{ alignSelf: 'flex-start' }}>
               <div style={{
                 padding: '12px 18px', background: 'var(--color-ai-bubble)',

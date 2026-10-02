@@ -45,18 +45,25 @@ def _axes(**kw):
 
 def _llm_output(*, filters=None, delta_set=None, delta_remove=None, priority=None,
                 probe_needed=False, reply='이해했어요: 따뜻한 "목재" 주택 — \U0001F3E0 맞을까요?',
-                probe_question=None, stage1=True):
-    """Model output in the NEW key order (filters, filter_delta, filter_priority first)."""
+                probe_question=None, stage1=True, image_focus=None, image_focus_last=False):
+    """Model output in the NEW key order (filters, filter_delta, image_focus,
+    filter_priority first). `image_focus_last=True` emits image_focus AFTER the reply
+    (a non-conforming order: it is then unknown when the early `filters` event fires)."""
     out = {
         'filters': _axes(**(filters or {})),
         'filter_delta': {'set': _axes(**(delta_set or {})), 'remove': delta_remove or []},
+    }
+    if not image_focus_last:
+        out['image_focus'] = image_focus
+    out.update({
         'filter_priority': priority if priority is not None else ['program', 'material'],
         'probe_needed': probe_needed,
         'reply': reply,
         'probe_question': probe_question,
-        'image_focus': None,
-        'raw_query': 'ignored-by-server-verbatim-rule',
-    }
+    })
+    if image_focus_last:
+        out['image_focus'] = image_focus
+    out['raw_query'] = 'ignored-by-server-verbatim-rule'
     if not stage1:
         out['visual_description'] = 'A warm timber house.'
     out.update({
@@ -195,7 +202,9 @@ class TestPartialJSONScanner:
     def test_key_order_events_follow_output_order(self):
         events, _ = _scan(FIRST_TURN_TEXT, 4)
         keys = [e[1] for e in events if e[0] == 'key']
-        assert keys[:5] == ['filters', 'filter_delta', 'filter_priority', 'probe_needed', 'reply']
+        assert keys[:6] == [
+            'filters', 'filter_delta', 'image_focus', 'filter_priority', 'probe_needed', 'reply',
+        ]
 
     def test_filters_value_available_before_reply_text_arrives(self):
         text = FIRST_TURN_TEXT
@@ -276,7 +285,7 @@ class TestParseStreamSink:
         for c in _chunks(text, 6):
             sink.feed(c)
         assert len(got) == 1
-        assert set(got[0]) == set(FILTER_TRIO)
+        assert set(got[0]) == set(FILTER_TRIO) | {'image_focus'}
         assert got[0]['filters']['program'] == 'Housing'
         assert sink.filters_emitted and sink.filters_ms is not None
         assert sink.ttft_ms is not None and sink.filters_ms >= sink.ttft_ms
@@ -308,7 +317,7 @@ class TestParseStreamSink:
         for c in _chunks(json.dumps(obj), 7):
             sink.feed(c)
         assert len(got) == 1  # exactly once
-        assert set(got[0]) == {'filter_delta', 'filter_priority'}
+        assert set(got[0]) == {'filter_delta', 'filter_priority', 'image_focus'}
         assert sink.filters_emitted and sink.filters_ms is not None
 
     def test_filters_fire_when_only_filters_present_no_delta(self):
@@ -318,7 +327,7 @@ class TestParseStreamSink:
         sink = ParseStreamSink(on_filters_ready=got.append)
         for c in _chunks(json.dumps(obj), 7):
             sink.feed(c)
-        assert len(got) == 1 and set(got[0]) == {'filters', 'filter_priority'}
+        assert len(got) == 1 and set(got[0]) == {'filters', 'filter_priority', 'image_focus'}
 
     def test_no_early_filters_with_priority_only(self):
         got = []
@@ -394,7 +403,7 @@ class TestGenerateContentStreaming:
         rf = kw['response_format']
         assert rf['type'] == 'json_schema' and rf['json_schema']['strict'] is True
         props = list(rf['json_schema']['schema']['properties'])
-        assert props[:3] == ['filters', 'filter_delta', 'filter_priority']
+        assert props[:4] == ['filters', 'filter_delta', 'image_focus', 'filter_priority']
         assert props.index('reply') > props.index('filter_priority')
         assert 'visual_description' not in props  # Stage-1 variant
 
@@ -766,6 +775,222 @@ class TestParseQueryStreamView:
 
 
 # ---------------------------------------------------------------------------
+# PERF-SEARCH-2: early (speculative) results
+# ---------------------------------------------------------------------------
+
+EARLY = [{'canonical_bld_id': 'bld_early_1'}, {'canonical_bld_id': 'bld_early_2'}]
+LATE = [{'canonical_bld_id': 'bld_late_1'}]
+
+
+def _stream_frames(text, body=None, chunk_size=5):
+    body = body or {'conversation_history': HISTORY}
+    with patch('apps.recommendation.services._get_client',
+               return_value=_FakeOpenAIClient(text=text, chunk_size=chunk_size)):
+        return _frames(_stream_post(body))
+
+
+class TestEarlyResults:
+    @override_settings(**OPENAI)
+    def test_results_emitted_right_after_filters_before_reply_and_final(self, parse_env):
+        parse_env.search.return_value = list(EARLY)
+        frames = _stream_frames(FIRST_TURN_TEXT)
+        names = [n for n, _ in frames]
+        assert names.count('results') == 1
+        assert names.index('filters') + 1 == names.index('results')
+        assert names.index('results') < names.index('reply') < names.index('final')
+        early = dict(frames)['results']
+        assert early == {'results': EARLY, 'is_fallback': False, 'fallback_note': ''}
+
+    @override_settings(**OPENAI)
+    def test_equal_inputs_reuse_speculative_results_without_second_search(self, parse_env):
+        parse_env.search.return_value = list(EARLY)
+        frames = _stream_frames(FIRST_TURN_TEXT)
+        assert parse_env.search.call_count == 1  # speculative only; final reused it
+        final = dict(frames)['final']
+        assert final['results'] == dict(frames)['results']['results'] == EARLY
+        # the speculative search used exactly the args the final path would
+        args, kwargs = parse_env.search.call_args
+        assert args[0] == final['structured_filters']
+        assert kwargs['filter_priority'] == final['filter_priority']
+        assert kwargs['raw_query'] == HISTORY[0]['text']
+        assert kwargs['limit'] == 20 and kwargs['image_focus'] is None
+
+    @override_settings(**OPENAI)
+    def test_final_payload_identical_to_blocking_when_results_reused(self, parse_env):
+        body = {'conversation_history': HISTORY}
+        final = dict(_stream_frames(FIRST_TURN_TEXT, body))['final']
+        with patch('apps.recommendation.services._get_client', return_value=MagicMock()), \
+                patch('apps.recommendation.services.generate_content_with_fallback',
+                      return_value=_blocking_response(FIRST_TURN_TEXT)):
+            blocking = _blocking_post(body)
+        assert json.loads(json.dumps(blocking.data)) == final
+
+    @override_settings(**OPENAI)
+    def test_image_focus_in_schema_order_keeps_early_and_final_search_equal(self, parse_env):
+        parse_env.search.return_value = list(EARLY)
+        text = _llm_output(filters=HOUSING, image_focus='interior')
+        frames = _stream_frames(text)
+        assert parse_env.search.call_count == 1
+        _, kwargs = parse_env.search.call_args
+        assert kwargs['image_focus'] == 'interior'
+        final = dict(frames)['final']
+        assert final['image_focus'] == 'interior' and final['results'] == EARLY
+
+    @override_settings(**OPENAI)
+    def test_different_final_inputs_rerun_search_and_final_is_authoritative(self, parse_env):
+        # image_focus emitted AFTER reply: unknown at the early event (None), final has
+        # 'interior' -> the early result is stale -> search runs again.
+        parse_env.search.side_effect = [list(EARLY), list(LATE)]
+        text = _llm_output(filters=HOUSING, image_focus='interior', image_focus_last=True)
+        frames = _stream_frames(text)
+        assert parse_env.search.call_count == 2
+        assert dict(frames)['results']['results'] == EARLY
+        final = dict(frames)['final']
+        assert final['results'] == LATE
+        assert parse_env.search.call_args_list[0][1]['image_focus'] is None
+        assert parse_env.search.call_args_list[1][1]['image_focus'] == 'interior'
+
+    @override_settings(**OPENAI)
+    def test_probe_turn_emits_early_results_and_final_still_carries_results(self, parse_env):
+        parse_env.search.return_value = list(EARLY)
+        text = _llm_output(
+            filters={'program': 'Housing'}, priority=['program'], probe_needed=True,
+            probe_question='따뜻한 재료 vs 차가운 기하?', reply='주택 확인했어요.',
+        )
+        frames = _stream_frames(text)
+        names = [n for n, _ in frames]
+        assert names.count('results') == 1 and names[-1] == 'final'
+        final = dict(frames)['final']
+        # final carries results on probe turns too (see _parse_body) -> early cards are
+        # never withdrawn: the probe overlay is added on top of the same cards.
+        assert final['probe_needed'] is True and final['results'] == EARLY
+        assert parse_env.search.call_count == 1
+        parse_env.spawn.assert_not_called()
+
+    @override_settings(**OPENAI)
+    def test_follow_up_turn_uses_merged_filters_for_early_search(self, parse_env):
+        prior = {'program': 'Housing', 'material': 'brick'}
+        text = _llm_output(delta_set={'material': 'timber'}, priority=['material'])
+        obj = json.loads(text)
+        del obj['filters']
+        frames = _stream_frames(
+            json.dumps(obj), {'conversation_history': HISTORY, 'prior_filters': prior},
+        )
+        assert parse_env.search.call_count == 1
+        args, _ = parse_env.search.call_args
+        assert args[0]['material'] == 'timber' and args[0]['program'] == 'Housing'
+        assert args[0] == dict(frames)['final']['structured_filters']
+
+    @override_settings(**OPENAI)
+    def test_empty_search_fallback_is_emitted_early_and_reused_not_rerolled(self, parse_env):
+        parse_env.search.return_value = []
+        with patch('apps.recommendation.views.search.engine.get_diverse_random',
+                   return_value=list(EARLY)) as rnd:
+            frames = _stream_frames(FIRST_TURN_TEXT)
+        assert rnd.call_count == 1  # reused at final, random cards not re-rolled
+        early = dict(frames)['results']
+        assert early['is_fallback'] is True and early['results'] == EARLY
+        final = dict(frames)['final']
+        assert final['is_fallback'] is True and final['results'] == EARLY
+        assert final['fallback_note'] == early['fallback_note'] != ''
+
+    @override_settings(**OPENAI)
+    def test_speculative_failure_is_isolated_single_filters_and_final_recomputes(self, parse_env):
+        parse_env.search.side_effect = [RuntimeError('db blip'), list(LATE)]
+        frames = _stream_frames(FIRST_TURN_TEXT)
+        names = [n for n, _ in frames]
+        assert names.count('filters') == 1 and 'results' not in names
+        assert names[-1] == 'final'
+        assert dict(frames)['final']['results'] == LATE
+
+    @override_settings(LLM_PROVIDER='gemini')
+    def test_gemini_path_has_no_early_results(self, parse_env):
+        with patch('apps.recommendation.services._get_client', return_value=MagicMock()), \
+                patch('apps.recommendation.services.generate_content_with_fallback',
+                      return_value=_blocking_response(FIRST_TURN_TEXT)):
+            frames = _frames(_stream_post({'conversation_history': HISTORY}))
+        assert [n for n, _ in frames] == ['filters', 'final']
+        assert parse_env.search.call_count == 1
+
+    def test_final_search_inputs_helper_equality(self):
+        from apps.recommendation.views.search import _search_inputs
+        a = _search_inputs({'program': 'Housing'}, ['program'], 'q', None)
+        assert a == _search_inputs({'program': 'Housing'}, ('program',), 'q', None)
+        assert a != _search_inputs({'program': 'Housing'}, ['program'], 'q', 'interior')
+        assert a != _search_inputs({'program': 'Office'}, ['program'], 'q', None)
+        assert a != _search_inputs({'program': 'Housing'}, ['program'], 'q2', None)
+        assert a != _search_inputs({'program': 'Housing'}, [], 'q', None)
+
+
+# ---------------------------------------------------------------------------
+# PERF-SEARCH-2 Part B: fields no longer requested from the model are derived
+# ---------------------------------------------------------------------------
+
+_TRIMMED = ('raw_query', 'suggested_quick_replies', 'priority_ordered', 'llm_response_message')
+
+
+def _trimmed_output(**kw):
+    obj = json.loads(_llm_output(**kw))
+    for k in _TRIMMED:
+        obj.pop(k, None)
+    return json.dumps(obj)
+
+
+class TestServerDerivedFields:
+    @override_settings(**OPENAI)
+    def test_terminal_single_axis_fields_derived_server_side(self, parse_env):
+        text = _trimmed_output(filters={'program': 'Housing'}, priority=['program'])
+        final = dict(_stream_frames(text))['final']
+        assert final['raw_query'] == HISTORY[0]['text']          # request text, not the model
+        assert final['priority_ordered'] == final['filter_priority'] == ['program']
+        assert final['llm_response_message'] == final['reply']   # existing reply fallback
+        assert final['suggested_quick_replies'] == []
+
+    @override_settings(**OPENAI)
+    def test_probe_message_falls_back_to_probe_question(self, parse_env):
+        text = _trimmed_output(
+            filters={'program': 'Housing'}, priority=['program'], probe_needed=True,
+            probe_question='따뜻한 재료 vs 차가운 기하?', reply='주택 확인했어요.',
+        )
+        final = dict(_stream_frames(text))['final']
+        assert final['probe_needed'] is True
+        assert final['llm_response_message'] == '따뜻한 재료 vs 차가운 기하?'
+        assert final['suggested_quick_replies'] == []
+
+    @override_settings(**OPENAI)
+    def test_multi_axis_chips_are_server_built_not_model_built(self, parse_env):
+        final = dict(_stream_frames(_trimmed_output(filters=HOUSING)))['final']
+        chips = final['suggested_quick_replies']
+        assert {c['axis'] for c in chips} == {'program', 'material', 'style'}
+        assert all(set(c) == {'label', 'axis', 'value'} for c in chips)
+        assert final['system_action'] == 'REQUEST_PRIORITY'
+        assert final['llm_response_message'] == '추천에 더 중요하게 생각할 기준이 있나요?'
+
+    @override_settings(**OPENAI)
+    def test_model_supplied_values_still_honoured_when_present(self, parse_env):
+        """Gemini / legacy output may still carry the fields: not discarded."""
+        obj = json.loads(_llm_output(filters={'program': 'Housing'}, priority=['program']))
+        obj['priority_ordered'] = ['program', 'space_experience']
+        obj['llm_response_message'] = '직접 쓴 메시지'
+        final = dict(_stream_frames(json.dumps(obj)))['final']
+        assert final['priority_ordered'] == ['program', 'space_experience']
+        assert final['llm_response_message'] == '직접 쓴 메시지'
+
+    def test_prompt_no_longer_asks_for_trimmed_fields(self):
+        prompt = services._CHAT_PHASE_SYSTEM_PROMPT + services._CALIBRATION_PROMPT_EXTENSION
+        block = prompt[prompt.index('## Your output schema'):prompt.index('## Allowed `program`')]
+        for k in _TRIMMED:
+            assert '"%s"' % k not in block
+        for k in ('suggested_quick_replies', 'priority_ordered', 'llm_response_message'):
+            assert '**%s**' % k not in services._CALIBRATION_PROMPT_EXTENSION
+        for ln in prompt.split(chr(10)):
+            if ln.startswith('ASSISTANT: {'):
+                assert 'raw_query' not in json.loads(ln[len('ASSISTANT: '):])
+        for name in ('_STAGE1_RESPONSE_SCHEMA',):
+            assert not set(_TRIMMED) & set(getattr(services, name)['properties'])
+
+
+# ---------------------------------------------------------------------------
 # Schema / prompt ordering (filters BEFORE reply; `required` unchanged)
 # ---------------------------------------------------------------------------
 
@@ -773,16 +998,20 @@ class TestSchemaAndPromptOrder:
     def test_strict_schema_order_and_required_unchanged(self):
         from apps.recommendation.services._prompts import _OPENAI_STRICT_PARSE_SCHEMA as s
         props = list(s['properties'])
-        assert props[:3] == ['filters', 'filter_delta', 'filter_priority']
+        assert props[:4] == ['filters', 'filter_delta', 'image_focus', 'filter_priority']
         assert props.index('reply') > props.index('filter_priority')
         assert props.index('probe_question') > props.index('filter_priority')
         assert set(props) == set(s['required'])
+        # PERF-SEARCH-2: raw_query / suggested_quick_replies / priority_ordered /
+        # llm_response_message are server-derived, not requested from the model.
         assert s['required'] == [
             'probe_needed', 'probe_question', 'reply', 'filters', 'filter_delta',
-            'filter_priority', 'image_focus', 'raw_query', 'visual_description',
-            'confidence_score', 'system_action', 'suggested_quick_replies',
-            'priority_ordered', 'llm_response_message',
+            'filter_priority', 'image_focus', 'visual_description',
+            'confidence_score', 'system_action',
         ]
+        for dropped in ('raw_query', 'suggested_quick_replies', 'priority_ordered',
+                        'llm_response_message'):
+            assert dropped not in s['properties']
 
     def test_stage1_strict_schema_is_legacy_minus_visual_description(self):
         from apps.recommendation.services._prompts import (
@@ -798,7 +1027,7 @@ class TestSchemaAndPromptOrder:
     def test_stage1_gemini_schema_order_and_required_unchanged(self):
         s = services._STAGE1_RESPONSE_SCHEMA
         props = list(s['properties'])
-        assert props[:3] == ['filters', 'filter_delta', 'filter_priority']
+        assert props[:4] == ['filters', 'filter_delta', 'image_focus', 'filter_priority']
         assert props.index('reply') > props.index('filter_priority')
         assert s['required'] == ['probe_needed', 'reply']
 

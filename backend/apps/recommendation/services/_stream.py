@@ -25,6 +25,10 @@ logger = logging.getLogger('apps.recommendation')
 # moment `filter_priority` closes (the last of the trio in the schema order), carrying
 # whichever of `filters` / `filter_delta` were already closed.
 FILTER_TRIO = ('filters', 'filter_delta', 'filter_priority')
+# PERF-SEARCH-2: scalar keys that sit BEFORE `filter_priority` in the strict schema
+# and ride along in the early `partial` when already closed (they feed the speculative
+# results search, which needs image_focus to match the final search exactly).
+FILTER_EXTRA_KEYS = ('image_focus',)
 _FILTER_TRIGGER = 'filter_priority'
 _FILTER_BODY_KEYS = ('filters', 'filter_delta')
 
@@ -232,8 +236,8 @@ class ParseStreamSink:
     Callbacks (both optional, exceptions inside them are swallowed):
         on_filters_ready(partial: dict)   once, when filter_priority closes; `partial`
                                           holds the parsed values of filter_priority and
-                                          of whichever of filters / filter_delta had
-                                          already closed (raw model output, un-normalised).
+                                          of whichever of filters / filter_delta / image_focus
+                                          had already closed (raw model output, un-normalised).
                                           If the callback raises, `filters_emitted` stays
                                           False so the caller can emit the event itself.
         on_reply_delta(text: str)         incremental decoded `reply` text.
@@ -288,7 +292,10 @@ class ParseStreamSink:
         # tolerates the other being absent (follow-up turns may omit `filters`).
         if not any(k in self.completed for k in _FILTER_BODY_KEYS):
             return
-        partial = {k: self.completed[k] for k in FILTER_TRIO if k in self.completed}
+        partial = {
+            k: self.completed[k] for k in FILTER_TRIO + FILTER_EXTRA_KEYS
+            if k in self.completed
+        }
         elapsed = self._elapsed_ms()
         if self._on_filters_ready is None:
             self.filters_emitted = True
