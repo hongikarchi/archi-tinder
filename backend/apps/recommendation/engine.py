@@ -790,6 +790,141 @@ def create_pool_with_relaxation(
     return [], {}, 0
 
 
+def _mmr_downsample(relevance, emb_matrix, k, penalty):
+    """Greedy MMR selection of k row indices.
+
+    score_i = relevance_i - penalty * max_{j in selected} cos(i, j)
+    First pick = highest relevance. Rows of emb_matrix are L2-normalized, so the
+    dot product is cosine similarity. Returns indices in selection order.
+    """
+    n = len(relevance)
+    k = min(k, n)
+    if k <= 0:
+        return []
+    relevance = np.asarray(relevance, dtype=np.float64)
+    max_sim = np.zeros(n, dtype=np.float64)   # nearest-selected similarity (0 = none yet)
+    taken = np.zeros(n, dtype=bool)
+    selected = []
+    for _ in range(k):
+        score = relevance - penalty * max_sim
+        score[taken] = -np.inf
+        best = int(np.argmax(score))
+        selected.append(best)
+        taken[best] = True
+        sim = _cosine_sim_matrix(emb_matrix, emb_matrix[best:best + 1])[:, 0]
+        np.maximum(max_sim, sim, out=max_sim)
+    return selected
+
+
+def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None):
+    """
+    Promote-to-taste pool: pgvector HNSW neighbours of the Discovery preference
+    vector, down-sampled for diversity. Relies on hnsw.iterative_scan=strict_order
+    (buildings startup option, settings._HNSW_STARTUP_OPTION) so the post-filtered
+    LIMIT returns full rows -- keep BUILDINGS_DB_HOST on the direct endpoint.
+
+    Unlike create_pool_with_relaxation({}, ...), which returns a uniformly random
+    pool when no filters are given (the seed / v_initial are ignored), this
+    queries the buildings DB ORDER BY embedding <=> v_initial. It does NOT read
+    the global hyde_vinitial_enabled flag and does not touch the regular
+    search -> session-create pool path.
+
+    Steps:
+      1. One HNSW query: top overfetch*target publishable neighbours, excluding
+         exclude_ids and seed_ids (already seen in Discovery).
+      2. Greedy MMR down-sample of the neighbours so the swipe phase does not
+         get a near-duplicate cluster.
+      3. A small exploration slice (taste_pool_random_fraction, default 20%) of
+         uniformly random publishable buildings (cached id list, no extra SQL),
+         so the swipe phase can still discover taste outside the neighbourhood.
+      4. Seed injection per create_bounded_pool semantics: seeds prepended with
+         score 1.1 (the caller marks them exposed, so they are never served).
+      5. Neighbour embeddings are written into the pool-embedding cache, so the
+         caller's get_pool_embeddings(pool_ids) is a cache hit for them.
+
+    Returns (pool_ids, pool_scores). Raises on SQL failure (caller falls back).
+    Total pool size never exceeds target (seeds included) unless seeds alone do.
+    """
+    if target is None:
+        target = RC['bounded_pool_target']
+    if v_initial is None or len(v_initial) != 384:
+        raise ValueError('create_taste_seeded_pool: v_initial must be a 384-dim vector')
+
+    seed_list = list(dict.fromkeys(seed_ids or []))
+    exclude_list = list(dict.fromkeys(list(exclude_ids or []) + seed_list))
+    overfetch = max(1, int(RC.get('taste_pool_overfetch', 3)))
+    penalty = float(RC.get('taste_pool_mmr_penalty', 1.0))
+    random_fraction = min(max(float(RC.get('taste_pool_random_fraction', 0.2)), 0.0), 1.0)
+    k_fetch = target * overfetch
+    vec_str = _vec_to_pg(v_initial)
+
+    sql = (
+        'SELECT canonical_bld_id, embedding::text, (1 - (embedding <=> %s::vector)) AS relevance'
+        ' FROM canonical_v2_buildings'
+        ' WHERE is_publishable = true'
+    )
+    params = [vec_str]
+    if exclude_list:
+        sql += ' AND canonical_bld_id <> ALL(%s::text[])'
+        params.append(exclude_list)
+    sql += ' ORDER BY embedding <=> %s::vector LIMIT %s'
+    params.extend([vec_str, k_fetch])
+
+    with stage('taste_pool_hnsw_sql', target=target, k_fetch=k_fetch):
+        with connection.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+    ids, rel, embs = [], [], []
+    for bid, emb_text, relevance in rows:
+        emb = _parse_embedding_text(emb_text)
+        if emb is None:
+            continue
+        ids.append(bid)
+        rel.append(float(relevance))
+        embs.append(emb)
+
+    if not ids:
+        # No usable neighbours (e.g. embeddings unparseable): let the caller fall back.
+        raise RuntimeError('create_taste_seeded_pool: HNSW query returned no usable neighbours')
+
+    n_pick = max(0, target - len(seed_list))
+    n_random = int(round(n_pick * random_fraction))
+    n_near = n_pick - n_random
+    with stage('taste_pool_mmr', n_candidates=len(ids), n_pick=n_pick):
+        near_picked = _mmr_downsample(rel, np.stack(embs), n_pick, penalty)
+
+    # Exploration slice: random publishable ids not already chosen / excluded.
+    random_ids = []
+    if n_random > 0:
+        taken = set(exclude_list) | {ids[i] for i in near_picked[:n_near]}
+        try:
+            sample = _random_pool(2 * n_random + len(taken))
+        except Exception as exc:
+            logger.warning('create_taste_seeded_pool: random slice failed (%s)', exc)
+            sample = []
+        random_ids = [b for b in dict.fromkeys(sample) if b not in taken][:n_random]
+    # Random slice came up short -> take more nearest-diverse picks instead.
+    near_picked = near_picked[:n_near + (n_random - len(random_ids))]
+
+    with _cache_lock:
+        for i in near_picked:
+            _building_embedding_cache[ids[i]] = embs[i]
+        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+            for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                _building_embedding_cache.pop(old_bid, None)
+    pool_ids = [ids[i] for i in near_picked]
+    pool_scores = {ids[i]: rel[i] for i in near_picked}
+    pool_ids.extend(random_ids)
+    pool_ids = list(dict.fromkeys(pool_ids))   # defensive: random slice vs shortfall picks
+
+    for sid in reversed(seed_list):
+        pool_ids.insert(0, sid)
+        pool_scores[sid] = 1.1
+    return pool_ids, pool_scores
+
+
 def refresh_pool_if_low(session, threshold=5):
     """
     If session's remaining pool (pool_ids - exposed_ids) is below threshold, escalate

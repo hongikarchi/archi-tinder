@@ -25,6 +25,8 @@ _(Updated 2026-04-26 6f4b76f: HyDE V_initial scaffolding — flag-gated default 
 
 _(Updated 2026-04-26 305e213: Topic 01 Hybrid RRF scaffolding — flag-gated default OFF; activates RRF blend of BM25 + v_initial-cosine + filter channels in pool creation when enabled. v_initial reused from Topic 03 — no extra HF call.)_
 
+_(Updated 2026-10-02: promote-to-taste pool now seeded by HNSW neighbours of the Discovery preference vector, mixed with diversity — previously uniform random due to empty-filter early return)_
+
 _(Updated 2026-04-26 06c6c5a: IMP-7 per-building-id immutable cache + companion §6 swipe.timing_breakdown observability — fixes A4 escalation cache invalidation; expected select_ms 300ms → ~50ms.)_
 
 _(Updated 2026-04-26 c133787: IMP-5 Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT — flag-gated default OFF; lazy-init via _ensure_chat_cache with 80% Django TTL invariant; once flipped on, expected per-Gemini-call ~3246→~1400-1800ms drop. Companion to IMP-8 — both share LocMemCache→Redis swap requirement for multi-worker prod.)_

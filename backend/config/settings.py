@@ -374,6 +374,9 @@ RECOMMENDATION = {
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
+    'taste_pool_overfetch': 3,       # promote-to-taste pool: HNSW neighbours fetched = overfetch * pool target, MMR-downsampled to target
+    'taste_pool_mmr_penalty': 1.0,   # promote-to-taste pool: diversity penalty in the MMR down-sample (measured: 0.3 barely moved pairwise similarity)
+    'taste_pool_random_fraction': 0.2,  # promote-to-taste pool: share of uniformly random buildings kept for swipe-phase exploration
     'convergence_threshold': 0.13,   # epsilon -- tuned for convergence inside the 10-swipe target window
     'convergence_window': 3,
     'target_swipes': 10,             # product goal: taste should be captured within ~10 swipes
