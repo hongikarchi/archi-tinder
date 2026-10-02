@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-30 10:47 KST',
-    head: 'dbfe598',
-    branch: 'feature/claude-perf-baseline',
+    updatedAt: '2026-10-02 22:02 KST',
+    head: '405a537',
+    branch: 'feature/sns-contact-messaging',
   },
   done: [
+    {
+      id: 'FULL-MESSAGING-1',
+      title: '관심 있어요 버튼이 아무 동작 안 함',
+      completedAt: '2026-10-02',
+      note: '관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).',
+    },
     {
       id: 'PERF-SWIPE-1',
       title: '스와이프 왕복 축소 + HNSW 후보 부족 수정',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체',
       completedAt: '2026-09-29',
       note: '2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`',
-    },
-    {
-      id: 'FRONT-COMP-PROTO-1',
-      title: '공모전 팀빌딩 화면 프로토타입',
-      completedAt: '2026-09-23',
-      note: '완성품이 아니라 판단용: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정',
     },
   ],
   now: [],
@@ -134,6 +134,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FULL-MESSAGING-2',
+        title: '새로고침하면 차단 해제를 못 함',
+        note: '차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 \'차단\'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.',
+      },
       {
         id: 'PERF-RESULT-1',
         title: '결과 조회 458KB 전송 병목',
@@ -237,6 +242,11 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-UX-15',
+        title: '메시지 시트 닫으면 포커스 사라짐',
+        note: 'Esc/닫기 후 `document.activeElement`가 body — 호출한 메시지 pill / 관심 있어요 버튼으로 포커스 복귀 필요 (portal Modal). 접근성 minor, FULL-MESSAGING-1 app-test.',
+      },
+      {
         id: 'INFRA-WORKS-1',
         title: 'R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)',
         note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
@@ -300,6 +310,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 341,
+      title: 'chore(INFRA-GIT-2): 로컬 develop 동기화 스크립트 — 배포 후 강제리셋 대응',
+      mergedAt: '2026-09-30T10:40:28Z',
+      mergedAtKST: '2026-09-30 19:40 KST',
+      sha: '81b07c7',
+    },
+    {
+      number: 340,
+      title: 'perf(PERF-SWIPE-1): HNSW iterative scan + 스와이프 캐시 무효화 일괄 + 성능 기준값',
+      mergedAt: '2026-09-30T10:26:56Z',
+      mergedAtKST: '2026-09-30 19:26 KST',
+      sha: 'f3d7e2d',
+    },
+    {
       number: 338,
       title: 'feat(UI-CONSISTENCY-B): 디자인 통일성 정비 — 규칙·토큰 → 공통 부품 → 페이지 교체',
       mergedAt: '2026-09-29T13:39:33Z',
@@ -340,20 +364,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-19T00:37:00Z',
       mergedAtKST: '2026-09-19 09:37 KST',
       sha: '4975849',
-    },
-    {
-      number: 330,
-      title: 'feat(results): 리포트 화면 상단 저장 CTA — 저장하면 프로필로 이어짐',
-      mergedAt: '2026-09-19T00:31:02Z',
-      mergedAtKST: '2026-09-19 09:31 KST',
-      sha: '631995b',
-    },
-    {
-      number: 329,
-      title: 'fix(report): 페르소나 리포트 재생성은 보드 소유자만',
-      mergedAt: '2026-09-19T00:26:02Z',
-      mergedAtKST: '2026-09-19 09:26 KST',
-      sha: 'ab473f5',
     },
   ],
   agents: [
@@ -842,6 +852,62 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/views/profile.py',
       role: '유저 프로필·좋아요 건물 뷰',
+    },
+    {
+      path: 'backend/apps/messaging/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/serializers.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/test_messaging.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/throttling.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/views.py',
+      role: '',
     },
     {
       path: 'backend/apps/notifications/__init__.py',
@@ -1868,6 +1934,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/plans/2026-10-02-contact-messaging-design.md',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -1990,6 +2060,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/api/liked.js',
       role: '좋아요 건물 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/messaging.js',
+      role: '',
     },
     {
       path: 'frontend/src/api/meta.js',
@@ -2288,6 +2362,50 @@ window.PROJECT_STATE = {
       role: '공통 stroke 아이콘 세트',
     },
     {
+      path: 'frontend/src/components/messaging/ContactCta.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/ConversationView.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/GreetingSheet.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/InboxView.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessagesEntry.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessagesSheet.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/Messaging.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/ReportDialog.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/blockedUsers.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/messagingUtils.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/photoCardShell.js',
       role: '',
     },
@@ -2376,6 +2494,10 @@ window.PROJECT_STATE = {
       role: '언어 선택 훅',
     },
     {
+      path: 'frontend/src/hooks/useMessagingFeature.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
     },
@@ -2392,7 +2514,15 @@ window.PROJECT_STATE = {
       role: '테마 context 소비 훅',
     },
     {
+      path: 'frontend/src/hooks/useUnreadMessages.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useUnreadNotifications.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useVisualViewportSheetStyle.js',
       role: '',
     },
     {
@@ -2794,6 +2924,10 @@ window.PROJECT_STATE = {
     {
       path: 'tools/git-stage-and-commit.sh',
       role: '안전 커밋 스크립트',
+    },
+    {
+      path: 'tools/git-sync-develop.sh',
+      role: '',
     },
     {
       path: 'tools/install-hooks.sh',
