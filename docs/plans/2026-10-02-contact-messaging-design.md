@@ -30,12 +30,13 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 | D10 | 무시된 요청: **30일간 재요청 불가**. 보낸 사람에게는 계속 **"보냄"**으로만 표시 (무시 사실 비공개) | 거절 통보로 인한 부담 제거 + 반복 요청 방지 |
 | D11 | 요청 수신 가능 대상 = **성향 진단 완료(`PersonalityProfile` 존재) AND `discovery_opt_in = true`** | 발견 피드 노출에 동의한 사람만 연락 받음 |
 | D12 | **기능 플래그 `MESSAGING_ENABLED`** 하나로 메시지 기능 전체(요청·메시지·차단·신고 API + 모든 UI) on/off. 기본 OFF | 구현을 develop에 합치되 검증 전 prod 노출을 막고, 문제 시 재배포 없이 env만 바꿔 끌 수 있게 (§6) |
+| D13 | 수락 시 대화방에 **"연결됐어요" 시스템 메시지** 삽입, **보낸 사람 기준 안 읽음 1건**으로 카운트 | D9로 알림을 뺐기 때문에, 이것이 없으면 보낸 사람은 수락 사실을 알 방법이 없다. 메시지 버튼 배지·탭바 점으로 자연스럽게 인지 |
 
 ## 3. 사용자 흐름
 
 1. A가 B의 프로필에서 **"관심 있어요"** → 작은 시트에 인사말(선택) 입력 → 보내기 → 버튼이 "보냄" 상태로 바뀜
 2. B는 내 프로필의 **메시지 버튼 배지** 또는 **탭바 프로필 점**으로 인지 → 메시지함 시트 상단의 **받은 요청 카드**에서 수락/무시
-3. 수락 → 대화방 생성, 인사말이 첫 메시지. A의 메시지함에도 대화방이 나타남 (별도 알림 없음, D9)
+3. 수락 → 대화방 생성. 메시지 순서: 인사말(A가 보낸 것으로) → **"연결됐어요" 시스템 메시지** (D13). A에게는 이 시스템 메시지가 **안 읽음 1건**으로 잡혀 메시지 버튼 배지·탭바 점이 켜진다 (`Notification`은 여전히 만들지 않음, D9). 수락한 B에게는 안 읽음 0
 4. 무시 → B의 목록에서 사라짐. A에게는 "보냄" 유지, 30일 뒤 재요청 가능 (D10)
 5. 대화방: 시트 안에서 말풍선 UI, 열려 있는 동안 3~5초마다 증분 조회. 뒤로 → 목록
 6. ⋯ 메뉴(대화 화면, 다른 유저 프로필): 차단 / 신고
@@ -49,7 +50,7 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
   - 재요청 가드: 같은 쌍의 최근 `ignored`가 30일 이내면 거부 (D10). 응답은 일반 성공과 구분되지 않게 — 보낸 사람 UI는 "보냄" 유지
   - 역방향 요청이 이미 pending이면: 새 요청 대신 **기존 요청을 수락 처리**하고 대화방 개설 (서로 관심 = 연결)
 - **`Conversation`** — 두 참여자 (`user_a`, `user_b`, 정규화: `user_a_id < user_b_id`, unique), `last_message_at` (db_index), 참여자별 `a_last_read_at` / `b_last_read_at`, `closed_at` (차단 시)
-- **`Message`** — `conversation` FK, `sender` FK, `body` (≤1000), `created_at`. 인덱스 `(conversation, id)`
+- **`Message`** — `conversation` FK, `sender` FK (**nullable** — 시스템 메시지는 null), `kind` (`user` / `system`), `system_type` (`connected`, blank for user), `body` (≤1000, 시스템 메시지는 빈 값 — 문구는 프론트 i18n이 `system_type`으로 렌더, DB에 한국어 저장 안 함), `created_at`. 인덱스 `(conversation, id)`
 - **`Block`** — `blocker`, `blocked`, unique 쌍
 - **`Report`** — `reporter`, `target_type` (`user` / `message` / `profile`), `target_id`, `reason`, `created_at`. 처리 UI는 범위 밖 (관리자 조회만)
 
@@ -60,7 +61,7 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 | POST | `contact-requests/` | `{recipient_id, greeting?}` 요청 보내기. 가드: 자기 자신 ✗, 차단 관계 ✗, D11 미충족 ✗, 30일 쿨다운(조용히 성공처럼) |
 | GET | `contact-requests/received/` | 받은 pending 목록 (보낸 사람 요약 + 인사말) |
 | GET | `contact-requests/status/?user_id=` | 다른 유저 프로필의 버튼 상태 (`none` / `sent` / `connected`) — ignored도 `sent`로 반환 |
-| POST | `contact-requests/<id>/accept/` | 수락 → Conversation 생성 + 인사말을 첫 Message로 |
+| POST | `contact-requests/<id>/accept/` | 수락 → Conversation 생성 + 인사말을 첫 Message로 (sender=요청자) + `connected` 시스템 Message. 한 트랜잭션. 수락자의 `last_read_at` = 지금 |
 | POST | `contact-requests/<id>/ignore/` | 무시 |
 | GET | `conversations/` | 목록 (상대 요약, 마지막 메시지, 안 읽은 수), `last_message_at` 내림차순 |
 | GET | `conversations/<id>/messages/?after=<msg_id>` | 증분 조회 (폴링용, 응답 가볍게) |
@@ -73,6 +74,9 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 ### 규칙
 
 - 참여자가 아닌 대화방은 404 (존재 여부 비노출)
+- **안 읽음 계산** = 내 `last_read_at` 이후 메시지 중 `sender != 나` (시스템 메시지 `sender=null` 포함). 그래서 수락 직후: 요청자 = 시스템 메시지 1건 안 읽음 (인사말은 본인이 보낸 것이라 제외), 수락자 = `last_read_at`을 수락 시각으로 맞춰 0건
+- 상호 요청 자동 수락(역방향 pending 존재)도 같은 규칙: 먼저 요청해 둔 쪽이 '보낸 사람'으로 안 읽음 1건, 방금 행동한 쪽은 0건. 인사말은 두 요청에 있으면 시간순으로 둘 다 삽입
+- 시스템 메시지에는 답장·신고 대상이 아님 (`reports/`에서 `kind=system` 거부)
 - 차단: 양방향 요청·메시지 차단, 대화방 `closed_at` 설정, **발견 피드에서 서로 미노출** (people feed 쿼리에 Block 제외 조건 추가)
 - 보내는 사람 조건: 로그인 + 비게스트. (보내는 쪽 진단 여부는 강제하지 않음 — 필요해지면 추가)
 - 수신자가 나중에 opt-out해도 기존 대화방은 유지, 신규 요청만 차단
@@ -81,7 +85,7 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 
 ### 테스트
 
-권한(비참여자 접근 404), 상태 전이(pending→accepted/ignored), 30일 쿨다운 + "보냄" 비노출, 역방향 상호 요청 자동 수락, D11 가드, 차단 시 요청/메시지/피드 차단, 증분 조회 `after`, unread-count 정확성, 스로틀.
+권한(비참여자 접근 404), 상태 전이(pending→accepted/ignored), 30일 쿨다운 + "보냄" 비노출, 역방향 상호 요청 자동 수락, D11 가드, 차단 시 요청/메시지/피드 차단, 증분 조회 `after`, unread-count 정확성 (**수락 직후 요청자 1 / 수락자 0**, 상호 요청 케이스, 인사말 없는 요청), 시스템 메시지 신고 거부, 스로틀.
 
 ## 5. 프론트엔드 (PR 2, `DESIGN.md` 준수)
 
@@ -92,7 +96,7 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
    - 메시지 버튼은 **fixed가 아니라 콘텐츠 흐름 안**(`PageLogoHeader` 아래, 콘텐츠 컨테이너 상단 우측 정렬)에 둔다. 우측 고정 컨트롤(y ≈ 16–48px)과 세로로 겹치지 않도록 초기 위치는 그보다 아래. 스크롤 시에는 콘텐츠와 함께 올라가며 고정 컨트롤(z 300) 밑으로 지나간다 — 의도된 동작
 3. **탭바 프로필 점** — 앱 공용 `useUnreadMessages` hook (NOTIF-INAPP-1과 같은 계약: mount + `visibilitychange` + 라우트 변경 시 갱신, `setInterval` 없음). `TabBar`의 profile 아이콘에 점
 4. **메시지함 시트** — 기존 `Modal` sheet 모드 재사용. 상단 받은 요청 카드(인사말 + 수락/무시), 아래 대화방 목록. 빈 상태·로딩·에러 상태 포함
-5. **대화 화면 (시트 내부)** — 말풍선, 하단 입력창. 열려 있는 동안만 3~5초 `after=` 폴링, 시트 닫힘/탭 숨김 시 중지. 진입 시 read 호출. 모바일 키보드: `visualViewport` 기준으로 시트 높이 조정 (body는 viewport-lock)
+5. **대화 화면 (시트 내부)** — 말풍선, 하단 입력창. `kind=system` 메시지는 말풍선이 아니라 가운데 정렬 캡션("연결됐어요 · 이제 대화를 시작해 보세요" — ko/en i18n 키)으로 렌더. 대화방 목록 미리보기도 마지막 메시지가 시스템이면 같은 문구. 열려 있는 동안만 3~5초 `after=` 폴링, 시트 닫힘/탭 숨김 시 중지. 진입 시 read 호출. 모바일 키보드: `visualViewport` 기준으로 시트 높이 조정 (body는 viewport-lock)
 6. **⋯ 메뉴** — 차단 / 신고 (대화 화면, 다른 유저 프로필)
 7. **i18n** — 신규 문구 전부 ko/en 키
 
