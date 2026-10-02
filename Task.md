@@ -57,7 +57,14 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — PERF-SWIPE-1 완료 2026-09-30, ## Done 참조)_
+### FULL-MESSAGING-1 — 관심 있어요 버튼이 아무 동작 안 함
+
+설계: `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13). 브랜치 `feature/sns-contact-messaging`.
+관심 요청 → 수락/무시(30일 쿨다운, 비공개) → 앱 내 1:1 메시지(폴링) + 차단/신고. 플래그 `MESSAGING_ENABLED` 기본 OFF.
+
+- [ ] PR 1 백엔드 — `apps.messaging` 모델 5종 + API 12개 + 플래그 + MeView `features.messaging` + 피드 차단 제외
+- [ ] PR 2 프론트 — 관심 있어요 시트, 내 프로필 메시지 버튼, 탭바 점, 메시지함/대화 시트, ⋯ 차단·신고, i18n
+- [ ] app-test FEATURE-SCOPED (계정 2개) · 배포 후 `make migrate-prod`
 
 ## Next
 
