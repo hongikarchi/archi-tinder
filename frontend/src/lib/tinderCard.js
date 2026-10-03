@@ -17,6 +17,13 @@
  *   (d) useWindowSize eagerly reads window.innerWidth/innerHeight as its
  *       initializer, replacing upstream's SSR guard. This app is CSR-only,
  *       and it also fixes upstream's first-render NaN-diagonal race.
+ *   (f) FRONT-MOBILE-FIX: drag rotation is position-based (dx / windowWidth,
+ *       ~15deg at half-window drag, clamped to maxTilt) instead of
+ *       instantaneous velocity x 15, which jumped frame to frame. Velocity now
+ *       uses ev.timeStamp (sub-ms, dt<=0 keeps previous velocity) and only
+ *       feeds release logic. touchstart preventDefault skips any target inside
+ *       a `.pressable` ancestor (closest(), SVG-safe). AnimatedDiv has
+ *       willChange: transform.
  *   (e) Upstream's `isClicking` closure-local state bug is inherited as-is
  *       and is now team-owned (not fixed here).
  */
@@ -90,6 +97,10 @@ const AnimatedDiv = animated.div
 const TinderCard = React.forwardRef(
   ({ flickOnSwipe = true, children, onSwipe, onCardLeftScreen, className, preventSwipe = [], swipeRequirementType = 'velocity', swipeThreshold = settings.swipeThreshold, onSwipeRequirementFulfilled, onSwipeRequirementUnfulfilled }, ref) => {
     const { width, height } = useWindowSize()
+    // Read through a ref inside the gesture effect so a resize never re-runs
+    // it mid-drag (which would reset the start position).
+    const widthRef = React.useRef(width)
+    widthRef.current = width
     const [{ xyrot }, setSpringTarget] = useSpring(() => ({
       xyrot: [0, 0, 0],
       config: physics.touchResponsive
@@ -139,20 +150,29 @@ const TinderCard = React.forwardRef(
       let dx = isTouch ? ev.touches[0].clientX - startPositon.x : ev.clientX - startPositon.x
       let dy = isTouch ? ev.touches[0].clientY - startPositon.y : ev.clientY - startPositon.y
       if (startPositon.x === 0 && startPositon.y === 0) { dx = 0; dy = 0 }
-      const vx = -(dx - lastPosition.dx) / (lastPosition.timeStamp - Date.now())
-      const vy = -(dy - lastPosition.dy) / (lastPosition.timeStamp - Date.now())
-      return { dx, dy, vx, vy, timeStamp: Date.now() }
+      const now = ev.timeStamp || performance.now()
+      const dt = now - lastPosition.timeStamp
+      let vx = lastPosition.vx
+      let vy = lastPosition.vy
+      if (dt > 0) {
+        vx = (dx - lastPosition.dx) / dt
+        vy = (dy - lastPosition.dy) / dt
+        // Sign convention preserved from upstream: upstream computed
+        // -(d)/(last - now) == d/(now - last), i.e. positive for rightward.
+      }
+      return { dx, dy, vx, vy, timeStamp: now }
     }
 
     const element = React.useRef()
 
     React.useLayoutEffect(() => {
       let startPositon = { x: 0, y: 0 }
-      let lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: Date.now() }
+      let lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: performance.now() }
       let isClicking = false
 
       const onTouchStart = (ev) => {
-        if (!ev.srcElement.className.includes('pressable') && ev.cancelable) ev.preventDefault()
+        const pressable = ev.target && ev.target.closest && ev.target.closest('.pressable')
+        if (!pressable && ev.cancelable) ev.preventDefault()
         const gestureState = gestureStateFromWebEvent(ev, startPositon, lastPosition, true)
         lastPosition = gestureState
         startPositon = { x: ev.touches[0].clientX, y: ev.touches[0].clientY }
@@ -182,7 +202,8 @@ const TinderCard = React.forwardRef(
             }
           }
         }
-        let rot = gestureState.vx * 15
+        // Position-based tilt: ~15deg when dragged half the window width.
+        let rot = (gestureState.dx / (widthRef.current || 1)) * 30
         if (isNaN(rot)) rot = 0
         rot = Math.max(Math.min(rot, settings.maxTilt), -settings.maxTilt)
         setSpringTarget.start({ xyrot: [gestureState.dx, gestureState.dy, rot], config: physics.touchResponsive })
@@ -201,7 +222,7 @@ const TinderCard = React.forwardRef(
         isClicking = false
         handleSwipeReleased(setSpringTarget, lastPosition)
         startPositon = { x: 0, y: 0 }
-        lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: Date.now() }
+        lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: performance.now() }
       }
       window.addEventListener('mouseup', onMouseUp)
 
@@ -215,7 +236,7 @@ const TinderCard = React.forwardRef(
       const onTouchEnd = () => {
         handleSwipeReleased(setSpringTarget, lastPosition)
         startPositon = { x: 0, y: 0 }
-        lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: Date.now() }
+        lastPosition = { dx: 0, dy: 0, vx: 0, vy: 0, timeStamp: performance.now() }
       }
       element.current.addEventListener('touchend', onTouchEnd)
 
@@ -233,6 +254,7 @@ const TinderCard = React.forwardRef(
       ref: element,
       className,
       style: {
+        willChange: 'transform',
         transform: xyrot.to((x, y, rot) => `translate3d(${x}px, ${y}px, 0px) rotate(${rot}deg)`)
       },
       children

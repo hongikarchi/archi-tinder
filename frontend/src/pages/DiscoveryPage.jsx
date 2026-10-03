@@ -767,13 +767,6 @@ export default function DiscoveryPage({ showToast, onLogout }) {
         )}
       </div>
 
-      {/* Bottom area: swipe hint */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-        <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          {t('discovery.swipeHintBar')}
-        </p>
-      </div>
-
       {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate
           away or log out while draftLikeCount >= 1. Built on the shared Modal
           (DESIGN.md §8.10): mobile bottom sheet, desktop centered modal (max-width

@@ -8,7 +8,6 @@ import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import { getMyPersonality } from '../api/personality.js'
-import ShareCardModal from '../components/ShareCardModal.jsx'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
@@ -75,8 +74,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
-  // Share card modal
-  const [shareOpen, setShareOpen] = useState(false)
   // Tab state — 'boards' | 'studios' | 'liked'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
@@ -498,7 +495,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       <PageTopControls onLogout={onLogout} />
 
       {/* Floating top-left cluster — Claude Design mock conversion.
-          isMe: bell (unread badge) + share + settings, all neutral
+          isMe: bell (unread badge) + settings, all neutral
           circles (no destructive tint — mock parity). !isMe: single back
           circle via PageBackButton (value-for-value match already shipped
           by the design-port initiative — reused rather than re-authored).
@@ -533,20 +530,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
                 {unreadBadgeLabel}
               </span>
             )}
-          </FloatingIconButton>
-
-          {/* Share — mock's share-network glyph, SVG paths verbatim from profile.html */}
-          <FloatingIconButton
-            onClick={() => setShareOpen(true)}
-            ariaLabel={t('profile.shareCard')}
-            title={t('profile.shareCard')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="6" r="3"></circle>
-              <circle cx="18" cy="18" r="3"></circle>
-              <path d="M8.6 10.5l6.8-3M8.6 13.5l6.8 3"></path>
-            </svg>
           </FloatingIconButton>
 
           {/* Settings */}
@@ -1075,11 +1058,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         )}
 
       </div>
-
-      {/* Share card modal */}
-      {shareOpen && user && (
-        <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
-      )}
 
       {/* Work detail modal */}
       {selectedWorkId && (

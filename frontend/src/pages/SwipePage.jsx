@@ -641,11 +641,6 @@ export default function SwipePage({
 
         </div>{/* end center wrapper */}
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
-        </div>
-
       </div>
     </>
   )

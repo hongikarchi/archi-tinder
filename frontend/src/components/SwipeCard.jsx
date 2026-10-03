@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 import { useTranslation } from '../i18n/index.js'
 
@@ -119,6 +119,8 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const dragStart = useRef(null)
   const dragStartTime = useRef(null)
   const imgRef = useRef(null)
+  // Mirror of imgLoaded for the 4s timer (its closure would otherwise be stale).
+  const imgLoadedRef = useRef(false)
   const timeoutRef = useRef(null)
   const galleryScrollRef = useRef(null)
   // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
@@ -225,6 +227,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
       timeoutRef.current = null
     }
     captureImgRatio(e.target)
+    imgLoadedRef.current = true
     setImgLoaded(true)
     telemetryOnLoad(e)
   }
@@ -249,7 +252,11 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // R2 cold cache + Singapore latency regularly takes 1.7-2.6s; the old 2s
   // timer was firing prematurely on normal loads. 4s matches the observed
   // worst-case cold-CDN P99 and avoids false-positive fallback triggers.
-  useEffect(() => {
+  // useLayoutEffect: the reset must run BEFORE paint and before any cached
+  // image's onLoad can be processed after it, else a late reset leaves the
+  // image stuck at opacity 0.
+  useLayoutEffect(() => {
+    imgLoadedRef.current = false
     setImgLoaded(false)
     setImgFailed(false)
     setHasBeenOpened(false)
@@ -260,9 +267,19 @@ export default function SwipeCard({ card, onGalleryClose }) {
     ratioSetRef.current = false
     imgRetried.current = null
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    // Cached image: the browser may already have it decoded (onLoad fired
+    // before/while we reset). naturalWidth check excludes broken images.
+    const cachedNode = imgRef.current
+    if (cachedNode && cachedNode.complete && cachedNode.naturalWidth > 0) {
+      handleImgLoad({ target: cachedNode })
+    }
     timeoutRef.current = setTimeout(() => {
       const node = imgRef.current
-      if (!node || imgLoaded) return
+      if (!node || imgLoadedRef.current) return
+      if (node.complete && node.naturalWidth > 0) {
+        handleImgLoad({ target: node })
+        return
+      }
       if (!advanceFallback(node)) {
         setImgFailed(true)
       }
@@ -587,14 +604,15 @@ export default function SwipeCard({ card, onGalleryClose }) {
           </div>
 
           {/* Detail content — transparent, slides over expanded gradient.
-              Height 72% gives breathing room for 2-line H2 + architects +
+              Height is auto (max 100%) and content hugs the bottom (flex-end); room for 2-line H2 + architects +
               7-row InfoRow grid + gallery button. flexShrink:0 on critical
               elements means only the grid compresses when content overflows;
               H2 / architects / divider / button always keep their natural
               height. */}
           <div style={{
             position: 'absolute', left: 0, right: 0, bottom: 0,
-            height: '72%',
+            height: 'auto', maxHeight: '100%',
+            justifyContent: 'flex-end',
             background: 'transparent',
             transform: isExpanded ? 'translateY(0)' : 'translateY(100%)',
             transition: 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
@@ -627,6 +645,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
             </div>
             {gallery.length > 0 && (
               <button
+                className="pressable"
                 onPointerDown={e => e.stopPropagation()}
                 onPointerUp={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); openGallery() }}
@@ -640,7 +659,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="28" height="28" rx="2"/>
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
                   <circle cx="8.5" cy="8.5" r="1.5"/>
                   <polyline points="21 15 16 10 5 21"/>
                 </svg>
@@ -732,6 +751,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
 
           {/* Close button */}
           <button
+            className="pressable"
             onPointerDown={e => e.stopPropagation()}
             onPointerUp={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); closeGallery() }}
