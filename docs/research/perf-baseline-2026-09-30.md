@@ -190,6 +190,27 @@ too on low pre-launch traffic and Neon scale-to-zero. Check Neon compute size
 + scale-to-zero; consider keeping the compute warm / larger LFC; pg_prewarm on
 the HNSW index is a Make-DB-side action.
 
+### 4e-2. Warm-controlled re-measure (same day)
+
+`prod_bench.py --warmup 1 --runs 2 --stream` (new flags: warm-up runs reported
+separately as "cold"; search measured on the SSE path the app uses).
+
+| p50 ms (client, Korea) | 9/30 before | 10/3 warm | 10/3 cold (first touch) |
+|---|---|---|---|
+| search: filters shown | 3532 (all at once) | **1415** | 2105 |
+| search: result cards | 3532 | **1666** | 2474 (max 7195) |
+| search: complete | 3532 | **1926** | 2648 |
+| session create | 280 | **228** (srv 98) | 502 |
+| swipe (n=120) | 202 | 212 (srv 89, db 46) | 219 |
+| swipe extend | 139 | 162 | 171 |
+| session result | 695 | **414** (srv 285) | 1471 (db 1256) |
+| guest login | 600-1674 | 563 | 1340 |
+
+Swipe is flat (+10 ms, within noise; ~110 ms of it is the Korea->Singapore
+network floor). The earlier "result 1081 ms / swipe 232 ms" round3 numbers were
+cold-page effects. Policy: keep Neon scale-to-zero ON pre-launch (Launch plan,
+~$19/mo at 0.25 CU if disabled); measure warm, track cold separately.
+
 ## 5. Railway replacement review (summary)
 
 | Option | Per API call | Per swipe | Monthly | Effort |
