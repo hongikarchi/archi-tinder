@@ -1,5 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
-import { generateReport, generateReportImage } from '../api/projects.js'
+import { generateReport } from '../api/projects.js'
+import { useReportImageJob, reportImageJobs } from '../hooks/useReportImageJob.js'
+import styles from './PersonaReport.module.css'
 import TasteSpectrum from './TasteSpectrum.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { localizeReport } from '../utils/reportText.js'
@@ -13,7 +15,7 @@ const DEFAULT_AXES = { materiality: 0, scale: 0, energy: 0, tradition: 0 }
 /**
  * Props:
  *   boardId         string  - API 호출에 사용 (null이면 재생성 버튼 비활성화)
- *   canRegenerate   bool    - 뷰어가 이 보드의 소유자인가. false면 이미지/리포트
+ *   canRegenerate   bool    - 뷰어가 이 보드의 소유자인가. false면 리포트
  *                             재생성 버튼을 아예 렌더하지 않는다 — 남의 리포트를
  *                             덮어쓰는 조작이므로 비활성 표시가 아니라 제거.
  *                             기본 true: 소유자 화면(ResultsPage 등) 호출부 무영향.
@@ -36,8 +38,9 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
   const [localMime, setLocalMime] = useState(reportImageMime || null)
   const [localAxisScores, setLocalAxisScores] = useState(axisScores || DEFAULT_AXES)
   const [localReport, setLocalReport] = useState(null)
-  const [imgGenLoading, setImgGenLoading] = useState(false)
-  const [imgError, setImgError] = useState(null)
+  // FULL-REPORT-IMG-1: image is generated automatically at session end (no
+  // button). Request state lives in a shared store so it survives navigation.
+  const imageJob = useReportImageJob(boardId)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState(null)
 
@@ -51,26 +54,19 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
   // API call. Old single-language reports (no i18n block) pass through as-is.
   const report = localizeReport(localReport || finalReport || {}, language)
   const scores = localAxisScores
+  const imageData = localImage || imageJob.image
+  const imageMime = localImage ? localMime : (imageJob.mime || localMime)
 
-  async function handleGenerateImage() {
-    if (imgGenLoading || !boardId) return
-    setImgGenLoading(true)
-    setImgError(null)
-    try {
-      // Explicit user intent (button click) must bypass the backend cache.
-      const res = await generateReportImage(boardId, { regenerate: true })
-      if (res?.image_data) {
-        setLocalImage(res.image_data)
-        if (res.mime_type) setLocalMime(res.mime_type)
-      } else {
-        setImgError(t('persona.imgError'))
-      }
-    } catch (e) {
-      setImgError(e?.data?.detail || e?.message || t('persona.imgError'))
-    } finally {
-      setImgGenLoading(false)
+  // FULL-REPORT-IMG-1: owner-only auto-start for legacy / previously failed
+  // boards (no regenerate button). Fires only while the job is 'idle' (never
+  // after 'error'/'done'), so it runs at most once per project per page load;
+  // the backend also short-circuits a stored image and 404s non-owners.
+  const hasImage = !!(localImage || reportImage || imageJob.image)
+  useEffect(() => {
+    if (canRegenerate && boardId && !hasImage && imageJob.status === 'idle') {
+      reportImageJobs.start(boardId)
     }
-  }
+  }, [canRegenerate, boardId, hasImage, imageJob.status])
 
   async function handleRegenerateReport() {
     if (reportLoading || !boardId) return
@@ -259,10 +255,10 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
         {t('persona.imageSection')}
       </h2>
 
-      {localImage ? (
+      {imageData ? (
         <div style={{ position: 'relative', marginBottom: 14 }}>
           <img
-            src={`data:${localMime || 'image/png'};base64,${localImage}`}
+            src={`data:${imageMime || 'image/png'};base64,${imageData}`}
             alt="Persona"
             style={{
               width: '100%',
@@ -273,8 +269,8 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
             }}
           />
           <a
-            href={`data:${localMime || 'image/png'};base64,${localImage}`}
-            download={`persona-${boardId || 'report'}.${(localMime || 'image/png').split('/')[1] || 'png'}`}
+            href={`data:${imageMime || 'image/png'};base64,${imageData}`}
+            download={`persona-${boardId || 'report'}.${(imageMime || 'image/png').split('/')[1] || 'png'}`}
             style={{
               position: 'absolute',
               bottom: 10,
@@ -303,6 +299,19 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
             {t('persona.imageSave')}
           </a>
         </div>
+      ) : imageJob.status === 'generating' ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`${styles.imageState} ${styles.imageGenerating}`}
+        >
+          <div className={styles.skeletonPulse} aria-hidden="true" />
+          <span className={styles.imageStateLabel}>{t('persona.imgGenerating')}</span>
+        </div>
+      ) : imageJob.status === 'error' ? (
+        <div role="alert" className={`${styles.imageState} ${styles.imageError}`}>
+          <span className={styles.imageStateLabel}>{t('persona.imgError')}</span>
+        </div>
       ) : (
         <div style={{
           width: '100%',
@@ -328,36 +337,6 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
           non-owner must not merely see them disabled; they are not rendered.
           The report itself stays fully readable either way. */}
       {canRegenerate && (<>
-      <button
-        type="button"
-        onClick={handleGenerateImage}
-        disabled={imgGenLoading || !boardId}
-        style={{
-          width: '100%',
-          minHeight: 44,
-          padding: '12px 24px',
-          borderRadius: 'var(--radius-md)',
-          background: (imgGenLoading || !boardId)
-            ? 'var(--color-surface-2)'
-            : 'var(--accent-1)',
-          color: (imgGenLoading || !boardId) ? 'var(--color-text-muted)' : '#fff',
-          border: 'none',
-          fontSize: 'var(--fs-body)',
-          fontWeight: 'var(--fw-bold)',
-          cursor: (imgGenLoading || !boardId) ? 'default' : 'pointer',
-          fontFamily: 'inherit',
-          marginBottom: 16,
-        }}
-      >
-        {imgGenLoading ? t('persona.imgGenerating') : localImage ? t('persona.imgRegenerate') : t('persona.imgGenerate')}
-      </button>
-
-      {imgError && (
-        <p style={{ color: 'var(--color-destructive)', fontSize: 'var(--fs-caption)', marginBottom: 12, lineHeight: 1.5 }}>
-          {imgError}
-        </p>
-      )}
-
       {/* 리포트 재생성 버튼 */}
       <button
         type="button"
