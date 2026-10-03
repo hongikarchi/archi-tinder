@@ -1,0 +1,572 @@
+/*
+ * Messaging.module.css — contact requests + 1:1 messaging UI (FULL-MESSAGING-1).
+ * DESIGN.md §4/§10.4: interactive controls owning :hover/:focus/:active live in
+ * a CSS Module; themeable values come from tokens.css; layout-only values may
+ * stay inline in the JSX. Type scale = the 5 --fs-* steps; weights <= 700;
+ * radii by role (§3.1); motion via --motion-* tokens (§3.5).
+ */
+
+/* ---- Buttons (§8.1 primary / §8.2 secondary / §8.4 destructive) ---------- */
+
+.btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform var(--motion-normal) var(--motion-ease),
+              background-color var(--motion-normal) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease),
+              box-shadow var(--motion-slow) var(--motion-ease-out);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btnPrimary {
+  background: var(--accent-1);
+  color: #fff;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-1) 86%, #000);
+}
+
+.btnPrimary:active:not(:disabled) {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
+  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
+}
+
+.btnSecondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btnSecondary:hover:not(:disabled) {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.btnDestructive {
+  background: transparent;
+  color: var(--color-destructive);
+  border-color: var(--color-destructive);
+}
+
+.btnDestructive:hover:not(:disabled) {
+  background: var(--color-destructive);
+  color: #fff;
+}
+
+/* ---- Profile entry pill (>=44px, in content flow) ------------------------ */
+
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+.pill:hover {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+/* ---- Badges -------------------------------------------------------------- */
+
+.pill .badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: var(--accent-1);
+  color: #fff;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  line-height: 20px;
+  text-align: center;
+}
+
+/* ---- Sheet scaffolding --------------------------------------------------- */
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+}
+
+.section + .section {
+  margin-top: 20px;
+}
+
+.errorBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+}
+
+.inlineError {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
+  color: var(--color-text);
+  font-size: var(--fs-body);
+}
+
+/* ---- Received request cards --------------------------------------------- */
+
+.requestCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.requestCard + .requestCard {
+  margin-top: 8px;
+}
+
+.requestTop {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.requestText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.greeting {
+  margin: 2px 0 0;
+  font-size: var(--fs-body);
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.requestActions {
+  display: flex;
+  gap: 8px;
+}
+
+.requestActions > .btn {
+  flex: 1 1 0;
+}
+
+/* ---- Conversation rows --------------------------------------------------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 8px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.row:hover {
+  background: var(--color-surface);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: -2px;
+}
+
+.rowClosed {
+  opacity: 0.55;
+}
+
+.rowMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rowPreview {
+  margin: 2px 0 0;
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowUnread .name {
+  font-weight: var(--fw-bold);
+}
+
+.rowUnread .rowPreview {
+  color: var(--color-text);
+}
+
+.rowMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.time {
+  font-size: var(--fs-caption);
+  color: var(--color-text-dim);
+}
+
+/* ---- Conversation view --------------------------------------------------- */
+
+.convHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding-right: 44px; /* clear Modal's absolute close button */
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.convTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.convName {
+  margin: 0;
+  font-size: var(--fs-emphasis);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 8px;
+}
+
+.msgRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.msgRowMine {
+  justify-content: flex-end;
+}
+
+.msgCol {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+}
+
+.msgRowMine .msgCol {
+  align-items: flex-end;
+}
+
+.bubble {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.bubbleMine {
+  background: var(--accent-1);
+  color: #fff;
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.bubbleTheirs {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.msgTime {
+  margin-top: 2px;
+  font-size: var(--fs-caption);
+  color: var(--color-text-dim);
+}
+
+.systemMsg {
+  align-self: center;
+  margin: 8px 0;
+  padding: 4px 12px;
+  text-align: center;
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+}
+
+.msgReportBtn {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--motion-fast) var(--motion-ease),
+              color var(--motion-fast) var(--motion-ease);
+}
+
+/* invisible 44px hit area around the 28px visual (DESIGN.md §3.2) */
+.msgReportBtn::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.msgReportBtn:hover,
+.msgReportBtn:focus-visible {
+  opacity: 1;
+  color: var(--color-destructive);
+}
+
+.msgReportBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.composer {
+  flex-shrink: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.composerRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 11px 14px;
+  resize: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: 1.4;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent-1);
+}
+
+.textareaTall {
+  min-height: 96px;
+  max-height: none;
+  width: 100%;
+}
+
+.counter {
+  margin: 4px 2px 0;
+  text-align: right;
+  font-size: var(--fs-caption);
+  color: var(--color-text-dim);
+}
+
+.composeError {
+  margin: 0 0 6px;
+  font-size: var(--fs-caption);
+  color: var(--color-destructive);
+}
+
+.closedNotice {
+  flex-shrink: 0;
+  padding: 14px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+  text-align: center;
+}
+
+/* ---- Overflow menu ------------------------------------------------------- */
+
+.menuWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-soft);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: var(--color-surface);
+  outline: none;
+}
+
+.menuItemDanger {
+  color: var(--color-destructive);
+}
+
+/* ---- Dialog body copy ---------------------------------------------------- */
+
+.dialogText {
+  margin: 0 0 16px;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.dialogLabel {
+  display: block;
+  margin: 0 0 6px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.dialogActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialogActions > .btn {
+  flex: 1 1 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .pill,
+  .row {
+    transition: none;
+  }
+}

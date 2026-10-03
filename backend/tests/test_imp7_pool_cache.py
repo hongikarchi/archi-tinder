@@ -489,7 +489,7 @@ class TestSessionCreateViewWarmsCacheNaturally:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert resp.status_code == 201
@@ -610,7 +610,7 @@ class TestSwipeEventPayload:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert resp.status_code == 200
@@ -712,7 +712,7 @@ class TestSwipeEventPayload:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         swipe_event = SessionEvent.objects.filter(session=session, event_type='swipe').first()
@@ -793,7 +793,7 @@ class TestPoolEscalationFiredFlag:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert resp.status_code == 200
@@ -873,7 +873,7 @@ class TestPoolEscalationFiredFlag:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert resp.status_code == 200

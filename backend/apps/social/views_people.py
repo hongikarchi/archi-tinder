@@ -49,6 +49,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import PersonalityProfile, UserProfile
+from apps.messaging.services import blocked_profile_ids
 from apps.recommendation.models import Project
 
 logger = logging.getLogger('apps.social')
@@ -189,6 +190,12 @@ class PeopleDiscoveryView(APIView):
             .filter(discovery_opt_in=True)
             .select_related('user')
         )
+
+        # Block exclusion (either direction) — ALWAYS applied, independent of
+        # MESSAGING_ENABLED, so blocks survive the flag being turned OFF.
+        blocked_ids = blocked_profile_ids(requester_profile)
+        if blocked_ids:
+            base_qs = base_qs.exclude(user_id__in=blocked_ids)
 
         # Optional type_code filter.
         if type_code_filter is not None:

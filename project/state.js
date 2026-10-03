@@ -23,11 +23,29 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-09-30 10:47 KST',
-    head: 'dbfe598',
-    branch: 'feature/claude-perf-baseline',
+    updatedAt: '2026-10-03 10:41 KST',
+    head: '69b43d3',
+    branch: 'feature/sns-contact-messaging',
   },
   done: [
+    {
+      id: 'FULL-MESSAGING-1',
+      title: '관심 있어요 버튼이 아무 동작 안 함',
+      completedAt: '2026-10-02',
+      note: '관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).',
+    },
+    {
+      id: 'PERF-ROUND3',
+      title: '취향분석 pool 버그 + 검색 카드 선표시 + 정리 묶음',
+      completedAt: '2026-10-02',
+      note: 'BACK-PROMOTE-1: 취향 분석(promote-to-taste) pool이 빈 필터 조기반환으로 150개 균등 무작위였음 → 선호 벡터 HNSW 이웃 3x 오버페치 + MMR + 20% 무작위 탐색. 실DB 취향 유사도 0.60→0.77, 브루탈리즘 좋아요 시 pool 내 0→29개 (`c9aa0f1`).',
+    },
+    {
+      id: 'PERF-ROUND2',
+      title: '속도 개선 2차 (스트리밍·풀·코드분할·런타임)',
+      completedAt: '2026-09-30',
+      note: '검색 해석 SSE 스트리밍(`/parse-query/stream/`): 필터 먼저 → 답변 타이핑 → 기존과 동일한 final. 로컬 실측 필터 1.4-2.6s (기존 전체 3.1-3.6s). 스키마·few-shot 필터 우선 순서.',
+    },
     {
       id: 'PERF-SWIPE-1',
       title: '스와이프 왕복 축소 + HNSW 후보 부족 수정',
@@ -57,24 +75,6 @@ window.PROJECT_STATE = {
       title: '리포트 취향 문장이 근거 없음',
       completedAt: '2026-09-26',
       note: '리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).',
-    },
-    {
-      id: 'FULL-RECOMMEND-1',
-      title: '질문카드가 리포트에 무영향·순위만 과왜곡',
-      completedAt: '2026-09-25',
-      note: '질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).',
-    },
-    {
-      id: 'UI-CONSISTENCY-B',
-      title: '디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체',
-      completedAt: '2026-09-29',
-      note: '2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`',
-    },
-    {
-      id: 'FRONT-COMP-PROTO-1',
-      title: '공모전 팀빌딩 화면 프로토타입',
-      completedAt: '2026-09-23',
-      note: '완성품이 아니라 판단용: 스와이프 취향분석 vs 커뮤니티 중 어느 쪽을 메인으로 둘지 주변 사람들에게 물어보기 위한 화면. user 결정',
     },
   ],
   now: [],
@@ -135,14 +135,24 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
+        id: 'FULL-MESSAGING-2',
+        title: '새로고침하면 차단 해제를 못 함',
+        note: '차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 \'차단\'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.',
+      },
+      {
         id: 'PERF-RESULT-1',
         title: '결과 조회 458KB 전송 병목',
         note: '세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.',
       },
       {
-        id: 'PERF-SERVER-1',
-        title: '서버 방식 실험 (Python 고정·gthread·연결 유지)',
-        note: 'Python 3.12 고정(`.python-version`, prod 미고정·CI 3.9·로컬 3.11), gunicorn `gthread` (공유 dict 캐시 스레드 안전 검토 선행), buildings `CONN_MAX_AGE` (Make-DB 연결 점유 금지 결정 뒤집기 — 사용자 결정 필요), Django 5.2 → psycopg3. 각 단계 `tools/perf/bench.py` 전후 비교.',
+        id: 'BACK-VOCAB-2',
+        title: '재료 어휘 timber vs wood 불일치',
+        note: '검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).',
+      },
+      {
+        id: 'PERF-MEASURE-2',
+        title: 'round2 배포 후 prod 재측정',
+        note: 'PERF-ROUND2 배포 후 `tools/perf/prod_bench.py --label round2` (사용자 실행 — prod 쓰기) + Server-Timing 열로 서버/네트워크 분리. 확인 포인트: 스와이프 +25~40ms 원인, 검색 필터 도착 시간, 결과 조회, PoolTimeout 로그(SSE가 default 슬롯 점유 — 필요시 `DB_POOL_MAX_SIZE` 상향).',
       },
       {
         id: 'INFRA-IMG-2',
@@ -237,6 +247,11 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-UX-15',
+        title: '메시지 시트 닫으면 포커스 사라짐',
+        note: 'Esc/닫기 후 `document.activeElement`가 body — 호출한 메시지 pill / 관심 있어요 버튼으로 포커스 복귀 필요 (portal Modal). 접근성 minor, FULL-MESSAGING-1 app-test.',
+      },
+      {
         id: 'INFRA-WORKS-1',
         title: 'R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)',
         note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
@@ -300,6 +315,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 344,
+      title: 'perf(PERF-ROUND2/3): 검색 스트리밍·카드 선표시, 커넥션 풀, Django 5.2, 취향분석 pool 버그 수정',
+      mergedAt: '2026-10-03T01:23:07Z',
+      mergedAtKST: '2026-10-03 10:23 KST',
+      sha: '69b43d3',
+    },
+    {
+      number: 341,
+      title: 'chore(INFRA-GIT-2): 로컬 develop 동기화 스크립트 — 배포 후 강제리셋 대응',
+      mergedAt: '2026-09-30T10:40:28Z',
+      mergedAtKST: '2026-09-30 19:40 KST',
+      sha: '81b07c7',
+    },
+    {
+      number: 340,
+      title: 'perf(PERF-SWIPE-1): HNSW iterative scan + 스와이프 캐시 무효화 일괄 + 성능 기준값',
+      mergedAt: '2026-09-30T10:26:56Z',
+      mergedAtKST: '2026-09-30 19:26 KST',
+      sha: 'f3d7e2d',
+    },
+    {
       number: 338,
       title: 'feat(UI-CONSISTENCY-B): 디자인 통일성 정비 — 규칙·토큰 → 공통 부품 → 페이지 교체',
       mergedAt: '2026-09-29T13:39:33Z',
@@ -333,27 +369,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-26T00:56:44Z',
       mergedAtKST: '2026-09-26 09:56 KST',
       sha: '986ed5b',
-    },
-    {
-      number: 331,
-      title: 'docs(plans): 공모전 팀빌딩 찜 기반 설계 — 팀원 추천 v2 접근 기각',
-      mergedAt: '2026-09-19T00:37:00Z',
-      mergedAtKST: '2026-09-19 09:37 KST',
-      sha: '4975849',
-    },
-    {
-      number: 330,
-      title: 'feat(results): 리포트 화면 상단 저장 CTA — 저장하면 프로필로 이어짐',
-      mergedAt: '2026-09-19T00:31:02Z',
-      mergedAtKST: '2026-09-19 09:31 KST',
-      sha: '631995b',
-    },
-    {
-      number: 329,
-      title: 'fix(report): 페르소나 리포트 재생성은 보드 소유자만',
-      mergedAt: '2026-09-19T00:26:02Z',
-      mergedAtKST: '2026-09-19 09:26 KST',
-      sha: 'ab473f5',
     },
   ],
   agents: [
@@ -640,6 +655,14 @@ window.PROJECT_STATE = {
       role: '태스크 보드 문서',
     },
     {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
       path: 'backend/.env.example',
       role: '백엔드 환경변수 예시',
     },
@@ -650,6 +673,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/.gitignore',
       role: 'Git 무시 규칙 (미디어 파일)',
+    },
+    {
+      path: 'backend/.python-version',
+      role: '',
     },
     {
       path: 'backend/apps/__init__.py',
@@ -842,6 +869,62 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/views/profile.py',
       role: '유저 프로필·좋아요 건물 뷰',
+    },
+    {
+      path: 'backend/apps/messaging/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/serializers.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/test_messaging.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/throttling.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/views.py',
+      role: '',
     },
     {
       path: 'backend/apps/notifications/__init__.py',
@@ -1172,6 +1255,10 @@ window.PROJECT_STATE = {
       role: '단계별 성능 타이밍 계측',
     },
     {
+      path: 'backend/apps/recommendation/prewarm.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/serializers.py',
       role: 'Project 보드 직렬화기',
     },
@@ -1198,6 +1285,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/services/_report_prompts.py',
       role: '리포트 문장 규칙 프롬프트',
+    },
+    {
+      path: 'backend/apps/recommendation/services/_stream.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/services/axis_scores.py',
@@ -1524,6 +1615,10 @@ window.PROJECT_STATE = {
       role: '멀티 DB 라우터',
     },
     {
+      path: 'backend/config/middleware.py',
+      role: '',
+    },
+    {
       path: 'backend/config/settings.py',
       role: 'Django 프로젝트 설정',
     },
@@ -1546,6 +1641,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/fixtures/tag_axis_weights.json',
       role: '태그-축 가중치 픽스처',
+    },
+    {
+      path: 'backend/gunicorn.conf.py',
+      role: '',
     },
     {
       path: 'backend/manage.py',
@@ -1604,6 +1703,14 @@ window.PROJECT_STATE = {
       role: '신뢰도 테스트',
     },
     {
+      path: 'backend/tests/test_conn_hygiene.py',
+      role: '',
+    },
+    {
+      path: 'backend/tests/test_discovery_fps_vectorised.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_discovery_perf.py',
       role: '디스커버리 성능 테스트',
     },
@@ -1644,8 +1751,16 @@ window.PROJECT_STATE = {
       role: 'top-k 무선호 순서 테스트',
     },
     {
+      path: 'backend/tests/test_gthread_safety.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_guest_auth.py',
       role: '게스트 인증 테스트',
+    },
+    {
+      path: 'backend/tests/test_gzip_middleware.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_hybrid_retrieval.py',
@@ -1716,6 +1831,14 @@ window.PROJECT_STATE = {
       role: '레거시 마이그레이션 항목 테스트',
     },
     {
+      path: 'backend/tests/test_perf_search_stream.py',
+      role: '',
+    },
+    {
+      path: 'backend/tests/test_prewarm.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_profile_perf.py',
       role: '프로필 성능 테스트',
     },
@@ -1728,12 +1851,20 @@ window.PROJECT_STATE = {
       role: '프로젝트 N+1 쿼리 테스트',
     },
     {
+      path: 'backend/tests/test_promote_taste_pool.py',
+      role: '',
+    },
+    {
       path: 'backend/tests/test_rerank_shape.py',
       role: '리랭크 결과 형태 테스트',
     },
     {
       path: 'backend/tests/test_schema_robustness.py',
       role: '스키마 견고성 테스트',
+    },
+    {
+      path: 'backend/tests/test_server_timing.py',
+      role: '',
     },
     {
       path: 'backend/tests/test_session_create_correctness.py',
@@ -1765,6 +1896,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/tests/test_taste_calibration.py',
+      role: '',
+    },
+    {
+      path: 'backend/tests/test_top_k_mmr_equivalence.py',
       role: '',
     },
     {
@@ -1868,6 +2003,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/plans/2026-10-02-contact-messaging-design.md',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -1956,6 +2095,14 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
       path: 'frontend/src/api/architects.js',
       role: 'architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)',
     },
@@ -1976,6 +2123,10 @@ window.PROJECT_STATE = {
       role: '디스커버리 피드 API 클라이언트',
     },
     {
+      path: 'frontend/src/api/getResult.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/images.js',
       role: '이미지 카드 정규화·텔레메트리 헬퍼',
     },
@@ -1990,6 +2141,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/api/liked.js',
       role: '좋아요 건물 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/messaging.js',
+      role: '',
     },
     {
       path: 'frontend/src/api/meta.js',
@@ -2030,6 +2185,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/api/social.js',
       role: '팔로우·리액션 소셜 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/sse.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/sse.test.mjs',
+      role: '',
     },
     {
       path: 'frontend/src/api/works.js',
@@ -2168,6 +2331,10 @@ window.PROJECT_STATE = {
       role: '인증 보호 라우트 가드',
     },
     {
+      path: 'frontend/src/components/RouteFallback.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/SaveBoardModal.jsx',
       role: '',
     },
@@ -2288,6 +2455,54 @@ window.PROJECT_STATE = {
       role: '공통 stroke 아이콘 세트',
     },
     {
+      path: 'frontend/src/components/messaging/ContactCta.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/ConversationView.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/GreetingSheet.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/InboxView.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessageIcon.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessagesEntry.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessagesSheet.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/Messaging.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/ReportDialog.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/blockedUsers.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/messagingUtils.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/photoCardShell.js',
       role: '',
     },
@@ -2376,6 +2591,10 @@ window.PROJECT_STATE = {
       role: '언어 선택 훅',
     },
     {
+      path: 'frontend/src/hooks/useMessagingFeature.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
     },
@@ -2392,7 +2611,15 @@ window.PROJECT_STATE = {
       role: '테마 context 소비 훅',
     },
     {
+      path: 'frontend/src/hooks/useUnreadMessages.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useUnreadNotifications.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useVisualViewportSheetStyle.js',
       role: '',
     },
     {
@@ -2414,6 +2641,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/layouts/MainLayout.jsx',
       role: '메인 레이아웃 + TabBar 셸',
+    },
+    {
+      path: 'frontend/src/lazyPages.js',
+      role: '',
     },
     {
       path: 'frontend/src/lib/tinderCard.js',
@@ -2748,6 +2979,14 @@ window.PROJECT_STATE = {
       role: '대시보드 상태 데이터',
     },
     {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
       path: 'tools/.smoke.sh',
       role: 'git 스크립트 환경 스모크 검사',
     },
@@ -2796,6 +3035,10 @@ window.PROJECT_STATE = {
       role: '안전 커밋 스크립트',
     },
     {
+      path: 'tools/git-sync-develop.sh',
+      role: '',
+    },
+    {
       path: 'tools/install-hooks.sh',
       role: 'git 훅 설치 스크립트',
     },
@@ -2813,6 +3056,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'tools/perf/probe.sh',
+      role: '',
+    },
+    {
+      path: 'tools/perf/prod_bench.py',
       role: '',
     },
     {

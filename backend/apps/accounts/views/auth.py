@@ -1130,7 +1130,10 @@ class MeView(APIView):
         profile = getattr(request.user, 'profile', None)
         if not profile:
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(UserSerializer(profile).data)
+        payload = dict(UserSerializer(profile).data)
+        # D12: runtime feature flags — backend is the single source of truth.
+        payload['features'] = {'messaging': bool(getattr(settings, 'MESSAGING_ENABLED', False))}
+        return Response(payload)
 
 
 # -- Logout ----------------------------------------------------------------

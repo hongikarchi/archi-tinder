@@ -495,9 +495,38 @@ class TestStage2ThreadSpawn:
         probe_result = self._make_stage1_result(probe_needed=True)
         with patch('apps.recommendation.views.services.parse_query', return_value=probe_result):
             with patch('apps.recommendation.views._spawn_stage2') as mock_spawn:
-                with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': True}):
+                with patch.dict(settings.RECOMMENDATION, {
+                    'stage_decouple_enabled': True, 'hyde_vinitial_enabled': True,
+                }):
                     view = ParseQueryView.as_view()
                     view(request)
+
+        mock_spawn.assert_not_called()
+
+    def test_thread_not_spawned_when_hyde_vinitial_off(self):
+        """PERF-MISC-1: stage_decouple=True but hyde_vinitial_enabled=False (production
+        default) -> V_initial has no consumer, so Stage 2 is never spawned."""
+        from rest_framework.test import APIRequestFactory
+        from apps.recommendation.views import ParseQueryView
+
+        factory = APIRequestFactory()
+        request = factory.post(
+            '/api/v1/recommendation/parse-query/',
+            {'query': 'brutalist concrete'},
+            format='json',
+        )
+        request.user = MagicMock()
+        request.user.id = 1
+
+        terminal_result = self._make_stage1_result(probe_needed=False)
+        with patch('apps.recommendation.views.services.parse_query', return_value=terminal_result):
+            with patch('apps.recommendation.views.engine.search_by_filters_scored', return_value=[]):
+                with patch('apps.recommendation.views.engine.get_diverse_random', return_value=[]):
+                    with patch('apps.recommendation.views._spawn_stage2') as mock_spawn:
+                        with patch.dict(settings.RECOMMENDATION, {
+                            'stage_decouple_enabled': True, 'hyde_vinitial_enabled': False,
+                        }):
+                            ParseQueryView.as_view()(request)
 
         mock_spawn.assert_not_called()
 
@@ -567,7 +596,9 @@ class TestStage2ThreadSpawn:
         with patch('apps.recommendation.views.services.parse_query', return_value=terminal_result):
             with patch('apps.recommendation.views.engine.search_by_filters_scored', return_value=[{'canonical_bld_id': 'b1'}]):
                 with patch('apps.recommendation.views.search._spawn_stage2') as mock_spawn:
-                    with patch.dict(settings.RECOMMENDATION, {'stage_decouple_enabled': True}):
+                    with patch.dict(settings.RECOMMENDATION, {
+                        'stage_decouple_enabled': True, 'hyde_vinitial_enabled': True,
+                    }):
                         response = ParseQueryView.as_view()(request)
 
         assert response.data['raw_query'] == 'Modern museum in Japan'

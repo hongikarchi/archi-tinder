@@ -9,6 +9,8 @@ Coverage:
   (5) User-provided REAL name is NOT overridden.
   (6) _sanitise_board_name: strips punctuation, clamps to 2 words, Title Case.
   (7) _deterministic_board_name: priority order respected.
+  (8) PERF-MISC-1: create_session board names are deterministic for all languages
+      (incl. ko placeholder), no LLM call, no background thread.
 """
 import pytest
 from unittest.mock import MagicMock, patch
@@ -206,12 +208,10 @@ class TestGenerateTasteBoardName:
 
 # ---------------------------------------------------------------------------
 # Integration: session_service.create_session placeholder detection
-# PERF-HOTPATH-1: create_session NEVER calls Gemini synchronously any more —
-# it always inserts the deterministic (filters-only) fallback name at create
-# time, and (only for placeholder names) registers a post-commit thread that
-# may later upgrade the name via Gemini. These tests verify the synchronous
-# fallback wiring + immediate return; the async upgrade itself is covered by
-# TestAsyncBoardNameUpdate below.
+# PERF-MISC-1: create_session NEVER calls an LLM for board names (neither
+# synchronously nor via a background thread): a placeholder name (incl. the ko
+# locale's '제목 없는 프로젝트') is replaced inline by the deterministic
+# (filters-only) name + '(N)' dedupe.
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
@@ -376,97 +376,51 @@ class TestCreateSessionAutoName:
         project = Project.objects.get(project_id=pid)
         assert project.name == 'Brutalist Museum'
 
-    def test_placeholder_registers_post_commit_thread(self, user_profile):
-        """Placeholder name + new project -> a callback is registered via
-        transaction.on_commit (the async Gemini-upgrade thread spawn)."""
+    def test_placeholder_registers_no_background_thread(self, user_profile):
+        """PERF-MISC-1: placeholder name -> deterministic name inline, NO post-commit
+        callback / background Gemini-upgrade thread is registered any more."""
         with patch('apps.recommendation.services.session_service.transaction.on_commit') as mock_on_commit:
-            resp, _ = self._run_create(user_profile, name='', filters={'style': 'brick'})
+            resp, mock_gemini = self._run_create(user_profile, name='', filters={'style': 'brick'})
         assert resp.status_code == 201
-        mock_on_commit.assert_called_once()
+        mock_on_commit.assert_not_called()
+        mock_gemini.assert_not_called()
 
     def test_real_name_does_not_register_post_commit_thread(self, user_profile):
-        """Non-placeholder client-provided name -> no on_commit registration
-        (no async Gemini upgrade needed; the user's name is final)."""
+        """Non-placeholder client-provided name -> no on_commit registration."""
         with patch('apps.recommendation.services.session_service.transaction.on_commit') as mock_on_commit:
             resp, _ = self._run_create(user_profile, name='My Gallery')
         assert resp.status_code == 201
         mock_on_commit.assert_not_called()
 
-
-# ---------------------------------------------------------------------------
-# _async_board_name_update: post-commit Gemini name-upgrade thread body
-# ---------------------------------------------------------------------------
-
-@pytest.mark.django_db
-class TestAsyncBoardNameUpdate:
-    """Call the thread function directly (synchronously) — no real threading
-    needed to exercise its logic. connections.close_all() is mocked out so
-    the test's own SQLite/PG connection survives the call.
-    """
-
-    def _run(self, *args, **kwargs):
-        from apps.recommendation.services.session_service import _async_board_name_update
-        # _async_board_name_update does a LOCAL `from django.db import connections as
-        # _connections` (telemetry-thread pattern) -- patch the real django.db.connections
-        # object so both the entry and finally close_all() calls are captured.
-        with patch('django.db.connections') as mock_conn:
-            _async_board_name_update(*args, **kwargs)
-        return mock_conn
-
-    def test_applies_gemini_name_when_row_still_matches_fallback(self, user_profile):
-        """Gemini succeeds and the row name still equals the fallback -> row updated."""
+    def test_korean_placeholder_gets_deterministic_name_no_llm(self, user_profile):
+        """PERF-MISC-1: the ko-locale placeholder is in the placeholder set -> board
+        name derived from filters, no LLM call (previously Korean users kept the
+        placeholder as the literal board name)."""
         from apps.recommendation.models import Project
-        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
+        resp, mock_gemini = self._run_create(
+            user_profile, name='제목 없는 프로젝트', filters={'style': 'brutalist', 'program': 'museum'},
+        )
+        assert resp.status_code == 201
+        mock_gemini.assert_not_called()
+        project = Project.objects.get(project_id=resp.data['project_id'])
+        assert project.name == 'Brutalist Museum'
 
-        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
-                   return_value='Brick House'):
-            mock_conn = self._run(
-                project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk,
-            )
-
-        project.refresh_from_db()
-        assert project.name == 'Brick House'
-        # close_all called on entry AND in finally (telemetry-thread pattern)
-        assert mock_conn.close_all.call_count == 2
-
-    def test_manual_rename_guard_leaves_renamed_row_untouched(self, user_profile):
-        """User already renamed the board (name no longer equals fallback) ->
-        the async updater must NOT clobber the manual rename."""
+    def test_korean_placeholder_no_filters_keeps_korean_label_and_dedups(self, user_profile):
+        """Korean placeholder + no usable filters -> keep the client's own label
+        (not an English 'Untitled'); the '(1)' dedupe still applies."""
         from apps.recommendation.models import Project
-        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
-        # Simulate a concurrent manual rename via ProjectDetailView.patch.
-        Project.objects.filter(pk=project.pk).update(name='My Custom Name')
+        Project.objects.create(user=user_profile, name='제목 없는 프로젝트', filters={}, raw_query='')
+        resp, mock_gemini = self._run_create(user_profile, name='제목 없는 프로젝트', filters={})
+        assert resp.status_code == 201
+        mock_gemini.assert_not_called()
+        project = Project.objects.get(project_id=resp.data['project_id'])
+        assert project.name == '제목 없는 프로젝트 (1)'
 
-        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
-                   return_value='Brick House'):
-            self._run(project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk)
-
-        project.refresh_from_db()
-        assert project.name == 'My Custom Name'
-
-    def test_empty_gemini_result_keeps_fallback(self, user_profile):
-        """Gemini returns '' -> fallback name stays, no exception."""
+    def test_english_placeholder_dedupes_for_all_languages(self, user_profile):
+        """Same filters twice -> second board gets the '(1)' dedupe suffix."""
         from apps.recommendation.models import Project
-        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
-
-        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
-                   return_value=''):
-            self._run(project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk)
-
-        project.refresh_from_db()
-        assert project.name == 'Brick'
-
-    def test_gemini_exception_keeps_fallback_and_never_raises(self, user_profile):
-        """Gemini raises -> fallback name stays; the thread function itself
-        never propagates the exception (would kill a daemon thread silently
-        anyway, but the contract is explicit try/except -> log)."""
-        from apps.recommendation.models import Project
-        project = Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
-
-        with patch('apps.recommendation.services.session_service.services._gemini_board_name_raw',
-                   side_effect=RuntimeError('Gemini timeout')):
-            # Must not raise.
-            self._run(project.pk, 'Brick', {'style': 'brick'}, 'brick buildings', user_profile.pk)
-
-        project.refresh_from_db()
-        assert project.name == 'Brick'
+        Project.objects.create(user=user_profile, name='Brick', filters={}, raw_query='')
+        resp, _ = self._run_create(user_profile, name='Untitled Project', filters={'style': 'brick'})
+        assert resp.status_code == 201
+        project = Project.objects.get(project_id=resp.data['project_id'])
+        assert project.name == 'Brick (1)'

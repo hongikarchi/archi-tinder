@@ -663,6 +663,8 @@ def test_promote_with_draft_id_uses_that_draft(auth_client, user_profile):
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
                side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_taste_seeded_pool',
+               return_value=(['bld_000010', 'bld_000011'], {})), \
          patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
                return_value=(['bld_000010', 'bld_000011'], {}, 1)), \
          patch('apps.recommendation.views.discovery.engine.get_pool_embeddings',
@@ -699,6 +701,8 @@ def test_promote_without_draft_id_uses_most_recent(auth_client, user_profile):
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
                side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_taste_seeded_pool',
+               return_value=(['bld_000010', 'bld_000011'], {})), \
          patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
                return_value=(['bld_000010'], {}, 1)), \
          patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
@@ -1210,6 +1214,8 @@ def test_promote_next_image_contains_image_url(auth_client, user_profile):
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
                side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_taste_seeded_pool',
+               return_value=(['bld_000010', 'bld_000011'], {})), \
          patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
                return_value=(['bld_000010', 'bld_000011'], {}, 1)), \
          patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
@@ -1252,6 +1258,8 @@ def test_promote_reuses_draft_project_not_new(auth_client, user_profile):
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
                side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_taste_seeded_pool',
+               return_value=(['bld_000010', 'bld_000011'], {})), \
          patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
                return_value=(['bld_000010', 'bld_000011'], {}, 1)), \
          patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
@@ -1298,6 +1306,8 @@ def test_promote_fallback_most_recent_also_reuses_draft(auth_client, user_profil
     with patch('apps.recommendation.views.discovery.engine.get_pool_embeddings', return_value=emb_map), \
          patch('apps.recommendation.views.discovery.engine.update_preference_vector',
                side_effect=lambda pv, emb, a: emb), \
+         patch('apps.recommendation.views.discovery.engine.create_taste_seeded_pool',
+               return_value=(['bld_000010', 'bld_000011'], {})), \
          patch('apps.recommendation.views.discovery.engine.create_pool_with_relaxation',
                return_value=(['bld_000010'], {}, 1)), \
          patch('apps.recommendation.views.discovery.engine.farthest_point_from_pool',
@@ -1410,3 +1420,80 @@ def test_feedback_timezone_offset_minutes_accepted(auth_client, user_profile):
     assert draft.name == 'discovery_260628_1230', (
         f'Expected KST-based name discovery_260628_1230, got {draft.name!r}'
     )
+
+
+# ── BACK-PROMOTE-1: promote pool is seeded by HNSW neighbours of the pref vector ──
+
+_PROMOTE_PATCH = 'apps.recommendation.views.discovery.engine.'
+
+
+def _promote_post(auth_client, draft, *, taste_pool, relax_pool=None):
+    """Run promote with engine pool builders mocked; return (resp, taste_mock, relax_mock)."""
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    emb_map = {f'bld_{i:06d}': mock_emb for i in range(10)}
+    with (
+        patch(_PROMOTE_PATCH + 'get_pool_embeddings', return_value=emb_map),
+        patch(_PROMOTE_PATCH + 'update_preference_vector',
+              side_effect=lambda pv, emb, a: emb),
+        patch(_PROMOTE_PATCH + 'create_taste_seeded_pool', **taste_pool) as taste,
+        patch(_PROMOTE_PATCH + 'create_pool_with_relaxation',
+              return_value=relax_pool or (['bld_000020'], {}, 3)) as relax,
+        patch(_PROMOTE_PATCH + 'farthest_point_from_pool', return_value=None),
+        patch(_PROMOTE_PATCH + 'get_buildings_by_ids',
+              return_value=[_card('bld_000010')]),
+    ):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {'draft_id': str(draft.project_id)},
+            format='json',
+        )
+    return resp, taste, relax
+
+
+@pytest.mark.django_db
+def test_promote_builds_pool_from_taste_seeded_pool(auth_client, user_profile):
+    """With a preference vector the pool comes from create_taste_seeded_pool
+    (seeds + draft passes passed through), NOT create_pool_with_relaxation."""
+    from apps.recommendation.models import AnalysisSession
+
+    seeds = [f'bld_{i:06d}' for i in range(10)]
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seeds]
+    draft.disliked_ids = ['bld_000050', 'bld_000051']
+    draft.save(update_fields=['liked_ids', 'disliked_ids'])
+
+    pool = seeds + ['bld_000010', 'bld_000011']
+    resp, taste, relax = _promote_post(
+        auth_client, draft,
+        taste_pool={'return_value': (pool, {sid: 1.1 for sid in seeds})},
+    )
+
+    assert resp.status_code == 201
+    relax.assert_not_called()
+    taste.assert_called_once()
+    args, kwargs = taste.call_args
+    assert len(args[0]) == 384                       # preference vector
+    assert list(args[1]) == seeds                    # liked seeds
+    assert set(kwargs['exclude_ids']) == {'bld_000050', 'bld_000051'}
+
+    session = AnalysisSession.objects.get(session_id=resp.json()['session_id'])
+    assert session.pool_ids == pool
+    assert session.current_pool_tier == 1
+    # seeds are in the pool and marked exposed -> never re-served
+    assert set(seeds) <= set(session.exposed_ids)
+
+
+@pytest.mark.django_db
+def test_promote_falls_back_to_relaxation_when_taste_pool_fails(auth_client, user_profile):
+    """HNSW query failure must not 500 the promote: fall back to the old path."""
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': f'bld_{i:06d}', 'intensity': 1.0} for i in range(10)]
+    draft.save(update_fields=['liked_ids'])
+
+    resp, taste, relax = _promote_post(
+        auth_client, draft, taste_pool={'side_effect': RuntimeError('db down')},
+    )
+
+    assert resp.status_code == 201
+    taste.assert_called_once()
+    relax.assert_called_once()

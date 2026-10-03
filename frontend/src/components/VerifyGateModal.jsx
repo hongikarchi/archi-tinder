@@ -27,9 +27,13 @@ import { useTranslation } from '../i18n/index.js'
 import GoogleVerifyButton from './GoogleVerifyButton.jsx'
 import Modal from './Modal.jsx'
 
-export default function VerifyGateModal({ onClose, onPromoted }) {
+export default function VerifyGateModal({ onClose, onPromoted, reason = null }) {
   const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
   const { t } = useTranslation()
+  // FULL-MESSAGING-1: guest hit a messaging write (reason 'messaging', set by
+  // api/messaging.js) — the board-limit copy would be wrong, so swap in
+  // messaging copy.
+  const isGuestGate = reason === 'messaging'
 
   // useGoogleLogin is NOT called here — it lives inside GoogleVerifyButton,
   // which is only rendered when googleConfigured === true (inside GoogleOAuthProvider).
@@ -56,7 +60,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
     <Modal
       open
       onClose={onClose}
-      title={t('auth.gateTitle')}
+      title={t(isGuestGate ? 'auth.gateMessagingTitle' : 'auth.gateTitle')}
       zIndex={10100}
       closeLabel={t('auth.gateCancelAria')}
     >
@@ -66,7 +70,7 @@ export default function VerifyGateModal({ onClose, onPromoted }) {
         margin: '0 0 20px',
         lineHeight: 1.55,
       }}>
-        {t('auth.gateBody')}
+        {t(isGuestGate ? 'auth.gateMessagingBody' : 'auth.gateBody')}
       </p>
 
       {error && (

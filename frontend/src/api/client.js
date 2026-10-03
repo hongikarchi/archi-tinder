@@ -10,7 +10,7 @@
 export { getToken, setTokens, clearTokens, getLastCall } from './core.js'
 export { socialLogin, guestLogin, promoteAccount, devLogin, logout, getMe, login, register, setPassword, linkEmail } from './auth.js'
 export { normalizeCard, getImageSource, emitImageLoadEvent } from './images.js'
-export { startSession, getSessionState, recordSwipe, parseQuery, getResult } from './sessions.js'
+export { startSession, getSessionState, recordSwipe, parseQuery, parseQueryStream, getResult } from './sessions.js'
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, bookmarkBuilding, generateReport, generateReportImage, createProject, VerifyRequiredError } from './projects.js'
 export { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, fetchBoardSurprise } from './discovery.js'
 export { getUserProfile, updateMyProfile } from './profiles.js'
@@ -19,3 +19,8 @@ export { addLikedBuilding, getLikedBuildings } from './liked.js'
 export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.js'
 export { listNotifications, getUnreadCount, markRead } from './notifications.js'
 export { getInspectBuildings, getInspectBuilding, inspectSearch } from './inspect.js'
+export {
+  sendContactRequest, listReceivedRequests, getContactStatus, acceptContactRequest, ignoreContactRequest,
+  listConversations, listMessages, sendMessage, markConversationRead, getMessagesUnreadCount,
+  blockUser, unblockUser, reportTarget,
+} from './messaging.js'

@@ -239,6 +239,9 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
     } catch { /* ignore */ }
     return []
   })
+  // Live AI bubble while parse-query streams: { text, filters } or null.
+  // Transient (never persisted); replaced by the final message on completion.
+  const [streamingReply, setStreamingReply] = useState(null)
   const messagesEndRef = useRef(null)
   // Tracks whether backend hydration has finished (prevents save loop on mount).
   const hydrationDoneRef = useRef(false)
@@ -247,7 +250,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isLoading])
+  }, [messages, isLoading, streamingReply])
 
   // Persist chat state to localStorage (write-through cache — always active).
   useEffect(() => {
@@ -473,7 +476,26 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       if (latestFilters && Object.keys(latestFilters).length > 0) {
         queryOptions.prior_filters = latestFilters
       }
-      const parsed = await api.parseQuery(nextHistory, queryOptions)
+      // Stream reply text / early filters into a live bubble; `parsed` is the
+      // same shape as the blocking parseQuery response (falls back to it
+      // transparently on any stream failure).
+      const parsed = await api.parseQueryStream(nextHistory, queryOptions, {
+        onReply: delta => setStreamingReply(prev => ({
+          ...prev, text: (prev?.text || '') + delta,
+        })),
+        onFilters: data => setStreamingReply(prev => ({
+          ...prev, text: prev?.text || '', filters: data?.structured_filters,
+        })),
+        // Speculative early cards: shown in the live bubble until `final`
+        // arrives; the final message then replaces them (final is authoritative).
+        onResults: data => setStreamingReply(prev => ({
+          ...prev,
+          text: prev?.text || '',
+          results: data?.results || [],
+          isFallback: Boolean(data?.is_fallback),
+        })),
+        onFallback: () => setStreamingReply(null),
+      })
 
       // Shared result fields — present in both probe and terminal responses
       const results    = parsed.results || []
@@ -554,6 +576,7 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
       setMessages(prev => [...prev, { role: 'ai', text: t('search.somethingWentWrong', { detail: err.message }) }])
     }
 
+    setStreamingReply(null)
     setIsLoading(false)
   }
 
@@ -806,7 +829,26 @@ export default function LLMSearchPage({ mode, projectId, projectName: initialNam
             </div>
           )}
 
-          {isLoading && (
+          {isLoading && (streamingReply?.text || streamingReply?.results?.length > 0) && (
+            <div style={{
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'flex-start', alignSelf: 'flex-start', maxWidth: '100%',
+            }}>
+              <div style={{
+                padding: '12px 16px', borderRadius: 16, fontSize: 14, lineHeight: 1.6,
+                whiteSpace: 'pre-wrap', maxWidth: '100%', overflowX: 'hidden',
+                background: 'var(--color-ai-bubble)',
+                border: '1px solid var(--color-ai-bubble-border)',
+                color: 'var(--color-text-2)', borderBottomLeftRadius: 4,
+              }}>
+                {streamingReply.text}
+                <FilterChips filters={streamingReply.filters} />
+                <ResultStrip results={streamingReply.results} isFallback={streamingReply.isFallback} />
+              </div>
+            </div>
+          )}
+
+          {isLoading && !streamingReply?.text && !(streamingReply?.results?.length > 0) && (
             <div style={{ alignSelf: 'flex-start' }}>
               <div style={{
                 padding: '12px 18px', background: 'var(--color-ai-bubble)',

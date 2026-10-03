@@ -42,20 +42,20 @@ logger = logging.getLogger('apps.recommendation')
 
 # FULL-LANGUAGE-1: per-user language override directive injected into system_instruction.
 # Scoped to `reply` and `probe_question` only.
-# Does NOT override rule 3 (visual_description ALWAYS English) or rule 4 (raw_query verbatim).
+# Does NOT override rule 3 (visual_description ALWAYS English).
 # language=None (default) leaves current inference-from-message behaviour intact.
 _LANG_DIRECTIVE = {
     'ko': (
         '\n\n## Language override (user preference)\n'
         'The user has set their language preference to Korean. '
         'Write `reply` and `probe_question` in Korean regardless of the language of their message. '
-        '`visual_description` remains English (rule 3). `raw_query` is verbatim (rule 4).'
+        '`visual_description` remains English (rule 3).'
     ),
     'en': (
         '\n\n## Language override (user preference)\n'
         'The user has set their language preference to English. '
         'Write `reply` and `probe_question` in English regardless of the language of their message. '
-        '`visual_description` remains English (rule 3). `raw_query` is verbatim (rule 4).'
+        '`visual_description` remains English (rule 3).'
     ),
 }
 
@@ -380,7 +380,166 @@ def _maybe_multi_axis_probe(filters, filter_priority, user_turn_count, parsed_re
     return result
 
 
-def parse_query(conversation_history, language=None, prior_filters=None):
+_EMPTY_FILTERS = {
+    'location_country': None, 'location_city': None,
+    'program': None, 'material': None, 'style': None,
+    'year_min': None, 'year_max': None,
+    'atmosphere': None, 'color_tone': None, 'typology_primary': None,
+    'architectural_elements': None,
+}
+
+# Allowlist: only these 11 axes survive into a filter_delta.
+_VALID_AXES = frozenset({
+    'location_country', 'location_city', 'program', 'material', 'style',
+    'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
+    'architectural_elements',
+})
+
+
+def _apply_filter_delta(data, prior_filters):
+    """FILTER-DELTA merge + sanitise + vocab snap + required-slate repair.
+
+    Returns (filters, filter_priority, filter_delta). Shared by _finalize_parsed and
+    the streaming endpoint's early `filters` event (PERF-SEARCH-1), so both compute
+    the identical filter set from the same model output.
+    """
+    # FILTER-DELTA: deterministic apply of prior_filters + delta.
+    # Priority:
+    #   1. If filter_delta present: final = prior + delta.set - delta.remove
+    #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
+    #      (backward-compat for first turns or models that skip filter_delta)
+    # After merging, run existing _repair_required_slate so result has a slate.
+    _filter_delta = data.get('filter_delta') or {}
+    _delta_set = _filter_delta.get('set') or {}
+    _delta_remove = _filter_delta.get('remove') or []
+    # Allowlist: only the 11 known axes survive into delta (module-level _VALID_AXES)
+    _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
+    _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
+
+    # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
+    # follow-up turn (prior filters exist). On a first turn it must NOT
+    # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
+    # Gemini on schema-faithful outputs) always emit the delta skeleton,
+    # which silently wiped every parsed filter (found in A/B 2026-08-04).
+    if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
+        # Follow-up turn: apply delta to prior
+        filters = dict(prior_filters or {})
+        # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
+        # in both remove and set (replace semantics) -- set must win.
+        for _axis in _delta_remove:
+            filters.pop(_axis, None)
+        filters.update(_delta_set)
+    else:
+        # First turn or LLM skipped filter_delta: merge prior + full LLM filters
+        _llm_filters = data.get('filters') or dict(_EMPTY_FILTERS)
+        filters = dict(prior_filters or {})
+        filters.update({k: v for k, v in _llm_filters.items() if v is not None})
+
+    # Sanitize program value
+    if filters.get('program'):
+        program = filters['program']
+        if program not in PROGRAM_VALUES:
+            titled = program.title()
+            filters['program'] = titled if titled in PROGRAM_VALUES else None
+
+    # BACK-PARSER-VOCAB-1: snap the 5 grounded soft axes to live DB vocabulary
+    # (exact -> casefold -> style ism->ist -> title -> None). program is
+    # untouched (handled above via PROGRAM_VALUES).
+    filters = _snap_to_vocab(filters)
+
+    # Sanitize/repair filter_priority: keep only non-null filter keys, but
+    # never let a successful Gemini payload proceed without any required
+    # slate field. Diffuse prompts get a broad Contemporary default.
+    raw_priority = data.get('filter_priority') or []
+    filters, filter_priority = _repair_required_slate(filters, raw_priority)
+    # Expose validated delta for transparency (callers may log/inspect it)
+    filter_delta = {'set': _delta_set, 'remove': _delta_remove}
+    return filters, filter_priority, filter_delta
+
+
+_IMAGE_FOCUS_VALUES = ('exterior', 'interior', 'drawing', 'aerial', 'detail')
+
+
+def normalise_image_focus(value):
+    """Allowlist the model's image_focus; anything else -> None.
+
+    Shared by _finalize_parsed and the streaming endpoint's early search
+    (PERF-SEARCH-2) so both see the identical value."""
+    return value if value in _IMAGE_FOCUS_VALUES else None
+
+
+def _finalize_parsed(data, prior_filters, first_user_text, _user_turn_count, *,
+                     stage1, log_label):
+    """Post-process the LLM's parsed JSON `data` into the parse_query result dict.
+
+    PERF-SEARCH-1: extracted VERBATIM from the (previously duplicated) tails of
+    parse_query() and parse_query_stage1() so the streaming endpoint shares exactly
+    one post-processing implementation with the blocking one. `stage1=True` returns
+    visual_description=None (Stage 2 generates it); `log_label` only prefixes the M1
+    cap warning. Raises like the inlined code did (caller's except handles it).
+    """
+    probe_needed = bool(data.get('probe_needed', False))
+
+    # M1 cap: Python-level runaway-clarification guard (same as parse_query)
+    if _user_turn_count >= 3 and probe_needed:
+        logger.warning(
+            '%s: Gemini returned probe_needed=True on user turn %d (>=3); '
+            'forcing probe_needed=False per Investigation 22 M1 cap',
+            log_label, _user_turn_count,
+        )
+        probe_needed = False
+
+    filters, filter_priority, filter_delta = _apply_filter_delta(data, prior_filters)
+
+    # raw_query: spec §3 says always verbatim first user message
+    raw_query = data.get('raw_query') or first_user_text
+
+    image_focus = normalise_image_focus(data.get('image_focus'))
+
+    # TASTE-CALIBRATION-1: extract calibration fields
+    calibration = _extract_calibration_fields(data, filters, probe_needed)
+    # PERF-SEARCH-2: priority_ordered is no longer requested from the model (no consumer
+    # reads it beyond echoing it back); it is exactly the validated filter_priority.
+    if not calibration['priority_ordered']:
+        calibration['priority_ordered'] = list(filter_priority)
+
+    result = {
+        'probe_needed': probe_needed,
+        'probe_question': data.get('probe_question') if probe_needed else None,
+        'reply': data.get('reply', ''),
+        'filters': filters,
+        'filter_delta': filter_delta,
+        'filter_priority': filter_priority,
+        'image_focus': image_focus,
+        'raw_query': raw_query,
+        # Stage 1: Stage 2 generates visual_description asynchronously
+        'visual_description': None if stage1 else data.get('visual_description'),
+        # TASTE-CALIBRATION-1 fields
+        'confidence_score': calibration['confidence_score'],
+        'system_action': calibration['system_action'],
+        'suggested_quick_replies': calibration['suggested_quick_replies'],
+        'priority_ordered': calibration['priority_ordered'],
+        'llm_response_message': calibration['llm_response_message'],
+    }
+    # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
+    result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
+    return result
+
+
+def resolve_filters_from_partial(partial, prior_filters):
+    """PERF-SEARCH-1: the exact filter merge _finalize_parsed applies, on partial data.
+
+    `partial` = the already-closed top-level values {'filters','filter_delta',
+    'filter_priority'} from the LLM stream. Returns (filters, filter_priority) exactly
+    as _finalize_parsed would compute them for the same model output (same delta
+    apply, program sanitise, vocab snap and required-slate repair).
+    """
+    data = {k: partial.get(k) for k in ('filters', 'filter_delta', 'filter_priority')}
+    filters, filter_priority, _delta = _apply_filter_delta(data, prior_filters)
+    return filters, filter_priority
+
+
+def parse_query(conversation_history, language=None, prior_filters=None, _stream_sink=None):
     """
     Chat phase Gemini call (Sprint 1 rewrite per Investigation 06).
 
@@ -400,6 +559,11 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             The final filters are computed deterministically:
             final = prior_filters + delta.set - delta.remove.
             None (default) = first turn, no prior context.
+        _stream_sink: PERF-SEARCH-1 -- optional ParseStreamSink. When given, the LLM call
+            goes through generate_content_streaming (deltas -> sink) instead of the
+            blocking generate_content_with_fallback; everything after the call is the
+            SAME code, so the result is identical for identical model output. None
+            (default) = the unchanged blocking path.
         Backward compat: if a bare string is passed (legacy caller), it is wrapped
             as [{'role': 'user', 'text': conversation_history}].
 
@@ -450,6 +614,11 @@ def parse_query(conversation_history, language=None, prior_filters=None):
     # Use _svc.parse_query_stage1 so mock.patch/patch.object on services.parse_query_stage1
     # is visible here at call time (late-bound via the module object).
     if settings.RECOMMENDATION.get('stage_decouple_enabled', False):
+        if _stream_sink is not None:
+            return _svc.parse_query_stage1(
+                conversation_history, language=language, prior_filters=prior_filters,
+                _stream_sink=_stream_sink,
+            )
         return _svc.parse_query_stage1(
             conversation_history, language=language, prior_filters=prior_filters,
         )
@@ -515,6 +684,13 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         client = _svc._get_client()
         rc = settings.RECOMMENDATION
 
+        def _llm_call(**call_kw):
+            # PERF-SEARCH-1: streaming endpoint routes through generate_content_streaming;
+            # otherwise the exact pre-existing blocking call (same args) is made.
+            if _stream_sink is not None:
+                return _svc.generate_content_streaming(client, sink=_stream_sink, **call_kw)
+            return _svc.generate_content_with_fallback(client, **call_kw)
+
         # Build Gemini contents list from conversation_history
         contents = []
         for turn in conversation_history:
@@ -574,8 +750,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
 
         t_call_start = time.perf_counter()
         try:
-            response = _svc.generate_content_with_fallback(
-                client,
+            response = _llm_call(
                 contents=contents,
                 config=_cached_config,
             )
@@ -591,8 +766,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
                 )
                 django_cache.delete(_svc._get_django_cache_key())
                 cache_resource_name = None
-                response = _svc.generate_content_with_fallback(
-                    client,
+                response = _llm_call(
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=_system_instruction,
@@ -638,12 +812,19 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             _user_turn_count >= 3 and _clarification_fired is True
         )
 
+        # PERF-SEARCH-1: streaming-only additive telemetry (absent on the blocking path,
+        # whose payload stays byte-identical).
+        _stream_timing_extra = (
+            {'filters_ms': _stream_sink.filters_ms, 'streamed': _stream_sink.got_output}
+            if _stream_sink is not None else {}
+        )
+
         _svc.event_log.emit_event(
             'parse_query_timing',
             session=None,
             user=None,
             gemini_total_ms=round((t_call_end - t_call_start) * 1000, 2),
-            ttft_ms=None,   # not available without streaming
+            ttft_ms=_stream_sink.ttft_ms if _stream_sink is not None else None,
             gen_ms=round((t_call_end - t_call_start) * 1000, 2),
             input_tokens=getattr(_usage, 'prompt_token_count', None) if _usage else None,
             output_tokens=getattr(_usage, 'candidates_token_count', None) if _usage else None,
@@ -659,113 +840,14 @@ def parse_query(conversation_history, language=None, prior_filters=None):
             # M1 field (Investigation 22 §M1 refined): True iff Python-level cap overrode
             # Gemini's probe_needed=True on user turn 3+. Observable cap-fire-rate metric.
             m1_cap_forced_terminal=_m1_cap_forced_terminal,
+            **_stream_timing_extra,
         )
 
         data = json.loads(response.text)
-
-        probe_needed = bool(data.get('probe_needed', False))
-
-        # M1 (Investigation 22 §M1 refined): Python-level runaway-clarification cap.
-        # If user_turn_count >= 3 AND Gemini still returned probe_needed=True, force
-        # terminal mode. This is defense-in-depth: the prompt HARD CAP clause should
-        # prevent Gemini from firing a 3rd probe, but Python enforces it regardless.
-        # Cap fires ONLY at turn 3+ -- turns 1 and 2 are legitimate 0/1-turn flows per
-        # Investigation 06's design intent. Always-on; no flag gate.
-        if _user_turn_count >= 3 and probe_needed:
-            logger.warning(
-                'parse_query: Gemini returned probe_needed=True on user turn %d (>=3); '
-                'forcing probe_needed=False per Investigation 22 M1 cap',
-                _user_turn_count,
-            )
-            probe_needed = False
-
-        # FILTER-DELTA: deterministic apply of prior_filters + delta.
-        # Priority:
-        #   1. If filter_delta present: final = prior + delta.set - delta.remove
-        #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
-        #      (backward-compat for first turns or models that skip filter_delta)
-        # After merging, run existing _repair_required_slate so result has a slate.
-        _filter_delta = data.get('filter_delta') or {}
-        _delta_set = _filter_delta.get('set') or {}
-        _delta_remove = _filter_delta.get('remove') or []
-        # Allowlist: only the 11 known axes survive into delta
-        _VALID_AXES = frozenset({
-            'location_country', 'location_city', 'program', 'material', 'style',
-            'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
-            'architectural_elements',
-        })
-        _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
-        _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
-
-        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
-        # follow-up turn (prior filters exist). On a first turn it must NOT
-        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
-        # Gemini on schema-faithful outputs) always emit the delta skeleton,
-        # which silently wiped every parsed filter (found in A/B 2026-08-04).
-        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
-            # Follow-up turn: apply delta to prior
-            filters = dict(prior_filters or {})
-            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
-            # in both remove and set (replace semantics) -- set must win.
-            for _axis in _delta_remove:
-                filters.pop(_axis, None)
-            filters.update(_delta_set)
-        else:
-            # First turn or LLM skipped filter_delta: merge prior + full LLM filters
-            _llm_filters = data.get('filters') or dict(_empty_filters)
-            filters = dict(prior_filters or {})
-            filters.update({k: v for k, v in _llm_filters.items() if v is not None})
-
-        # Sanitize program value (case-insensitive -> canonical form)
-        if filters.get('program'):
-            program = filters['program']
-            if program not in PROGRAM_VALUES:
-                titled = program.title()
-                filters['program'] = titled if titled in PROGRAM_VALUES else None
-
-        # BACK-PARSER-VOCAB-1: snap the 5 grounded soft axes to live DB vocabulary
-        # (exact -> casefold -> style ism->ist -> title -> None). program is
-        # untouched (handled above via PROGRAM_VALUES).
-        filters = _snap_to_vocab(filters)
-
-        # Sanitize/repair filter_priority: keep only non-null filter keys, but
-        # never let a successful Gemini payload proceed without any required
-        # slate field. Diffuse prompts get a broad Contemporary default.
-        raw_priority = data.get('filter_priority') or []
-        filters, filter_priority = _repair_required_slate(filters, raw_priority)
-        # Expose validated delta for transparency (callers may log/inspect it)
-        filter_delta = {'set': _delta_set, 'remove': _delta_remove}
-
-        # raw_query: spec §3 says always verbatim first user message
-        raw_query = data.get('raw_query') or first_user_text
-
-        image_focus = data.get('image_focus')
-        if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
-            image_focus = None
-
-        # TASTE-CALIBRATION-1: extract calibration fields
-        calibration = _extract_calibration_fields(data, filters, probe_needed)
-
-        result = {
-            'probe_needed': probe_needed,
-            'probe_question': data.get('probe_question') if probe_needed else None,
-            'reply': data.get('reply', ''),
-            'filters': filters,
-            'filter_delta': filter_delta,
-            'filter_priority': filter_priority,
-            'image_focus': image_focus,
-            'raw_query': raw_query,
-            'visual_description': data.get('visual_description'),
-            # TASTE-CALIBRATION-1 fields
-            'confidence_score': calibration['confidence_score'],
-            'system_action': calibration['system_action'],
-            'suggested_quick_replies': calibration['suggested_quick_replies'],
-            'priority_ordered': calibration['priority_ordered'],
-            'llm_response_message': calibration['llm_response_message'],
-        }
-        # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
-        result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
-        return result
+        return _finalize_parsed(
+            data, prior_filters, first_user_text, _user_turn_count,
+            stage1=False, log_label='parse_query',
+        )
 
     except json.JSONDecodeError as e:
         logger.error('parse_query JSON decode error: %s', e)
@@ -793,7 +875,7 @@ def parse_query(conversation_history, language=None, prior_filters=None):
         return _fallback
 
 
-def parse_query_stage1(conversation_history, language=None, prior_filters=None):
+def parse_query_stage1(conversation_history, language=None, prior_filters=None, _stream_sink=None):
     """IMP-6 Commit 2: Stage 1 Gemini call -- USER-BLOCKING portion of the split.
 
     Same as parse_query() but uses response_schema to exclude visual_description,
@@ -886,6 +968,13 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         client = _svc._get_client()
         rc = settings.RECOMMENDATION
 
+        def _llm_call(**call_kw):
+            # PERF-SEARCH-1: streaming endpoint routes through generate_content_streaming;
+            # otherwise the exact pre-existing blocking call (same args) is made.
+            if _stream_sink is not None:
+                return _svc.generate_content_streaming(client, sink=_stream_sink, **call_kw)
+            return _svc.generate_content_with_fallback(client, **call_kw)
+
         # Build Gemini contents list from conversation_history
         contents = []
         for turn in conversation_history:
@@ -945,8 +1034,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
 
         t_call_start = time.perf_counter()
         try:
-            response = _svc.generate_content_with_fallback(
-                client,
+            response = _llm_call(
                 contents=contents,
                 config=_s1_config,
             )
@@ -961,8 +1049,7 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
                 )
                 django_cache.delete(_svc._get_django_cache_key())
                 cache_resource_name = None
-                response = _svc.generate_content_with_fallback(
-                    client,
+                response = _llm_call(
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=_system_instruction,
@@ -993,12 +1080,19 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
         _user_turn_count = sum(1 for t in conversation_history if t.get('role') == 'user')
         _m1_cap_forced_terminal = bool(_user_turn_count >= 3 and _clarification_fired is True)
 
+        # PERF-SEARCH-1: streaming-only additive telemetry (absent on the blocking path,
+        # whose payload stays byte-identical).
+        _stream_timing_extra = (
+            {'filters_ms': _stream_sink.filters_ms, 'streamed': _stream_sink.got_output}
+            if _stream_sink is not None else {}
+        )
+
         _svc.event_log.emit_event(
             'parse_query_timing',
             session=None,
             user=None,
             gemini_total_ms=round((t_call_end - t_call_start) * 1000, 2),
-            ttft_ms=None,
+            ttft_ms=_stream_sink.ttft_ms if _stream_sink is not None else None,
             gen_ms=round((t_call_end - t_call_start) * 1000, 2),
             input_tokens=getattr(_usage, 'prompt_token_count', None) if _usage else None,
             output_tokens=getattr(_usage, 'candidates_token_count', None) if _usage else None,
@@ -1015,107 +1109,14 @@ def parse_query_stage1(conversation_history, language=None, prior_filters=None):
             m1_cap_forced_terminal=_m1_cap_forced_terminal,
             # IMP-6 Commit 2 additive field: stage identifier
             stage='1',
+            **_stream_timing_extra,
         )
 
         data = json.loads(response.text)
-        probe_needed = bool(data.get('probe_needed', False))
-
-        # M1 cap: Python-level runaway-clarification guard (same as parse_query)
-        if _user_turn_count >= 3 and probe_needed:
-            logger.warning(
-                'parse_query_stage1: Gemini returned probe_needed=True on user turn %d (>=3); '
-                'forcing probe_needed=False per Investigation 22 M1 cap',
-                _user_turn_count,
-            )
-            probe_needed = False
-
-        # FILTER-DELTA: deterministic apply of prior_filters + delta.
-        # Priority:
-        #   1. If filter_delta present: final = prior + delta.set - delta.remove
-        #   2. Else if filters present: final = {**(prior or {}), **llm_filters}
-        #      (backward-compat for first turns or models that skip filter_delta)
-        # After merging, run existing _repair_required_slate so result has a slate.
-        _filter_delta = data.get('filter_delta') or {}
-        _delta_set = _filter_delta.get('set') or {}
-        _delta_remove = _filter_delta.get('remove') or []
-        # Allowlist: only the 11 known axes survive into delta
-        _VALID_AXES = frozenset({
-            'location_country', 'location_city', 'program', 'material', 'style',
-            'year_min', 'year_max', 'atmosphere', 'color_tone', 'typology_primary',
-            'architectural_elements',
-        })
-        _delta_set = {k: v for k, v in _delta_set.items() if k in _VALID_AXES and v is not None}
-        _delta_remove = [a for a in _delta_remove if isinstance(a, str) and a in _VALID_AXES]
-
-        # An EMPTY delta ({'set': {}, 'remove': []}) is only meaningful on a
-        # follow-up turn (prior filters exist). On a first turn it must NOT
-        # shadow the full `filters` dict -- some models (gpt-5.6-luna, and
-        # Gemini on schema-faithful outputs) always emit the delta skeleton,
-        # which silently wiped every parsed filter (found in A/B 2026-08-04).
-        if (_delta_set or _delta_remove) or (prior_filters and _filter_delta):
-            # Follow-up turn: apply delta to prior
-            filters = dict(prior_filters or {})
-            # Remove BEFORE set: "X는 빼고 Y로" makes models emit the same axis
-            # in both remove and set (replace semantics) -- set must win.
-            for _axis in _delta_remove:
-                filters.pop(_axis, None)
-            filters.update(_delta_set)
-        else:
-            # First turn or LLM skipped filter_delta: merge prior + full LLM filters
-            _llm_filters = data.get('filters') or dict(_empty_filters)
-            filters = dict(prior_filters or {})
-            filters.update({k: v for k, v in _llm_filters.items() if v is not None})
-
-        # Sanitize program value
-        if filters.get('program'):
-            program = filters['program']
-            if program not in PROGRAM_VALUES:
-                titled = program.title()
-                filters['program'] = titled if titled in PROGRAM_VALUES else None
-
-        # BACK-PARSER-VOCAB-1: snap the 5 grounded soft axes to live DB vocabulary
-        # (exact -> casefold -> style ism->ist -> title -> None). program is
-        # untouched (handled above via PROGRAM_VALUES).
-        filters = _snap_to_vocab(filters)
-
-        # Sanitize/repair filter_priority: keep only non-null filter keys, but
-        # never let a successful Gemini payload proceed without any required
-        # slate field. Diffuse prompts get a broad Contemporary default.
-        raw_priority = data.get('filter_priority') or []
-        filters, filter_priority = _repair_required_slate(filters, raw_priority)
-        # Expose validated delta for transparency (callers may log/inspect it)
-        filter_delta = {'set': _delta_set, 'remove': _delta_remove}
-
-        # raw_query: spec §3 says always verbatim first user message
-        raw_query = data.get('raw_query') or first_user_text
-
-        image_focus = data.get('image_focus')
-        if image_focus not in ('exterior', 'interior', 'drawing', 'aerial', 'detail'):
-            image_focus = None
-
-        # TASTE-CALIBRATION-1: extract calibration fields
-        calibration = _extract_calibration_fields(data, filters, probe_needed)
-
-        result = {
-            'probe_needed': probe_needed,
-            'probe_question': data.get('probe_question') if probe_needed else None,
-            'reply': data.get('reply', ''),
-            'filters': filters,
-            'filter_delta': filter_delta,
-            'filter_priority': filter_priority,
-            'image_focus': image_focus,
-            'raw_query': raw_query,
-            'visual_description': None,  # Stage 2 generates this asynchronously
-            # TASTE-CALIBRATION-1 fields
-            'confidence_score': calibration['confidence_score'],
-            'system_action': calibration['system_action'],
-            'suggested_quick_replies': calibration['suggested_quick_replies'],
-            'priority_ordered': calibration['priority_ordered'],
-            'llm_response_message': calibration['llm_response_message'],
-        }
-        # D1: multi-axis optional prompt — fires on any terminal turn with >=2 strong axes
-        result = _maybe_multi_axis_probe(filters, filter_priority, _user_turn_count, result)
-        return result
+        return _finalize_parsed(
+            data, prior_filters, first_user_text, _user_turn_count,
+            stage1=True, log_label='parse_query_stage1',
+        )
 
     except json.JSONDecodeError as e:
         logger.error('parse_query_stage1 JSON decode error: %s', e)
