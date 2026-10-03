@@ -7,7 +7,7 @@
  * `.lp-skel` pulse animation (index.css) — no shimmer, no mascot.
  */
 
-import { CARD_HEIGHT, CARD_WIDTH } from './SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 import { useTranslation } from '../i18n/index.js'
 import {
   MONO,
@@ -18,6 +18,7 @@ import {
 
 export default function CardSkeleton({ label }) {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
 
   return (
     <div

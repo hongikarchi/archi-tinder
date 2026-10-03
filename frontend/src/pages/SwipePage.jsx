@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
-import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
+import SwipeCard from '../components/SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
@@ -32,6 +33,7 @@ import {
 // title, meta body, mono hint row). Swipe semantics/props unchanged.
 function ActionCard({ card }) {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
   const message  = card.action_card_message  || t('swipe.actionCard.message')
   const subtitle = card.action_card_subtitle || t('swipe.actionCard.subtitle')
   return (
@@ -284,6 +286,7 @@ export default function SwipePage({
   onLogout,
 }) {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH } = useCardSize()
   const cardRef = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))

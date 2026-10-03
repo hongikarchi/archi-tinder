@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
 import { useTranslation } from '../i18n/index.js'
+import { useCardSize } from '../hooks/useCardSize.js'
 
 /**
  * Shared swipe card — consumed by SwipePage (Taste) and DiscoveryPage (Discovery).
@@ -19,10 +20,7 @@ import { useTranslation } from '../i18n/index.js'
  * Telemetry behavior is unchanged.
  */
 
-const _vw = typeof window !== 'undefined' ? window.innerWidth : 375
-const _vh = typeof window !== 'undefined' ? window.innerHeight : 812
-export const CARD_WIDTH  = Math.min(420, _vw - 32)
-export const CARD_HEIGHT = Math.min(Math.round(CARD_WIDTH * 1.55), _vh - 220)
+// Card size is reactive — see hooks/useCardSize.js (useCardSize()).
 export const TAP_THRESHOLD = 8
 
 // B2 — adaptive object-fit: cover ONLY when crop loss (fraction of image area
@@ -72,9 +70,9 @@ function preloadImg(url, srcset) {
  *   - Otherwise cover only if cropping to the card ratio loses <= COVER_CROP_MAX
  *     of the image area.
  */
-export function computeFit(imgRatio, isDrawing) {
+export function computeFit(imgRatio, isDrawing, cardRatio) {
   if (!imgRatio || isDrawing) return 'contain'
-  const rCard = CARD_WIDTH / CARD_HEIGHT
+  const rCard = cardRatio
   const cropLoss = 1 - Math.min(imgRatio, rCard) / Math.max(imgRatio, rCard)
   return cropLoss <= COVER_CROP_MAX ? 'cover' : 'contain'
 }
@@ -95,6 +93,12 @@ function InfoRow({ label, value }) {
 /* ── SwipeCard ───────────────────────────────────────────────────────────── */
 export default function SwipeCard({ card, onGalleryClose }) {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
+  const cardRatio = CARD_WIDTH / CARD_HEIGHT
+  // Latest height for the gallery keyboard effect (deps [showGallery] would
+  // otherwise capture a stale value after a viewport resize).
+  const cardHeightRef = useRef(CARD_HEIGHT)
+  cardHeightRef.current = CARD_HEIGHT
   const [isExpanded,     setIsExpanded]     = useState(false)
   const [showGallery,    setShowGallery]    = useState(false)
   const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
@@ -398,9 +402,9 @@ export default function SwipeCard({ card, onGalleryClose }) {
         // (in-transit scrollTop still rounds to the origin card mid-glide,
         // which would eat rapid presses).
         const baseTop = glideTargetRef.current ?? el.scrollTop
-        const currentIndex = Math.round(baseTop / CARD_HEIGHT)
+        const currentIndex = Math.round(baseTop / cardHeightRef.current)
         const targetIndex = currentIndex + (e.key === 'ArrowDown' ? 1 : -1)
-        const target = Math.min(Math.max(targetIndex * CARD_HEIGHT, 0), maxScroll)
+        const target = Math.min(Math.max(targetIndex * cardHeightRef.current, 0), maxScroll)
         animateScroll(el, target)
         const galSrcset = card.gallery_srcset || []
         preloadImg(gallery[targetIndex + 1], galSrcset[targetIndex + 1])
@@ -482,7 +486,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
   // focus/kind fields say otherwise.
   const isDrawingKind = card.image_focus === 'drawing' || card.image_kind === 'drawing' || landedOnDrawing
   // B2-3: adaptive object-fit — cover only when crop loss is small and it's not a drawing.
-  const imgFit = computeFit(imgRatio, isDrawingKind)
+  const imgFit = computeFit(imgRatio, isDrawingKind, cardRatio)
 
   return (
     <div
@@ -704,7 +708,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
               // letterboxed) when it's far off. Before the ratio is known, fall back
               // to the pre-adaptive isDrawing?'contain':'cover' to avoid a layout flash.
               const galleryFit = knownRatio != null
-                ? computeFit(knownRatio, isDrawing)
+                ? computeFit(knownRatio, isDrawing, cardRatio)
                 : (isDrawing ? 'contain' : 'cover')
               // Background: drawings always keep white (matches the split above).
               // Photos that resolve to 'cover' show no bars at all (background is
