@@ -5,34 +5,20 @@ import { useLanguage } from './hooks/useLanguage.js'
 import { useTranslation } from './i18n/index.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
-import LLMSearchPage from './pages/LLMSearchPage.jsx'
-import SaveBoardModal from './components/SaveBoardModal.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import UserProfilePage from './pages/UserProfilePage.jsx'
-import BoardDetailPage from './pages/BoardDetailPage.jsx'
-import BoardReportPage from './pages/BoardReportPage.jsx'
-import ResultsPage from './pages/ResultsPage.jsx'
-import BuildingDetailPage from './pages/BuildingDetailPage.jsx'
+import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
-import VerifyGateModal from './components/VerifyGateModal.jsx'
-import LikedProjectsPage from './pages/LikedProjectsPage.jsx'
-import UploadWorkPage from './pages/UploadWorkPage.jsx'
-import ArchitectProfilePage from './pages/ArchitectProfilePage.jsx'
-import AssessmentPage from './pages/AssessmentPage.jsx'
-import PeopleDiscoveryPage from './pages/PeopleDiscoveryPage.jsx'
-import CompetitionListPage from './pages/CompetitionListPage.jsx'
-import CompetitionDetailPage from './pages/CompetitionDetailPage.jsx'
-import SettingsPage from './pages/settings/SettingsPage.jsx'
-import AccountScreen from './pages/settings/AccountScreen.jsx'
-import NotificationsScreen from './pages/settings/NotificationsScreen.jsx'
-import NotificationInboxScreen from './pages/settings/NotificationInboxScreen.jsx'
-import AppearanceScreen from './pages/settings/AppearanceScreen.jsx'
-import EditProfileScreen from './pages/settings/EditProfileScreen.jsx'
+import {
+  LoginPage, LLMSearchPage, LLMSearchUpdateWrapper, UserProfilePage, ResultsPage,
+  BuildingDetailPage, BoardDetailPage, BoardReportPage, LikedProjectsPage, UploadWorkPage,
+  ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, CompetitionListPage,
+  CompetitionDetailPage, SettingsPage, AccountScreen, NotificationsScreen,
+  NotificationInboxScreen, AppearanceScreen, EditProfileScreen, SaveBoardModal,
+  VerifyGateModal, prefetchLikelyNextPages,
+} from './lazyPages.js'
 import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
-import LLMSearchUpdateWrapper from './components/LLMSearchUpdateWrapper.jsx'
 
 // ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
 // so it never lands in the prod bundle's eager import graph either.
@@ -92,6 +78,12 @@ export default function App() {
   const [surprisePending, setSurprisePending] = useState(false)
   // Global toast state (type: 'info' | 'success' | 'warning' | 'error')
   const [globalToast, setGlobalToast] = useState(null) // {message, type}
+
+  // PERF-FE-1: once the first screen is up and the browser is idle, warm the
+  // chunks of the pages most likely opened next (swipe after search, TabBar tabs).
+  useEffect(() => {
+    if (userId) prefetchLikelyNextPages()
+  }, [userId])
 
   // If session has a user but no access token, clear immediately
   useEffect(() => {
@@ -1052,7 +1044,11 @@ export default function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/login" element={
-          userId ? <Navigate to="/" replace /> : <LoginPage onLogin={handleLogin} />
+          userId ? <Navigate to="/" replace /> : (
+            <Suspense fallback={<RouteFallback />}>
+              <LoginPage onLogin={handleLogin} />
+            </Suspense>
+          )
         } />
 
         <Route element={
@@ -1238,15 +1234,18 @@ export default function App() {
 
       {/* SaveBoardModal — shown after report completion for temp projects, or from banner */}
       {showSaveModal && saveModalProject && (
-        <SaveBoardModal
-          projectId={saveModalProject.backendId}
-          finalReport={saveModalProject.finalReport}
-          onSaved={handleBoardSaved}
-          onClose={handleBoardSaveClose}
-        />
+        <Suspense fallback={null}>
+          <SaveBoardModal
+            projectId={saveModalProject.backendId}
+            finalReport={saveModalProject.finalReport}
+            onSaved={handleBoardSaved}
+            onClose={handleBoardSaveClose}
+          />
+        </Suspense>
       )}
 
       {verifyGateOpen && (
+        <Suspense fallback={null}>
         <VerifyGateModal
           onClose={() => {
             setVerifyGateOpen(false)
@@ -1301,6 +1300,7 @@ export default function App() {
             }
           }}
         />
+        </Suspense>
       )}
     </ErrorBoundary>
   )

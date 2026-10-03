@@ -21,7 +21,7 @@ module-import time).
 import logging
 import queue
 import time
-from threading import Thread as _Thread
+from threading import Event as _Event, Lock as _Lock, Thread as _Thread
 
 from django.conf import settings
 from google import genai
@@ -36,6 +36,10 @@ logger = logging.getLogger('apps.recommendation')
 # capture, a leaked synchronous Thread mock would make hung Gemini calls
 # return their value before the deadline can fire, breaking the timeout
 # guarantee that production depends on.
+
+# gthread: guards the lazy singleton builds below (double-checked). Building two
+# clients on a race is not corrupting, but it leaks one and doubles cold-start work.
+_client_init_lock = _Lock()
 
 _client = None
 
@@ -128,13 +132,15 @@ def _get_client():
     public function is introduced.
     """
     global _client
-    if settings.LLM_PROVIDER == 'openai':
-        if _client is None:
-            import openai  # noqa: PLC0415 -- lazy: zero import cost on the gemini path
-            _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    if _client is not None:
         return _client
-    if _client is None:
-        _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    with _client_init_lock:   # gthread: build the singleton once, not once per racing thread
+        if _client is None:
+            if settings.LLM_PROVIDER == 'openai':
+                import openai  # noqa: PLC0415 -- lazy: zero import cost on the gemini path
+                _client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+            else:
+                _client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _client
 
 
@@ -151,7 +157,9 @@ def _get_gemini_client():
     """
     global _gemini_client
     if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        with _client_init_lock:
+            if _gemini_client is None:
+                _gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
     return _gemini_client
 
 
@@ -168,8 +176,10 @@ def _get_openai_client():
     """
     global _openai_client
     if _openai_client is None:
-        import openai  # noqa: PLC0415 -- lazy: zero import cost when LLM_IMAGE_PROVIDER=gemini
-        _openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+        with _client_init_lock:
+            if _openai_client is None:
+                import openai  # noqa: PLC0415 -- lazy: zero import cost when LLM_IMAGE_PROVIDER=gemini
+                _openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     return _openai_client
 
 
@@ -283,6 +293,24 @@ class _NormalizedResponse:
         self.usage_metadata = self._UsageMetadata(prompt_tokens, completion_tokens, cached_tokens)
         self.model_version = model
 
+    @classmethod
+    def from_stream(cls, text, usage, model, ttft_ms=None):
+        """PERF-SEARCH-1: build from an accumulated streamed completion.
+
+        `usage` is the final stream chunk's `usage` object (needs
+        stream_options={'include_usage': True}); may be None.
+        """
+        self = cls.__new__(cls)
+        self.text = text
+        prompt_tokens = getattr(usage, 'prompt_tokens', None) if usage else None
+        completion_tokens = getattr(usage, 'completion_tokens', None) if usage else None
+        details = getattr(usage, 'prompt_tokens_details', None) if usage else None
+        cached_tokens = getattr(details, 'cached_tokens', None) if details else None
+        self.usage_metadata = cls._UsageMetadata(prompt_tokens, completion_tokens, cached_tokens)
+        self.model_version = model
+        self.ttft_ms = ttft_ms
+        return self
+
 
 def _translate_contents_to_messages(contents, config):
     """BACK-LLM-PROVIDER-1: translate genai `contents` (+ config.system_instruction)
@@ -326,6 +354,62 @@ def _translate_contents_to_messages(contents, config):
     return messages
 
 
+def _build_openai_chat_kwargs(model, contents, config, *, stream=False):
+    """Translate (contents, config) into chat.completions.create kwargs.
+
+    Shared by the blocking dispatch (_dispatch_generate) and the streaming path
+    (generate_content_streaming). `stream=True` only widens the strict-schema gate
+    (see below); everything else is identical so both paths send the same request.
+    """
+    messages = _translate_contents_to_messages(contents, config)
+    kwargs = {
+        'model': model,
+        'messages': messages,
+    }
+    # temperature intentionally NOT forwarded: gpt-5.x reasoning-class models
+    # reject any non-default value with 400 unsupported_value (empirically hit
+    # 2026-08-04 — "Only the default (1) value is supported").
+    json_mode = bool(config and getattr(config, 'response_mime_type', None) == 'application/json')
+    response_schema = getattr(config, 'response_schema', None) if config else None
+    if json_mode and settings.OPENAI_STRICT_SCHEMA and (response_schema is None or stream):
+        # LLM-AB-KNOB-1: opt-in strict structured output. Blocking calls apply it to
+        # the LEGACY parse path only (response_schema is None there -- the stage1
+        # path always sets response_schema=_STAGE1_RESPONSE_SCHEMA, a Gemini-shaped
+        # schema that must NOT be forwarded here, so it falls through to the plain
+        # json_object branch below unchanged). Streaming (stream=True) applies it to
+        # both, picking the OpenAI-shaped schema itself (see below).
+        from ._prompts import (  # noqa: PLC0415 -- lazy, keeps module self-contained
+            _OPENAI_STRICT_PARSE_SCHEMA, _OPENAI_STRICT_STAGE1_SCHEMA,
+        )
+        # PERF-SEARCH-1: the streaming path also uses strict mode on the Stage-1 route
+        # (response_schema set) so key ORDER is schema-guaranteed; the Stage-1 variant
+        # omits visual_description (Stage 1 discards it). Non-stream behaviour unchanged.
+        strict_schema = (
+            _OPENAI_STRICT_PARSE_SCHEMA if response_schema is None
+            else _OPENAI_STRICT_STAGE1_SCHEMA
+        )
+        kwargs['response_format'] = {
+            'type': 'json_schema',
+            'json_schema': {
+                'name': 'parse_result',
+                'strict': True,
+                'schema': strict_schema,
+            },
+        }
+    elif json_mode:
+        kwargs['response_format'] = {'type': 'json_object'}
+    # config.thinking_config is intentionally IGNORED on the openai path -- see
+    # this function's docstring + module design notes. config.response_schema
+    # is ignored too EXCEPT as the strict-mode gate above (never translated/
+    # forwarded verbatim -- Gemini schema shape != OpenAI json_schema shape).
+
+    # Validated at settings load (allowlist); empty string means "do not send".
+    reasoning_effort = getattr(settings, 'OPENAI_REASONING_EFFORT', '')
+    if reasoning_effort:
+        kwargs['reasoning_effort'] = reasoning_effort
+    return kwargs
+
+
 def _dispatch_generate(client, *, model, contents, config=None, timeout, provider=None):
     """BACK-LLM-PROVIDER-1: provider-agnostic single-call dispatch.
 
@@ -354,42 +438,7 @@ def _dispatch_generate(client, *, model, contents, config=None, timeout, provide
             timeout=timeout,
         )
 
-    messages = _translate_contents_to_messages(contents, config)
-    kwargs = {
-        'model': model,
-        'messages': messages,
-    }
-    # temperature intentionally NOT forwarded: gpt-5.x reasoning-class models
-    # reject any non-default value with 400 unsupported_value (empirically hit
-    # 2026-08-04 — "Only the default (1) value is supported").
-    json_mode = bool(config and getattr(config, 'response_mime_type', None) == 'application/json')
-    response_schema = getattr(config, 'response_schema', None) if config else None
-    if json_mode and settings.OPENAI_STRICT_SCHEMA and response_schema is None:
-        # LLM-AB-KNOB-1: opt-in strict structured output for the LEGACY parse
-        # path only (response_schema is None there -- the stage1 path always
-        # sets response_schema=_STAGE1_RESPONSE_SCHEMA, a Gemini-shaped schema
-        # that must NOT be translated/forwarded here, so it falls through to
-        # the plain json_object branch below unchanged).
-        from ._prompts import _OPENAI_STRICT_PARSE_SCHEMA  # noqa: PLC0415 -- lazy, keeps module self-contained
-        kwargs['response_format'] = {
-            'type': 'json_schema',
-            'json_schema': {
-                'name': 'parse_result',
-                'strict': True,
-                'schema': _OPENAI_STRICT_PARSE_SCHEMA,
-            },
-        }
-    elif json_mode:
-        kwargs['response_format'] = {'type': 'json_object'}
-    # config.thinking_config is intentionally IGNORED on the openai path -- see
-    # this function's docstring + module design notes. config.response_schema
-    # is ignored too EXCEPT as the strict-mode gate above (never translated/
-    # forwarded verbatim -- Gemini schema shape != OpenAI json_schema shape).
-
-    # Validated at settings load (allowlist); empty string means "do not send".
-    reasoning_effort = getattr(settings, 'OPENAI_REASONING_EFFORT', '')
-    if reasoning_effort:
-        kwargs['reasoning_effort'] = reasoning_effort
+    kwargs = _build_openai_chat_kwargs(model, contents, config)
 
     response = _svc._retry_gemini_call(
         client.chat.completions.create,
@@ -447,4 +496,143 @@ def generate_content_with_fallback(client, *, timeout=15.0, provider=None, **kw)
                 primary, type(e).__name__, fb,
             )
             return _dispatch_generate(client, model=fb, timeout=timeout, provider=resolved, **kw)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# PERF-SEARCH-1: streaming variant of generate_content_with_fallback
+# ---------------------------------------------------------------------------
+
+def _stream_openai_completion(client, model, kwargs, timeout, sink, state):
+    """Run chat.completions.create(stream=True) and feed deltas to `sink`.
+
+    The blocking SDK iteration runs in a daemon thread (real Thread captured at
+    import -- see _Thread note above) that pushes chunks onto a Queue; this
+    (calling) thread pulls with the REMAINING time of a single total deadline
+    (`timeout` covers the whole stream, same budget as the blocking path's
+    per-attempt deadline). On expiry the worker is told to stop and TimeoutError is
+    raised. `state['got_output']` is set as soon as one content delta was seen so
+    the caller knows whether a non-stream fallback is still safe.
+
+    Returns a _NormalizedResponse (text = accumulated content, usage from the final
+    include_usage chunk, .ttft_ms = time to first content delta).
+    """
+    q = queue.Queue()
+    stop = _Event()
+
+    def _runner():
+        stream = None
+        try:
+            stream = client.chat.completions.create(
+                stream=True, stream_options={'include_usage': True}, **kwargs,
+            )
+            for chunk in stream:
+                q.put(('chunk', chunk))
+                if stop.is_set():
+                    break
+            q.put(('end', None))
+        except BaseException as e:  # noqa: BLE001 -- forwarded to the caller thread
+            q.put(('err', e))
+        finally:
+            close = getattr(stream, 'close', None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+    t0 = time.perf_counter()
+    if hasattr(sink, 'mark_start'):
+        sink.mark_start()
+    _Thread(target=_runner, daemon=True).start()
+
+    deadline = t0 + timeout
+    parts = []
+    usage = None
+    ttft_ms = None
+    while True:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            stop.set()
+            raise TimeoutError(f'LLM stream exceeded {timeout}s')
+        try:
+            kind, value = q.get(timeout=remaining)
+        except queue.Empty:
+            stop.set()
+            raise TimeoutError(f'LLM stream exceeded {timeout}s')
+        if kind == 'err':
+            raise value
+        if kind == 'end':
+            break
+        chunk_usage = getattr(value, 'usage', None)
+        if chunk_usage:
+            usage = chunk_usage
+        choices = getattr(value, 'choices', None) or []
+        if not choices:
+            continue
+        delta = getattr(choices[0], 'delta', None)
+        text = getattr(delta, 'content', None) if delta else None
+        if isinstance(text, str) and text:
+            if ttft_ms is None:
+                ttft_ms = round((time.perf_counter() - t0) * 1000, 2)
+            state['got_output'] = True
+            parts.append(text)
+            sink.feed(text)
+
+    return _NormalizedResponse.from_stream(''.join(parts), usage, model, ttft_ms=ttft_ms)
+
+
+def generate_content_streaming(client, *, sink, timeout=15.0, provider=None, **kw):
+    """Streaming counterpart of generate_content_with_fallback (PERF-SEARCH-1).
+
+    openai provider: chat.completions with stream=True and the SAME request as the
+    blocking path (see _build_openai_chat_kwargs; strict json_schema when
+    OPENAI_STRICT_SCHEMA is on, key order = schema order). Text deltas are fed to
+    `sink.feed(text)` as they arrive; returns a _NormalizedResponse whose .text is the
+    full accumulated output -- callers post-process it exactly like a blocking response.
+
+    Fallbacks (never a second request once output has been seen):
+      * gemini provider                     -> plain generate_content_with_fallback
+      * stream raises BEFORE any output     -> plain generate_content_with_fallback
+        (fatal 4xx and total-deadline timeouts are re-raised: the blocking call would
+        fail identically / double the wait)
+      * stream raises AFTER output started  -> re-raise
+    Whenever this function raises, `sink.error` is set so the caller can tell a
+    genuine LLM failure from a parsed result.
+
+    Routed through the services-package facade for the blocking fallback so existing
+    mock seams stay live (FULL-REFACTOR-1 lesson).
+    """
+    from apps.recommendation import services as _svc
+
+    sink.error = None  # every entry starts clean (IMP-5 cache-404 retry re-enters here)
+    resolved = provider or settings.LLM_PROVIDER
+    fallback_kw = dict(kw)
+    if provider:
+        fallback_kw['provider'] = provider
+
+    if resolved != 'openai':
+        try:
+            return _svc.generate_content_with_fallback(client, timeout=timeout, **fallback_kw)
+        except Exception as e:
+            sink.error = e
+            raise
+
+    model = settings.OPENAI_TEXT_MODEL
+    kwargs = _build_openai_chat_kwargs(model, kw.get('contents'), kw.get('config'), stream=True)
+    state = {'got_output': False}
+    try:
+        return _stream_openai_completion(client, model, kwargs, timeout, sink, state)
+    except Exception as e:
+        if state['got_output'] or isinstance(e, TimeoutError) or _is_fatal_gemini(e):
+            sink.error = e
+            raise
+        logger.warning(
+            'LLM stream failed before output (%s: %s); falling back to blocking call',
+            type(e).__name__, e,
+        )
+    try:
+        return _svc.generate_content_with_fallback(client, timeout=timeout, **fallback_kw)
+    except Exception as e:
+        sink.error = e
         raise

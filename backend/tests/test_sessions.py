@@ -152,7 +152,7 @@ def _apply_patches():
 
 def _stop_patches(patchers):
     """Stop all patchers."""
-    for p in patchers:
+    for p in reversed(patchers):
         p.stop()
 
 
@@ -314,7 +314,7 @@ class TestSessionRawQueryPersistence:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert resp.status_code == 201
@@ -363,7 +363,7 @@ class TestSessionRawQueryPersistence:
                 format='json',
             )
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert resp.status_code == 201
@@ -572,7 +572,7 @@ class TestPhaseTransitions:
                 if last_resp.json().get('progress', {}).get('phase') == 'converged':
                     break
         finally:
-            for p in patchers:
+            for p in reversed(patchers):
                 p.stop()
 
         assert last_resp.json()['progress']['phase'] == 'converged'

@@ -219,6 +219,16 @@ def _greedy_fps(rows, n):
     minimum cosine distance to already-selected rows.
 
     Returns up to n rows. Does NOT modify the input list.
+
+    PERF-MISC-1: vectorised with numpy (was O(n * len(selected) * dim) pure-Python
+    per pick). Selection order and tie-breaks are identical to the previous
+    implementation: the running per-row min-similarity is updated with one
+    matrix-vector product per pick, `np.argmax` returns the FIRST maximum (== the
+    old strict `>` scan over the remaining rows in list order), and the old
+    `best_dist = -1.0` initial value is replicated (if no remaining row has
+    distance > -1.0 the first remaining row wins). Equivalence is pinned by
+    test_discovery_fps_vectorised.py. Only float summation order differs from the
+    old `sum(a * b)` (<= ~1e-15), which can only matter for exact-to-the-ulp ties.
     """
     if not rows:
         return []
@@ -227,20 +237,40 @@ def _greedy_fps(rows, n):
     if len(rows) <= n:
         return list(rows)
 
-    selected = [rows[0]]
-    remaining = list(rows[1:])
-    while len(selected) < n and remaining:
-        best_idx, best_dist = 0, -1.0
-        for i, r in enumerate(remaining):
-            min_sim = min(
-                sum(a * b for a, b in zip(r['_vec'], s['_vec']))
-                for s in selected
-            )
-            dist = 1.0 - min_sim  # cosine distance
-            if dist > best_dist:
-                best_idx, best_dist = i, dist
-        selected.append(remaining.pop(best_idx))
-    return selected
+    vecs = np.asarray([r['_vec'] for r in rows], dtype=np.float64)
+    m = len(rows)
+    # Cosine similarity of every candidate (rows[1:]) to rows[0], then running min.
+    min_sim = vecs[1:] @ vecs[0]
+    available = np.ones(m - 1, dtype=bool)  # index i <-> rows[i + 1]
+    selected_idx = [0]
+    while len(selected_idx) < n and available.any():
+        dist = np.where(available, 1.0 - min_sim, -np.inf)
+        best = int(np.argmax(dist))          # first max wins (strict '>' tie-break)
+        if dist[best] <= -1.0:               # old best_dist=-1.0 init: nothing beat it
+            best = int(np.argmax(available))  # -> first remaining row
+        available[best] = False
+        selected_idx.append(best + 1)
+        min_sim = np.minimum(min_sim, vecs[1:] @ vecs[best + 1])
+    return [rows[i] for i in selected_idx]
+
+
+def _split_local_global(rows, centroid_vecs, local_sim_radius):
+    """Split `rows` into (local_pool, global_pool), preserving input order.
+
+    A row is local when its max dot-product against any centroid is
+    >= local_sim_radius. PERF-MISC-1: one (n_rows x dim) @ (dim x n_centroids)
+    product instead of n_rows * n_centroids * dim pure-Python multiplications.
+    """
+    if not rows:
+        return [], []
+    vecs = np.asarray([r['_vec'] for r in rows], dtype=np.float64)
+    cents = np.asarray(centroid_vecs, dtype=np.float64)
+    dim = min(vecs.shape[1], cents.shape[1])  # zip() semantics: truncate to common dim
+    max_sim = (vecs[:, :dim] @ cents[:, :dim].T).max(axis=1)
+    is_local = max_sim >= local_sim_radius
+    local_pool = [r for r, flag in zip(rows, is_local) if flag]
+    global_pool = [r for r, flag in zip(rows, is_local) if not flag]
+    return local_pool, global_pool
 
 
 # ── Micro-interleave ──────────────────────────────────────────────────────────
@@ -541,7 +571,7 @@ def build_discovery_chunk(
         raw = row.get('embedding')
         if not raw:
             continue
-        vec = [float(x) for x in raw.strip('[]').split(',')]
+        vec = np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64).tolist()
         row['_vec'] = vec
         parsed_rows.append(row)
 
@@ -564,16 +594,9 @@ def build_discovery_chunk(
         # Cold / Tier 1: all candidates go to global pool
         global_pool = parsed_rows
     else:
-        for row in parsed_rows:
-            v = row['_vec']
-            max_sim = max(
-                sum(a * b for a, b in zip(v, cv))
-                for cv in centroid_vecs
-            )
-            if max_sim >= local_sim_radius:
-                local_pool.append(row)
-            else:
-                global_pool.append(row)
+        local_pool, global_pool = _split_local_global(
+            parsed_rows, centroid_vecs, local_sim_radius,
+        )
 
     # ── Greedy FPS pick with backfill ─────────────────────────────────────
     local_selected = _greedy_fps(local_pool, n_local)

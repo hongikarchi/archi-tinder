@@ -39,6 +39,12 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    # Right after CORS so `total` covers every other middleware. /api/ only; fail-open.
+    'config.middleware.ServerTimingMiddleware',
+    # PERF-MISC-1: gzip JSON >= 1 KB (never SSE / streaming / /api/v1/auth/*). Listed
+    # AFTER ServerTiming (its `total` covers compression) and BEFORE Common/Security
+    # so it compresses last on the way out (Django docs: gzip near the top).
+    'config.middleware.ApiGZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -78,8 +84,8 @@ DATABASES = {
         'NAME':     os.environ['DB_NAME'],
         'USER':     os.environ['DB_USER'],
         'PASSWORD': os.environ['DB_PASSWORD'],
-        'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 minutes
-        'CONN_HEALTH_CHECKS': True,  # Django 4.2+: close broken pooled connections proactively
+        # CONN_MAX_AGE / CONN_HEALTH_CHECKS / OPTIONS['pool'] are applied by
+        # _apply_db_pooling() below (pool vs persistent-connection modes).
         'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('DB_SSLMODE', 'require'),
@@ -96,6 +102,10 @@ DATABASES = {
         'NAME':     os.environ['BUILDINGS_DB_NAME'],
         'USER':     os.environ['BUILDINGS_DB_USER'],
         'PASSWORD': os.environ['BUILDINGS_DB_PASSWORD'],
+        # Connection reuse for this alias is configured by _apply_db_pooling() below
+        # (INFRA-PY-2: psycopg 3 pool by default; PERF-CONN-1 persistent connections
+        # as the DB_POOL_ENABLED=false fallback). The HNSW startup option below is
+        # applied once per physical connect, so pooled/reused connections keep it.
         'TIME_ZONE': None,  # explicit so settings_dict["TIME_ZONE"] never raises on reconnect
         'OPTIONS': {
             'sslmode': os.getenv('BUILDINGS_DB_SSLMODE', 'require'),
@@ -119,6 +129,68 @@ if DATABASES['buildings']['ENGINE'].endswith('postgresql'):
     _existing_pg_options = _bldg_options.get('options', '').strip()
     if _HNSW_STARTUP_OPTION not in _existing_pg_options:
         _bldg_options['options'] = f'{_existing_pg_options} {_HNSW_STARTUP_OPTION}'.strip()
+
+# -- Connection pooling (INFRA-PY-2) ---------------------------------------
+# Driver is psycopg 3. Django's built-in psycopg pool (OPTIONS['pool'], needs
+# `psycopg[pool]`) replaces PERF-CONN-1's per-thread persistent connections:
+# a request/background thread checks a connection out of the per-process pool on
+# first DB use and Django returns it at request end (CONN_MAX_AGE = 0) or on
+# `connections.close_all()` in a background thread's `finally`. Each gunicorn
+# worker owns one pool per alias, so the DB-side cap is
+# workers x DB_POOL_MAX_SIZE x aliases (3 x 12 x 2 = 72 << Neon's 901; see
+# railway.toml). Django REQUIRES CONN_MAX_AGE == 0 when a pool is configured.
+#
+# Ops rollback WITHOUT a code deploy: set DB_POOL_ENABLED=false on Railway ->
+# both aliases fall back to PERF-CONN-1 persistent connections
+# (CONN_MAX_AGE=600). CONN_HEALTH_CHECKS stays on in both modes: with a pool it
+# becomes ConnectionPool.check_connection on checkout; without, Django's
+# per-request SELECT 1.
+# Pool tuning knobs (all optional): DB_POOL_MIN_SIZE (1), DB_POOL_MAX_SIZE (12),
+# DB_POOL_TIMEOUT seconds to wait for a free connection (10).
+
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+# PERF-MISC-1: per-worker pre-warm (gunicorn.conf.py post_worker_init ->
+# apps/recommendation/prewarm.py). Env PREWARM_ENABLED=false disables it; always off
+# under pytest. Not an AppConfig hook, so manage.py / collectstatic never trigger it.
+PREWARM_ENABLED = (
+    os.getenv('PREWARM_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+    and 'pytest' not in sys.modules
+)
+
+DB_POOL_ENABLED = os.getenv('DB_POOL_ENABLED', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+DB_POOL_OPTIONS = {
+    'min_size': _env_int('DB_POOL_MIN_SIZE', 1),
+    'max_size': _env_int('DB_POOL_MAX_SIZE', 12),
+    'timeout': _env_int('DB_POOL_TIMEOUT', 10),
+}
+
+
+def _apply_db_pooling(databases, pool_enabled, pool_options):
+    """Set connection-reuse settings on every PostgreSQL alias (mutates in place).
+
+    Non-PostgreSQL aliases (the SQLite test override) are left untouched: they
+    have no pool option and SQLite ignores CONN_MAX_AGE semantics we rely on.
+    """
+    for cfg in databases.values():
+        if not cfg['ENGINE'].endswith('postgresql'):
+            continue
+        cfg['CONN_HEALTH_CHECKS'] = True
+        if pool_enabled:
+            cfg['CONN_MAX_AGE'] = 0  # Django: pooling doesn't support persistent connections
+            cfg.setdefault('OPTIONS', {})['pool'] = dict(pool_options)
+        else:
+            cfg['CONN_MAX_AGE'] = 600  # PERF-CONN-1 fallback: one persistent conn per thread
+            cfg.setdefault('OPTIONS', {}).pop('pool', None)
+
+
+_apply_db_pooling(DATABASES, DB_POOL_ENABLED, DB_POOL_OPTIONS)
 
 DATABASE_ROUTERS = ['config.db_router.MakeWebRouter']
 
@@ -187,6 +259,8 @@ SIMPLE_JWT = {
 # -- CORS ------------------------------------------------------------------
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174').split(',')
 CORS_ALLOW_CREDENTIALS = True
+# Let browser JS read the Server-Timing header (ServerTimingMiddleware) on cross-origin calls.
+CORS_EXPOSE_HEADERS = ['server-timing']
 
 # -- Cache (required for DRF throttling, IMP-5 Gemini context-cache, IMP-8 async prefetch) --
 # INFRA-REDIS-1 (2026-05-26): Redis is the prod cache backend so PR 3 (BACK-AUTH-1 JWT user-row cache)
@@ -312,6 +386,9 @@ RECOMMENDATION = {
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
+    'taste_pool_overfetch': 3,       # promote-to-taste pool: HNSW neighbours fetched = overfetch * pool target, MMR-downsampled to target
+    'taste_pool_mmr_penalty': 1.0,   # promote-to-taste pool: diversity penalty in the MMR down-sample (measured: 0.3 barely moved pairwise similarity)
+    'taste_pool_random_fraction': 0.2,  # promote-to-taste pool: share of uniformly random buildings kept for swipe-phase exploration
     'convergence_threshold': 0.13,   # epsilon -- tuned for convergence inside the 10-swipe target window
     'convergence_window': 3,
     'target_swipes': 10,             # product goal: taste should be captured within ~10 swipes

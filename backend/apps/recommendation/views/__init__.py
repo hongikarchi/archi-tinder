@@ -38,6 +38,7 @@ from .swipe import (
 )
 from .search import (
     ParseQueryView,
+    ParseQueryStreamView,
     # Private helper accessed by tests
     _spawn_stage2,
 )
@@ -86,6 +87,7 @@ __all__ = [
     'BuildingBatchView',
     'DiverseRandomView',
     'ParseQueryView',
+    'ParseQueryStreamView',
     'DiscoveryFeedView',
     'DiscoveryFeedbackView',
     'DiscoveryPromoteView',

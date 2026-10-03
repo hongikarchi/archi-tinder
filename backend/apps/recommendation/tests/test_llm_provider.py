@@ -758,10 +758,9 @@ class TestOpenaiStrictParseSchemaStructure:
 
         expected = {
             'probe_needed', 'probe_question', 'reply', 'filters', 'filter_delta',
-            'filter_priority', 'image_focus', 'raw_query', 'visual_description',
-            'confidence_score', 'system_action', 'suggested_quick_replies',
-            'priority_ordered', 'llm_response_message',
-        }
+            'filter_priority', 'image_focus', 'visual_description',
+            'confidence_score', 'system_action',
+        }  # PERF-SEARCH-2: 4 server-derivable fields no longer requested
         assert set(_OPENAI_STRICT_PARSE_SCHEMA['properties'].keys()) == expected
 
     def test_filters_axes_match_the_eleven_axes(self):

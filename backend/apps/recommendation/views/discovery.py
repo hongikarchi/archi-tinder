@@ -335,7 +335,9 @@ class DiscoveryPromoteView(APIView):
       - preference_vector folded from each seed embedding
       - phase = 'analyzing' when seed count >= min_likes_for_clustering, else 'exploring'
       - multimodal_floor = RC['k_clusters'] so K-Means multi-centroid runs immediately
-      - pool built via create_pool_with_relaxation(seed_ids=liked_ids)
+      - pool built via engine.create_taste_seeded_pool: HNSW neighbours of the
+        preference vector (excluding the draft's passes), MMR-diversified; liked
+        seeds injected at score 1.1. Fallback = create_pool_with_relaxation.
       - exposed_ids = seed liked ids (already seen in Discovery)
       - first cards selected via centroid MMR (not farthest-point) when analyzing
 
@@ -440,11 +442,30 @@ class DiscoveryPromoteView(APIView):
         phase = 'analyzing' if seeded_count >= min_likes else 'exploring'
         session_floor = multimodal_floor if phase == 'analyzing' else None
 
-        # ── 3. Build the pool (seed_ids steer the pool toward the user's taste) ──
-        pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
-            {}, [], seed_ids,
-            v_initial=pref_vector if pref_vector else None,
-        )
+        # ── 3. Build the pool ──────────────────────────────────────────────
+        # With a preference vector: HNSW nearest neighbours of the Discovery
+        # taste vector, MMR-diversified (engine.create_taste_seeded_pool).
+        # NOTE: create_pool_with_relaxation({}, [], seeds, v_initial=...) does
+        # NOT do this — with empty filters and hyde_vinitial_enabled=False it
+        # returns a uniformly random pool before seed injection, ignoring both
+        # v_initial and the seeds. It is kept only as the fallback (no
+        # preference vector, or the HNSW query failed).
+        pool_ids, pool_scores, current_pool_tier = [], {}, 1
+        if pref_vector:
+            _disliked_raw = _draft_liked_id_only(list(draft.disliked_ids or [])) if draft else []
+            _exclude = [d for d in _disliked_raw if isinstance(d, str)]
+            try:
+                pool_ids, pool_scores = engine.create_taste_seeded_pool(
+                    pref_vector, seed_ids, exclude_ids=_exclude,
+                )
+            except Exception as exc:
+                logger.warning('promote-to-taste: HNSW seeded pool failed, falling back (%s)', exc)
+                pool_ids, pool_scores = [], {}
+        if not pool_ids:
+            pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
+                {}, [], seed_ids,
+                v_initial=pref_vector if pref_vector else None,
+            )
 
         if not pool_ids:
             return Response(
