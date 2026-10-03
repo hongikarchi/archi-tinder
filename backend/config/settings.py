@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'apps.social',
     'apps.notifications',
     'apps.works',
+    'apps.messaging',
 ]
 
 MIDDLEWARE = [
@@ -238,6 +239,11 @@ REST_FRAMEWORK = {
         'llm_search':       '10/min',
         'report_generate':  '10/hour',
         'report_image':     '5/hour',
+        # MESSAGING (FULL-MESSAGING-1): registry only — effective values are class attrs
+        # in apps/messaging/throttling.py (code-pinned).
+        'contact_request': '20/day',
+        'message_send':    '30/min',
+        'report':          '10/hour',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',
@@ -524,6 +530,11 @@ _check_async_prefetch_safety(
 
 # -- External API keys -----------------------------------------------------
 PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
+
+# Contact-request + in-app messaging feature flag (D12, docs/plans/2026-10-02-contact-messaging-design.md).
+# Default OFF: every messaging endpoint 404s. Flip via env (restart only, no redeploy).
+# Schema/migrations are applied regardless of this flag.
+MESSAGING_ENABLED = os.getenv('MESSAGING_ENABLED', 'false').lower() == 'true'
 
 # -- External API keys -----------------------------------------------------
 GEMINI_API_KEY              = os.getenv('GEMINI_API_KEY', '')

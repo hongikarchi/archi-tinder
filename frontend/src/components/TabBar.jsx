@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import SegmentedControl from './SegmentedControl.jsx'
+import { useUnreadMessages } from '../hooks/useUnreadMessages.js'
 
 /*
  * TAB_ICONS — { outline, active } SVG pair per tab.
@@ -129,6 +130,10 @@ export default function TabBar() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const activeTab = getActiveTab(location.pathname)
+  // FULL-MESSAGING-1 (D6): unread dot on the profile tab — the message pill
+  // only lives on /user/me, so other screens learn about new messages here.
+  // Flag OFF -> count is always 0 and no request is made.
+  const { count: unreadMessages } = useUnreadMessages()
 
   const tabs = [
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
@@ -150,7 +155,12 @@ export default function TabBar() {
     }
   }
 
-  const options = tabs.map(tab => ({ value: tab.id, ariaLabel: t(tab.labelKey) }))
+  const options = tabs.map(tab => ({
+    value: tab.id,
+    ariaLabel: tab.id === 'profile' && unreadMessages > 0
+      ? t('tabbar.profileUnread', { n: unreadMessages })
+      : t(tab.labelKey),
+  }))
 
   return (
     <nav
@@ -192,7 +202,24 @@ export default function TabBar() {
         })}
         optionContentStyle={{ width: 68, height: 44 }}
         highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
-        renderOption={(opt, isActive) => (isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline)}
+        renderOption={(opt, isActive) => {
+          const icon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
+          if (opt.value !== 'profile' || unreadMessages <= 0) return icon
+          return (
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              {icon}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute', top: -1, right: -3,
+                  width: 9, height: 9, borderRadius: '50%',
+                  background: 'var(--accent-1)',
+                  boxShadow: '0 0 0 2px var(--color-bg)',
+                }}
+              />
+            </span>
+          )
+        }}
       />
     </nav>
   )

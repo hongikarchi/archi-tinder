@@ -19,6 +19,9 @@ import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
+import { clearBlocked } from './components/messaging/blockedUsers.js'
+import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 
 // ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
 // so it never lands in the prod bundle's eager import graph either.
@@ -67,6 +70,7 @@ export default function App() {
 
   // VerifyGateModal — shown when guest hits the 3-board limit
   const [verifyGateOpen, setVerifyGateOpen] = useState(false)
+  const [verifyGateReason, setVerifyGateReason] = useState(null)
   // Pending board-create payload from SaveToBoardModal (Fix 3 Option A).
   // Stored when VerifyRequiredError fires during board creation; retried on promote.
   const [pendingBoardCreate, setPendingBoardCreate] = useState(null)
@@ -92,6 +96,24 @@ export default function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // FULL-MESSAGING-1 (D12): the backend owns the messaging flag — read
+  // `features.messaging` from GET /auth/me/ once per login (the login payload
+  // does not carry it) and publish it app-wide. Logout / no token -> flag OFF
+  // and the previous user's unread count is dropped. While OFF (the default)
+  // no messaging UI renders and no messaging endpoint is called.
+  useEffect(() => {
+    resetUnreadMessages()
+    clearBlocked()
+    if (!userId || !api.getToken()) {
+      resetMessagingFeature()
+      return
+    }
+    // Re-fetch the badge after the reset (guest->account merge changes userId
+    // A->B with no null in between). No-op while the flag is OFF.
+    // refreshUnreadMessages itself no-ops unless the flag is ON.
+    loadMessagingFeature().then(() => refreshUnreadMessages({ force: true })).catch(() => {})
+  }, [userId])
+
   // Listen for session-expired event dispatched by api/client.js
   useEffect(() => {
     const onExpired = () => handleLogout()
@@ -101,7 +123,10 @@ export default function App() {
 
   // Listen for verify-required event dispatched by api/projects.js createProject()
   useEffect(() => {
-    const onVerifyRequired = () => setVerifyGateOpen(true)
+    const onVerifyRequired = (e) => {
+      setVerifyGateReason(e?.detail?.reason || null)
+      setVerifyGateOpen(true)
+    }
     window.addEventListener('archithon:verify-required', onVerifyRequired)
     return () => window.removeEventListener('archithon:verify-required', onVerifyRequired)
   }, [])
@@ -1247,6 +1272,7 @@ export default function App() {
       {verifyGateOpen && (
         <Suspense fallback={null}>
         <VerifyGateModal
+          reason={verifyGateReason}
           onClose={() => {
             setVerifyGateOpen(false)
             setPendingBoardCreate(null)

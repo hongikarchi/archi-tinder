@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-02 18:23 KST',
-    head: '405a537',
-    branch: 'feature/claude-perf-round2',
+    updatedAt: '2026-10-03 10:41 KST',
+    head: '69b43d3',
+    branch: 'feature/sns-contact-messaging',
   },
   done: [
+    {
+      id: 'FULL-MESSAGING-1',
+      title: '관심 있어요 버튼이 아무 동작 안 함',
+      completedAt: '2026-10-02',
+      note: '관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).',
+    },
     {
       id: 'PERF-ROUND3',
       title: '취향분석 pool 버그 + 검색 카드 선표시 + 정리 묶음',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '리포트 취향 문장이 근거 없음',
       completedAt: '2026-09-26',
       note: '리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).',
-    },
-    {
-      id: 'FULL-RECOMMEND-1',
-      title: '질문카드가 리포트에 무영향·순위만 과왜곡',
-      completedAt: '2026-09-25',
-      note: '질문카드(ALGO-QCARD) 전면 제거 — 답변은 리포트에 0 영향, `question_bias_vector`(답변당 ±2.0 비정규화)가 like 대비 ~4배로 MMR 순위 과점유, algorithm.md 미문서화였음. 다음 카드 = 스와이프 pref_vector만(재튜닝 없음).',
     },
   ],
   now: [],
@@ -134,6 +134,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FULL-MESSAGING-2',
+        title: '새로고침하면 차단 해제를 못 함',
+        note: '차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 \'차단\'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.',
+      },
+      {
+        id: 'PERF-RESULT-1',
+        title: '결과 조회 458KB 전송 병목',
+        note: '세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.',
+      },
       {
         id: 'BACK-VOCAB-2',
         title: '재료 어휘 timber vs wood 불일치',
@@ -237,6 +247,11 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-UX-15',
+        title: '메시지 시트 닫으면 포커스 사라짐',
+        note: 'Esc/닫기 후 `document.activeElement`가 body — 호출한 메시지 pill / 관심 있어요 버튼으로 포커스 복귀 필요 (portal Modal). 접근성 minor, FULL-MESSAGING-1 app-test.',
+      },
+      {
         id: 'INFRA-WORKS-1',
         title: 'R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)',
         note: 'FULL-WORKS-1 배포 후 ops task. R2 버킷에 CORS 정책 설정 필요 (AllowedMethods: POST, AllowedOrigins: 도메인, AllowedHeaders: *). 설정 전 브라우저에서 presigned POST XHR이 CORS 에러로 차단됨. 코드 변경 없음, R2 대시보드 또는 wrangler cli.',
@@ -300,6 +315,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 344,
+      title: 'perf(PERF-ROUND2/3): 검색 스트리밍·카드 선표시, 커넥션 풀, Django 5.2, 취향분석 pool 버그 수정',
+      mergedAt: '2026-10-03T01:23:07Z',
+      mergedAtKST: '2026-10-03 10:23 KST',
+      sha: '69b43d3',
+    },
+    {
       number: 341,
       title: 'chore(INFRA-GIT-2): 로컬 develop 동기화 스크립트 — 배포 후 강제리셋 대응',
       mergedAt: '2026-09-30T10:40:28Z',
@@ -347,13 +369,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-26T00:56:44Z',
       mergedAtKST: '2026-09-26 09:56 KST',
       sha: '986ed5b',
-    },
-    {
-      number: 331,
-      title: 'docs(plans): 공모전 팀빌딩 찜 기반 설계 — 팀원 추천 v2 접근 기각',
-      mergedAt: '2026-09-19T00:37:00Z',
-      mergedAtKST: '2026-09-19 09:37 KST',
-      sha: '4975849',
     },
   ],
   agents: [
@@ -640,6 +655,14 @@ window.PROJECT_STATE = {
       role: '태스크 보드 문서',
     },
     {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
+      path: 'Task.md',
+      role: '태스크 보드 문서',
+    },
+    {
       path: 'backend/.env.example',
       role: '백엔드 환경변수 예시',
     },
@@ -846,6 +869,62 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/views/profile.py',
       role: '유저 프로필·좋아요 건물 뷰',
+    },
+    {
+      path: 'backend/apps/messaging/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/serializers.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/services.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/test_messaging.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/throttling.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/views.py',
+      role: '',
     },
     {
       path: 'backend/apps/notifications/__init__.py',
@@ -1924,6 +2003,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/plans/2026-10-02-contact-messaging-design.md',
+      role: '',
+    },
+    {
       path: 'docs/prd/archibe-business-model.html',
       role: 'archibe 비즈니스 모델 PRD (정적 HTML)',
     },
@@ -2012,6 +2095,14 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
       path: 'frontend/src/api/architects.js',
       role: 'architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)',
     },
@@ -2050,6 +2141,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/api/liked.js',
       role: '좋아요 건물 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/messaging.js',
+      role: '',
     },
     {
       path: 'frontend/src/api/meta.js',
@@ -2360,6 +2455,54 @@ window.PROJECT_STATE = {
       role: '공통 stroke 아이콘 세트',
     },
     {
+      path: 'frontend/src/components/messaging/ContactCta.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/ConversationView.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/GreetingSheet.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/InboxView.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessageIcon.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessagesEntry.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/MessagesSheet.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/Messaging.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/ReportDialog.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/blockedUsers.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/messagingUtils.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/photoCardShell.js',
       role: '',
     },
@@ -2448,6 +2591,10 @@ window.PROJECT_STATE = {
       role: '언어 선택 훅',
     },
     {
+      path: 'frontend/src/hooks/useMessagingFeature.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
     },
@@ -2464,7 +2611,15 @@ window.PROJECT_STATE = {
       role: '테마 context 소비 훅',
     },
     {
+      path: 'frontend/src/hooks/useUnreadMessages.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useUnreadNotifications.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useVisualViewportSheetStyle.js',
       role: '',
     },
     {
@@ -2818,6 +2973,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

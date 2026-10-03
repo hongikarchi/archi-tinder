@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — PERF-SWIPE-1 완료 2026-09-30, ## Done 참조)_
+_(비어 있음 — FULL-MESSAGING-1 완료 2026-10-02, ## Done 참조)_
 
 ## Next
 
@@ -180,6 +180,11 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 
 ### MEDIUM
 
+#### FULL-MESSAGING-2 — 새로고침하면 차단 해제를 못 함
+차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 '차단'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.
+
+#### PERF-RESULT-1 — 결과 조회 458KB 전송 병목
+세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.
 #### BACK-VOCAB-2 — 재료 어휘 timber vs wood 불일치
 검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).
 
@@ -270,6 +275,9 @@ Likely slices:
 
 ### LOW
 
+#### FRONT-UX-15 — 메시지 시트 닫으면 포커스 사라짐
+Esc/닫기 후 `document.activeElement`가 body — 호출한 메시지 pill / 관심 있어요 버튼으로 포커스 복귀 필요 (portal Modal). 접근성 minor, FULL-MESSAGING-1 app-test.
+
 #### INFRA-WORKS-1 — R2 works 버킷 프로비저닝 (dev/prod 버킷 + 환경별 토큰 + CORS + public access)
 _(2026-07-17 플랜 `streamed-bubbling-lagoon`; **dev 버킷 완료**, prod 남음)_ 토큰 모델 확정 = **환경별 2개**: dev 토큰(works-dev 버킷만 스코프, 협업자 전달용) / prod 토큰(archibe-avatars+works-prod 멀티버킷, Railway 전용) — 코드 무수정(공유 `R2_*` env 유지). ✅ ① DONE 2026-07-17 (Cloudflare MCP API): `archibe-works-dev`(APAC) 생성 + CORS(`http://localhost:5174`+`5173`, **PUT**+content-type — presigned PUT 전환 반영) + public access `pub-b071ab81….r2.dev` + Object R/W dev 토큰(대시보드) + 로컬 `.env` 세팅 + 실업로드 E2E 검증. 남음 ② `archibe-works-prod` + prod 토큰 재발급(avatars+works-prod 멀티버킷) + prod 도메인 CORS(**PUT**; Vercel 도메인 대시보드 확인) + Railway env 4종 — 배포 직전 (Workstream C).
 
@@ -334,6 +342,13 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-MESSAGING-1 — 관심 있어요 버튼이 아무 동작 안 함 — RESOLVED 2026-10-02 (`15116cf`)
+- 관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).
+- [x] 백엔드 `apps.messaging` (`dbb40b7`): ContactRequest/Conversation/Message/Block/Report, API 11뷰, OFF 시 전 엔드포인트 404, MeView `features.messaging`. 수락 시 인사말 + `connected` 시스템 메시지(요청자 안 읽음 1 / 수락자 0, D13). 무시 30일 쿨다운 비공개(D10), 수신 가드 진단+opt-in(D11), 알림 row 미생성(D9). 차단 → 대화 closed + 발견 피드 양방향 제외(플래그 무관). 스로틀 3종. 상호 요청 경합 정리 + connect 멱등. 테스트 61개.
+- [x] 프론트 (`be1010e`, `3695998`, `15116cf`): 다른 유저 프로필 관심 있어요(status 기반), 내 프로필 메시지 pill(≥44px, 콘텐츠 흐름) + 탭바 프로필 점, 메시지함/대화 바텀시트(열린 동안만 4s 폴링, closed 시 중지), 시스템 캡션 i18n, ⋯ 차단/해제·신고. `useUnreadMessages`는 mount/visibility/route만(NOTIF-INAPP-1 유지). `Modal` opt-in `portal`(UserProfilePage zIndex 1 스태킹 컨텍스트 탈출 — 모바일 탭바가 시트를 가리던 app-test FAIL 수정).
+- [x] app-test FEATURE-SCOPED: 1차 FAIL(모바일 탭바가 시트 보내기/입력창 가림) → 수정 후 PASS-WITH-MINORS (390/430/1280, 계정 2개, 차단·해제·로그아웃 잔존 확인). 로컬 `make test-local` 60/61 — 실패 1건은 플래그 기본값 테스트가 로컬 `.env`를 읽은 격리 문제로 수정(`476da72`), 수정 후 재실행 미확인.
+- Minors: 시트 Esc 닫힘 후 포커스가 호출 버튼으로 복귀 안 함(body). dev-login이 유저 1명만 만들어 2계정 E2E는 시드 유저 JWT 수동 발급 필요.
+- Deferred: 차단 여부 조회 API 없음 — 새로고침하면 화면이 차단 상태를 잊어 '차단 해제'가 안 보임 (FULL-MESSAGING-2). 배포 후 `make migrate-prod` 필수(messaging 0001).
 ### PERF-ROUND3 — 취향분석 pool 버그 + 검색 카드 선표시 + 정리 묶음 — RESOLVED 2026-10-02 (`836bc60`)
 - BACK-PROMOTE-1: 취향 분석(promote-to-taste) pool이 빈 필터 조기반환으로 150개 균등 무작위였음 → 선호 벡터 HNSW 이웃 3x 오버페치 + MMR + 20% 무작위 탐색. 실DB 취향 유사도 0.60→0.77, 브루탈리즘 좋아요 시 pool 내 0→29개 (`c9aa0f1`).
 - PERF-SEARCH-2: filters 시점 참고건물 선검색 → SSE `results`, final 입력 같으면 재사용. LLM 출력 4필드 서버 계산으로 이전(~350→~245 토큰; A/B 핵심필터 일치 87.6% = 재실행 노이즈 88.0%). 로컬 카드 1.97-2.06s, 완료 2.11-2.20s (이전 3.7-4.8s) (`dcd1429`).

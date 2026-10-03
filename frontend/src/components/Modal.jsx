@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import FloatingIconButton from './FloatingIconButton.jsx'
 import styles from './Modal.module.css'
 
@@ -34,6 +35,23 @@ import styles from './Modal.module.css'
  * Modal because it stacks under another open Modal that should own Escape
  * (e.g. SaveBoardModal staying open under VerifyGateModal at zIndex 10100 so
  * the user's in-progress name/visibility choices survive verification).
+ *
+ * FULL-MESSAGING-1 additions (all backward-compatible, default off):
+ *  - `ariaLabel`  — accessible name when no `title` is rendered (a caller that
+ *    draws its own header row inside the body).
+ *  - `fill`       — fixed-height flex-column panel (body fills the remaining
+ *    height and the caller scrolls inside it) for chat-style sheets whose
+ *    composer must stay pinned at the bottom.
+ *  - `panelStyle` — extra inline style on the panel; used to pass the
+ *    `--modal-max-h` / `--modal-kb-inset` custom properties from
+ *    `useVisualViewportSheetStyle` so a mobile sheet clears the keyboard.
+ *  - `portal`     — render backdrop+panel into `document.body` via
+ *    `createPortal`. Needed when the caller sits inside a stacking context
+ *    (e.g. a `position:relative; z-index:1` page container) that would trap the
+ *    Modal's z-index below the root-level fixed TabBar (z 100) on mobile.
+ *    Default false: every other caller renders in place, unchanged. Escape /
+ *    focus handling is unaffected (document listener + ref focus); React
+ *    synthetic events still bubble through the portal to React ancestors.
  */
 export default function Modal({
   open,
@@ -47,6 +65,10 @@ export default function Modal({
   className = '',
   centered = false,
   closeOnEscape = true,
+  ariaLabel,
+  fill = false,
+  panelStyle,
+  portal = false,
 }) {
   const titleId = useId()
   const panelRef = useRef(null)
@@ -70,7 +92,7 @@ export default function Modal({
     if (e.target === e.currentTarget) onClose()
   }
 
-  return (
+  const node = (
     <div
       className={`${styles.backdrop} ${centered ? styles.centered : ''}`}
       style={{ zIndex }}
@@ -81,9 +103,10 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
         tabIndex={-1}
-        className={`${styles.panel} ${centered ? styles.centered : ''} ${className}`}
-        style={{ '--modal-max-width': `${width}px` }}
+        className={`${styles.panel} ${centered ? styles.centered : ''} ${fill ? styles.fill : ''} ${className}`}
+        style={{ '--modal-max-width': `${width}px`, ...panelStyle }}
       >
         <div className={styles.handle} aria-hidden="true" />
 
@@ -106,4 +129,6 @@ export default function Modal({
       </div>
     </div>
   )
+
+  return portal && typeof document !== 'undefined' ? createPortal(node, document.body) : node
 }

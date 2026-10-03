@@ -48,6 +48,22 @@
   margin-top: 16px;
 }
 
+/* fill (FULL-MESSAGING-1) — fixed-height flex column; .body takes the rest so
+   a caller can pin a composer and scroll its own list. */
+.panel.fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: min(640px, 85vh);
+}
+
+.panel.fill .body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 @media (max-width: 768px) {
   /* .centered (Phase 3) opts a caller out of the mobile bottom-sheet layout —
      it stays a centered modal at every width. See Modal.jsx doc comment. */
@@ -59,9 +75,16 @@
   .panel:not(.centered) {
     max-width: 100%;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    max-height: 85vh;
+    /* --modal-max-h / --modal-kb-inset come from useVisualViewportSheetStyle
+       (mobile keyboard); both default to the previous values when unset. */
+    max-height: var(--modal-max-h, 85vh);
+    margin-bottom: var(--modal-kb-inset, 0px);
     padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
     animation: slideUp var(--motion-flip) var(--motion-ease);
+  }
+
+  .panel.fill:not(.centered) {
+    height: var(--modal-max-h, 85vh);
   }
 
   .panel:not(.centered) .handle {
