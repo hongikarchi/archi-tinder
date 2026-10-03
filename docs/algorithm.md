@@ -3,7 +3,7 @@
 > Phase logic, mathematical formulas, and hyperparameter theory.
 > Research agent updates this file. Orchestrator references it for algorithm tasks.
 
-**Last Synced (Reporter):** 2026-09-27 e13c9b9
+**Last Synced (Reporter):** 2026-10-02 836bc60
 
 ---
 
@@ -24,6 +24,8 @@ _(Updated 2026-04-25 e290287: Sprint 1 §3 chat phase rewrite (Investigation 06)
 _(Updated 2026-04-26 6f4b76f: HyDE V_initial scaffolding — flag-gated default OFF; activates HF Inference API embed of visual_description and pgvector cosine sim blending in pool creation when enabled)_
 
 _(Updated 2026-04-26 305e213: Topic 01 Hybrid RRF scaffolding — flag-gated default OFF; activates RRF blend of BM25 + v_initial-cosine + filter channels in pool creation when enabled. v_initial reused from Topic 03 — no extra HF call.)_
+
+_(Updated 2026-10-02: promote-to-taste pool now seeded by HNSW neighbours of the Discovery preference vector, mixed with diversity — previously uniform random due to empty-filter early return)_
 
 _(Updated 2026-04-26 06c6c5a: IMP-7 per-building-id immutable cache + companion §6 swipe.timing_breakdown observability — fixes A4 escalation cache invalidation; expected select_ms 300ms → ~50ms.)_
 
@@ -186,6 +188,9 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 | `pool_embedding_cache_max_size` | int | 1000-10000 | 5000 |
 | `async_prefetch_enabled` | bool | True/False | True |
 | `async_prefetch_cache_timeout_seconds` | int | 10-300 | 60 |
+| `taste_pool_overfetch` | int | | 3 |
+| `taste_pool_mmr_penalty` | float | | 1.0 |
+| `taste_pool_random_fraction` | float | | 0.2 |
 | `context_caching_enabled` | bool | True/False | False |
 | `context_caching_ttl_seconds` | int | 60-7200 | 3600 |
 | `stage_decouple_enabled` | bool | True/False | False |

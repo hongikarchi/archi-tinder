@@ -150,7 +150,7 @@ def _apply_patches(extra=None):
 
 
 def _stop_patches(patchers):
-    for p in patchers:
+    for p in reversed(patchers):
         p.stop()
 
 

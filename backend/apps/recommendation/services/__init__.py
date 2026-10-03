@@ -38,6 +38,9 @@ from ..engine import _dictfetchall  # noqa: F401
 # ---------------------------------------------------------------------------
 from ._gemini import _get_client, _retry_gemini_call  # noqa: F401
 from ._gemini import generate_content_with_fallback, _is_model_unavailable  # noqa: F401
+# PERF-SEARCH-1: streaming variant + incremental-JSON sink (late-bound via _svc like the rest).
+from ._gemini import generate_content_streaming  # noqa: F401
+from ._stream import ParseStreamSink, PartialJSONScanner  # noqa: F401
 from ._gemini import _GEMINI_MAX_RETRIES, _GEMINI_RETRY_DELAY  # noqa: F401
 # BACK-LLM-PROVIDER-1: always-Gemini client for the image path (generation.py
 # _gen_native) -- must stay accessible via the _svc facade for late-binding.
@@ -81,6 +84,8 @@ from .parse_query import (  # noqa: F401
     _repair_required_slate,
     _compute_confidence_fallback,
     _extract_calibration_fields,
+    _finalize_parsed,
+    resolve_filters_from_partial,
     parse_query,
     parse_query_stage1,
 )

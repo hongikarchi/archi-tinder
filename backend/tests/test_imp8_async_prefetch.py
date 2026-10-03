@@ -176,7 +176,10 @@ def _apply_patches(patches_dict):
 
 
 def _stop_patches(patchers):
-    for p in patchers:
+    # LIFO: several tests stack a second patcher on the same target
+    # (threading.Thread). Stopping in start order restores the FIRST mock as the
+    # final value, leaking a fake Thread into every later test module.
+    for p in reversed(patchers):
         p.stop()
 
 

@@ -185,9 +185,11 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 
 #### PERF-RESULT-1 — 결과 조회 458KB 전송 병목
 세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.
+#### BACK-VOCAB-2 — 재료 어휘 timber vs wood 불일치
+검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).
 
-#### PERF-SERVER-1 — 서버 방식 실험 (Python 고정·gthread·연결 유지)
-Python 3.12 고정(`.python-version`, prod 미고정·CI 3.9·로컬 3.11), gunicorn `gthread` (공유 dict 캐시 스레드 안전 검토 선행), buildings `CONN_MAX_AGE` (Make-DB 연결 점유 금지 결정 뒤집기 — 사용자 결정 필요), Django 5.2 → psycopg3. 각 단계 `tools/perf/bench.py` 전후 비교.
+#### PERF-MEASURE-2 — round2 배포 후 prod 재측정
+PERF-ROUND2 배포 후 `tools/perf/prod_bench.py --label round2` (사용자 실행 — prod 쓰기) + Server-Timing 열로 서버/네트워크 분리. 확인 포인트: 스와이프 +25~40ms 원인, 검색 필터 도착 시간, 결과 조회, PoolTimeout 로그(SSE가 default 슬롯 점유 — 필요시 `DB_POOL_MAX_SIZE` 상향).
 
 #### INFRA-IMG-2 — prod 이미지 r2.dev → 커스텀 도메인
 prod `IMAGE_BASE_URL`이 속도 제한 있는 개발용 `r2.dev`. 출시 전 R2 커스텀 도메인 연결.
@@ -347,6 +349,22 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - [x] app-test FEATURE-SCOPED: 1차 FAIL(모바일 탭바가 시트 보내기/입력창 가림) → 수정 후 PASS-WITH-MINORS (390/430/1280, 계정 2개, 차단·해제·로그아웃 잔존 확인). 로컬 `make test-local` 60/61 — 실패 1건은 플래그 기본값 테스트가 로컬 `.env`를 읽은 격리 문제로 수정(`476da72`), 수정 후 재실행 미확인.
 - Minors: 시트 Esc 닫힘 후 포커스가 호출 버튼으로 복귀 안 함(body). dev-login이 유저 1명만 만들어 2계정 E2E는 시드 유저 JWT 수동 발급 필요.
 - Deferred: 차단 여부 조회 API 없음 — 새로고침하면 화면이 차단 상태를 잊어 '차단 해제'가 안 보임 (FULL-MESSAGING-2). 배포 후 `make migrate-prod` 필수(messaging 0001).
+### PERF-ROUND3 — 취향분석 pool 버그 + 검색 카드 선표시 + 정리 묶음 — RESOLVED 2026-10-02 (`836bc60`)
+- BACK-PROMOTE-1: 취향 분석(promote-to-taste) pool이 빈 필터 조기반환으로 150개 균등 무작위였음 → 선호 벡터 HNSW 이웃 3x 오버페치 + MMR + 20% 무작위 탐색. 실DB 취향 유사도 0.60→0.77, 브루탈리즘 좋아요 시 pool 내 0→29개 (`c9aa0f1`).
+- PERF-SEARCH-2: filters 시점 참고건물 선검색 → SSE `results`, final 입력 같으면 재사용. LLM 출력 4필드 서버 계산으로 이전(~350→~245 토큰; A/B 핵심필터 일치 87.6% = 재실행 노이즈 88.0%). 로컬 카드 1.97-2.06s, 완료 2.11-2.20s (이전 3.7-4.8s) (`dcd1429`).
+- PERF-MISC-1: 미사용 HyDE Stage-2 중단, 보드명 LLM → 필터 규칙(한국어 placeholder 처리), gunicorn 워커 프리워밍, JSON gzip(SSE·auth 제외), Discovery FPS numpy, 결과 API 1회 호출 (`836bc60`).
+- 측정 근거: 검색 LLM 시간의 최대 구간은 출력 디코딩(~1.25s); nano·4.1-mini·reasoning low 모두 더 느리거나 부정확. Discovery/취향분석은 prod 추정 0.2-0.3s (로컬 1-2.5s는 RTT 73ms 탓).
+- 검증 한계: DB 통합 테스트 로컬 미실행 — CI 판정. app-test 스킵.
+
+### PERF-ROUND2 — 속도 개선 2차 (스트리밍·풀·코드분할·런타임) — RESOLVED 2026-09-30 (`49cb015`)
+- 검색 해석 SSE 스트리밍(`/parse-query/stream/`): 필터 먼저 → 답변 타이핑 → 기존과 동일한 final. 로컬 실측 필터 1.4-2.6s (기존 전체 3.1-3.6s). 스키마·few-shot 필터 우선 순서.
+- Server-Timing 헤더(total/db/쿼리수, CORS 노출) + `prod_bench.py` 서버시간 열.
+- 결과 조회 MMR 행렬연산 + `np.fromstring` 파싱 (순서 동일 42 테스트) — PERF-RESULT-1 해소.
+- gunicorn gthread 3x4 + 캐시/LLM 클라 lock (PERF-SERVER-1 해소), buildings 연결 유지 → psycopg3 + Django pool (max 12, `DB_POOL_ENABLED=false` 롤백).
+- Python 3.12 고정 + Django 5.2 LTS (CI 3.12), 프론트 코드 분할 첫 로딩 JS 205 → ~125KB gzip.
+- Jev(TypeSafe) PoC: 6x 빠르나 핵심 필터 정확도 93.9% vs 99.1%, 확신도로 못 거름 → 미도입.
+- 검증 한계: DB 테스트 로컬 Postgres 부재 — CI 판정. app-test 스킵.
+- Deferred: `BACK-VOCAB-2`, `PERF-MEASURE-2` (## Next MEDIUM).
 
 ### PERF-SWIPE-1 — 스와이프 왕복 축소 + HNSW 후보 부족 수정 — RESOLVED 2026-09-30 (`78932f0`)
 - HNSW 필터 top-k가 `ef_search` 40 후보에서 끊겨 후보가 모자라던 정확도 버그 수정: buildings 연결 시작옵션 `hnsw.iterative_scan=strict_order` (왕복 추가 0). 실측 LIMIT 60 → off 8행 / on 60행.

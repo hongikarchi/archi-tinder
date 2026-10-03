@@ -213,7 +213,7 @@ class TagAxisWeight(models.Model):
         unique_together = [('tag', 'axis')]
         constraints = [
             CheckConstraint(
-                check=Q(weight__gte=-1.0) & Q(weight__lte=1.0),
+                condition=Q(weight__gte=-1.0) & Q(weight__lte=1.0),
                 name='tagaxisweight_weight_range',
             ),
         ]

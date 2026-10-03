@@ -67,6 +67,10 @@ RC = settings.RECOMMENDATION  # shorthand for constants
 _building_embedding_cache = {}             # canonical_bld_id (str) -> np.ndarray (384-dim, L2-normalized)
 _BUILDING_CACHE_MAX_SIZE = RC.get('pool_embedding_cache_max_size', 5000)  # ~5MB max; configurable via RECOMMENDATION setting
 _centroid_cache = {}
+# gthread (PERF-ROUND2): request threads in one worker share the two dict caches
+# above. Single dict ops are GIL-atomic, but check-then-act sequences (FIFO
+# evict, clear-at-20, `in` then `[]`) are not -- serialise the compound mutations.
+_cache_lock = threading.Lock()
 _AVAILABLE_COLUMNS = None                  # frozenset of column names in canonical_v2_buildings; None = not yet probed
 
 # Per-thread telemetry storage (Finding #17).
@@ -210,7 +214,7 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
     # Parse embeddings
     for row in rows:
         raw = row['embedding']
-        row['_vec'] = [float(x) for x in raw.strip('[]').split(',')]
+        row['_vec'] = np.fromstring(raw.strip('[]'), sep=',', dtype=np.float64).tolist()
 
     # Greedy farthest-point sampling
     selected = [rows[0]]
@@ -786,6 +790,141 @@ def create_pool_with_relaxation(
     return [], {}, 0
 
 
+def _mmr_downsample(relevance, emb_matrix, k, penalty):
+    """Greedy MMR selection of k row indices.
+
+    score_i = relevance_i - penalty * max_{j in selected} cos(i, j)
+    First pick = highest relevance. Rows of emb_matrix are L2-normalized, so the
+    dot product is cosine similarity. Returns indices in selection order.
+    """
+    n = len(relevance)
+    k = min(k, n)
+    if k <= 0:
+        return []
+    relevance = np.asarray(relevance, dtype=np.float64)
+    max_sim = np.zeros(n, dtype=np.float64)   # nearest-selected similarity (0 = none yet)
+    taken = np.zeros(n, dtype=bool)
+    selected = []
+    for _ in range(k):
+        score = relevance - penalty * max_sim
+        score[taken] = -np.inf
+        best = int(np.argmax(score))
+        selected.append(best)
+        taken[best] = True
+        sim = _cosine_sim_matrix(emb_matrix, emb_matrix[best:best + 1])[:, 0]
+        np.maximum(max_sim, sim, out=max_sim)
+    return selected
+
+
+def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None):
+    """
+    Promote-to-taste pool: pgvector HNSW neighbours of the Discovery preference
+    vector, down-sampled for diversity. Relies on hnsw.iterative_scan=strict_order
+    (buildings startup option, settings._HNSW_STARTUP_OPTION) so the post-filtered
+    LIMIT returns full rows -- keep BUILDINGS_DB_HOST on the direct endpoint.
+
+    Unlike create_pool_with_relaxation({}, ...), which returns a uniformly random
+    pool when no filters are given (the seed / v_initial are ignored), this
+    queries the buildings DB ORDER BY embedding <=> v_initial. It does NOT read
+    the global hyde_vinitial_enabled flag and does not touch the regular
+    search -> session-create pool path.
+
+    Steps:
+      1. One HNSW query: top overfetch*target publishable neighbours, excluding
+         exclude_ids and seed_ids (already seen in Discovery).
+      2. Greedy MMR down-sample of the neighbours so the swipe phase does not
+         get a near-duplicate cluster.
+      3. A small exploration slice (taste_pool_random_fraction, default 20%) of
+         uniformly random publishable buildings (cached id list, no extra SQL),
+         so the swipe phase can still discover taste outside the neighbourhood.
+      4. Seed injection per create_bounded_pool semantics: seeds prepended with
+         score 1.1 (the caller marks them exposed, so they are never served).
+      5. Neighbour embeddings are written into the pool-embedding cache, so the
+         caller's get_pool_embeddings(pool_ids) is a cache hit for them.
+
+    Returns (pool_ids, pool_scores). Raises on SQL failure (caller falls back).
+    Total pool size never exceeds target (seeds included) unless seeds alone do.
+    """
+    if target is None:
+        target = RC['bounded_pool_target']
+    if v_initial is None or len(v_initial) != 384:
+        raise ValueError('create_taste_seeded_pool: v_initial must be a 384-dim vector')
+
+    seed_list = list(dict.fromkeys(seed_ids or []))
+    exclude_list = list(dict.fromkeys(list(exclude_ids or []) + seed_list))
+    overfetch = max(1, int(RC.get('taste_pool_overfetch', 3)))
+    penalty = float(RC.get('taste_pool_mmr_penalty', 1.0))
+    random_fraction = min(max(float(RC.get('taste_pool_random_fraction', 0.2)), 0.0), 1.0)
+    k_fetch = target * overfetch
+    vec_str = _vec_to_pg(v_initial)
+
+    sql = (
+        'SELECT canonical_bld_id, embedding::text, (1 - (embedding <=> %s::vector)) AS relevance'
+        ' FROM canonical_v2_buildings'
+        ' WHERE is_publishable = true'
+    )
+    params = [vec_str]
+    if exclude_list:
+        sql += ' AND canonical_bld_id <> ALL(%s::text[])'
+        params.append(exclude_list)
+    sql += ' ORDER BY embedding <=> %s::vector LIMIT %s'
+    params.extend([vec_str, k_fetch])
+
+    with stage('taste_pool_hnsw_sql', target=target, k_fetch=k_fetch):
+        with connection.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+
+    ids, rel, embs = [], [], []
+    for bid, emb_text, relevance in rows:
+        emb = _parse_embedding_text(emb_text)
+        if emb is None:
+            continue
+        ids.append(bid)
+        rel.append(float(relevance))
+        embs.append(emb)
+
+    if not ids:
+        # No usable neighbours (e.g. embeddings unparseable): let the caller fall back.
+        raise RuntimeError('create_taste_seeded_pool: HNSW query returned no usable neighbours')
+
+    n_pick = max(0, target - len(seed_list))
+    n_random = int(round(n_pick * random_fraction))
+    n_near = n_pick - n_random
+    with stage('taste_pool_mmr', n_candidates=len(ids), n_pick=n_pick):
+        near_picked = _mmr_downsample(rel, np.stack(embs), n_pick, penalty)
+
+    # Exploration slice: random publishable ids not already chosen / excluded.
+    random_ids = []
+    if n_random > 0:
+        taken = set(exclude_list) | {ids[i] for i in near_picked[:n_near]}
+        try:
+            sample = _random_pool(2 * n_random + len(taken))
+        except Exception as exc:
+            logger.warning('create_taste_seeded_pool: random slice failed (%s)', exc)
+            sample = []
+        random_ids = [b for b in dict.fromkeys(sample) if b not in taken][:n_random]
+    # Random slice came up short -> take more nearest-diverse picks instead.
+    near_picked = near_picked[:n_near + (n_random - len(random_ids))]
+
+    with _cache_lock:
+        for i in near_picked:
+            _building_embedding_cache[ids[i]] = embs[i]
+        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+            for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                _building_embedding_cache.pop(old_bid, None)
+    pool_ids = [ids[i] for i in near_picked]
+    pool_scores = {ids[i]: rel[i] for i in near_picked}
+    pool_ids.extend(random_ids)
+    pool_ids = list(dict.fromkeys(pool_ids))   # defensive: random slice vs shortfall picks
+
+    for sid in reversed(seed_list):
+        pool_ids.insert(0, sid)
+        pool_scores[sid] = 1.1
+    return pool_ids, pool_scores
+
+
 def refresh_pool_if_low(session, threshold=5):
     """
     If session's remaining pool (pool_ids - exposed_ids) is below threshold, escalate
@@ -1283,16 +1422,22 @@ def get_pool_embeddings(pool_ids):
                 rows = _dictfetchall(cur)
 
         with stage('embeddings_parse_normalize', n=len(rows)):
+            parsed = []
             for row in rows:
                 embedding = _parse_embedding_text(row['embedding'])
                 if embedding is not None:
-                    _building_embedding_cache[row['canonical_bld_id']] = embedding
+                    parsed.append((row['canonical_bld_id'], embedding))
 
-            # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
-            if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
-                excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
-                for old_bid in list(_building_embedding_cache.keys())[:excess]:
-                    del _building_embedding_cache[old_bid]
+            # Insert + FIFO eviction as one critical section: unlocked, two threads
+            # could both compute `excess` and delete the same keys (KeyError).
+            with _cache_lock:
+                for bid, embedding in parsed:
+                    _building_embedding_cache[bid] = embedding
+                # FIFO eviction when cache exceeds max size (Python 3.7+ dict preserves insertion order)
+                if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+                    excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+                    for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                        _building_embedding_cache.pop(old_bid, None)
 
     # Record stats for §6 swipe telemetry (most-recent call on this thread; overwritten per call)
     _telemetry.embedding_call_stats = {
@@ -1302,7 +1447,14 @@ def get_pool_embeddings(pool_ids):
     }
 
     with stage('embeddings_assemble', n=len(pool_ids)):
-        return {bid: _building_embedding_cache[bid] for bid in pool_ids if bid in _building_embedding_cache}
+        # .get() not `in` + `[]`: a concurrent thread's eviction between the two
+        # would raise KeyError.
+        assembled = {}
+        for bid in pool_ids:
+            vec = _building_embedding_cache.get(bid)
+            if vec is not None:
+                assembled[bid] = vec
+        return assembled
 
 
 def get_last_embedding_call_stats():
@@ -1389,12 +1541,14 @@ def precompute_pool_embeddings(pool_ids):
 
 def clear_pool_embedding_cache():
     """Clear the per-building-id embedding cache (for testing)."""
-    _building_embedding_cache.clear()
+    with _cache_lock:
+        _building_embedding_cache.clear()
 
 
 def clear_centroid_cache():
     """Clear the centroid cache (for testing)."""
-    _centroid_cache.clear()
+    with _cache_lock:
+        _centroid_cache.clear()
 
 
 def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
@@ -1434,6 +1588,14 @@ def farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings):
     return candidate_ids[best_idx]
 
 
+def _centroid_cache_put(cache_key, result):
+    """Clear-at-20 + insert as one critical section (thread-safe under gthread)."""
+    with _cache_lock:
+        if len(_centroid_cache) > 20:
+            _centroid_cache.clear()
+        _centroid_cache[cache_key] = result
+
+
 def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     """
     Compute taste cluster centroids with recency weighting.
@@ -1453,8 +1615,8 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         round_num,
         multimodal_floor,
     )
-    if cache_key in _centroid_cache:
-        result = _centroid_cache[cache_key]
+    result = _centroid_cache.get(cache_key)   # single atomic read; `in` then `[]` races clear()
+    if result is not None:
         # Re-set stats from cached extended entry (3-tuple) or recompute minimally.
         # Extended cache entries are (centroids, global_centroid, stats_dict).
         # Legacy entries (from before this change) are 2-tuples; fall through to minimal stats.
@@ -1486,9 +1648,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         }
         _telemetry.clustering_stats = stats
         result = (centroids, centroid, stats)
-        if len(_centroid_cache) > 20:
-            _centroid_cache.clear()
-        _centroid_cache[cache_key] = result
+        _centroid_cache_put(cache_key, result)
         return centroids, centroid
 
     like_embeddings = np.array([w[0] for w in weighted_likes])
@@ -1512,9 +1672,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         }
         _telemetry.clustering_stats = stats
         result = (centroids, global_centroid, stats)
-        if len(_centroid_cache) > 20:
-            _centroid_cache.clear()
-        _centroid_cache[cache_key] = result
+        _centroid_cache_put(cache_key, result)
         return centroids, global_centroid
 
     # Path 2 & 3: Topic 06 silhouette-based adaptive k (flag-gated, N>=4 required)
@@ -1549,9 +1707,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
         }
         _telemetry.clustering_stats = stats
         result = (centroids, global_centroid, stats)
-        if len(_centroid_cache) > 20:
-            _centroid_cache.clear()
-        _centroid_cache[cache_key] = result
+        _centroid_cache_put(cache_key, result)
         return centroids, global_centroid
 
     # Path 4: Default k=min(k_clusters, N) KMeans (flag off or N<4)
@@ -1567,9 +1723,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     }
     _telemetry.clustering_stats = stats
     result = (centroids, global_centroid, stats)
-    if len(_centroid_cache) > 20:
-        _centroid_cache.clear()
-    _centroid_cache[cache_key] = result
+    _centroid_cache_put(cache_key, result)
     return centroids, global_centroid
 
 
@@ -1717,51 +1871,52 @@ def get_top_k_mmr(
     if not rows:
         return []
 
-    # Parse embeddings
-    for row in rows:
-        embedding_str = row['embedding']
-        row['_vec'] = np.array([float(x) for x in embedding_str.strip('[]').split(',')])
+    # Parse embeddings (vectorised text -> float64; NOT unit-normalised on purpose:
+    # the MMR math below must stay numerically equivalent (within float ulp) to the per-pair np.dot loop).
+    vecs = np.stack([
+        np.fromstring(row['embedding'].strip('[]'), sep=',', dtype=np.float64)
+        for row in rows
+    ])                                                    # (n, 384)
+    n_rows = vecs.shape[0]
 
-    # MMR selection
-    selected = []
-    remaining = rows.copy()
+    # Collapse bit-identical embeddings (duplicate buildings) to one row before any
+    # matrix product. BLAS mat-vec/mat-mat kernels can differ by 1 ulp between rows at
+    # different positions even for identical data, which would break the exact score
+    # tie (and so the first-index-wins tie-break) the per-pair np.dot loop had.
+    # Computing on unique rows and expanding through `inv` keeps duplicates exactly tied.
+    uniq_of = {}
+    first_idx = []
+    inv = np.empty(n_rows, dtype=np.intp)
+    for i in range(n_rows):
+        u = uniq_of.setdefault(vecs[i].tobytes(), len(uniq_of))
+        if u == len(first_idx):
+            first_idx.append(i)
+        inv[i] = u
+    uvecs = vecs[first_idx]                                   # (u, 384), row u == unique id u
 
-    # Select first item with best relevance (multi-modal: max over all centroids)
-    if remaining:
-        best_idx = 0
-        best_relevance = -1
-        for i, row in enumerate(remaining):
-            relevance = max(np.dot(row['_vec'], c) for c in centroids)
-            if relevance > best_relevance:
-                best_relevance = relevance
-                best_idx = i
-        selected.append(remaining.pop(best_idx))
+    # Relevance (multi-modal: max cosine over all centroids) is constant per
+    # candidate -- compute once for the whole candidate matrix.
+    relevance = (uvecs @ np.stack(centroids).T).max(axis=1)[inv]    # (n,)
+    penalty = RC['mmr_penalty']
 
-    # Greedy MMR selection for remaining items
-    while len(selected) < k and remaining:
-        best_idx = 0
-        best_score = -float('inf')
+    # First pick: best relevance. Original scan started at best_relevance=-1 with
+    # strict '>' (first index wins ties; index 0 if nothing beats -1).
+    best_idx = int(np.argmax(relevance)) if relevance.max() > -1 else 0
+    selected_idx = [best_idx]
 
-        for i, row in enumerate(remaining):
-            candidate_emb = row['_vec']
+    # Greedy MMR for the remaining items. redundancy = max(0, max sim to selected),
+    # kept as a running vector updated with one mat-vec per pick.
+    available = np.ones(n_rows, dtype=bool)
+    available[best_idx] = False
+    redundancy = np.maximum(0.0, (uvecs @ uvecs[inv[best_idx]])[inv])
+    while len(selected_idx) < k and available.any():
+        scores = np.where(available, relevance - penalty * redundancy, -np.inf)
+        best_idx = int(np.argmax(scores))     # first max wins == strict '>' scan
+        selected_idx.append(best_idx)
+        available[best_idx] = False
+        redundancy = np.maximum(redundancy, (uvecs @ uvecs[inv[best_idx]])[inv])
 
-            # Relevance: max cosine similarity to any centroid (multi-modal)
-            relevance = max(np.dot(candidate_emb, c) for c in centroids)
-
-            # Redundancy: max similarity to already selected
-            redundancy = 0
-            for sel in selected:
-                sel_emb = sel['_vec']
-                redundancy = max(redundancy, np.dot(candidate_emb, sel_emb))
-
-            # MMR score
-            mmr_score = relevance - RC['mmr_penalty'] * redundancy
-
-            if mmr_score > best_score:
-                best_score = mmr_score
-                best_idx = i
-
-        selected.append(remaining.pop(best_idx))
+    selected = [rows[i] for i in selected_idx]
 
     # Convert to ImageCard format
     return [_row_to_card(row, image_focus=image_focus) for row in selected]
