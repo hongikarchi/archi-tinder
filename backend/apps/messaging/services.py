@@ -34,7 +34,13 @@ def is_blocked_between(a, b):
 
 
 def recipient_eligible(profile):
-    """D11: PersonalityProfile exists AND discovery_opt_in is True."""
+    """D11: PersonalityProfile exists AND discovery_opt_in is True.
+
+    Guests are excluded too: IsVerifiedUser blocks them from accept/ignore/
+    block, so a request to a guest would stay pending forever.
+    """
+    if profile.is_guest:
+        return False
     return PersonalityProfile.objects.filter(user=profile, discovery_opt_in=True).exists()
 
 

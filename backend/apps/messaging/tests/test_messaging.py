@@ -123,6 +123,11 @@ class TestSendRequest:
         t = make_user('hidden', opt_in=False)
         assert send(ca, t).status_code == 400
 
+    def test_guest_recipient_rejected(self, ca):
+        # Guests cannot accept/ignore/block (IsVerifiedUser) -> not contactable.
+        t = make_user('guestrcpt', guest=True)
+        assert send(ca, t).status_code == 400
+
     def test_unknown_recipient(self, ca):
         r = ca.post('/api/v1/contact-requests/', {'recipient_id': 999999}, format='json')
         assert r.status_code == 400
