@@ -188,8 +188,8 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 #### BACK-VOCAB-2 — 재료 어휘 timber vs wood 불일치
 검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).
 
-#### PERF-MEASURE-2 — round2 배포 후 prod 재측정
-PERF-ROUND2 배포 후 `tools/perf/prod_bench.py --label round2` (사용자 실행 — prod 쓰기) + Server-Timing 열로 서버/네트워크 분리. 확인 포인트: 스와이프 +25~40ms 원인, 검색 필터 도착 시간, 결과 조회, PoolTimeout 로그(SSE가 default 슬롯 점유 — 필요시 `DB_POOL_MAX_SIZE` 상향).
+#### PERF-PROMOTE-2 — 취향 분석 콜드 쿼리 2개
+prod 컨테이너 실측(2026-10-03): 데워진 상태 0.22-0.25s, 식은 상태 15.9s = HNSW 후보 450개 쿼리 10.4s + 무작위 후보용 전체 publishable id 스캔 5.2s. 후보안: id 스캔 제거(TABLESAMPLE 또는 Redis 공유 캐시), `taste_pool_overfetch` 3→~1.33(k=200). 사용자 결정: 지금은 보류 — Neon scale-to-zero 해제(사용자 증가 시) 때 재검토.
 
 #### INFRA-IMG-2 — prod 이미지 r2.dev → 커스텀 도메인
 prod `IMAGE_BASE_URL`이 속도 제한 있는 개발용 `r2.dev`. 출시 전 R2 커스텀 도메인 연결.
@@ -342,6 +342,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### FULL-REPORT-IMG-1 + PERF-MEASURE-2 — 취향 이미지 자동 생성 + 배포 후 prod 측정 — RESOLVED 2026-10-03 (`a2a4b91`)
+- 이미지: 생성/재생성 버튼 삭제, 스와이프 완료 시 리포트와 동시에 생성 시작(리포트 없으면 파이썬 취향 데이터로 프롬프트), '이미지 생성 중…' 스켈레톤 + 실패 문구, 프로젝트별 토큰 락으로 중복 유료 생성 방지, 소유자 화면에서 이미지 없으면 1회 자동 생성 (`8d839e1`).
+- 측정(웜, `prod_bench --warmup 1 --stream`): 검색 카드 1.67s(배포전 3.53s), 결과 414ms(695), 세션생성 228ms(280), 스와이프 212ms(202, 노이즈). 1초 초과: 이미지 11.3s, 리포트 첫 생성 2.7s, 취향분석(식으면 15.9s), 검색 완료 1.93s.
+- Neon: Launch 플랜, user_data+archi_data 한 컴퓨트(0.25-8 CU), scale-to-zero 5분 ON 유지(사용자 결정; 끄면 0.25CU 월 ~$19).
+- Deferred: `PERF-PROMOTE-2` (## Next MEDIUM).
+
 ### FULL-MESSAGING-1 — 관심 있어요 버튼이 아무 동작 안 함 — RESOLVED 2026-10-02 (`15116cf`)
 - 관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).
 - [x] 백엔드 `apps.messaging` (`dbb40b7`): ContactRequest/Conversation/Message/Block/Report, API 11뷰, OFF 시 전 엔드포인트 404, MeView `features.messaging`. 수락 시 인사말 + `connected` 시스템 메시지(요청자 안 읽음 1 / 수락자 0, D13). 무시 30일 쿨다운 비공개(D10), 수신 가드 진단+opt-in(D11), 알림 row 미생성(D9). 차단 → 대화 closed + 발견 피드 양방향 제외(플래그 무관). 스로틀 3종. 상호 요청 경합 정리 + connect 멱등. 테스트 61개.
