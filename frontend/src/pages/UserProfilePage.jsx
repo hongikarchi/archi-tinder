@@ -492,19 +492,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       background: 'var(--color-bg)',
       paddingBottom: 'var(--tabbar-clearance)'
     }}>
-      <PageTopControls onLogout={onLogout} />
-
-      {/* Floating top-left cluster — Claude Design mock conversion.
-          isMe: bell (unread badge) + settings, all neutral
-          circles (no destructive tint — mock parity). !isMe: single back
-          circle via PageBackButton (value-for-value match already shipped
-          by the design-port initiative — reused rather than re-authored).
-          Logout lives in PageTopControls (top-right) like every other page. */}
-      {isMe ? (
-        <div style={{
-          position: 'fixed', top: 16, left: 12, zIndex: 300,
-          display: 'flex', gap: 6, alignItems: 'center',
-        }}>
+      {/* Top-left rail (via PageTopControls `leading`; theme pill sits to its
+          right). isMe: bell (unread badge) + settings, neutral circles. !isMe:
+          single back circle. Logout lives top-right with the language pill. */}
+      <PageTopControls
+        onLogout={onLogout}
+        leading={isMe ? (
+          <>
           {/* Notifications bell + unread badge (NOTIF-INAPP-1). FloatingIconButton's
               own .btn class already sets position:relative, which is what the
               badge below anchors to — no extra positioning style needed. */}
@@ -543,10 +537,11 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
             </svg>
           </FloatingIconButton>
-        </div>
-      ) : (
-        <PageBackButton onClick={() => navigate(-1)} />
-      )}
+          </>
+        ) : (
+          <PageBackButton inline onClick={() => navigate(-1)} />
+        )}
+      />
 
       <PageLogoHeader padding="20px 16px 0" />
 

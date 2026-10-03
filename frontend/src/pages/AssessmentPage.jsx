@@ -183,8 +183,7 @@ export default function AssessmentPage({ onLogout }) {
   if (showResult && result) {
     return (
       <div className={styles.page}>
-        <PageTopControls onLogout={onLogout} />
-        <PageBackButton onClick={() => navigate('/user/me')} label={t('assessmentPage.goToProfile')} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate('/user/me')} label={t('assessmentPage.goToProfile')} />} />
         <PageLogoHeader padding="0 0 6px" marginBottom={8} />
 
         <div className={styles.resultBody}>
@@ -225,8 +224,7 @@ export default function AssessmentPage({ onLogout }) {
   // Assessment screen
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} />
-      <PageBackButton onClick={() => navigate(-1)} label={t('assessmentPage.goBack')} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('assessmentPage.goBack')} />} />
 
       {/* Header — Arch|ibe logo + "Tuning taste"-style progress row, matching
           SwipePage's top region (PageLogoHeader -> info row -> 4px track). */}

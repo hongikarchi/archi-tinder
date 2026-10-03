@@ -90,9 +90,8 @@ export default function BoardReportPage({ onLogout }) {
   if (loading || shouldAutoGenerate) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageBackButton onClick={() => navigate(-1)} />
         <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Spinner />
         </div>
@@ -105,9 +104,8 @@ export default function BoardReportPage({ onLogout }) {
   if (!board) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageBackButton onClick={() => navigate(-1)} />
         <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0 }}>
             {t('board.notFound')}
@@ -121,9 +119,8 @@ export default function BoardReportPage({ onLogout }) {
   if (genError) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageBackButton onClick={() => navigate(-1)} />
         <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
           <p style={{ color: 'var(--color-destructive)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0, textAlign: 'center' }}>
             {t('board.reportGenError')}
@@ -155,9 +152,8 @@ export default function BoardReportPage({ onLogout }) {
   if (!report) {
     return (
       <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageBackButton onClick={() => navigate(-1)} />
         <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0 }}>
             {t('board.noReport')}
@@ -169,9 +165,8 @@ export default function BoardReportPage({ onLogout }) {
 
   return (
     <div className={styles.page}>
-      <PageBackButton onClick={() => navigate(`/board/${boardId}`)} label={t('board.backToDetail')} />
       <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(`/board/${boardId}`)} label={t('board.backToDetail')} />} />
       <div className={styles.container}>
         <PersonaReport
           boardId={boardId}

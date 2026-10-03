@@ -43,7 +43,7 @@ export default function CompetitionListPage({ onLogout }) {
 
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} splitMobile />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Header — tab root, no back button (matches PeopleDiscoveryPage) */}
       <header className={styles.header}>

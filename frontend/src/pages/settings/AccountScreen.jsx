@@ -572,9 +572,8 @@ export default function AccountScreen({ onLogout }) {
 function ScreenChrome({ navigate, onLogout }) {
   return (
     <>
-      <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
     </>
   )
 }
