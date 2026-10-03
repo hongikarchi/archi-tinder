@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-03 10:41 KST',
-    head: '69b43d3',
-    branch: 'feature/sns-contact-messaging',
+    updatedAt: '2026-10-03 19:05 KST',
+    head: '5f7026e',
+    branch: 'feature/claude-persona-image-auto',
   },
   done: [
+    {
+      id: 'FULL-REPORT-IMG-1',
+      title: '+ PERF-MEASURE-2 — 취향 이미지 자동 생성 + 배포 후 prod 측정',
+      completedAt: '2026-10-03',
+      note: '이미지: 생성/재생성 버튼 삭제, 스와이프 완료 시 리포트와 동시에 생성 시작(리포트 없으면 파이썬 취향 데이터로 프롬프트), \'이미지 생성 중…\' 스켈레톤 + 실패 문구, 프로젝트별 토큰 락으로 중복 유료 생성 방지, 소유자 화면에서 이미지 없으면 1회 자동 생성 (`8d839e1`).',
+    },
     {
       id: 'FULL-MESSAGING-1',
       title: '관심 있어요 버튼이 아무 동작 안 함',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '결과 My Likes에 Discovery 좋아요 누락',
       completedAt: '2026-09-27',
       note: '결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.',
-    },
-    {
-      id: 'BACK-LLM-5',
-      title: '리포트 취향 문장이 근거 없음',
-      completedAt: '2026-09-26',
-      note: '리포트를 보여준 카드(좋아요∪싫어요) 기준 결정론 사실(`taste_facts.py`) + 사용자 언어 프롬프트(`_report_prompts.py`)로 재작성. ① `pattern_paragraph`("보여드린 건물 중…") + ② `description`(부드러운 해석), 기존 필드 호환, `taste_facts` 저장(싫어요 건물 id 제외 — 보안 리뷰).',
     },
   ],
   now: [],
@@ -150,9 +150,9 @@ window.PROJECT_STATE = {
         note: '검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).',
       },
       {
-        id: 'PERF-MEASURE-2',
-        title: 'round2 배포 후 prod 재측정',
-        note: 'PERF-ROUND2 배포 후 `tools/perf/prod_bench.py --label round2` (사용자 실행 — prod 쓰기) + Server-Timing 열로 서버/네트워크 분리. 확인 포인트: 스와이프 +25~40ms 원인, 검색 필터 도착 시간, 결과 조회, PoolTimeout 로그(SSE가 default 슬롯 점유 — 필요시 `DB_POOL_MAX_SIZE` 상향).',
+        id: 'PERF-PROMOTE-2',
+        title: '취향 분석 콜드 쿼리 2개',
+        note: 'prod 컨테이너 실측(2026-10-03): 데워진 상태 0.22-0.25s, 식은 상태 15.9s = HNSW 후보 450개 쿼리 10.4s + 무작위 후보용 전체 publishable id 스캔 5.2s. 후보안: id 스캔 제거(TABLESAMPLE 또는 Redis 공유 캐시), `taste_pool_overfetch` 3→~1.33(k=200). 사용자 결정: 지금은 보류 — Neon scale-to-zero 해제(사용자 증가 시) 때 재검토.',
       },
       {
         id: 'INFRA-IMG-2',
@@ -322,6 +322,13 @@ window.PROJECT_STATE = {
       sha: '69b43d3',
     },
     {
+      number: 343,
+      title: 'feat(FULL-MESSAGING-1): 관심 있어요 버튼이 아무 동작 안 함',
+      mergedAt: '2026-10-03T01:48:37Z',
+      mergedAtKST: '2026-10-03 10:48 KST',
+      sha: 'ff46597',
+    },
+    {
       number: 341,
       title: 'chore(INFRA-GIT-2): 로컬 develop 동기화 스크립트 — 배포 후 강제리셋 대응',
       mergedAt: '2026-09-30T10:40:28Z',
@@ -362,13 +369,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-26T01:02:47Z',
       mergedAtKST: '2026-09-26 10:02 KST',
       sha: 'a277440',
-    },
-    {
-      number: 332,
-      title: 'docs(plans): 공모전 팀빌딩 — 팀 진단 기각, 축 가중치는 추천 전용',
-      mergedAt: '2026-09-26T00:56:44Z',
-      mergedAtKST: '2026-09-26 09:56 KST',
-      sha: '986ed5b',
     },
   ],
   agents: [
@@ -649,14 +649,6 @@ window.PROJECT_STATE = {
     {
       path: 'README.md',
       role: '프로젝트 안내 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
-    },
-    {
-      path: 'Task.md',
-      role: '태스크 보드 문서',
     },
     {
       path: 'Task.md',
@@ -1383,6 +1375,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_report_image_parallel.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
     },
@@ -2095,14 +2091,6 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
-      path: 'frontend/src/App.jsx',
-      role: '앱 루트 라우팅 컴포넌트',
-    },
-    {
-      path: 'frontend/src/App.jsx',
-      role: '앱 루트 라우팅 컴포넌트',
-    },
-    {
       path: 'frontend/src/api/architects.js',
       role: 'architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)',
     },
@@ -2317,6 +2305,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/PersonaReport.jsx',
       role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
+    },
+    {
+      path: 'frontend/src/components/PersonaReport.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/PhotoTile.jsx',
@@ -2597,6 +2589,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useReportImageJob.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useResults.js',
@@ -2923,6 +2919,14 @@ window.PROJECT_STATE = {
       role: 'loginFlow 테스트',
     },
     {
+      path: 'frontend/src/utils/reportImageJobs.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportImageJobs.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/reportText.js',
       role: '리포트 문장 언어 선택',
     },
@@ -2973,14 +2977,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

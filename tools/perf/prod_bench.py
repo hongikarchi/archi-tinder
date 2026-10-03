@@ -19,11 +19,18 @@ ap.add_argument('--runs', type=int, default=2)
 ap.add_argument('--swipes', type=int, default=20)
 ap.add_argument('--sleep', type=float, default=0.5)
 ap.add_argument('--seed', type=int, default=1234)
+ap.add_argument('--warmup', type=int, default=1,
+                help='untimed warm-up runs first (Neon scale-to-zero leaves storage pages cold); '
+                     'their numbers are reported separately as "cold", not in the main table')
+ap.add_argument('--stream', action='store_true',
+                help='search via /parse-query/stream/ (what the app uses): records search_filters / '
+                     'search_results / search_final arrival times instead of blocking parse_query')
 ap.add_argument('--out', default=os.path.join(os.path.expanduser('~'), 'perf-bench-out'))
 A = ap.parse_args()
 API = A.base.rstrip('/') + '/api/v1'
 QUERIES = ['제주도 돌로 지은 명상 공간', '따뜻한 목재 주택', '서울 도심 오피스']
 recs, notes = [], []
+PHASE = {'name': 'measure'}
 
 
 _ST_RE = re.compile(r'([A-Za-z0-9_-]+)(?:;desc="?[^;,"]*"?)?;dur=([\d.]+)')
@@ -46,8 +53,32 @@ def call(s, kind, method, path, **kw):
     ms = (time.perf_counter() - t0) * 1000
     st = parse_server_timing(r.headers.get('Server-Timing'))
     recs.append({'kind': kind, 'ms': round(ms, 1), 'status': r.status_code, 'label': A.label,
+                 'phase': PHASE['name'],
                  'srv_total': st.get('total'), 'srv_db': st.get('db')})
     return r
+
+
+def stream_search(s, q):
+    """POST /parse-query/stream/, record event arrival times; return the final payload."""
+    t0 = time.perf_counter(); final = None; seen = set(); buf = ''
+    with s.post(API + '/parse-query/stream/', json={'query': q}, stream=True, timeout=120) as resp:
+        if resp.status_code != 200:
+            return None
+        for chunk in resp.iter_content(chunk_size=None, decode_unicode=True):
+            buf += chunk
+            while '\n\n' in buf:
+                frame, buf = buf.split('\n\n', 1)
+                ev = [ln[7:] for ln in frame.split('\n') if ln.startswith('event: ')]
+                if not ev or ev[0] in seen:
+                    continue
+                seen.add(ev[0])
+                if ev[0] in ('filters', 'results', 'final'):
+                    recs.append({'kind': 'search_' + ev[0], 'ms': round((time.perf_counter() - t0) * 1000, 1),
+                                 'status': 200, 'label': A.label, 'phase': PHASE['name']})
+                if ev[0] == 'final':
+                    data = [ln[6:] for ln in frame.split('\n') if ln.startswith('data: ')]
+                    final = json.loads(data[0]) if data else None
+    return final
 
 
 def cid(card):
@@ -62,10 +93,15 @@ def one_run(ri, rng):
         notes.append(f'run{ri}: guest login HTTP {r.status_code} {r.text[:150]}'); return
     s.headers['Authorization'] = 'Bearer ' + r.json()['access']
     for qi, q in enumerate(QUERIES):
-        r = call(s, 'parse_query', 'POST', '/parse-query/', json={'query': q})
-        if r.status_code != 200:
-            notes.append(f'run{ri} q{qi}: parse HTTP {r.status_code}'); continue
-        d = r.json()
+        if A.stream:
+            d = stream_search(s, q)
+            if d is None:
+                notes.append(f'run{ri} q{qi}: stream search failed'); continue
+        else:
+            r = call(s, 'parse_query', 'POST', '/parse-query/', json={'query': q})
+            if r.status_code != 200:
+                notes.append(f'run{ri} q{qi}: parse HTTP {r.status_code}'); continue
+            d = r.json()
         body = {'name': f'perfbench-{A.label}-{ri}-{qi}', 'filters': d.get('structured_filters') or {},
                 'filter_priority': d.get('filter_priority') or [], 'seed_ids': [],
                 'raw_query': d.get('raw_query') or q, 'force_new': True}
@@ -107,23 +143,44 @@ def pct(v, p):
 
 
 rng = random.Random(A.seed)
-for ri in range(A.runs):
+total = A.warmup + A.runs
+for ri in range(total):
+    PHASE['name'] = 'warmup' if ri < A.warmup else 'measure'
     one_run(ri, rng)
-    if ri < A.runs - 1:
+    if ri < total - 1:
         time.sleep(21)  # guest_login throttle 3/min
 os.makedirs(A.out, exist_ok=True)
 stamp = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-lines = [f'# prod bench {A.label} {stamp} base={A.base}', '', '| endpoint | n | p50 ms | p95 ms | max ms | non-2xx | srv total p50 | srv db p50 |', '|---|---|---|---|---|---|---|---|']
-for k in ['guest_login', 'parse_query', 'session_create', 'swipe', 'swipe_extend', 'session_result']:
-    ok = [r for r in recs if r['kind'] == k and r['status'] < 300]
-    v = [r['ms'] for r in ok]
-    bad = sum(1 for r in recs if r['kind'] == k and r['status'] >= 300)
+KINDS = ['guest_login', 'parse_query', 'search_filters', 'search_results', 'search_final',
+         'session_create', 'swipe', 'swipe_extend', 'session_result']
+lines = [f'# prod bench {A.label} {stamp} base={A.base} (warm-up runs: {A.warmup}, measured runs: {A.runs})', '',
+         '## measured (warm)', '',
+         '| endpoint | n | p50 ms | p95 ms | max ms | non-2xx | srv total p50 | srv db p50 |', '|---|---|---|---|---|---|---|---|']
 
-    def srv_p50(field):
-        x = [r[field] for r in ok if r.get(field) is not None]
-        return f'{statistics.median(x):.0f}' if x else '-'
-    if v or bad:
-        lines.append(f'| {k} | {len(v)} | {statistics.median(v):.0f} | {pct(v, 95):.0f} | {max(v):.0f} | {bad} | {srv_p50("srv_total")} | {srv_p50("srv_db")} |' if v else f'| {k} | 0 | - | - | - | {bad} | - | - |')
+
+def table_rows(phase):
+    out = []
+    for k in KINDS:
+        ok = [r for r in recs if r['kind'] == k and r['status'] < 300 and r.get('phase') == phase]
+        v = [r['ms'] for r in ok]
+        bad = sum(1 for r in recs if r['kind'] == k and r['status'] >= 300 and r.get('phase') == phase)
+        srv = {}
+        for field in ('srv_total', 'srv_db'):
+            x = [r[field] for r in ok if r.get(field) is not None]
+            srv[field] = f'{statistics.median(x):.0f}' if x else '-'
+        if v:
+            out.append(f"| {k} | {len(v)} | {statistics.median(v):.0f} | {pct(v, 95):.0f} | {max(v):.0f} | {bad} "
+                       f"| {srv['srv_total']} | {srv['srv_db']} |")
+        elif bad:
+            out.append(f'| {k} | 0 | - | - | - | {bad} | - | - |')
+    return out
+
+
+lines += table_rows('measure')
+if A.warmup:
+    lines += ['', '## cold (warm-up runs, first touch after Neon scale-to-zero)', '',
+              '| endpoint | n | p50 ms | p95 ms | max ms | non-2xx | srv total p50 | srv db p50 |',
+              '|---|---|---|---|---|---|---|---|'] + table_rows('warmup')
 lines += ['', 'notes: ' + ('; '.join(notes) or 'none')]
 open(os.path.join(A.out, f'prod_{A.label}.md'), 'w', encoding='utf-8').write('\n'.join(lines))
 json.dump({'recs': recs, 'notes': notes}, open(os.path.join(A.out, f'prod_{A.label}.json'), 'w'), indent=1)

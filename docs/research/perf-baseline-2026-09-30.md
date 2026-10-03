@@ -161,6 +161,56 @@ carried confidence 0.42-1.0, so confidence gating cannot filter them. Decision: 
 gpt-5.4-mini instead (PERF-SEARCH-1). Side finding: material vocab mismatch
 (`wood` 8,544 rows vs `timber` 2,625) → BACK-VOCAB-2.
 
+## 4e. Prod after round 2/3 deploy (main `5f7026e`, 2026-10-03)
+
+Client side from Korea (`prod_bench.py --label round3`, 2 runs) with the new
+Server-Timing columns (server total / DB, p50):
+
+| p50 ms | 9/30 before | 10/3 round3 | srv total | srv db |
+|---|---|---|---|---|
+| parse-query (blocking endpoint) | 3532 | 3414 | 3284 | 232 |
+| session create | 280 | 386 | 258 | 187 |
+| swipe (n=120) | 202 | 232 | 102 | 50 |
+| swipe extend | 139 | 177 | 54 | 23 |
+| session result | 695 | 1081 | 934 | 867 |
+| guest login | 1674 / 600 | 542 | 58 | 37 |
+
+Search streaming (`/parse-query/stream/`, 6 queries, the path the app now uses):
+filters p50 2040 ms, **result cards p50 2352 ms**, final p50 2662 ms (max 3069)
+vs the old blocking full response ~3.4-3.5 s.
+
+Session result, same session called 3x: 822 / 219 / 234 ms client; server
+681 / 81 / 96 ms; DB 621 / 31 / 40 ms. The result top-k HNSW query itself runs
+in 3 ms warm (EXPLAIN ANALYZE on prod) but 671 ms on first touch -> the first
+call per session is dominated by **cold Neon storage pages**, not code. gzip
+cut the result payload to ~31 KB on the wire.
+
+Open: swipe is not faster (server ~102 ms incl. ~50 ms DB); suspect cold pages
+too on low pre-launch traffic and Neon scale-to-zero. Check Neon compute size
++ scale-to-zero; consider keeping the compute warm / larger LFC; pg_prewarm on
+the HNSW index is a Make-DB-side action.
+
+### 4e-2. Warm-controlled re-measure (same day)
+
+`prod_bench.py --warmup 1 --runs 2 --stream` (new flags: warm-up runs reported
+separately as "cold"; search measured on the SSE path the app uses).
+
+| p50 ms (client, Korea) | 9/30 before | 10/3 warm | 10/3 cold (first touch) |
+|---|---|---|---|
+| search: filters shown | 3532 (all at once) | **1415** | 2105 |
+| search: result cards | 3532 | **1666** | 2474 (max 7195) |
+| search: complete | 3532 | **1926** | 2648 |
+| session create | 280 | **228** (srv 98) | 502 |
+| swipe (n=120) | 202 | 212 (srv 89, db 46) | 219 |
+| swipe extend | 139 | 162 | 171 |
+| session result | 695 | **414** (srv 285) | 1471 (db 1256) |
+| guest login | 600-1674 | 563 | 1340 |
+
+Swipe is flat (+10 ms, within noise; ~110 ms of it is the Korea->Singapore
+network floor). The earlier "result 1081 ms / swipe 232 ms" round3 numbers were
+cold-page effects. Policy: keep Neon scale-to-zero ON pre-launch (Launch plan,
+~$19/mo at 0.25 CU if disabled); measure warm, track cold separately.
+
 ## 5. Railway replacement review (summary)
 
 | Option | Per API call | Per swipe | Monthly | Effort |
