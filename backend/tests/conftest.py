@@ -85,3 +85,28 @@ def _patch_swipe_service_connections():
     import apps.recommendation.views  # noqa: F401
     with patch('apps.recommendation.services.swipe_service.connections', mock_conn):
         yield
+
+
+# --- TEMP diagnostic (PR #344 CI BrokenBarrierError): dump all thread stacks
+# when a threading.Barrier breaks, so CI logs show which thread was late and why.
+import faulthandler as _fh  # noqa: E402
+import sys as _sys  # noqa: E402
+import threading as _thr  # noqa: E402
+
+_orig_barrier_wait = _thr.Barrier.wait
+
+
+def _diag_barrier_wait(self, timeout=None):
+    try:
+        return _orig_barrier_wait(self, timeout)
+    except _thr.BrokenBarrierError:
+        if not getattr(self, '_diag_dumped', False):
+            self._diag_dumped = True
+            _sys.__stderr__.write('\n=== DIAG barrier broke; live threads: %s ===\n'
+                                  % [t.name for t in _thr.enumerate()])
+            _fh.dump_traceback(file=_sys.__stderr__, all_threads=True)
+            _sys.__stderr__.flush()
+        raise
+
+
+_thr.Barrier.wait = _diag_barrier_wait
