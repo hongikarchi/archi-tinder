@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-06 15:48 KST',
-    head: '4c5950c',
-    branch: 'feature/claude-mobile-fix-1',
+    updatedAt: '2026-10-06 16:55 KST',
+    head: '9c65d3d',
+    branch: 'feature/claude-admin-dash-1',
   },
   done: [
+    {
+      id: 'ADMIN-DASH-1',
+      title: '관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계)',
+      completedAt: '2026-10-06',
+      note: '앱 내 `/admin` 관리자 페이지 + 서버 다중 잠금 `IsAdminOperator`(is_staff + `ADMIN_EMAILS` env + 비게스트 + Google SocialAccount); 거부는 logger만(DB 행 없음), 통과 호출 throttle `admin` 120/min.',
+    },
     {
       id: 'MOBILE-FIX-1',
       title: '모바일 스와이프 카드·상단 컨트롤 정비',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '리포트가 언어 전환에 안 따라옴',
       completedAt: '2026-09-27',
       note: '리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).',
-    },
-    {
-      id: 'FULL-PERSONA-1',
-      title: '취향 막대가 반대·근거 없음이 중립으로 보임',
-      completedAt: '2026-09-27',
-      note: '오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).',
     },
   ],
   now: [],
@@ -134,6 +134,16 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'ADMIN-DASH-2',
+        title: '관리자 페이지 2~4단계',
+        note: '2단계 호스팅·LLM 상태/계정/비용(Railway/Vercel/Neon/CF R2/OpenAI/Gemini/HF; 로그인 방식은 메모) → 3단계 신고 처리·작품 검수·계정 정지/삭제(PIPA)·동의 이력(typed-confirm + audit) → 4단계 실시간 API 성능(ServerTimingMiddleware→Redis) + 제품 지표 설계. 계획: ADMIN-DASH-1 plan "Later PRs".',
+      },
+      {
+        id: 'ADMIN-DASH-HARDEN-1',
+        title: '관리자 페이지 low 4건',
+        note: 'version 캐시 키에 RAILWAY_GIT_COMMIT_SHA 포함(배포 직후 거짓 불일치 배지); audit IP = 신뢰 프록시 기준 XFF; compare 250커밋 초과 시 develop_sha null; User.email 쓰기 경로 추가 감지 테스트. ADMIN-DASH-1 Deferred.',
+      },
       {
         id: 'FRONT-IMG-TELEMETRY-1',
         title: '카드 이미지 실패 원인 호스트별 집계',
@@ -320,6 +330,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 347,
+      title: 'fix(MOBILE-FIX-1): 모바일 스와이프 카드 + 상단 컨트롤 정비',
+      mergedAt: '2026-10-06T06:55:37Z',
+      mergedAtKST: '2026-10-06 15:55 KST',
+      sha: '9c65d3d',
+    },
+    {
       number: 346,
       title: 'feat(FULL-REPORT-IMG-1): 취향 이미지 자동 생성 + 배포 후 prod 측정 기록',
       mergedAt: '2026-10-03T10:11:49Z',
@@ -367,13 +384,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-29T14:21:40Z',
       mergedAtKST: '2026-09-29 23:21 KST',
       sha: 'fe90b2b',
-    },
-    {
-      number: 334,
-      title: 'feat(FRONT-HEADER-1): 페이지 상단 크롬 축소·통일 + people 헤더 로고 교체',
-      mergedAt: '2026-09-26T00:57:29Z',
-      mergedAtKST: '2026-09-26 09:57 KST',
-      sha: '811c2e9',
     },
   ],
   agents: [
@@ -870,6 +880,90 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/views/profile.py',
       role: '유저 프로필·좋아요 건물 뷰',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/audit.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/flags.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/github.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/management/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/management/commands/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/management/commands/grant_admin.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/testing.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/tests/test_endpoints.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/tests/test_grant_admin.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/tests/test_permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/throttling.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/views.py',
+      role: '',
     },
     {
       path: 'backend/apps/messaging/__init__.py',
@@ -2100,6 +2194,10 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
+      path: 'frontend/src/api/admin.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/architects.js',
       role: 'architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)',
     },
@@ -2568,6 +2666,10 @@ window.PROJECT_STATE = {
       role: '테마 React context 정의',
     },
     {
+      path: 'frontend/src/hooks/useAdminStatus.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useBoard.js',
       role: '보드 상세 로딩 훅',
     },
@@ -2769,6 +2871,50 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/UserProfilePage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/AdminGate.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/AdminPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/AdminPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/AuditSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/CiSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/DeploySection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/FlagsSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/MigrationSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/SectionCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/StatsSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/useAdminSection.js',
       role: '',
     },
     {

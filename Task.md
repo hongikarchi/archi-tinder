@@ -57,11 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-### ADMIN-DASH-1 — 관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계)
-- `/admin` in-app route, same Google login; server gate = is_staff + ADMIN_EMAILS + Google-verified.
-- Read-only surfaces: version, pending migrations, CI, flags (KO label + ON/OFF), DB stats, audit log.
-- Lock `/api/v1/inspect/*` + office_claims to new gate; drop dead `IMAGE_BASE_URL`; legacy R2 bucket delete (ops).
-- Later phases: cost/account (2) → moderation + suspend/delete + consent history (3) → live perf + product metrics (4).
+_(비어 있음 — ADMIN-DASH-1 완료 2026-10-06, ## Done 참조)_
 
 ## Next
 
@@ -183,6 +179,12 @@ _(2026-06-08 범위 축소: #212(`4e58195`) Case #3 resume guard가 **진행중(
 _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `session_service.py:167-182`(completed 제외), 신규 세션 cold-create `:397-416`(phase='exploring', like_vectors=[] 등 전부 빈 값), `liked_ids`는 완료-세션 리포트에만 사용(`:688-689`), warm-start seed 경로 여전히 부재.)_
 
 ### MEDIUM
+
+#### ADMIN-DASH-2 — 관리자 페이지 2~4단계
+2단계 호스팅·LLM 상태/계정/비용(Railway/Vercel/Neon/CF R2/OpenAI/Gemini/HF; 로그인 방식은 메모) → 3단계 신고 처리·작품 검수·계정 정지/삭제(PIPA)·동의 이력(typed-confirm + audit) → 4단계 실시간 API 성능(ServerTimingMiddleware→Redis) + 제품 지표 설계. 계획: ADMIN-DASH-1 plan "Later PRs".
+
+#### ADMIN-DASH-HARDEN-1 — 관리자 페이지 low 4건
+version 캐시 키에 RAILWAY_GIT_COMMIT_SHA 포함(배포 직후 거짓 불일치 배지); audit IP = 신뢰 프록시 기준 XFF; compare 250커밋 초과 시 develop_sha null; User.email 쓰기 경로 추가 감지 테스트. ADMIN-DASH-1 Deferred.
 
 #### FRONT-IMG-TELEMETRY-1 — 카드 이미지 실패 원인 호스트별 집계
 `/api/v1/telemetry/image-load/` 실패 이벤트(100% 수집)를 호스트별(archdaily/dezeen/divisare/imgix…)로 묶어 실패율·지연 확인 → 외부 핫링크 차단 비중 판단, 필요 시 R2 미러링 검토. MOBILE-FIX-1 Deferred.
@@ -349,6 +351,16 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### ADMIN-DASH-1 — 관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계) — RESOLVED 2026-10-06 (`fa38b8e`)
+- 앱 내 `/admin` 관리자 페이지 + 서버 다중 잠금 `IsAdminOperator`(is_staff + `ADMIN_EMAILS` env + 비게스트 + Google SocialAccount); 거부는 logger만(DB 행 없음), 통과 호출 throttle `admin` 120/min.
+- 새 app `admin_dashboard`: GET `/api/v1/admin/dashboard/{version,migrations,flags,stats,audit-log}/`; `AdminAuditLog` 모델(0001) + `grant_admin <email> [--revoke]`(JWT 유저 캐시 무효화).
+- version = Railway SHA + GitHub compare/CI(15분 캐시, 실패 시 null+error 200); migrations = MigrationExecutor 미적용 목록; flags = 한국어 설명 + ON/OFF 읽기전용(비밀값 없음); stats = 유저/작품/신고/세션/건물(is_publishable).
+- office_claims + `/api/v1/inspect/*` 동일 잠금으로 교체; `/auth/me/` `is_admin`; DbCheck → `/admin/db-check`(DEV 전용 해제); 설정 화면 관리자 행(관리자만).
+- 죽은 `IMAGE_BASE_URL` 제거; 예전 건물사진 R2 bucket은 사용자가 정리.
+- 검증: pytest 311 passed(admin_dashboard/profiles/inspect/accounts, 로컬 branch owner), flake8·ESLint·build PASS, code-review low 4 / security PASS.
+- Ops 남음: Railway env `ADMIN_EMAILS` + `GITHUB_TOKEN` 추가, `IMAGE_BASE_URL` env 삭제, 배포 후 `make migrate-prod` → prod `grant_admin`.
+- Deferred: low 4건 → ADMIN-DASH-HARDEN-1; 2~4단계 → ADMIN-DASH-2.
+
 ### MOBILE-FIX-1 — 모바일 스와이프 카드·상단 컨트롤 정비 — RESOLVED 2026-10-06 (`4384ae2`)
 - 스와이프 카드 모바일 7건: 갤러리 버튼 터치 무반응(tinderCard touchstart preventDefault → closest('.pressable')), 캐시 이미지 opacity 0 고착 + 4s 타이머 stale closure 수정, 상세 정보 하단 정렬, 드래그 기울기 위치 기반(속도 튐 제거), 하단 힌트 문구 삭제, 프로필 공유 버튼 + ShareCardModal 삭제.
 - 카드 크기: 모듈 로드 시 고정 → `hooks/useCardSize` 반응형(같은 공식, 주소창 80px 미만 높이 변화 무시).
