@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import PasswordInput from '../components/PasswordInput.jsx'
 import styles from './LoginPage.module.css'
 import { login as apiLogin, register as apiRegister, checkHandle } from '../api/auth.js'
 import * as api from '../api/client.js'
@@ -763,9 +764,8 @@ function CredentialsStep({ t, isActive = true, disabled, initialId = '', initial
         <label style={{ ...baseLabelStyle, marginTop: 4 }} htmlFor="cred-password">
           {t('login.credentials.password.label')}
         </label>
-        <input
+        <PasswordInput
           id="cred-password"
-          type="password"
           value={localPassword}
           onChange={e => setLocalPassword(e.target.value)}
           disabled={disabled}
@@ -995,8 +995,7 @@ function ReturningStep({
           className={styles.input}
           style={paperInputStyle}
         />
-        <input
-          type="password"
+        <PasswordInput
           value={password}
           onChange={e => setPassword(e.target.value)}
           disabled={disabled}

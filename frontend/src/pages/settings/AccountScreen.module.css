@@ -47,3 +47,58 @@
   border-color: var(--color-destructive);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-destructive) 18%, transparent);
 }
+
+/* Unverified status row — tap target that starts the Google verify flow */
+.actionRow {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.actionRow:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.actionRow:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-1) 10%, transparent);
+}
+
+.actionRow:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: -2px;
+}
+
+.actionRow:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.actionRowLabel {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.actionRowValue {
+  flex: 1;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-1);
+}
+
+.actionRowChevron {
+  color: var(--accent-1);
+  font-size: 18px;
+  line-height: 1;
+}

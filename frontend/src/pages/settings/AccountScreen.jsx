@@ -2,8 +2,8 @@
  * AccountScreen — /settings/account
  *
  * Editable: ID/handle (PATCH /api/v1/users/me/), password (POST /auth/set-password/).
- * Read-only display: email + verified status, is_guest (verified status), providers.
- * Email verify: Google auth-code flow → POST /auth/link-email/.
+ * Read-only display: verified status (!!email_verified_at) + email once verified.
+ * Email verify: tap the status row (unverified) -> Google auth-code flow → POST /auth/link-email/.
  * Discovery opt-in: GET /api/v1/personality/me/ (reused from /assessment, /people) +
  * PATCH /api/v1/personality/me/ {discovery_opt_in}. Section renders only when the
  * user has a PersonalityProfile (404/error on GET → section hidden).
@@ -21,6 +21,7 @@ import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
 import PageShell from '../../components/PageShell.jsx'
 import PageTitle from '../../components/PageTitle.jsx'
+import PasswordInput from '../../components/PasswordInput.jsx'
 import Toggle from '../../components/Toggle.jsx'
 import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
@@ -226,6 +227,7 @@ export default function AccountScreen({ onLogout }) {
     }
   }
 
+  const verified = !!me?.email_verified_at
   const isDirty = handle !== (me?.handle || '')
 
   return (
@@ -263,39 +265,77 @@ export default function AccountScreen({ onLogout }) {
             borderRadius: 'var(--radius-lg)',
             overflow: 'hidden',
           }}>
-            {/* Verified status */}
-            <InfoRow
-              label={t('account.status')}
-              value={me?.is_guest ? t('account.statusGuest') : t('account.statusVerified')}
-              valueStyle={{ color: me?.is_guest ? 'var(--accent-3)' : 'var(--accent-1)', fontWeight: 600 }}
-            />
+            {/* Account status — tap target while unverified */}
+            {verified ? (
+              <InfoRow
+                label={t('account.status')}
+                value={t('account.statusVerified')}
+                valueStyle={{ color: 'var(--accent-1)', fontWeight: 600 }}
+                last={!me?.email}
+              />
+            ) : googleConfigured ? (
+              <GoogleVerifyButton
+                onSuccess={handleVerifySuccess}
+                onError={handleVerifyError}
+                onNonOAuthError={handleVerifyNonOAuthError}
+                disabled={verifyLoading}
+                loading={verifyLoading}
+                renderTrigger={({ onClick, loading: busy, disabled }) => (
+                  <button
+                    type="button"
+                    onClick={onClick}
+                    disabled={disabled}
+                    aria-busy={busy}
+                    className={styles.actionRow}
+                  >
+                    <span className={styles.actionRowLabel}>{t('account.status')}</span>
+                    <span className={styles.actionRowValue}>
+                      {busy ? t('account.verifying') : t('account.statusGuest')}
+                    </span>
+                    <span className={styles.actionRowChevron} aria-hidden="true">›</span>
+                  </button>
+                )}
+              />
+            ) : (
+              <InfoRow
+                label={t('account.status')}
+                value={t('account.statusGuest')}
+                valueStyle={{ color: 'var(--accent-3)', fontWeight: 600 }}
+                last
+              />
+            )}
 
-            {/* Login method (providers) */}
-            <InfoRow
-              label={t('account.loginMethod')}
-              value={formatProviders(me?.providers)}
-            />
-
-            {/* Email */}
-            <InfoRow
-              label={t('account.email')}
-              value={
-                me?.email
-                  ? me.email_verified_at
-                    ? t('account.emailVerified', { email: me.email })
-                    : t('account.emailUnverified', { email: me.email })
-                  : '—'
-              }
-              valueStyle={
-                me?.email && me?.email_verified_at
-                  ? { color: 'var(--accent-1)', fontWeight: 500 }
-                  : me?.email
-                  ? { color: 'var(--accent-3)', fontWeight: 500 }
-                  : {}
-              }
-              last
-            />
+            {/* Email — only once verified */}
+            {verified && me?.email && (
+              <InfoRow
+                label={t('account.email')}
+                value={t('account.emailVerified', { email: me.email })}
+                valueStyle={{ color: 'var(--accent-1)', fontWeight: 500 }}
+                last
+              />
+            )}
           </div>
+
+          {!verified && !googleConfigured && (
+            <div role="status" style={{ ...HINT_STYLE, marginTop: 10 }}>
+              {t('account.googleUnavailable')}
+            </div>
+          )}
+
+          {verifyError && (
+            <div style={{
+              padding: '10px 14px',
+              marginTop: 12,
+              background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+              border: '1px solid var(--color-destructive)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 13,
+              color: 'var(--color-destructive)',
+              fontWeight: 500,
+            }}>
+              {t(verifyError.key, verifyError.params)}
+            </div>
+          )}
         </section>
 
         {/* ID (handle) edit section */}
@@ -377,8 +417,7 @@ export default function AccountScreen({ onLogout }) {
             {me?.has_password && (
               <label>
                 <span style={LABEL_STYLE}>{t('account.currentPassword')}</span>
-                <input
-                  type="password"
+                <PasswordInput
                   value={currentPassword}
                   onChange={(e) => {
                     setCurrentPassword(e.target.value)
@@ -398,9 +437,8 @@ export default function AccountScreen({ onLogout }) {
 
             <label>
               <span style={LABEL_STYLE}>{t('account.newPassword')}</span>
-              <input
-                type="password"
-                value={newPassword}
+              <PasswordInput
+                  value={newPassword}
                 onChange={(e) => {
                   setNewPassword(e.target.value)
                   setPasswordError(null)
@@ -413,9 +451,8 @@ export default function AccountScreen({ onLogout }) {
 
             <label>
               <span style={LABEL_STYLE}>{t('account.confirmPassword')}</span>
-              <input
-                type="password"
-                value={confirmPassword}
+              <PasswordInput
+                  value={confirmPassword}
                 onChange={(e) => {
                   setConfirmPassword(e.target.value)
                   setPasswordError(null)
@@ -455,56 +492,6 @@ export default function AccountScreen({ onLogout }) {
             </button>
           </form>
         </section>
-
-        {/* Email verify section */}
-        {!me?.email_verified_at && (
-          <section style={{ marginBottom: 32 }}>
-            <p style={{
-              fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
-              color: 'var(--color-text-muted)', textTransform: 'uppercase',
-              margin: '0 0 16px',
-            }}>
-              {t('account.emailVerifySection')}
-            </p>
-
-            {verifyError && (
-              <div style={{
-                padding: '10px 14px',
-                background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
-                border: '1px solid var(--color-destructive)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 13,
-                color: 'var(--color-destructive)',
-                fontWeight: 500,
-                marginBottom: 12,
-              }}>
-                {t(verifyError.key, verifyError.params)}
-              </div>
-            )}
-
-            {googleConfigured ? (
-              <GoogleVerifyButton
-                onSuccess={handleVerifySuccess}
-                onError={handleVerifyError}
-                onNonOAuthError={handleVerifyNonOAuthError}
-                disabled={verifyLoading}
-                loading={verifyLoading}
-                label={t('account.verifyWithGoogle')}
-              />
-            ) : (
-              <div role="status" style={{
-                padding: '12px 16px',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: 13,
-                color: 'var(--color-text-dim)',
-              }}>
-                {t('account.googleUnavailable')}
-              </div>
-            )}
-          </section>
-        )}
 
         {/* Discovery opt-in section — only rendered for users with a personality profile */}
         {personality && (
@@ -596,10 +583,4 @@ function InfoRow({ label, value, valueStyle, last }) {
       </span>
     </div>
   )
-}
-
-function formatProviders(providers) {
-  if (!providers || providers.length === 0) return '—'
-  const MAP = { google: 'Google', kakao: 'Kakao', naver: 'Naver' }
-  return providers.map(p => MAP[p] || p).join(', ')
 }
