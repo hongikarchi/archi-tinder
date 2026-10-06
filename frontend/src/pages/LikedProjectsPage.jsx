@@ -67,9 +67,8 @@ export default function LikedProjectsPage({ onLogout }) {
       background: 'var(--color-bg)',
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
-      <PageBackButton onClick={() => navigate(-1)} />
       <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
 
       {/* Content area */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '18px 20px 24px' }}>

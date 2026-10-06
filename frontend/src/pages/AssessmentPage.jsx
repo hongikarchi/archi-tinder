@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSpring, animated } from '@react-spring/web'
 import { physics } from '../lib/tinderCard.js'
-import { CARD_WIDTH } from '../components/cardShell.js'
+import { useCardSize } from '../hooks/useCardSize.js'
 import { QUESTIONS } from '../constants/assessmentQuestions.js'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import { useTranslation } from '../i18n/index.js'
@@ -41,6 +41,7 @@ const EXIT_DIRECTION = 'left'
 export default function AssessmentPage({ onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { width: CARD_WIDTH } = useCardSize()
 
   // Read once, on mount. Refresh / browser-back / typing the URL all remount
   // this component, so without this the run restarted at question 1 every time.
@@ -183,8 +184,7 @@ export default function AssessmentPage({ onLogout }) {
   if (showResult && result) {
     return (
       <div className={styles.page}>
-        <PageTopControls onLogout={onLogout} />
-        <PageBackButton onClick={() => navigate('/user/me')} label={t('assessmentPage.goToProfile')} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate('/user/me')} label={t('assessmentPage.goToProfile')} />} />
         <PageLogoHeader padding="0 0 6px" marginBottom={8} />
 
         <div className={styles.resultBody}>
@@ -225,8 +225,7 @@ export default function AssessmentPage({ onLogout }) {
   // Assessment screen
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} />
-      <PageBackButton onClick={() => navigate(-1)} label={t('assessmentPage.goBack')} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('assessmentPage.goBack')} />} />
 
       {/* Header — Arch|ibe logo + "Tuning taste"-style progress row, matching
           SwipePage's top region (PageLogoHeader -> info row -> 4px track). */}

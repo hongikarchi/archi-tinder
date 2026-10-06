@@ -132,7 +132,7 @@ export default function PeopleDiscoveryPage({ onLogout }) {
 
   return (
     <div className={styles.page}>
-      <PageTopControls onLogout={onLogout} splitMobile />
+      <PageTopControls onLogout={onLogout} />
 
       {/* Header — tab root, no back button (see DiscoveryPage convention) */}
       <header className={styles.header}>

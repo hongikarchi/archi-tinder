@@ -1,4 +1,4 @@
-import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 
 // FRONT-UX-14-SIMPLIFY — SwipeDeck is now a pure decoration shell: two static
 // dummy cards (never animate, never receive image data) plus a children slot.
@@ -7,6 +7,7 @@ import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
 // children slot, in an identical keyed wrapper to the top card, so React
 // reuses the DOM node when the card is promoted (no remount = no flicker).
 export default function SwipeDeck({ children, active = false }) {
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
   return (
     <div style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}>
       {active && (

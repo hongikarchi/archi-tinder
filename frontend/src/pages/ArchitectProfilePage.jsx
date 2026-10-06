@@ -119,8 +119,7 @@ export default function ArchitectProfilePage({ onLogout }) {
       background: 'var(--color-bg)',
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
-      <PageBackButton onClick={() => navigate(-1)} label={t('architect.back')} />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('architect.back')} />} />
 
       {/* Share — stacked under the back button (kept per existing working
        * control; the mock drops the sticky header with no relocation shown).

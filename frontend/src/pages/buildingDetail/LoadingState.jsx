@@ -1,8 +1,7 @@
-import Header from './Header.jsx'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 import Skeleton from '../../components/Skeleton.jsx'
 
-export default function LoadingState({ onBack }) {
+export default function LoadingState() {
   return (
     <div style={{
       height: 'var(--page-height)',
@@ -11,7 +10,6 @@ export default function LoadingState({ onBack }) {
       color: 'var(--color-text)',
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
-      <Header onBack={onBack} />
       <PageLogoHeader />
       <Skeleton width="100%" height="50vh" radius="0" />
       <div style={{ padding: '22px 20px' }}>

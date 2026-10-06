@@ -264,9 +264,8 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
       background: 'var(--color-bg)',
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
-      <PageBackButton onClick={() => navigate('/')} />
       <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate('/')} />} />
 
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
       {/* FRONT-RESULTS-SAVE-1 — the run's closing action.

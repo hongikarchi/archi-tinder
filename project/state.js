@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-03 19:05 KST',
-    head: '5f7026e',
-    branch: 'feature/claude-persona-image-auto',
+    updatedAt: '2026-10-06 15:48 KST',
+    head: '4c5950c',
+    branch: 'feature/claude-mobile-fix-1',
   },
   done: [
+    {
+      id: 'MOBILE-FIX-1',
+      title: '모바일 스와이프 카드·상단 컨트롤 정비',
+      completedAt: '2026-10-06',
+      note: '스와이프 카드 모바일 7건: 갤러리 버튼 터치 무반응(tinderCard touchstart preventDefault → closest(\'.pressable\')), 캐시 이미지 opacity 0 고착 + 4s 타이머 stale closure 수정, 상세 정보 하단 정렬, 드래그 기울기 위치 기반(속도 튐 제거), 하단 힌트 문구 삭제, 프로필 공유 버튼 + ShareCardModal 삭제.',
+    },
     {
       id: 'FULL-REPORT-IMG-1',
       title: '+ PERF-MEASURE-2 — 취향 이미지 자동 생성 + 배포 후 prod 측정',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '취향 막대가 반대·근거 없음이 중립으로 보임',
       completedAt: '2026-09-27',
       note: '오각형 삭제(`8cff892`). 양극 막대 5개 전부 좌우 반전 버그 수정 + 단어 변경(`ee6d5f4`: 비정형↔정형, 자연↔인공 재료, 공간감 아늑한↔압도적인, 분위기 차분한↔역동적인, 전통적↔실험적). 근거 없는 축 = null → 흐린 막대 + "아직 판단할 근거가 없어요"(`ce4968e`).',
-    },
-    {
-      id: 'BACK-RECOMMEND-7',
-      title: '결과 My Likes에 Discovery 좋아요 누락',
-      completedAt: '2026-09-27',
-      note: '결과 API `liked_images`가 이번 세션 스와이프만 조회 → Discovery→Taste 전환 시 Discovery 좋아요 누락(리포트와 불일치). `session.project.liked_ids`(보드 좋아요 목록)에서 조회, 순서 유지·중복 제거. 실데이터: 4개 → 20개 표시.',
     },
   ],
   now: [],
@@ -134,6 +134,11 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FRONT-IMG-TELEMETRY-1',
+        title: '카드 이미지 실패 원인 호스트별 집계',
+        note: '`/api/v1/telemetry/image-load/` 실패 이벤트(100% 수집)를 호스트별(archdaily/dezeen/divisare/imgix…)로 묶어 실패율·지연 확인 → 외부 핫링크 차단 비중 판단, 필요 시 R2 미러링 검토. MOBILE-FIX-1 Deferred.',
+      },
       {
         id: 'FULL-MESSAGING-2',
         title: '새로고침하면 차단 해제를 못 함',
@@ -315,6 +320,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 346,
+      title: 'feat(FULL-REPORT-IMG-1): 취향 이미지 자동 생성 + 배포 후 prod 측정 기록',
+      mergedAt: '2026-10-03T10:11:49Z',
+      mergedAtKST: '2026-10-03 19:11 KST',
+      sha: '4c5950c',
+    },
+    {
       number: 344,
       title: 'perf(PERF-ROUND2/3): 검색 스트리밍·카드 선표시, 커넥션 풀, Django 5.2, 취향분석 pool 버그 수정',
       mergedAt: '2026-10-03T01:23:07Z',
@@ -362,13 +374,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-26T00:57:29Z',
       mergedAtKST: '2026-09-26 09:57 KST',
       sha: '811c2e9',
-    },
-    {
-      number: 333,
-      title: 'feat(competition): 공모전 팀빌딩 화면 프로토타입 — 목 데이터, 백엔드 없음',
-      mergedAt: '2026-09-26T01:02:47Z',
-      mergedAtKST: '2026-09-26 10:02 KST',
-      sha: 'a277440',
     },
   ],
   agents: [
@@ -520,6 +525,10 @@ window.PROJECT_STATE = {
     },
     {
       path: '.claude/plans/like-vectors-id-round-refactor.md',
+      role: '',
+    },
+    {
+      path: '.claude/plans/mobile-fixes-1.md',
       role: '',
     },
     {
@@ -2351,10 +2360,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/ShareCardModal.jsx',
-      role: '프로필 명함 공유 모달',
-    },
-    {
       path: 'frontend/src/components/Skeleton.jsx',
       role: '',
     },
@@ -2565,6 +2570,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useBoard.js',
       role: '보드 상세 로딩 훅',
+    },
+    {
+      path: 'frontend/src/hooks/useCardSize.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useGoogleEmailVerify.js',

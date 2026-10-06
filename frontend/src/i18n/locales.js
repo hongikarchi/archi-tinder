@@ -36,7 +36,6 @@ export const locales = {
       retry: '다시 시도',
       emptyTitle: '아직 보여드릴 항목이 없어요',
       startAnalysis: 'Taste 분석 시작',
-      swipeHintBar: '← 패스 · 카드 탭 · 좋아요 →  ·  방향키 지원',
       triggerCard: {
         title: '취향이 10장 모였어요',
         bodyLine1: '지금까지 좋아요한 건축들로',
@@ -388,7 +387,6 @@ export const locales = {
     },
     profile: {
       notifications:   '알림',
-      shareCard:       '프로필 카드 공유',
       settings:        '설정',
       loginRequired:   '로그인이 필요해요.',
       loadError:       '데이터를 불러오지 못했어요.',
@@ -903,7 +901,6 @@ export const locales = {
       retry: 'Retry',
       emptyTitle: 'Nothing to show yet',
       startAnalysis: 'Start Taste Analysis',
-      swipeHintBar: '← skip · tap card · save →  ·  arrow keys supported',
       triggerCard: {
         title: 'You\'ve liked 10 buildings',
         bodyLine1: 'Based on what you\'ve liked so far,',
@@ -1272,7 +1269,6 @@ export const locales = {
     },
     profile: {
       notifications:   'Notifications',
-      shareCard:       'Share profile card',
       settings:        'Settings',
       loginRequired:   'Login required.',
       loadError:       'Could not load data.',

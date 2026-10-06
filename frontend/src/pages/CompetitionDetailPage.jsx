@@ -52,8 +52,7 @@ export default function CompetitionDetailPage({ onLogout }) {
 
   const chrome = (
     <>
-      <PageBackButton onClick={() => navigate('/competitions')} />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate('/competitions')} />} />
       <PageLogoHeader />
     </>
   )

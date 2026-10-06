@@ -552,9 +552,8 @@ export default function UploadWorkPage({ onLogout }) {
 
   return (
     <div className={s.page}>
-      <PageBackButton onClick={() => navigate(-1)} label={t('uploadWork.header.backAria')} />
       <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('uploadWork.header.backAria')} />} />
 
       {/* ── Success modal overlay ──────────────────────────────────────── */}
       {uploadState === 'processing' && (

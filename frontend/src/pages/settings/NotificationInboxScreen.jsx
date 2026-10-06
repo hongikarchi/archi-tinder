@@ -126,9 +126,8 @@ export default function NotificationInboxScreen({ onLogout }) {
     <PageShell
       width="narrow"
       chrome={<>
-        <PageBackButton onClick={() => navigate(-1)} />
         <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} />
+        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
       </>}
       contentStyle={{ padding: '8px 12px 24px' }}
     >
