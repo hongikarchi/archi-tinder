@@ -12,14 +12,16 @@ from django.core.cache import cache
 from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
+from rest_framework import status as http_status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .audit import log_admin_action
 from .flags import get_flags
 from .github import fetch_github_state
-from .models import AdminAuditLog
+from .models import AdminAuditLog, ProviderNote
 from .permissions import IsAdminOperator
+from .providers import PROVIDER_SLUGS, fetch_all_services
 from .throttling import AdminThrottle
 
 logger = logging.getLogger('apps.admin_dashboard')
@@ -29,6 +31,11 @@ _GITHUB_TTL = 15 * 60
 _GITHUB_ERROR_TTL = 60  # failures are retried soon; don't pin nulls for 15 min
 _STATS_CACHE_KEY = 'admin_dash:stats'
 _STATS_TTL = 60
+
+_SERVICES_CACHE_KEY = 'admin:services:v1'
+_SERVICES_TTL = 10 * 60
+_SERVICES_ERROR_TTL = 60  # degraded fetch is retried soon; don't pin failures for 10 min
+_NOTE_MAX_LEN = 200
 
 _DEFAULT_PAGE_SIZE = 50
 _MAX_PAGE_SIZE = 100
@@ -187,3 +194,50 @@ class AuditLogView(AdminDashboardView):
             ],
             'count': count,
         })
+
+
+class ServicesView(AdminDashboardView):
+    """GET services/ -- external provider status / account / usage (ADMIN-DASH-2a).
+
+    The external part is cached 10 min; ``?refresh=1`` bypasses and re-sets it. Admin
+    notes are merged AFTER the cache read so an edit shows on the very next GET.
+    """
+
+    def get(self, request):
+        payload = None if request.query_params.get('refresh') == '1' else cache.get(_SERVICES_CACHE_KEY)
+        if payload is None:
+            services, degraded = fetch_all_services()
+            payload = {'services': services, 'fetched_at': timezone.now().isoformat()}
+            cache.set(_SERVICES_CACHE_KEY, payload, _SERVICES_ERROR_TTL if degraded else _SERVICES_TTL)
+
+        notes = dict(ProviderNote.objects.values_list('provider', 'login_note'))
+        services = [
+            {**svc, 'account': {'auto': svc['account']['auto'], 'note': notes.get(svc['slug'], '')}}
+            for svc in payload['services']
+        ]
+        return Response({'services': services, 'fetched_at': payload['fetched_at']})
+
+
+class ProviderNoteView(AdminDashboardView):
+    """PATCH services/<slug>/note/ -- edit the admin memo for one provider (audit-logged)."""
+
+    def patch(self, request, slug):
+        if slug not in PROVIDER_SLUGS:
+            return Response({'detail': 'Unknown provider.'}, status=http_status.HTTP_404_NOT_FOUND)
+
+        raw = request.data.get('login_note') if hasattr(request.data, 'get') else None
+        if not isinstance(raw, str):
+            return Response({'login_note': ['This field is required and must be a string.']},
+                            status=http_status.HTTP_400_BAD_REQUEST)
+        note = raw.strip()
+        if len(note) > _NOTE_MAX_LEN:
+            return Response({'login_note': [f'Ensure this field has no more than {_NOTE_MAX_LEN} characters.']},
+                            status=http_status.HTTP_400_BAD_REQUEST)
+
+        existing = ProviderNote.objects.filter(provider=slug).first()
+        old = existing.login_note if existing else ''
+        obj, _created = ProviderNote.objects.update_or_create(
+            provider=slug, defaults={'login_note': note, 'updated_by': request.user},
+        )
+        log_admin_action(request, 'provider_note.update', 'provider', slug, {'old': old, 'new': note})
+        return Response({'slug': slug, 'login_note': obj.login_note, 'updated_at': obj.updated_at.isoformat()})

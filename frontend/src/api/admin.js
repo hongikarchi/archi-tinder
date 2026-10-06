@@ -1,6 +1,6 @@
 /**
  * api/admin.js
- * ADMIN-DASH-1 — operator dashboard API. All endpoints are GET-only and gated
+ * ADMIN-DASH-1 — operator dashboard API (GET) + ADMIN-DASH-2a provider note (PATCH). Gated
  * server-side by IsAdminOperator (401 anon / 403 non-admin). The frontend
  * `is_admin` redirect is UX only; the backend is the real gate.
  */
@@ -36,4 +36,24 @@ export async function getAdminStats() {
 export async function getAdminAuditLog({ page = 1, pageSize = 50 } = {}) {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
   return callApi('GET', `${BASE_PATH}/audit-log/?${params.toString()}`)
+}
+
+/**
+ * ADMIN-DASH-2a — external service status / usage / login memo.
+ * Server caches the external part (10 min); `refresh` appends ?refresh=1 to bust it.
+ * @param {{ refresh?: boolean }} opts
+ * @returns {Promise<{services: object[], fetched_at: string}>}
+ */
+export async function getAdminServices({ refresh = false } = {}) {
+  return callApi('GET', `${BASE_PATH}/services/${refresh ? '?refresh=1' : ''}`)
+}
+
+/**
+ * Update the operator's free-text login memo for one provider (max 200 chars).
+ * @param {string} slug
+ * @param {string} loginNote
+ * @returns {Promise<{slug: string, login_note: string, updated_at: string}>}
+ */
+export async function updateProviderNote(slug, loginNote) {
+  return callApi('PATCH', `${BASE_PATH}/services/${encodeURIComponent(slug)}/note/`, { login_note: loginNote })
 }
