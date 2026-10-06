@@ -1,7 +1,7 @@
 /**
  * EditCardForm.jsx
  * Profile-edit form.
- * Edits our writable fields: display_name, onboarding_role (dropdown, replaces
+ * Edits our writable fields: onboarding_role (dropdown, replaces
  * the old free-text role input — SETTINGS-POLISH-1 §A), affiliation, bio,
  * external_links. Legacy free-text `role` is preserved (not editable here) —
  * see the commit() SAVE RULE below for the exact clear/preserve semantics.
@@ -12,8 +12,8 @@
  * and reduce to { instagram, email, website } on output.
  *
  * Props:
- *   user     — UserProfile object (display_name, role, onboarding_role, affiliation, bio, external_links)
- *   onChange — called with { display_name, [onboarding_role, role], affiliation, bio, external_links } on
+ *   user     — UserProfile object (role, onboarding_role, affiliation, bio, external_links)
+ *   onChange — called with { [onboarding_role, role], affiliation, bio, external_links } on
  *              every change. onboarding_role/role are only present together (a
  *              selection clears legacy role) — see commit() for details.
  */
@@ -78,7 +78,6 @@ export default function EditCardForm({ user, onChange }) {
   const { t } = useTranslation()
 
   const [draft, setDraft] = useState(() => ({
-    display_name: user?.display_name || '',
     // Legacy free-text role — kept in state for the hint + preservation rule
     // (SETTINGS-POLISH-1 §A.4). Never rendered as an editable input anymore.
     role: user?.role || '',
@@ -106,7 +105,6 @@ export default function EditCardForm({ user, onChange }) {
       ? { onboarding_role: next.onboarding_role, role: '' }
       : {}
     onChange?.({
-      display_name: next.display_name,
       ...rolePatch,
       affiliation: next.affiliation,
       bio: next.bio,
@@ -151,23 +149,6 @@ export default function EditCardForm({ user, onChange }) {
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-
-      {/* Display name */}
-      <div>
-        <label htmlFor="edit-display-name" style={labelStyle}>{t('profileEdit.displayNameLabel')}</label>
-        <input
-          id="edit-display-name"
-          type="text"
-          value={draft.display_name}
-          onChange={setText('display_name')}
-          maxLength={30}
-          placeholder="Your display name"
-          className={styles.field}
-        />
-        <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4, textAlign: 'right' }}>
-          {draft.display_name.length}/30
-        </div>
-      </div>
 
       {/* Role — dropdown bound to onboarding_role (SETTINGS-POLISH-1 §A.4) */}
       <div>

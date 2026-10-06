@@ -8,8 +8,8 @@ import styles from './PageTopControls.module.css'
 
 /**
  * PageTopControls — shared top controls on two fixed rails (decision
- * 2026-10-03): LEFT rail = [`leading` controls (back / exit / bell+settings),
- * theme pill]; RIGHT rail = [language pill, optional logout]. Both rails sit
+ * 2026-10-03): LEFT rail = [`leading` controls (back / exit), theme pill,
+ * optional `trailing` control (own-profile settings button)]; RIGHT rail = [language pill, optional logout]. Both rails sit
  * at top 16, 8px gap, 28px circles vertically centered. Pages with a top-left
  * control pass it via `leading` (render PageBackButton with `inline`) so the
  * theme pill lands immediately to its right and nothing overlaps. Pages with
@@ -44,7 +44,7 @@ import styles from './PageTopControls.module.css'
  * LoginPage passes no `onLogout` (unauthenticated page) -> no logout button,
  * even though the mock's markup includes one (meaningless pre-login).
  */
-export default function PageTopControls({ onLogout, leading = null }) {
+export default function PageTopControls({ onLogout, leading = null, trailing = null }) {
   const { theme, setTheme } = useTheme()
   const { language, setLanguage } = useLanguage()
   const { t } = useTranslation()
@@ -101,6 +101,7 @@ export default function PageTopControls({ onLogout, leading = null }) {
         highlightStyle={{ background: 'var(--color-bg)', boxShadow: '0 1px 3px rgba(0,0,0,0.14)' }}
         renderOption={(opt) => opt.icon}
       />
+        {trailing}
       </div>
       <div
         onPointerDown={stop}

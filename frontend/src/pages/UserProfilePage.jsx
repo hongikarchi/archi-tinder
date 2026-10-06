@@ -19,6 +19,7 @@ import Tabs from '../components/Tabs.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import PhotoTile from '../components/PhotoTile.jsx'
 import SectionTitle from '../components/SectionTitle.jsx'
+import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import Skeleton from '../components/Skeleton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { useMessagingEnabled } from '../hooks/useMessagingFeature.js'
@@ -492,11 +493,36 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       paddingBottom: 'var(--tabbar-clearance)'
     }}>
       {/* Top rail: theme pill left, 한/EN + logout right (same as other tab pages).
-          isMe passes no `leading`; bell + settings live in the ProfileHero.
-          !isMe: single back circle. */}
+          isMe: settings circle (with unread-notification badge) AFTER the theme
+          pill via `trailing`. !isMe: single back circle in `leading`. */}
       <PageTopControls
         onLogout={onLogout}
         leading={isMe ? undefined : <PageBackButton inline onClick={() => navigate(-1)} />}
+        trailing={isMe ? (
+          <FloatingIconButton
+            onClick={() => navigate('/settings')}
+            ariaLabel={t('profile.settings')}
+            title={t('profile.settings')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
+            </svg>
+            {unreadCount > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute', top: -3, right: -3,
+                  minWidth: 15, height: 15, padding: '0 4px',
+                  borderRadius: 999, background: 'var(--accent-1)', color: '#fff',
+                  fontSize: 9, fontWeight: 700, lineHeight: '15px', textAlign: 'center',
+                }}
+              >
+                {unreadBadgeLabel}
+              </span>
+            )}
+          </FloatingIconButton>
+        ) : undefined}
       />
 
       <PageLogoHeader padding="20px 16px 0" />
@@ -530,10 +556,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             else setActiveTab('boards')
           }}
           isMe={isMe}
-          unreadCount={unreadCount}
-          unreadBadgeLabel={unreadBadgeLabel}
-          onOpenNotifications={() => navigate('/notifications')}
-          onOpenSettings={() => navigate('/settings')}
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
 
@@ -729,32 +751,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
               {allSelected ? t('profileB3.deselectAll') : t('profileB3.selectAll')}
             </button>
           </div>
-        ) : (
-          // Normal boards section header
-          <div style={{ marginBottom: 20, padding: '0 4px' }}>
-            <SectionTitle
-              as="h3"
-              count={boardsTotalCount}
-              right={SHOW_BOARD_EDIT_BUTTON && isMe && boards.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectMode(true)}
-                  aria-label={t('profileB3.editBoards')}
-                  className={styles.editBtn}
-                >
-                  {/* Pencil icon */}
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                  </svg>
-                  {t('profileB3.editBoards')}
-                </button>
-              )}
-            >
-              {t('profileB3.curatedBoards')}
-            </SectionTitle>
-          </div>
-        )}
+        ) : null}
 
         <BoardGrid
           boards={boards}

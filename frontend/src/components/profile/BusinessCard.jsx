@@ -74,11 +74,12 @@ export default function BusinessCard({ user }) {
   const [flipped, setFlipped] = useState(false)
 
   // ─── Field derivations ───────────────────────────────────────────────────
-  const displayName     = user?.display_name || ''
+  const displayName     = user?.handle || user?.display_name || ''
   const roleLine        = user?.role || null
   const affiliationLine = user?.affiliation || null
   // handle: @handle if present, omit entirely if absent (do NOT show #user_id)
-  const handle = user?.handle ? `@${user.handle}` : null
+  // Unified ID: shown once as the name — no separate @handle row.
+  const handle = null
 
   // items from external_links — filter empty values
   const items = Object.entries(user?.external_links || {})

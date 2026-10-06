@@ -351,6 +351,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### MOBILE-FIX-2 — 모바일 후속: 탭바 글래스·라벨·접힘, 프로필·계정 정리 — RESOLVED 2026-10-06 (`4770a38`)
+- 탭바: 아이콘 아래 라벨(탐색/검색/소셜/프로필), 모든 테마 어두운 글래스(bg 0.35 + backdrop blur 12 saturate 160 brightness 0.55, 흰 아이콘), 스크롤/바깥 터치 시 아이콘만 48px로 접힘·탭하면 펼침; Discovery 카드 세로 가운데 복원.
+- 프로필: 알림 버튼 삭제, 설정 버튼 light/dark 오른쪽(`PageTopControls` `trailing`, 안 읽은 알림 배지 이동), "큐레이션 보드 N" 제목 삭제; 설정 맨 위 '알림함' 행 추가(유일한 받은함 진입점).
+- 이름→ID 통일: 프로필 편집 이름 칸 삭제, 프로필·사람 카드·명함에 ID 한 번만 표시, ID 규칙 문구/검증을 백엔드(한글·영문·숫자·_, 2-20)와 일치.
+- 로그인·가입·비밀번호 변경 입력에 비밀번호 보기 토글(`PasswordInput`); 계정 정보에서 미인증 '계정 상태' 행 탭 = Google 인증, 로그인 방식 행·별도 인증 섹션 삭제.
+
 ### ADMIN-DASH-2a — 관리자 페이지 외부 서비스 (상태·계정·비용) — RESOLVED 2026-10-06 (`f7165a0`)
 - `/admin` 외부 서비스 카드 8개(Railway·Vercel·Neon·Cloudflare R2·OpenAI·Gemini·HF·GitHub): 공식 status + 계정(HF whoami 자동 + 관리자 메모 `ProviderNote` 0002, 수정 시 작업 기록) + 대시보드 링크.
 - 숫자는 읽기전용 자격만: OpenAI 이번 달 비용(`OPENAI_ADMIN_KEY`), CF R2 bucket별 저장량·Class A/B 요청 + 무료구간 반영 추정비용(`CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID`). Railway·Neon·Vercel은 쓰기권한 토큰뿐 → 링크만(사용자 결정).
