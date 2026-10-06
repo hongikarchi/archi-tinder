@@ -7,8 +7,8 @@ export const locales = {
   ko: {
     tabbar: {
       nav:       '메인 내비게이션',
-      discovery: '디스커버리',
-      taste:     '취향',
+      discovery: '탐색',
+      taste:     '검색',
       social:    '소셜',
       profile:   '프로필',
       profileUnread: '프로필, 안 읽은 메시지 {n}건',
@@ -989,8 +989,8 @@ export const locales = {
   en: {
     tabbar: {
       nav:       'Main navigation',
-      discovery: 'Discovery',
-      taste:     'Taste',
+      discovery: 'Explore',
+      taste:     'Search',
       social:    'Social',
       profile:   'Profile',
       profileUnread: 'Profile, {n} unread messages',

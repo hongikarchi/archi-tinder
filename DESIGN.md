@@ -221,6 +221,15 @@ tabbar-height:            64    # floating glass capsule, icon + label (2026-10-
 > safe-area + 10px from the bottom, `blur(16px) saturate(180%)` over a clearly
 > translucent `--tabbar-glass-bg` (light themes 0.35, dark 0.38) with a hairline
 > border + inset top highlight. Content scrolls **behind** it — no reserved band.
+> 2026-10-06 (rev 2): capsule is **dark glass in every theme** — `--tabbar-glass-bg`
+> rgba(18,18,20,0.62), white icons/labels (`--tabbar-fg`, inactive
+> `--tabbar-fg-inactive` 0.65), active pill rgba(255,255,255,0.16) + filled icon +
+> semibold label. Labels 탐색 / 검색 / 소셜 / 프로필. **Two states**: expanded
+> (icon + label, 64px) after a tab tap / on load; **compact** (icon-only,
+> `--tabbar-height-compact` 48px, max-width 280) once the user scrolls >8px or
+> touches outside the bar (250ms grace after expand); tapping the compact bar
+> expands it. Transition = `--motion-slow`, interaction motion (ignores
+> reduced-motion). `--tabbar-clearance` stays based on the expanded height.
 > 2026-10-06: a small text label (`tabbar.*` i18n, ~11px) sits under each icon;
 > the sliding pill wraps icon + label. Glass made more see-through (was 0.55 /
 > 0.50, blur 24px) so content behind reads faintly.
