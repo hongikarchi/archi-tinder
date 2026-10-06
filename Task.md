@@ -57,7 +57,11 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — FULL-MESSAGING-1 완료 2026-10-02, ## Done 참조)_
+### ADMIN-DASH-1 — 관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계)
+- `/admin` in-app route, same Google login; server gate = is_staff + ADMIN_EMAILS + Google-verified.
+- Read-only surfaces: version, pending migrations, CI, flags (KO label + ON/OFF), DB stats, audit log.
+- Lock `/api/v1/inspect/*` + office_claims to new gate; drop dead `IMAGE_BASE_URL`; legacy R2 bucket delete (ops).
+- Later phases: cost/account (2) → moderation + suspend/delete + consent history (3) → live perf + product metrics (4).
 
 ## Next
 

@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'apps.notifications',
     'apps.works',
     'apps.messaging',
+    'apps.admin_dashboard',
 ]
 
 MIDDLEWARE = [
@@ -244,6 +245,9 @@ REST_FRAMEWORK = {
         'contact_request': '20/day',
         'message_send':    '30/min',
         'report':          '10/hour',
+        # ADMIN-DASH-1: admitted admin-dashboard calls (registry; effective value = class attr
+        # in apps/admin_dashboard/throttling.py).
+        'admin': '120/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',
@@ -536,6 +540,18 @@ PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 
 # Schema/migrations are applied regardless of this flag.
 MESSAGING_ENABLED = os.getenv('MESSAGING_ENABLED', 'false').lower() == 'true'
 
+# ADMIN-DASH-1: in-app admin dashboard allow-list. Comma-separated emails, stripped +
+# lowercased; empty/unset -> empty set -> IsAdminOperator denies everyone. Team members are
+# added via the Railway env var (no code change). One of several locks (is_staff + Google
+# SocialAccount + not guest are the others) -- see apps/admin_dashboard/permissions.py.
+ADMIN_EMAILS = frozenset(
+    e.strip().lower() for e in os.getenv('ADMIN_EMAILS', '').split(',') if e.strip()
+)
+# GitHub REST for the dashboard's deploy/CI panel. Repo is public -> token optional
+# (unauth = 60 req/h per egress IP; results are cached 15 min regardless).
+GITHUB_REPO  = os.getenv('GITHUB_REPO', 'hongikarchi/archi-tinder')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
+
 # -- External API keys -----------------------------------------------------
 GEMINI_API_KEY              = os.getenv('GEMINI_API_KEY', '')
 GEMINI_TEXT_MODEL           = os.getenv('GEMINI_TEXT_MODEL', 'gemini-3.1-flash-lite')
@@ -576,7 +592,6 @@ OPENAI_IMAGE_QUALITY = os.getenv('OPENAI_IMAGE_QUALITY', 'medium')  # low|medium
 if OPENAI_IMAGE_QUALITY not in _OPENAI_IMAGE_QUALITY_ALLOWED:
     OPENAI_IMAGE_QUALITY = 'medium'
 HF_TOKEN          = os.getenv('HF_TOKEN', '')
-IMAGE_BASE_URL    = os.getenv('IMAGE_BASE_URL', 'https://pub-5d2133d166fc4b65ad05295df352519f.r2.dev')
 GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 KAKAO_CLIENT_ID   = os.getenv('KAKAO_CLIENT_ID', '')

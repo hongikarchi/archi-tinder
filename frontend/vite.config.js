@@ -1,8 +1,13 @@
+/* global process */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // ADMIN-DASH-1: frontend commit SHA for the admin dashboard's deploy-drift check.
+  define: {
+    __COMMIT_SHA__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA || 'local'),
+  },
   build: {
     rollupOptions: {
       output: {

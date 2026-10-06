@@ -7,15 +7,18 @@ Tests cover:
 """
 import math
 import pytest
-from django.conf import settings
 
 from apps.recommendation.engine import _row_to_card  # noqa: F401 — used by skipped legacy class
 from apps.recommendation.models import SessionEvent
 
 
+# IMAGE_BASE_URL setting was removed (ADMIN-DASH-1); legacy skipped tests keep a placeholder base.
+_LEGACY_R2_BASE = 'https://legacy-r2.invalid'
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _base_row(canonical_bld_id='B00001', **overrides):
     """Build a minimal DB row dict for _row_to_card tests."""
@@ -60,7 +63,7 @@ class TestRowToCardDivisareFallback:
             cover_image_url_divisare=None,
             divisare_gallery_urls=[],
         )
-        base = settings.IMAGE_BASE_URL.rstrip('/')
+        base = _LEGACY_R2_BASE
         card = _row_to_card(row)
         assert card['image_url'] == f'{base}/B00001/photo1.jpg'
         assert f'{base}/B00001/photo2.jpg' in card['gallery']
@@ -87,7 +90,7 @@ class TestRowToCardDivisareFallback:
             cover_image_url_divisare='https://divisare.example.com/cover.jpg',
             divisare_gallery_urls=['https://divisare.example.com/g1.jpg', 'https://divisare.example.com/g2.jpg'],
         )
-        base = settings.IMAGE_BASE_URL.rstrip('/')
+        base = _LEGACY_R2_BASE
         card = _row_to_card(row)
         assert card['image_url'] == f'{base}/B00001/cover.jpg'
         assert 'https://divisare.example.com/g1.jpg' in card['gallery']
@@ -117,7 +120,7 @@ class TestRowToCardDivisareFallback:
             cover_image_url_divisare='https://divisare.example.com/cover.jpg',
             divisare_gallery_urls=['https://divisare.example.com/g1.jpg'],
         )
-        base = settings.IMAGE_BASE_URL.rstrip('/')
+        base = _LEGACY_R2_BASE
         card = _row_to_card(row)
         assert card['image_url'] == f'{base}/B00001/cover.jpg'
         gallery = card['gallery']
@@ -156,7 +159,7 @@ class TestRowToCardDivisareFallback:
             cover_image_url_divisare=None,
             divisare_gallery_urls=[],
         )
-        base = settings.IMAGE_BASE_URL.rstrip('/')
+        base = _LEGACY_R2_BASE
         card = _row_to_card(row)
         gallery = card['gallery']
         # Order: extra1 (photo zone), draw1 draw2 (drawing zone)
@@ -190,7 +193,7 @@ class TestRowToCardDivisareFallback:
             'image_drawings': [],
             # No 'cover_image_url_divisare', 'divisare_gallery_urls' keys
         }
-        base = settings.IMAGE_BASE_URL.rstrip('/')
+        base = _LEGACY_R2_BASE
         card = _row_to_card(row)
         assert card['image_url'] == f'{base}/B00002/old_photo.jpg'
         assert card['gallery'] == []
