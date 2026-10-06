@@ -7,7 +7,7 @@
 ## Spec / task ref
 
 <!-- Link to the relevant `Task.md` entry (or GitHub Issue once tracking moves),
-     and to a design record under docs/plans/ when one exists. N/A if none. -->
+     and to a design record under docs/decisions/ when one exists. N/A if none. -->
 
 - task: <!-- e.g. `Task.md` #### BACK-RECOMMEND-4 (from ## Now / ## Next) -->
 

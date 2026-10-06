@@ -1,6 +1,6 @@
 # Canvas Design Port — Claude Design → Frontend Code
 
-**Status:** approved by user 2026-08-29 — executing. PR-0 + PR-1 committed locally.
+**Status:** SHIPPED — all page groups landed as FRONT-DESIGN-C (PR #321, 2026-09-06). Archived 2026-10-07; §7 open items continue as Task.md `FRONT-DESIGN-C2`. Section numbers are frozen: frontend comments cite `§6d item N`.
 
 **Mode change (user, 2026-08-29):** the user could not run the dev server, and chose to **build all PRs first and review visually afterward**. Consequences, all deliberate:
 - **Every PR stays LOCAL** — branch + commit only. No push, no PR open, no merge, for any of them, until the user reviews and says which to ship. `develop` stays clean.

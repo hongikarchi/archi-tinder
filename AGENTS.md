@@ -21,7 +21,7 @@ truth for architecture and API surface — derive it by reading the code.
 | Visual design system (MUST before any UI work) | `DESIGN.md` |
 | Recommendation algorithm theory | `docs/algorithm.md` |
 | Building DB schema + Make-DB ownership rules | `docs/database-schema.md` |
-| Design decision records | `docs/plans/` |
+| Design decision records (ADR-style) | `docs/decisions/` |
 | Backlog + done log | `Task.md` (moving to GitHub Issues) |
 
 ## Product identity
@@ -123,7 +123,7 @@ industries outside architecture (interior, landscape, furniture).
 1. **Out-of-scope check first** — crossing a boundary → stop and ask.
 2. **Persona priority** — P2 (Person→Person) > P1 (Firm→Jobseeker) > P3
    (Firm→Client) > P4 (Individual/gateway). Reordered 2026-09-17 by user decision
-   (`docs/plans/2026-09-17-competition-team-design.md` §1).
+   (`docs/decisions/2026-09-17-competition-team-design.md` §1).
 3. **Foundation correctness > feature breadth.**
 4. **Honest matching > engagement metrics** — never trade taste quality for
    session length or swipe count.
@@ -146,7 +146,7 @@ tactical code → foundational correctness over polish.
 | Algorithm reference (design intent) | `docs/algorithm.md` | admin / algorithm collaborator via PR; sessions append dated notes |
 | Hyperparameter table (generated) | `docs/algorithm-hyperparameters.md` via `tools/gen-hyperparams.py` | never hand-edited |
 | Execution plans (branches, delegation, PR sequence) | `.claude/plans/*.md` (Claude), archived on ship per its README | the session |
-| Design decision records (what/why, Korean) | `docs/plans/*.md` | admin + session via PR |
+| Design decision records (what/why, Korean, `Status:` line) | `docs/decisions/*.md` | admin + session via PR |
 | Operator runbooks | `docs/runbooks/*.md` | admin via PR |
 | Research outputs | `docs/research/` | the session |
 | Project dashboard (generated) | `project/dashboard.html` + `project/state.js` via `tools/gen-state.js` | never hand-edited |

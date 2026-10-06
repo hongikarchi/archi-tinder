@@ -535,7 +535,7 @@ _check_async_prefetch_safety(
 # -- External API keys -----------------------------------------------------
 PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
 
-# Contact-request + in-app messaging feature flag (D12, docs/plans/2026-10-02-contact-messaging-design.md).
+# Contact-request + in-app messaging feature flag (D12, docs/decisions/2026-10-02-contact-messaging-design.md).
 # Default OFF: every messaging endpoint 404s. Flip via env (restart only, no redeploy).
 # Schema/migrations are applied regardless of this flag.
 MESSAGING_ENABLED = os.getenv('MESSAGING_ENABLED', 'false').lower() == 'true'

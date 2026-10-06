@@ -15,7 +15,7 @@ import styles from './PageTopControls.module.css'
  * theme pill lands immediately to its right and nothing overlaps. Pages with
  * no leading control get the theme pill alone at top-left.
  *
- * Design port (.claude/plans/canvas-design-port.md): 42 boards render this
+ * Design port (.claude/plans/archive/canvas-design-port.md): 42 boards render this
  * exact cluster (frontend/public/__mocks/discovery.html markup) — the user
  * confirmed language/theme switching belongs top-right on every page, not
  * only Settings → Appearance (which keeps working unchanged; this is an

@@ -2,7 +2,7 @@
  * CompetitionListPage.jsx — 공모전 목록 (PROTOTYPE)
  * Route: /competitions — Social 탭의 두 번째 세그먼트
  *
- * 설계: docs/plans/2026-09-17-competition-team-design.md §7-1
+ * 설계: docs/decisions/2026-09-17-competition-team-design.md §7-1
  *
  * 저빈도 문제를 푸는 화면이므로 **팀을 짤 생각이 없어도 볼 만해야** 한다.
  * 마감 임박순이 기본 정렬인 이유 — 긴급함이 목록의 성격을 만든다.

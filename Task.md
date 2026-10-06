@@ -63,10 +63,10 @@ _(비어 있음 — ADMIN-DASH-2a 완료 2026-10-06, ## Done 참조)_
 
 > Backlog grouped by priority bucket (`### X-HIGH` / `### HIGH` / `### MEDIUM` / `### LOW`). Each
 > item is a `#### <SLUG>` entry one level deeper. Bucket semantics described in
-> `## Workflow Rules` above. Phase 16-18 dimensions inlined here (formerly
-> `docs/specs/*`, absorbed 2026-05-24). Algorithm theory + production
-> hyperparameters still live in `docs/algorithm.md` (admin-owned, reporter syncs
-> Production Value column only).
+> `## Workflow Rules` above. Phase 16-18 dimensions inlined here (2026-05-24; design
+> decision records live in `docs/decisions/`). Algorithm design intent lives in
+> `docs/algorithm.md`; parameter values are generated into `docs/algorithm-hyperparameters.md`
+> from `settings.py` (`make hyperparams`).
 
 > **2026-06-04 backlog audit** (25 items verified vs `develop@2f9a9c2`): 0 resolved/dead; ~13 had
 > file:line drift from **FULL-REFACTOR-1 (#170-173)** moving view bodies → `services/*.py`, splitting
@@ -299,7 +299,7 @@ _(2026-07-17 플랜 `streamed-bubbling-lagoon`; **dev 버킷 완료**, prod 남�
 #### ARCHITECT-UNIFY-1 — firm-side Office→Architect 전면 통합 (deferred, firm-UX 착수 시)
 office-interest **모델 중복은 해소됨**: Phase 0(SavedOffice #188) + C(OfficeFollow, ARCHITECT-UNIFY-C)로 두 미배선 중복 삭제 → follow 모델 1개(ArchitectFollow). 남은 통합 = Office 서브시스템(table/claim/OfficeProjectLink/sync_offices/FirmProfilePage)을 arch_id로 흡수 = firm-side 전면 재설계.
 
-상태: **deferred → LOW (firm-UX 우선순위 미정, park).** Office 서브시스템은 계획 백로그(BACK-RECOMMEND-3 firm추천 / BACK-EXTERNAL-1 firm기사 / P1 firm-claim)의 **substrate라 park**(삭제 X). 전면 통합(FirmProfilePage→ArchitectProfilePage 흡수, claim/projects/recs/articles를 arch_id-overlay로)은 firm-UX 우선순위 정해질 때 별도 대형 작업. 옵션 A(재키잉)/B(전부삭제) 검토 후 탈락 — `docs/specs/architect-unification.md`(PROPOSAL).
+상태: **deferred → LOW (firm-UX 우선순위 미정, park).** Office 서브시스템은 계획 백로그(BACK-RECOMMEND-3 firm추천 / BACK-EXTERNAL-1 firm기사 / P1 firm-claim)의 **substrate라 park**(삭제 X). 전면 통합(FirmProfilePage→ArchitectProfilePage 흡수, claim/projects/recs/articles를 arch_id-overlay로)은 firm-UX 우선순위 정해질 때 별도 대형 작업. 옵션 A(재키잉)/B(전부삭제) 검토 후 탈락 — `docs/decisions/architect-unification.md`(PROPOSAL).
 
 #### BACK-AVATAR-3 — 기존 누적 orphan 아바타 일괄 청소 (sweep 명령)
 BACK-AVATAR-2(`5e1f934`)가 교체/삭제 시점 GC를 붙였으나 그 이전에 쌓인 orphan(R2/디스크)은 남음. management command(dry-run + `--confirm`, `purge_legacy_projects` 패턴) — R2 `list_objects`로 `avatars/` 나열 → 어떤 `UserProfile.avatar_url`도 참조 않는 키 삭제. 비차단·비긴급(현 prod 아바타 ≈0, 기능 갓 출시) → LOW.
@@ -388,7 +388,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - Deferred: `PERF-PROMOTE-2` (## Next MEDIUM).
 
 ### FULL-MESSAGING-1 — 관심 있어요 버튼이 아무 동작 안 함 — RESOLVED 2026-10-02 (`15116cf`)
-- 관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).
+- 관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/decisions/2026-10-02-contact-messaging-design.md` (D1–D13).
 - [x] 백엔드 `apps.messaging` (`dbb40b7`): ContactRequest/Conversation/Message/Block/Report, API 11뷰, OFF 시 전 엔드포인트 404, MeView `features.messaging`. 수락 시 인사말 + `connected` 시스템 메시지(요청자 안 읽음 1 / 수락자 0, D13). 무시 30일 쿨다운 비공개(D10), 수신 가드 진단+opt-in(D11), 알림 row 미생성(D9). 차단 → 대화 closed + 발견 피드 양방향 제외(플래그 무관). 스로틀 3종. 상호 요청 경합 정리 + connect 멱등. 테스트 61개.
 - [x] 프론트 (`be1010e`, `3695998`, `15116cf`): 다른 유저 프로필 관심 있어요(status 기반), 내 프로필 메시지 pill(≥44px, 콘텐츠 흐름) + 탭바 프로필 점, 메시지함/대화 바텀시트(열린 동안만 4s 폴링, closed 시 중지), 시스템 캡션 i18n, ⋯ 차단/해제·신고. `useUnreadMessages`는 mount/visibility/route만(NOTIF-INAPP-1 유지). `Modal` opt-in `portal`(UserProfilePage zIndex 1 스태킹 컨텍스트 탈출 — 모바일 탭바가 시트를 가리던 app-test FAIL 수정).
 - [x] app-test FEATURE-SCOPED: 1차 FAIL(모바일 탭바가 시트 보내기/입력창 가림) → 수정 후 PASS-WITH-MINORS (390/430/1280, 계정 2개, 차단·해제·로그아웃 잔존 확인). 로컬 `make test-local` 60/61 — 실패 1건은 플래그 기본값 테스트가 로컬 `.env`를 읽은 격리 문제로 수정(`476da72`), 수정 후 재실행 미확인.
@@ -452,7 +452,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - 검증: feature workflow review/security PASS(확정 결함 0); API 스모크 0 fail(연속 싫어요·연속 좋아요·수렴/ActionCard·재개·결과·리포트, `question-responses/` 404); BE 비DB 테스트 603 pass/0 fail(DB 테스트 831건은 로컬 DB 미연결 — CI 필요); FE 117 pass, eslint 0 error, build OK. app-test는 Playwright MCP 부재로 미실행.
 - 참고: 로컬 `dev-login` 500(`test_architinder` username 중복, 기존 데이터 문제 — 본 변경 무관).
 ### UI-CONSISTENCY-B — 디자인 통일성 정비: 규칙·토큰 → 공통 부품 → 페이지 교체 — RESOLVED 2026-09-29 (`cb4b025`, PR 대기)
-- 2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/ui-consistency-b.md`
+- 2026-09-26 전수 감사(radius 리터럴 ~160 vs 토큰 ~25, 폰트 23종, 원형 버튼 28~44 혼재, 사진 카드 7종, 탭 4종, 모달 공통 부품 부재, DESIGN.md 자체 결함) 후 유저 결정 순서대로 3단계 진행. 플랜 `.claude/plans/archive/ui-consistency-b.md`
 - 1단계 규칙·토큰: radius 역할(사진 20·UI 12·내부 8·시트 24·칩 pill), 5단 글자 12/14/16/20/24 + 굵기 400~700(800 금지), 모달 배경 `--color-scrim-modal` 0.4, 원형 버튼 28px/터치 44px. DESIGN.md의 `calc(var(--radius) * 1px)` 오류(모서리 0 렌더) 제거
 - 2단계 공통 부품: FloatingIconButton, PageTitle/SectionTitle, PageShell, Tabs, EmptyState, Skeleton(반짝임 제거), PhotoTile(4:5·캡션 오버레이), Modal(모바일 시트/데스크탑 중앙), SegmentedControl(선택 표시 슬라이딩 — 탭바·한/EN·라이트/다크·사람/공모전·프로필 탭). 하단 탭바 → 인스타 iOS식 떠 있는 유리 캡슐(아이콘만, 취향=돋보기, 선택=알약+채운 아이콘), `--page-height` 전체 화면 + `--tabbar-clearance`
 - 3단계 페이지: 보드 상세(풀블리드 히어로 제거 → 공통 틀 + 커버 카드, 정보 한 축 정렬, `SHOW_COVER`로 텍스트 헤더 전환 가능), architects(프로필 구조), 프로필·Studios(StudioCard 분리, 죽은 LikedOfficesPage 삭제), 공모전, 건물 상세·결과·리포트, 모달 전체
@@ -481,7 +481,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - `handleBoardSaved`에 `navigate('/user/me')` — CTA·재진입 배너 **모든 저장 경로가 프로필에서 끝남**
 - `SaveBoardModal`의 `나중에` 제거(출구를 저장으로 일원화)하되 **backdrop 클릭은 유지** — 오터치로 갇히면 안 되고, 돌아가도 리포트가 그대로 있어 잃는 게 없음
 - 신규 제작은 **버튼 하나**뿐. 모달·저장 API·`handleBoardSaved`는 기존 재사용, 버튼 스타일은 `PersonaReport` CTA 값 사용. i18n ko/en 2키 추가
-- 설계: `docs/plans/2026-09-17-results-save-cta-design.md`
+- 설계: `docs/decisions/2026-09-17-results-save-cta-design.md`
 - 미검증: 브라우저 실물(모달 미노출·CTA 동작·프로필 도착). PR에 수동 절차 기재
 
 ### FRONT-REPORT-OWNER-1 — 페르소나 리포트 재생성 버튼 소유자 제한 — RESOLVED 2026-09-10 (`f6e1118`, PR 리뷰 대기)
@@ -560,7 +560,7 @@ Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over
 - 버튼은 오각형 차트 + `{type_code} 유형` 문구 아래. 바로 위 형제 분기의 CTA와 같은 자리·같은 스타일(`--radius-pill`, `--color-surface`, `13px/600`, `minHeight:36`)이라 두 상태가 대칭. 새 스타일 값 미생성
 - 확인 모달 없음 — 제출 전에는 아무것도 안 바뀌므로(`update_or_create`가 제출 시점에만 실행) 중간 이탈해도 이전 결과가 남아 보호할 대상이 없고, 반복 데모에 마찰만 됨
 - 실증(로컬 API): 같은 유저 2회 제출로 `CLON[1,1,1,1,1]` → `RSDT[-1,-1,-1,-1,-1]` 교체(둘 다 200). `GET /users/1/`도 새 값 반환(캐시 무효화 동작). People 피드는 캐시가 없어 매 요청 DB 직조회 → 즉시 반영
-- 설계는 `docs/plans/2026-08-20-personality-discovery-design.md` §12에 기록(같은 주제 문서에 덧붙임). 이 파일은 그동안 untracked였어 이번에 추적 시작
+- 설계는 `docs/decisions/2026-08-20-personality-discovery-design.md` §12에 기록(같은 주제 문서에 덧붙임). 이 파일은 그동안 untracked였어 이번에 추적 시작
 - Deferred: PR #316(진단 이어하기) 머지 시 재진단이 중단된 draft를 되살려 "항상 1번부터" 결정과 충돌 → 진입 지점에서 draft 제거 필요
 - 미검증: 브라우저 실물 확인 못 함(버튼 렌더 + 네비게이션). PR에 수동 절차 기재
 
@@ -881,7 +881,7 @@ Plan `.claude/plans/settings-encapsulated-sedgewick.md` 4슬라이스 전부 머
 - 참고: 콜드 세션생성 6.0s는 풀 생성 쿼리 비용(인덱스 핸드오프 = PR-D 항목) — 본 PR 범위 밖.
 
 ### LOGIN-REWORK-1 — 로그인 페이지 컨셉 재작업 — RESOLVED 2026-07-06 (`a390f9f`-pre-squash)
-로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/login-page-concept-rework.md`.
+로그인 페이지 전면 재작업 — 스와이프-취향발견 컨셉 + 명함 UI에 충실, 사용자 포커싱. Frontend-only, 백엔드 무변경. Plan: `.claude/plans/archive/login-page-concept-rework.md`.
 - [x] (6) 실제 카드 덱: 다음 카드를 앞 카드 뒤에 프리렌더 (새로 렌더가 아니라 '뒤에서 대기하던 카드가 올라옴' 느낌) + step-history 스택 뒤로가기(pop). 기존 장식용 faux-depth 카드 대체.
 - [x] (2) IntroOverlay 모달 제거 → 첫 choice 카드에 통합, 카드 자체가 스와이프 튜토리얼(타이핑 질문 + 좌우 제스처 힌트).
 - [x] (3) ARCHIBE 워드마크 로고급 확대(24px/700/0.14em) via 로그인 전용 `loginWordmarkStyle` — 공유 `wordmarkStyle`은 원복해 CardSkeleton(Discovery/Swipe 로딩 스켈레톤) 무영향. 질문/라벨/finePrint 텍스트 MONO→기본 폰트(IBM Plex Sans KR) 전환 (DESIGN.md §2.5a single-font). MONO는 @id·JOINED 명함 메타 액센트로만 잔존.
@@ -1110,7 +1110,7 @@ Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔�
 - [x] 백엔드: `social/models.py` OfficeFollow + 시그널 2개 삭제, `social/views.py` OfficeFollowView, urls route, test_office_follow.py(파일), guest-merge FK_TABLES 항목, `OfficeDetailView.is_following`→False 상수. 신규 마이그 `social/0006_delete_officefollow`(로컬 적용 OK, 빈 테이블).
 - [x] 프론트: `api/social.js` followOffice/unfollowOffice + client.js 재export 삭제, FirmProfilePage/FirmProfileHero 팔로우 버튼 제거(FirmProfilePage는 parked view-only). build PASS, grep 0.
 - [x] KEEP(park): Office/OfficeProjectLink/claim/sync_offices/FirmProfilePage(view) — BACK-RECOMMEND-3/EXTERNAL-1/firm-claim substrate. ArchitectFollow/Follow 무손상.
-- 게이트: check PASS, makemigrations --check no-change, migrate --plan OK, flake8 clean, lint/build PASS, **code-review PASS**(6영역: guest-merge/dangling/is_following/signals/hero/migration 무결). app-test 스킵(swipe/recommendation 무관, FirmProfilePage 도달불가). A/B 탈락→C: `docs/specs/architect-unification.md` + deploy-gate 메모리 갱신.
+- 게이트: check PASS, makemigrations --check no-change, migrate --plan OK, flake8 clean, lint/build PASS, **code-review PASS**(6영역: guest-merge/dangling/is_following/signals/hero/migration 무결). app-test 스킵(swipe/recommendation 무관, FirmProfilePage 도달불가). A/B 탈락→C: `docs/decisions/architect-unification.md` + deploy-gate 메모리 갱신.
 - 후속: firm-side 전면 arch_id 통합 = `ARCHITECT-UNIFY-1`(deferred, firm-UX 착수 시).
 
 ### BACK-PROFILE-1 — external_links 검증 강화 (handle/email/website + mailto 주입 차단) — RESOLVED 2026-06-04 (`feature/claude-back-profile-1` → develop)
@@ -1126,7 +1126,7 @@ Discovery 우-스와이프 like(`UserProfile.liked_building_ids`)가 추천 엔�
 - [x] `profiles/models.py` SavedOffice 클래스 삭제(+미사용 settings import 정리), `views.py` OfficeSaveView+SavedOfficeListView+import 삭제, `urls.py` 2 path+import(re_path) 삭제.
 - [x] 신규 마이그 `0005_delete_savedoffice`(makemigrations 자동생성, DeleteModel만, deps 0004). 로컬 적용 OK(빈 테이블 안전 DROP).
 - [x] OfficeFollow/ArchitectFollow/Office/sync_offices 무손상. 게이트: `manage.py check` PASS, makemigrations --check "no changes", flake8 profiles clean. app-test SKIP(dead endpoint, UI 표면 0), code-review 스킵(순수 삭제 — check가 dangling-ref 검증).
-- 설계: `docs/specs/architect-unification.md`(PROPOSAL). Phase 1-4 = `ARCHITECT-UNIFY-1`(## Next), 조율-게이트.
+- 설계: `docs/decisions/architect-unification.md`(PROPOSAL). Phase 1-4 = `ARCHITECT-UNIFY-1`(## Next), 조율-게이트.
 - 후속: SavedOffice는 #180 의도적 기능이었으나 #182 ArchitectFollow에 밀린 중복 → 제거(예원 통지). deploy-gate: 0005 DROP은 #180/#182 prod 마이그 배치 합류(prod SavedOffice 비어있어 안전).
 
 ### UX-WRITE-FAIL — 쓰기 실패 무음 유실 표면화 (FRONT-UX-8 + FRONT-UX-7) — RESOLVED 2026-06-04 (`feature/claude-ux-write-fail` → develop)

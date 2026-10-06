@@ -9,7 +9,7 @@ For the full picture see:
 - `CONTRIBUTING.md` — branch model, PR workflow, role / file ownership
 - `docs/runbooks/` — local setup (Windows + macOS) and production deploy
 - `DESIGN.md` — visual design system (consult for any UI work)
-- `docs/algorithm.md` — recommendation algorithm theory; `docs/plans/` — design decision records
+- `docs/README.md` — map of every doc folder; `docs/algorithm.md` — algorithm design intent; `docs/decisions/` — design decision records
 - `Task.md` `## Next` — pending-feature backlog (items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`; tracking is moving to GitHub Issues)
 
 ---

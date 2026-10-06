@@ -1,6 +1,6 @@
 # 관심 있어요 → 연결 → 앱 내 메시지 설계
 
-**작성** 2026-10-02 · **상태** 설계 확정, 구현 미착수 · **선행** `2026-08-20-personality-discovery-design.md` §8 (컨택 플로우 B안), §9 (차단/신고 MVP 최소)
+**작성** 2026-10-02 · **상태** 구현 완료, 기능 플래그 `MESSAGING_ENABLED` OFF (FULL-MESSAGING-1, PR #343, 배포 #345 2026-10-03; 후속 FULL-MESSAGING-2) · **선행** `2026-08-20-personality-discovery-design.md` §8 (컨택 플로우 B안), §9 (차단/신고 MVP 최소)
 
 ---
 

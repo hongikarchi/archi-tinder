@@ -2,7 +2,7 @@
  * mockCompetitions.js — PROTOTYPE FIXTURE.
  *
  * 공모전 팀빌딩 기능을 "재미있는지" 판단하기 위한 화면 전용 가짜 데이터.
- * 설계: docs/plans/2026-09-17-competition-team-design.md
+ * 설계: docs/decisions/2026-09-17-competition-team-design.md
  *
  * 백엔드가 없다. Competition / CompetitionInterest / Team / TeamInvite 모델은
  * 아직 존재하지 않으며, 이 프로토타입은 의도적으로 그것들을 만들지 않는다 —

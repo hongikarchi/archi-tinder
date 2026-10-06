@@ -1,4 +1,4 @@
-# Canvas Design Port — 확인 가이드
+# Canvas Design Port — 확인 가이드 (ARCHIVED 2026-10-07 — 작업 완료 PR #321; `feature/claude-design-ALL` 브랜치는 존재하지 않음, 참고용)
 
 **갱신:** 2026-08-30 · 모든 작업 **로컬 커밋만** (push/PR/merge 없음, `develop` 깨끗)
 
