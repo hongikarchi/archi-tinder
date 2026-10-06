@@ -70,7 +70,7 @@ dashboard:
 # Local runtime user make_web_app has no DDL (INFRA-DB-1). Applies pending migrations
 # to your LOCAL dev branch as neondb_owner, keeping DB_HOST/NAME from backend/.env so
 # DDL hits LOCAL, never prod. Password is prompted (read -s), never written to disk.
-# Runtime .env untouched. See memory project_local_db_migrate + CLAUDE.md INFRA-DB-1/ENV-1.
+# Runtime .env untouched. Procedure: docs/runbooks/local-setup.md §4 (INFRA-DB-1/ENV-1).
 migrate-local:
 	@cd $(BACKEND_DIR); \
 	HOST=$$(grep -E '^DB_HOST=' .env | cut -d= -f2-); \
@@ -87,8 +87,8 @@ migrate-local:
 # -- Prod DB migrate (post-deploy step; DDL via neondb_owner) -------------------
 # Prod runtime user make_web_app has no DDL (INFRA-DB-1), so Railway can NOT
 # auto-migrate on deploy -- pending migrations are applied manually AFTER Railway
-# finishes deploying the new code (code-first ordering; see CONTRIBUTING.md
-# "Deploy runbook"). Credentials come from backend/.env.prod.owner (gitignored,
+# finishes deploying the new code (code-first ordering; add-only migrations may go
+# first -- see docs/runbooks/deploy.md §1/§3). Credentials come from backend/.env.prod.owner (gitignored,
 # chmod 600; DB_HOST = the PRODUCTION Neon endpoint, DB_USER = neondb_owner).
 # Runtime .env is untouched -- DB_* are injected inline for this command only
 # (settings.py load_dotenv override=False, so inline env wins). Pending
@@ -138,7 +138,7 @@ migrate-prod:
 # is untouched. This is a CI-shape run against real Postgres+pgvector -- the
 # conftest SQLite override is NOT load-bearing (see backend/conftest.py docstring).
 # Pass pytest args via ARGS, e.g.  make test-local ARGS="-x -k liked_buildings"
-# See memory project_local_db_migrate + CLAUDE.md INFRA-DB-1/ENV-1.
+# Procedure: docs/runbooks/local-setup.md §5 (INFRA-DB-1/DB-2).
 test-local:
 	@cd $(BACKEND_DIR); \
 	HOST=$$(grep -E '^DB_HOST=' .env | cut -d= -f2-); \

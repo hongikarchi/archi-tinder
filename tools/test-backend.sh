@@ -27,6 +27,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}/backend"
 
+# Interpreter: PYTHON env var wins; else the backend venv; else a REAL python3
+# (Windows ships a Store stub named python3 that runs nothing); else python.
+if [ -z "${PYTHON:-}" ]; then
+    if [ -x .venv/Scripts/python.exe ]; then PYTHON=.venv/Scripts/python
+    elif [ -x .venv/bin/python ]; then PYTHON=.venv/bin/python
+    elif [ "$(python3 -c 'print(42)' 2>/dev/null)" = "42" ]; then PYTHON=python3
+    else PYTHON=python; fi
+fi
+
 if [ "${1:-}" = "--ci-shape" ]; then
     shift
     echo "─── pytest --ci-shape (DB_HOST=nonexistent.invalid) ─────"
@@ -39,7 +48,7 @@ fi
 
 # Pass all args through to pytest. Default to -v if no args.
 if [ "$#" -eq 0 ]; then
-    python3 -m pytest -v 2>&1 | tail -25
+    "$PYTHON" -m pytest -v 2>&1 | tail -25
 else
-    python3 -m pytest "$@" -v 2>&1 | tail -25
+    "$PYTHON" -m pytest "$@" -v 2>&1 | tail -25
 fi

@@ -225,6 +225,8 @@
   "docs/MAKEWEB_DB_SWAP_RESPONSE.md": "DB 교체 대응 문서",
   "docs/algorithm.md": "추천 알고리즘 레퍼런스 문서",
   "docs/database-schema.md": "DB 스키마 문서",
+  "docs/runbooks/deploy.md": "운영 배포 런북 (develop→main, prod migrate, 환경변수)",
+  "docs/runbooks/local-setup.md": "로컬 개발 환경 설정 런북 (Windows + macOS)",
   "frontend/.env.example": "프론트 환경변수 예시 설정",
   "frontend/.gitignore": "프론트 Git 무시 설정",
   "frontend/eslint.config.js": "ESLint 설정",

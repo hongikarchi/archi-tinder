@@ -29,22 +29,17 @@ no `@TODO-role-*` placeholders remain, so onboarding just flags this. When a rea
 Role A/B collaborator joins, replace the relevant `@hongikarchi` entries with
 their handle on the first feature branch.
 
-Then set up your environment:
+Then set up your environment — **Windows and macOS are both supported; use the
+`make` targets, which pick the right Python per OS** (on Windows `python3` is a
+Store stub that runs nothing). Step-by-step, including Neon child-branch rules,
+`.env` fields and the local-migrate / local-test commands:
+[`docs/runbooks/local-setup.md`](docs/runbooks/local-setup.md).
 
 ```bash
-# Backend
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env             # then fill in DB / GEMINI / etc.
-python3 manage.py runserver 8001 # http://localhost:8001
-
-# Frontend (separate terminal)
-cd frontend
-npm ci
-cp .env.example .env             # if needed
-npm run dev                       # http://localhost:5174
+cp backend/.env.example backend/.env     # fill in DB / LLM keys from the admin
+cp frontend/.env.example frontend/.env
+make setup                               # deps + migrate + superuser + npm install
+make dev                                 # backend http://localhost:8001 + frontend http://localhost:5174
 ```
 
 ---
