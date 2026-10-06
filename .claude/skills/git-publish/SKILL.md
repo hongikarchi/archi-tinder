@@ -86,6 +86,8 @@ gh pr create \
 ## Summary
 <1-3 caveman bullets — what changed and why>
 
+Closes #<issue>   <!-- one line per issue this PR resolves; required since tracking moved to Issues (2026-10-07) -->
+
 ## Changes
 - <file>: <what>
 - <file>: <what>

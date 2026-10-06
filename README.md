@@ -10,7 +10,7 @@ For the full picture see:
 - `docs/runbooks/` — local setup (Windows + macOS) and production deploy
 - `DESIGN.md` — visual design system (consult for any UI work)
 - `docs/README.md` — map of every doc folder; `docs/algorithm.md` — algorithm design intent; `docs/decisions/` — design decision records
-- `Task.md` `## Next` — pending-feature backlog (items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`; tracking is moving to GitHub Issues)
+- GitHub Issues — the backlog (`gh issue list`); `Task.md` keeps the `<SURFACE>-<TOPIC>-<N>` ID + label conventions and the migration map
 
 ---
 

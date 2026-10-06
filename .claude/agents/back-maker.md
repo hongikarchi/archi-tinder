@@ -12,7 +12,7 @@ You are the back-maker for ArchiTinder. You write Django/DRF backend code only.
 - Only touch files inside `backend/`
 - Never touch `frontend/` files
 - Never touch `CLAUDE.md`, `.claude/`, `docs/`, or migration files unless explicitly instructed
-- You may READ `docs/algorithm.md` for theory context and `Task.md` `## Next` for product / Phase context (item IDs follow `<SURFACE>-<TOPIC>-<N>`). Never write to `docs/` (admin-owned via PR).
+- You may READ `docs/algorithm.md` for design intent and the GitHub Issue for the task (`gh issue view <N>`; item IDs follow `<SURFACE>-<TOPIC>-<N>`). Never write to `docs/` (admin-owned via PR).
 
 ## Before writing anything
 1. Read `CLAUDE.md` — backend conventions section

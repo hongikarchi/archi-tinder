@@ -11,13 +11,13 @@
 | `research/` | Dated research outputs (perf baselines, audits, image-latency findings, one-off reviews) | the session | read-only history; conclusions are recorded in Task.md / decisions |
 | `prd/` | Product requirement material (`archibe-business-model.html`) | admin | |
 | `design-preview/` | **Generated** HTML bundle for the Claude Design canvas sync | `tools/gen-design-preview.py` after `tokens.css` changes | not a source of truth; regenerate, do not edit |
-| `archive/` | Completed hand-offs and point-in-time incident records | — | history only; nothing here is a live instruction |
+| `archive/` | Completed hand-offs, point-in-time incident records, and `task-done-2026-04-to-10.md` (the frozen Task.md history) | — | history only; nothing here is a live instruction |
 | `db-index-handoff.md` | Open ask to the Make DB owner (HNSW / GIN indexes, 2026-07-07) | admin | partially answered (HNSW exists per `research/perf-baseline-2026-09-30.md`); close or archive once the rest is settled |
 
 Not under `docs/`: shared rules `AGENTS.md` (+ `backend/AGENTS.md`, `frontend/AGENTS.md`,
 `web-testing/AGENTS.md`), Claude-only `CLAUDE.md` + `.claude/`, Codex `.codex/` + `.agents/`,
-visual design system `DESIGN.md`, branch/PR process `CONTRIBUTING.md`, backlog `Task.md`
-(moving to GitHub Issues), execution plans `.claude/plans/` (archived on ship).
+visual design system `DESIGN.md`, branch/PR process `CONTRIBUTING.md`, tracking conventions
+`Task.md` (the backlog itself lives in GitHub Issues), execution plans `.claude/plans/` (archived on ship).
 
 Conventions:
 - New decision record: `docs/decisions/YYYY-MM-DD-<topic>.md`; first lines = title and a

@@ -22,7 +22,7 @@ truth for architecture and API surface — derive it by reading the code.
 | Recommendation algorithm theory | `docs/algorithm.md` |
 | Building DB schema + Make-DB ownership rules | `docs/database-schema.md` |
 | Design decision records (ADR-style) | `docs/decisions/` |
-| Backlog + done log | `Task.md` (moving to GitHub Issues) |
+| Backlog, in-progress, done | GitHub Issues (`gh issue list`; labels `priority:*`, `area:*`, `now`, `stage:pre-launch`) + merged PRs; conventions in `Task.md` |
 
 ## Product identity
 
@@ -56,7 +56,7 @@ GitHub Flow with a `develop` integration branch.
 5. **PRs target `develop`.** `develop → main` is a deploy, needs a deploy keyword.
 6. **Once per clone:** `./tools/install-hooks.sh` (migration-numbering pre-push hook).
 7. **Concurrent workers share carefully.** A separate clone per worker is
-   recommended, not required (user ruling 2026-09-26, Task.md DEPLOY-BLOCKER-1 ⑤).
+   recommended, not required (user ruling 2026-09-26, issue #363 item ⑤).
    In a shared checkout: one branch per active session; **never switch branches,
    stash, or reset while another session is active there** (check `git status`
    and the reflog at session start); preserve other workers' changes; prefer
@@ -87,9 +87,9 @@ save the work on a new `feature/*` branch first. Never stage on a protected bran
 - A hook blocks the forbidden git commands at the tool layer for Claude
   (`.claude/hooks/git-guard.py`) and Codex (`.codex/hooks.json` + `.codex/rules/`).
   Fail-open; GitHub branch protection is the server-side backstop.
-- Audit trail: record shipped work (Task.md `## Done` today; GitHub Issues after the
-  tracking migration) in the same PR as the work. Claude does this with the
-  `reporter-inline` skill; Codex does it directly.
+- Audit trail: every PR body carries `Closes #N` for the issue it resolves; deferred
+  follow-ups become new issues in the same session. Claude does this with the
+  `reporter-inline` skill; Codex does it directly. Shipped work = merged PRs.
 
 ## Data rules
 
@@ -142,7 +142,7 @@ tactical code → foundational correctness over polish.
 
 | Category | Location | Writer |
 |---|---|---|
-| Backlog + done log | `Task.md` (→ GitHub Issues + Project, staged migration) | the session, same PR as the work |
+| Backlog, in-progress, done | GitHub Issues (+ a Project board once the admin adds the `project` token scope); history before 2026-10-07 in `docs/archive/task-done-2026-04-to-10.md` | the session via `gh`; PR `Closes #N` |
 | Algorithm reference (design intent) | `docs/algorithm.md` | admin / algorithm collaborator via PR; sessions append dated notes |
 | Hyperparameter table (generated) | `docs/algorithm-hyperparameters.md` via `tools/gen-hyperparams.py` | never hand-edited |
 | Execution plans (branches, delegation, PR sequence) | `.claude/plans/*.md` (Claude), archived on ship per its README | the session |
