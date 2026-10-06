@@ -4,7 +4,7 @@
 Converts prose rules the model must remember into a harness-level block:
   - HARD RULE 1/3: no direct push to a protected branch (develop / main).
   - HARD RULE 4: no force-push to a protected branch; no `git push --no-verify`.
-  - PR base=main is Mode 3 deploy territory (git-publisher agent + deploy keyword).
+  - PR base=main is deploy territory (git-publisher agent + deploy keyword).
 
 ALLOWS: feature/* pushes, `gh pr merge --admin`, everything non-git.
 
@@ -78,7 +78,7 @@ def main():
 
             if targets_protected and forced:
                 deny("force-push to a protected branch (develop/main) is the "
-                     "post-deploy carve-out only — git-publisher Mode 3 "
+                     "post-deploy carve-out only — git-publisher Deploy PR "
                      "(CLAUDE.md HARD RULE 4).")
             elif targets_protected:
                 deny("direct push to a protected branch (develop/main). Push "
@@ -86,11 +86,11 @@ def main():
                      "handles feature->develop (CLAUDE.md HARD RULE 1/3).")
 
         elif p.startswith("gh pr create"):
-            # base=main is Mode 3 deploy territory. The ONLY sanctioned base=main
+            # base=main is deploy territory. The ONLY sanctioned base=main
             # PR is the deploy PR `--base main --head develop` (git-publisher.md) —
             # carve it out so the guard does not break the deploy workflow.
             if re.search(r"--base[=\s]+main\b", p) and not re.search(r"--head[=\s]+develop\b", p):
-                deny("PR base=main from a non-develop head is Mode 3 deploy "
+                deny("PR base=main from a non-develop head is deploy "
                      "territory — git-publisher agent + explicit deploy keyword. "
                      "(base=main + head=develop, the sanctioned deploy PR, is allowed.)")
 

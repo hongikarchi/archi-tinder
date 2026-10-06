@@ -6,8 +6,8 @@
 
 ## Spec / task ref
 
-<!-- Link to the relevant `Task.md` entry, or N/A if none applies.
-     (The old docs/specs/*.md folder was absorbed into Task.md 2026-05-24.) -->
+<!-- Link to the relevant `Task.md` entry (or GitHub Issue once tracking moves),
+     and to a design record under docs/plans/ when one exists. N/A if none. -->
 
 - task: <!-- e.g. `Task.md` #### BACK-RECOMMEND-4 (from ## Now / ## Next) -->
 
@@ -21,10 +21,13 @@
 
 ## Review status
 
-<!-- code-review + security-manager agents run pre-push (no slash command). -->
+<!-- Claude: code-review + security-manager run inside the feature workflow
+     before the commit; app-test is the separate pre-push gate. Codex / humans:
+     state which review ran. -->
 
 - [ ] code-review + security PASS (clean)
-- [ ] PASS with N MINOR (non-blocking; see `.claude/reviews/<sha>.md`)
+- [ ] PASS with N MINOR (non-blocking; list them under Notes)
+- [ ] app-test PASS / skipped (docs-only or 4-gate pass) — state which
 - [ ] not yet reviewed
 
 ## Risk zone
