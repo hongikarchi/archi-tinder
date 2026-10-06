@@ -1,0 +1,18 @@
+{
+  "description": "ArchiTinder git guard for Codex — same policy as .claude/hooks/git-guard.py (AGENTS.md HARD RULES 1/3/4 + deploy-PR rule). Fail-open; GitHub branch protection is the backstop.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .codex/hooks/git-guard.py",
+            "timeout": 10,
+            "statusMessage": "git-guard: checking push / PR command"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -297,4 +297,4 @@ If two roles need to edit the same file, coordinate via:
 - Reporter is deferred to session end. Don't spawn after every commit.
 - Trivial commits (<50 LOC, no migration, no production logic) skip code-review/security.
 
-See `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex) for the full token-saving policy.
+See `.claude/WORKFLOW.md` § Token-saving rules for the full policy (Codex follows the same intent via `AGENTS.md`; it has no separate workflow doc).
