@@ -180,6 +180,9 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 
 ### MEDIUM
 
+#### FRONT-IMG-TELEMETRY-1 — 카드 이미지 실패 원인 호스트별 집계
+`/api/v1/telemetry/image-load/` 실패 이벤트(100% 수집)를 호스트별(archdaily/dezeen/divisare/imgix…)로 묶어 실패율·지연 확인 → 외부 핫링크 차단 비중 판단, 필요 시 R2 미러링 검토. MOBILE-FIX-1 Deferred.
+
 #### FULL-MESSAGING-2 — 새로고침하면 차단 해제를 못 함
 차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 '차단'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.
 
@@ -342,6 +345,12 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### MOBILE-FIX-1 — 모바일 스와이프 카드·상단 컨트롤 정비 — RESOLVED 2026-10-06 (`4384ae2`)
+- 스와이프 카드 모바일 7건: 갤러리 버튼 터치 무반응(tinderCard touchstart preventDefault → closest('.pressable')), 캐시 이미지 opacity 0 고착 + 4s 타이머 stale closure 수정, 상세 정보 하단 정렬, 드래그 기울기 위치 기반(속도 튐 제거), 하단 힌트 문구 삭제, 프로필 공유 버튼 + ShareCardModal 삭제.
+- 카드 크기: 모듈 로드 시 고정 → `hooks/useCardSize` 반응형(같은 공식, 주소창 80px 미만 높이 변화 무시).
+- 상단 컨트롤: 모든 페이지 light/dark 왼쪽 레일(뒤로가기/종료 옆), 한/EN·로그아웃 오른쪽; splitMobile 삭제; 내 프로필 알림·설정은 히어로 통계 아래로 이동(<386px 로고 겹침 해소).
+- 이미지 미표시 원인 중 외부 CDN 핫링크 비중은 미측정 — Deferred: 이미지 로드 텔레메트리 호스트별 실패율 집계(FRONT-IMG-TELEMETRY-1).
+
 ### FULL-REPORT-IMG-1 + PERF-MEASURE-2 — 취향 이미지 자동 생성 + 배포 후 prod 측정 — RESOLVED 2026-10-03 (`a2a4b91`)
 - 이미지: 생성/재생성 버튼 삭제, 스와이프 완료 시 리포트와 동시에 생성 시작(리포트 없으면 파이썬 취향 데이터로 프롬프트), '이미지 생성 중…' 스켈레톤 + 실패 문구, 프로젝트별 토큰 락으로 중복 유료 생성 방지, 소유자 화면에서 이미지 없으면 1회 자동 생성 (`8d839e1`).
 - 측정(웜, `prod_bench --warmup 1 --stream`): 검색 카드 1.67s(배포전 3.53s), 결과 414ms(695), 세션생성 228ms(280), 스와이프 212ms(202, 노이즈). 1초 초과: 이미지 11.3s, 리포트 첫 생성 2.7s, 취향분석(식으면 15.9s), 검색 완료 1.93s.
