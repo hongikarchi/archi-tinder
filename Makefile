@@ -18,7 +18,7 @@ PYTHON := $(shell \
 	elif [ "$$(python3 -c 'print(42)' 2>/dev/null)" = "42" ]; then echo python3; \
 	else echo python; fi)
 
-.PHONY: setup dev backend frontend reset-db dashboard migrate-local test-local migrate-prod
+.PHONY: setup dev backend frontend reset-db dashboard migrate-local test-local migrate-prod hyperparams
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 setup:
@@ -61,6 +61,11 @@ frontend:
 # ── Reset DB (migrations only, no wipe) ─────────────────────────────────────
 reset-db:
 	cd $(BACKEND_DIR) && $(PYTHON) manage.py migrate
+
+# ── Hyperparameter table (generated from settings.py RECOMMENDATION) ───────
+# docs/algorithm-hyperparameters.md is generated; CI fails when it is stale.
+hyperparams:
+	$(PYTHON) tools/gen-hyperparams.py
 
 # ── Dashboard (open committed project state view) ──────────────────────────
 dashboard:

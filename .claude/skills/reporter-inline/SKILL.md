@@ -125,11 +125,12 @@ Run ONLY if the commit touched any of:
 
 If diff doesn't touch any of those, skip this entire step.
 
-**The write-permission contract is `CLAUDE.md` § Rules ("docs/algorithm.md reporter sync")** — permitted writes (a) Production-Value column sync, (b) one-line `_(Updated YYYY-MM-DD <sha_short>: ...)_` annotation per changed section, (c) the `**Last Synced (Reporter):**` line; everything else forbidden. Follow it exactly; if an edit would cross it, STOP and surface the constraint. Mechanical details not in CLAUDE.md:
+**The write-permission contract is `AGENTS.md` § Data rules.** Values are never hand-copied:
 
-- New `RECOMMENDATION` key → append a table row (Type from `settings.py`, Range blank). Removed key → keep the row, annotate the value cell `_(removed in <sha_short>)_`.
-- Annotation goes at the END of the semantically-matching section (e.g. convergence fix → "Convergence Detection"); no matching section → skip the annotation.
-- Never touch other `docs/*` files — admin-owned, PR-edited.
+- (a) `RECOMMENDATION` changed → run `make hyperparams` (`python tools/gen-hyperparams.py`) and commit the regenerated `docs/algorithm-hyperparameters.md`. CI fails if it is stale. A key without a code comment shows up under "Undocumented keys" — add the comment in `settings.py`, not in the doc.
+- (b) Behaviour of a phase / formula / edge case changed → append ONE line `_(Updated YYYY-MM-DD <sha_short>: <what changed>)_` at the END of the semantically matching section of `docs/algorithm.md` (e.g. convergence fix → "Convergence Detection"); no matching section → skip.
+- (c) Bump the `**Last verified against code:**` line near the top of `docs/algorithm.md`.
+- Forbidden: rewriting theory, removing content, adding sections, editing `docs/algorithm-hyperparameters.md` by hand, touching other `docs/*` files (admin-owned, PR-edited). If an edit would cross this, STOP and surface it.
 
 ---
 

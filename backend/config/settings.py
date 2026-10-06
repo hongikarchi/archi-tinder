@@ -392,7 +392,7 @@ AVATAR_OUTPUT_EDGE    = 512                 # square output side in pixels
 
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
-    'bounded_pool_target': 150,
+    'bounded_pool_target': 150,      # N: session card pool = top-N by cosine sim to V_initial after hard filters (Phase 0)
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
@@ -400,15 +400,15 @@ RECOMMENDATION = {
     'taste_pool_mmr_penalty': 1.0,   # promote-to-taste pool: diversity penalty in the MMR down-sample (measured: 0.3 barely moved pairwise similarity)
     'taste_pool_random_fraction': 0.2,  # promote-to-taste pool: share of uniformly random buildings kept for swipe-phase exploration
     'convergence_threshold': 0.13,   # epsilon -- tuned for convergence inside the 10-swipe target window
-    'convergence_window': 3,
+    'convergence_window': 3,         # consecutive pref-vector deltas below epsilon required to declare convergence
     'target_swipes': 10,             # product goal: taste should be captured within ~10 swipes
     'convergence_min_recent_likes': 2,  # recent positive evidence required before backend declares convergence
-    'k_clusters': 2,
+    'k_clusters': 2,                 # K-Means clusters in the multi-modal phase (Phase 2)
     'min_likes_for_multimodal': 11,  # keep the <=10-swipe loop single-centroid; KMeans only after the target window
-    'max_consecutive_dislikes': 5,
-    'top_k_results': 20,
+    'max_consecutive_dislikes': 5,   # dislike streak that triggers the escape fallback (farthest from dislike centroid)
+    'top_k_results': 20,             # buildings returned at session end (Completed: Top-K)
     'like_weight': 0.5,              # kept for pref vector update
-    'dislike_weight': -1.0,
+    'dislike_weight': -1.0,          # pref-vector update weight for a dislike (like_weight is the positive counterpart)
     'initial_explore_rounds': 10,    # kept for initial batch size
     'adaptive_k_clustering_enabled': False,  # Topic 06: silhouette-based k selection {1, 2}
     'soft_relevance_enabled':        False,  # Topic 06: softmax over centroid distances vs max
@@ -420,8 +420,8 @@ RECOMMENDATION = {
     'dpp_alpha':                     1.0,    # Wilhelm-form diversity strength; Optuna search [0.5, 1.0]
     'dpp_singularity_eps':           1e-9,   # Cholesky residual threshold for singularity
     'hyde_vinitial_enabled':         False,  # Topic 03: HyDE V_initial embedding rerank
-    'hyde_hf_model':                 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
-    'hyde_hf_timeout_seconds':       5,
+    'hyde_hf_model':                 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',  # HF Inference API model that embeds the HyDE visual description (same model as the corpus)
+    'hyde_hf_timeout_seconds':       5,      # HF embed call timeout; on timeout V_initial falls back to filters-only
     'hyde_score_weight':             50.0,   # HyDE similarity score additive weight
     # Topic 01: Hybrid Retrieval (RRF) -- Cormack et al. 2009
     'hybrid_retrieval_enabled':      False,  # CRITICAL: default OFF for backward compat
@@ -462,18 +462,18 @@ RECOMMENDATION = {
     'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
     # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
     'discovery_chunk_size': 10,
-    'discovery_tier2_min_likes': 10,
-    'discovery_tier3_min_projects': 4,
-    'discovery_tier3_min_likes': 50,
-    'discovery_tier2_local': 2,
-    'discovery_tier2_global': 8,
-    'discovery_tier3_local': 4,
-    'discovery_tier3_global': 6,
-    'discovery_dislike_history_window': 30,
+    'discovery_tier2_min_likes': 10,      # tier 2 unlocks once the user has this many Discovery likes
+    'discovery_tier3_min_projects': 4,    # tier 3 unlock: boards (projects) required ...
+    'discovery_tier3_min_likes': 50,      # ... and total likes required
+    'discovery_tier2_local': 2,           # tier 2 chunk mix: cards near the user's taste centroid (local) ...
+    'discovery_tier2_global': 8,          # ... vs corpus-wide exploration cards (global), per 10-card chunk
+    'discovery_tier3_local': 4,           # tier 3 chunk mix: local ...
+    'discovery_tier3_global': 6,          # ... vs global, per 10-card chunk
+    'discovery_dislike_history_window': 30,   # most recent dislikes used to build the dislike centroid
     'discovery_dislike_zone_threshold': 0.15,   # pgvector cosine DISTANCE; candidates farther than this from dislike centroid pass
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
-    'discovery_promote_threshold': 10,
+    'discovery_promote_threshold': 10,    # Discovery likes that unlock the promote-to-taste (analysis) CTA
     # LLM search (get_corpus_tag_df / engine.llm_search_by_filters) TF-IDF corpus DF cache TTL (24h)
     'corpus_df_cache_ttl_seconds': 86400,
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
