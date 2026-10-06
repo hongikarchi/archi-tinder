@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-06 16:55 KST',
-    head: '9c65d3d',
-    branch: 'feature/claude-admin-dash-1',
+    updatedAt: '2026-10-06 20:52 KST',
+    head: '0f8c231',
+    branch: 'feature/claude-admin-dash-2a',
   },
   done: [
+    {
+      id: 'ADMIN-DASH-2a',
+      title: '관리자 페이지 외부 서비스 (상태·계정·비용)',
+      completedAt: '2026-10-06',
+      note: '`/admin` 외부 서비스 카드 8개(Railway·Vercel·Neon·Cloudflare R2·OpenAI·Gemini·HF·GitHub): 공식 status + 계정(HF whoami 자동 + 관리자 메모 `ProviderNote` 0002, 수정 시 작업 기록) + 대시보드 링크.',
+    },
     {
       id: 'ADMIN-DASH-1',
       title: '관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계)',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '스와이프 왕복 축소 + HNSW 후보 부족 수정',
       completedAt: '2026-09-30',
       note: 'HNSW 필터 top-k가 `ef_search` 40 후보에서 끊겨 후보가 모자라던 정확도 버그 수정: buildings 연결 시작옵션 `hnsw.iterative_scan=strict_order` (왕복 추가 0). 실측 LIMIT 60 → off 8행 / on 60행.',
-    },
-    {
-      id: 'FULL-REPORT-2',
-      title: '리포트가 언어 전환에 안 따라옴',
-      completedAt: '2026-09-27',
-      note: '리포트 문장이 생성 시점 언어로만 저장돼 UI 언어를 바꿔도 그대로였음. Gemini 1회 호출로 ko·en 두 판(동일 내용, 언어별 문장 규칙 유지)을 생성해 `final_report.i18n`에 저장, FE `localizeReport()`가 현재 언어판을 즉시 표시(AI 재호출 없음).',
     },
   ],
   now: [],
@@ -330,6 +330,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 348,
+      title: 'feat(ADMIN-DASH-1): admin dashboard PR1 — gate + deploy/migration/CI/flag/stats',
+      mergedAt: '2026-10-06T09:05:35Z',
+      mergedAtKST: '2026-10-06 18:05 KST',
+      sha: '3284e70',
+    },
+    {
       number: 347,
       title: 'fix(MOBILE-FIX-1): 모바일 스와이프 카드 + 상단 컨트롤 정비',
       mergedAt: '2026-10-06T06:55:37Z',
@@ -377,13 +384,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-29T13:39:33Z',
       mergedAtKST: '2026-09-29 22:39 KST',
       sha: '2551611',
-    },
-    {
-      number: 337,
-      title: 'Feature/algo persona report',
-      mergedAt: '2026-09-29T14:21:40Z',
-      mergedAtKST: '2026-09-29 23:21 KST',
-      sha: 'fe90b2b',
     },
   ],
   agents: [
@@ -918,6 +918,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/admin_dashboard/migrations/0002_providernote.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/admin_dashboard/migrations/__init__.py',
       role: '',
     },
@@ -927,6 +931,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/admin_dashboard/permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/providers.py',
       role: '',
     },
     {
@@ -951,6 +959,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/admin_dashboard/tests/test_permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/admin_dashboard/tests/test_services.py',
       role: '',
     },
     {
@@ -2907,6 +2919,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/admin/SectionCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/ServicesSection.jsx',
       role: '',
     },
     {
