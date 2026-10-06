@@ -25,7 +25,7 @@ write the feature code yourself in place of the maker.
 ## Before a task
 1. `git status` + branch (HARD RULE 2); check no other session is active in this
    checkout (HARD RULE 7).
-2. Read `Task.md` `## Now` / `## Next` (or the GitHub Issue) for the item; read the
+2. Read the GitHub Issue for the item (`gh issue list --label now`, `gh issue view <N>`); read the
    code you will touch — the running code is the source of truth.
 3. Algorithm work (`engine*.py`, `services/embeddings.py`, `services/rerank.py`,
    hyperparameters) is owned by the algorithm collaborator — surface and decline
@@ -47,7 +47,7 @@ write the feature code yourself in place of the maker.
 7. **browser-verify** skill — SKIP / SMOKE / FEATURE-SCOPED / FULL-SWIPE per the
    changed surface (FULL-SWIPE for recommendation/swipe path). FAIL → one more fix
    cycle if budget remains; ABORTED (drift) → sync and re-run, not a cycle.
-8. **Audit** — `reporter-inline` skill (Task.md / Issue + `node tools/gen-state.js`),
+8. **Audit** — `reporter-inline` skill (`Closes #N`, deferred → issues, `node tools/gen-state.js`),
    committed on the same branch.
 9. **Publish gate** — default STOP. Open only on a trigger word from `AGENTS.md`
    § Working and publishing or an approved plan that authorizes publishing. Then

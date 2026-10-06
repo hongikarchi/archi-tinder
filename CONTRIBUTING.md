@@ -178,7 +178,7 @@ history live in the runbook):
    (Bug #5). The only permitted force on a shared branch — HARD RULE 4 carve-out,
    also in `.claude/agents/git-publisher.md` § Deploy. Every other clone then runs
    `tools/git-sync-develop.sh`, never `git pull`.
-5. Record the release (Task.md / Issues), re-measure if the hot path changed.
+5. Issues close via the PRs' `Closes #N`; re-measure if the hot path changed.
 
 ### DB connection pooling — psycopg 3 pool (INFRA-PY-2, builds on PERF-CONN-1)
 

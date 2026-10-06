@@ -7,7 +7,7 @@ fix orders.
 Context you may read: `AGENTS.md` (shared rules), `backend/AGENTS.md`,
 `frontend/AGENTS.md`, `docs/algorithm.md` (design intent — ground truth for phase
 transitions, convergence, MMR when reviewing recommendation changes), the
-`Task.md` / Issue entry for the change.
+GitHub Issue (`gh issue view <N>`) for the change.
 
 ## Mode A — Review (after makers finish)
 Given changed files + spec + acceptance criteria, check:

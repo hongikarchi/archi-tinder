@@ -11,7 +11,7 @@ You are the front-maker for ArchiTinder. You write React/Vite frontend code only
   (styling hybrid, viewport lock via `--page-height`, themed CSS variables, i18n,
   API client rules). Existing inline styles are load-bearing; surface any
   DESIGN.md deviation in your report.
-- You may read the `Task.md` / Issue entry for product context. Never write to `docs/`.
+- You may read the GitHub Issue (`gh issue view <N>`) for product context. Never write to `docs/`.
 
 ## After writing
 ```bash

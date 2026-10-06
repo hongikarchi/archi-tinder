@@ -66,19 +66,19 @@ the blockage; do not work around it by editing `backend/`/`frontend/` directly. 
 
 ## Before every task
 1. Read `CLAUDE.md` — conventions, rules, DB schema, `## Product Identity` + `## Product Constitution`.
-2. Read `Task.md` — `## Now` / `## Next` / `## Done` board.
+2. Read the backlog in GitHub Issues: `gh issue list --label now` (in progress), `gh issue list --label priority:high` etc. `Task.md` holds only the ID / label conventions.
 3. Read code directly — the running code is the source of truth for architecture + API surface.
-4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters (but see "Algorithm work — externally owned" below).
-5. If the task references a Phase / open question: read the matching `#### <SLUG>` entry under `### HIGH`/`### MEDIUM`/`### LOW` in `Task.md` `## Next`.
+4. If algorithm task: read `docs/algorithm.md` for design intent (values: `docs/algorithm-hyperparameters.md`) — but see "Algorithm work — externally owned" below.
+5. If the task references an open question: `gh issue view <N>` for the matching `<ID> — <title>` issue.
 
-## Now / Next discipline
-1. **Session start** — open `Task.md`, read `## Now` first.
-   - `## Now` non-empty + matches request: continue that entry.
-   - Empty: promote a matching `#### <SLUG>` from `## Next` into `## Now` (cut from bucket, paste into Now, raise heading one level). One slice at a time; prefer `### HIGH`.
-   - Brand-new request: write a fresh `### <ID> — <Korean title>` into `## Now` (ID convention from `Task.md ## Workflow Rules`, e.g. `BACK-LLM-1`).
-2. **Mid-session deferral** ("미루자" / "later" / "defer") — move the Now entry back to `## Next` (demote to `#### <SLUG>` under the matching bucket) with a one-line rationale. Never silently leave it in Now.
-3. **Session end (success)** — the `reporter-inline` skill moves the Now entry to `## Done` (Step 6).
-4. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
+## Issue discipline (tracking moved from Task.md to GitHub Issues, 2026-10-07)
+1. **Session start** — `gh issue list --label now`.
+   - Non-empty + matches the request: continue that issue.
+   - Empty: find the matching issue (`gh issue list --search "<keyword>"`, prefer `priority:high`) and `gh issue edit N --add-label now`. One slice at a time.
+   - Brand-new request: `gh issue create --title "<ID> — <Korean title>" --label now,priority:high,area:<x>` (ID convention in `Task.md` § Workflow Rules).
+2. **Mid-session deferral** ("미루자" / "later" / "defer") — `gh issue edit N --remove-label now --add-label deferred` + a comment with the reason. Never silently leave `now` on it.
+3. **Session end (success)** — the PR body carries `Closes #N`; `reporter-inline` (Step 6) verifies it and files deferred follow-ups as issues.
+4. **Failure after 2 cycles** — keep `now`, comment the failure notes on the issue, report to the user.
 
 ## "오늘 개발 진행해" / "continue development"
 Read `## Now` first; if empty, promote the highest-priority `## Next ### HIGH` item. Execute one slice through the full pipeline below. After the PR merges, ask before pulling the next HIGH item — do not auto-chain.

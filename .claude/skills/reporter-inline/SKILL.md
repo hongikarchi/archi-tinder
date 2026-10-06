@@ -1,6 +1,6 @@
 ---
 name: reporter-inline
-description: Update Task.md + state.js + conditional algorithm.md to record a just-shipped change. Runs in the main session BEFORE `git-publish` admin squash merge so the audit ships in the SAME PR as the work — eliminates separate reporter PRs. Supersedes the `reporter` agent for routine session-end housekeeping.
+description: Record a just-shipped change — verify the PR closes its GitHub Issue, file deferred follow-ups as issues, regenerate project/state.js, conditionally annotate docs/algorithm.md. Runs in the main session BEFORE `git-publish` admin squash merge so the audit ships in the SAME PR as the work — eliminates separate reporter PRs. Supersedes the `reporter` agent for routine session-end housekeeping.
 ---
 
 # reporter-inline — audit recorded in same PR as work
@@ -60,59 +60,32 @@ Read `Task.md` once before editing.
 
 ---
 
-## Step 2 — Update `Task.md`
+## Step 2 — Close / file issues (tracking lives in GitHub Issues since 2026-10-07)
 
-Use `Edit` tool (NOT `Write`) so the rest of the file stays intact.
+`Task.md` no longer carries `## Now` / `## Next` / `## Done`; do not add them back.
+Use `gh` (read `Task.md` § Workflow Rules for the ID + label conventions).
 
-### 2a. Move `## Now` entry to `## Done`
+### 2a. Make sure the PR closes its issue
 
-If the change closes a `## Now` entry: cut the entry from `## Now`, paste at the TOP of `## Done` under a new header:
+- Find the issue: `gh issue list --label now` (or `--search "<ID>"`). If the work had
+  no issue (small standalone fix), create one now so the history has a record:
+  `gh issue create --title "<ID> — <Korean title>" --label priority:medium,area:<x> --body "<one paragraph>"`.
+- The PR body MUST contain `Closes #N` (one line per issue). `git-publish` Step 3 puts
+  it in the template; if the PR already exists, `gh pr edit <PR> --body-file -`.
+- Remove the `now` label when the PR is opened: `gh issue edit N --remove-label now`.
 
-```
-### <TASK_ID> — <Korean title> — RESOLVED YYYY-MM-DD (`<sha-pre-squash>`)
-- <bullet 1 — what shipped>
-- <bullet 2>
-- ...
-```
+### 2b. Deferred follow-ups → new issues
 
-- `<TASK_ID>` = the stable task identifier — the PRIMARY key for the entry.
-- `YYYY-MM-DD` = today's date in KST.
-- `<sha-pre-squash>` = feature branch tip SHA from Step 1. "pre-squash" because post-merge the canonical SHA is the squash commit on `develop`, not yet known. A later reporter-inline pass can backfill the post-squash SHA and the GitHub PR# `(#N)` if desired — neither is required at write-time (the TASK ID is the key).
+For every `Deferred: …` note the session produced (fix-loop leftovers, review MINORs
+that did not ship): `gh issue create` with the next free `<SURFACE>-<TOPIC>-<N>` ID,
+Korean title ≤ 25 chars, body = the note + file:line, labels `priority:medium` (or
+`priority:high` if the note says urgent, `priority:low` + `deferred` if the user parked
+it) + `area:<surface>`. Skip if an open issue with the same title already exists.
 
-Sub-task checkboxes that were completed by this commit get `[x]` before moving.
+### 2c. Session-start reminders
 
-If NO `## Now` entry corresponds (small follow-up / standalone fix): create a fresh `### <ID> — <title> — RESOLVED ...` directly at the top of `## Done` with the new entry.
-
-### 2b. Deferred-item surfacing (`Deferred:` line → new `## Next` entry)
-
-If the new `## Done` entry's body contains a `Deferred: ...` line (a follow-up the session flagged but did not ship), append a `#### <SLUG>` entry under the appropriate bucket in `## Next`:
-
-- Default bucket: `### MEDIUM` (uncategorised pending).
-- `### HIGH` only if the Done note explicitly tags urgent.
-- `### LOW` only if Done note tags non-actionable / explicit skip.
-
-Pattern:
-```
-Done note line:
-  Deferred: _caches.py:92 IMP-5 cache create call bypass (gated default OFF).
-
-New Next entry under ### MEDIUM:
-  #### BACK-LLM-3 — Gemini cache 호출에 timeout 없음
-  _caches.py:92 ... wrap on toggle-on.
-```
-
-ID convention: `<SURFACE>-<TOPIC>-<N>` (e.g. `BACK-LLM-3`, `FRONT-UX-5`). Pick next available `N` within the matching `<SURFACE>-<TOPIC>` namespace. Korean title ≤25 chars (problem/goal only). Never reuse a retired number.
-
-If `Deferred:` already has a matching Next entry (pre-surfaced during this same commit), skip — do not duplicate.
-
-### 2c. Section vocabulary
-
-`Task.md` uses:
-- `## Next` — backlog, bucketed `### HIGH` / `### MEDIUM` / `### LOW`. Each item = `#### <SLUG>` one level deeper.
-- `## Now` — current initiative slice.
-- `## Done` — resolved log, append-only at top, one dated group per shipped batch.
-
-Do NOT use legacy labels `## Open` / `## In Progress` / `## Resolved` (renamed 2026-05-24).
+Something the next session must see first → `gh issue create --label session-start-todo`
+(or add the label to the relevant issue). Never write `SESSION-START-TODO` into `Task.md`.
 
 ---
 

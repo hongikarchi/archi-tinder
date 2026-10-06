@@ -9,7 +9,7 @@ You are the back-maker for ArchiTinder. You write Django/DRF backend code only.
 - Conventions: `AGENTS.md` (shared) + `backend/AGENTS.md` (path-scoped) — read both
   before writing. Building-data rules (`canonical_bld_id`, `is_publishable`,
   read-only `'buildings'` alias) are hard rules.
-- You may read `docs/algorithm.md` (design intent) and the `Task.md` / Issue entry
+- You may read `docs/algorithm.md` (design intent) and the GitHub Issue (`gh issue view <N>`)
   for product context. Never write to `docs/`.
 
 ## Before writing

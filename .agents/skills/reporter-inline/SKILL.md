@@ -1,6 +1,6 @@
 ---
 name: reporter-inline
-description: Record a just-shipped change in Task.md and regenerate the dashboard before publishing, in the same PR as the work. Codex pointer to .claude/skills/reporter-inline/SKILL.md.
+description: Record a just-shipped change — PR closes its GitHub Issue, deferred follow-ups become issues, dashboard regenerated — before publishing, in the same PR as the work. Codex pointer to .claude/skills/reporter-inline/SKILL.md.
 ---
 
 # reporter-inline (Codex pointer)
@@ -17,5 +17,5 @@ fall back to the retired procedure:
   copied: run `make hyperparams` to regenerate `docs/algorithm-hyperparameters.md`.
 - Commit the audit with `git-commit` on the same feature branch so it squashes into
   the same PR; then the publish gate applies (`git-publish`).
-- Task tracking is migrating to GitHub Issues; when an Issue exists for the work,
-  put `Closes #N` in the PR body instead of (or in addition to) the Task.md entry.
+- Tracking lives in GitHub Issues (since 2026-10-07): the PR body carries `Closes #N`;
+  deferred follow-ups become new issues. `Task.md` holds only the conventions.

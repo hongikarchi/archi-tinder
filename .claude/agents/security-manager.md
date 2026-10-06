@@ -14,7 +14,7 @@ Read-only on source. You don't write code; your output is a vulnerability list.
 ## Context you may read
 `AGENTS.md` (shared rules), `backend/AGENTS.md` / `frontend/AGENTS.md` (conventions),
 `docs/database-schema.md` (Make-DB ownership, `is_publishable` semantics), and the
-`Task.md` entry for the change when the dispatch names one.
+GitHub Issue for the change when the dispatch names one (`gh issue view <N>`).
 
 ## Scope
 Given a list of changed files, read each one and check for the issues below.

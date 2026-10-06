@@ -9,7 +9,7 @@ tools: Read, Glob, Grep, Bash
 You are the code reviewer for ArchiTinder.
 
 ## Boundary
-Read-only on source code and docs. You may READ `docs/algorithm.md` for algorithm ground-truth and `Task.md` `## Next` for product / Phase context (item IDs follow `<SURFACE>-<TOPIC>-<N>`). You don't write code; your output is a verdict + fix orders. See Mode A below.
+Read-only on source code and docs. You may READ `docs/algorithm.md` for algorithm ground-truth and the GitHub Issue for the task (`gh issue view <N>`); the former `Task.md` `## Next` for product / Phase context (item IDs follow `<SURFACE>-<TOPIC>-<N>`). You don't write code; your output is a verdict + fix orders. See Mode A below.
 
 ## Two modes
 

@@ -42,7 +42,7 @@ flowchart TD
     WF -->|"Opus judge"| Ver["adversarial-verify<br/>(confirm real, drop false positives)"]
     Main -->|"dispatches (post-commit)"| Gate["app-test<br/>(pre-push: browser journey + drift)"]
     Main -->|runs skill| Cmt["git-commit<br/>(single commit on feature branch)"]
-    Main -->|runs skill| RIn["reporter-inline<br/>(Task.md + state.js + algorithm.md)"]
+    Main -->|runs skill| RIn["reporter-inline<br/>(Issues + state.js + algorithm.md)"]
     Main -->|"runs skill (gate-open only)"| Pub["git-publish<br/>(feature → develop)"]
     Main -.->|escalation only| PubA["git-publisher agent<br/>(deploy PR / external PR / rebase)"]
     Impl --> Code["backend/ · frontend/"]
@@ -97,7 +97,7 @@ pins Sonnet on workers and Opus on the verify pass.
 | Skill | Role | Touches |
 |-------|------|---------|
 | **orchestrate** | Feature playbook — decomposes, launches the `feature` workflow, then owns commit/test/audit/publish-gate | — (orchestrates) |
-| **reporter-inline** | Session-end audit — `Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash | `Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
+| **reporter-inline** | Session-end audit — issue closure (`Closes #N`), deferred follow-ups → issues, `project/state.js` regen, conditional `docs/algorithm.md` notes. Runs INLINE before squash | GitHub Issues, `project/state.js`, narrow `docs/algorithm.md` |
 | **git-commit** | Single commit on a feature branch — caveman conventional commit + secret guards. Never pushes | `git commit` |
 | **git-publish** | feature → develop (push + PR + admin squash + cleanup). Publish gate at Step 0 | `git push`, `gh pr create/merge` |
 
@@ -184,13 +184,13 @@ those bundled commits — same PR.
 1. `git status && git branch --show-current`. If on `main`/`develop`, do not edit — create a `feature/*` branch first (`AGENTS.md` HARD RULE 2).
 2. Check that no other session is active in this checkout (dirty tree you did not create, reflog activity in the last hour). If one is, do not switch branches, stash or reset — coordinate or use another clone (`AGENTS.md` HARD RULE 7).
 3. `git fetch origin develop --quiet`; if behind, ask before rebasing.
-4. Scan `Task.md` for any `SESSION-START-TODO`; surface it before starting the request.
+4. `gh issue list --label session-start-todo` and `--label now`; surface them before starting the request.
 
 **Session end** (before the PR squash merges):
-1. `reporter-inline` skill — update `Task.md` + `project/state.js` (conditionally `docs/algorithm.md`). Once per push-worthy unit.
+1. `reporter-inline` skill — PR body `Closes #N`, deferred follow-ups filed as issues, `project/state.js` regenerated (conditionally `docs/algorithm.md` notes). Once per push-worthy unit.
 2. `git-commit` skill — audit commit on the same feature branch.
 3. `git-publish` Step 4 — admin squash merge (gate-open only).
-4. Append a `SESSION-START-TODO` to `Task.md` if something must fire next session.
+4. Something must fire next session → an issue labelled `session-start-todo`.
 
 ## 5. Planning — before substantive work
 

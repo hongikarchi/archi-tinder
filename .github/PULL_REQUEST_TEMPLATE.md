@@ -6,10 +6,11 @@
 
 ## Spec / task ref
 
-<!-- Link to the relevant `Task.md` entry (or GitHub Issue once tracking moves),
-     and to a design record under docs/decisions/ when one exists. N/A if none. -->
+<!-- `Closes #N` for every issue this PR resolves (closes it on merge). Link a
+     design record under docs/decisions/ when one exists. N/A if none. -->
 
-- task: <!-- e.g. `Task.md` #### BACK-RECOMMEND-4 (from ## Now / ## Next) -->
+- Closes #
+- design: <!-- docs/decisions/<file>.md §N, or N/A -->
 
 ## Test plan
 
