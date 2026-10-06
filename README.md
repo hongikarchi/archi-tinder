@@ -4,11 +4,13 @@ React + Django web app for the archi-tinder project. Reads from a PostgreSQL DB
 built by a sibling repo (Make DB).
 
 For the full picture see:
-- `CLAUDE.md` — project conventions, agent rules, DB schema (auto-loaded by Claude Code; **Codex reads the mirror `AGENTS.md`**)
+- `AGENTS.md` — the shared rulebook for humans, Claude Code and Codex (branch rules, publish gate, data rules, Product Constitution). `backend/AGENTS.md`, `frontend/AGENTS.md`, `web-testing/AGENTS.md` add path-scoped conventions.
+- `CLAUDE.md` — Claude Code–only additions (workflow, skills, agents, gates); it imports `AGENTS.md`
 - `CONTRIBUTING.md` — branch model, PR workflow, role / file ownership
+- `docs/runbooks/` — local setup (Windows + macOS) and production deploy
 - `DESIGN.md` — visual design system (consult for any UI work)
-- `docs/algorithm.md` — recommendation algorithm theory
-- `Task.md` `## Next` — pending-feature backlog (absorbed the prior `docs/specs/` folder on 2026-05-24; items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`)
+- `docs/algorithm.md` — recommendation algorithm theory; `docs/plans/` — design decision records
+- `Task.md` `## Next` — pending-feature backlog (items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`; tracking is moving to GitHub Issues)
 
 ---
 

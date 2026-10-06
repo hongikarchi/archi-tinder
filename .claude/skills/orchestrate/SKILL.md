@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Use this skill to implement any feature or fix end-to-end. It reads project context, decomposes the task into backend/frontend specs, launches the `feature` Workflow (build -> review -> security -> Opus adversarial-verify -> 2-cycle fix loop) which STOPS at commit-ready, then the main session runs the git-commit skill, dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill, and stops at the publish gate (git-publish only on explicit trigger). The git-publisher agent is reserved for Mode 3 deploy, external PR triage, and complex rebase recovery.
+description: Use this skill to implement any feature or fix end-to-end. It reads project context, decomposes the task into backend/frontend specs, launches the `feature` Workflow (build -> review -> security -> Opus adversarial-verify -> 2-cycle fix loop) which STOPS at commit-ready, then the main session runs the git-commit skill, dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill, and stops at the publish gate (git-publish only on explicit trigger). The git-publisher agent is reserved for develop→main deploy, external PR triage, and complex rebase recovery.
 ---
 
 # Orchestrate — feature-implementation playbook (Workflow-tool era)
@@ -125,15 +125,15 @@ Run the **`reporter-inline` skill** in the main session BEFORE publishing. It up
 **Default: STOP after the audit commit. Do NOT run `git-publish`, do NOT dispatch `git-publisher`.**
 
 The gate opens only when one is explicitly true:
-- **(a) Explicit trigger this turn** — user typed `"PR 올려"` / `"push"` / `"publish"` / `"merge"` / `"PR 열어"` / `"deploy"` / `"배포"` / `"release"`. Cite the literal phrase.
+- **(a) Explicit trigger this turn** — the user typed one of the publish keywords listed in `AGENTS.md` § Working and publishing (the only list). Cite the literal phrase.
 - **(b) Active plan with `## PR Plan`** — `.claude/plans/<name>.md` listing N slices authorizes those N PRs.
 - **(c) In-flight fix-loop continuation** — a tiny follow-up commit from a fix loop continues the original (a)/(b) authorization.
 
 If none true: STOP. Report `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish.` and wait.
 
-Once open: run the **`git-publish` skill** (base=`develop` only). Escalate to the `git-publisher` agent only for the CLAUDE.md `## Git Operations` edge cases (Mode 3 develop→main deploy, external PR triage, complex rebase, push rejection unclear cause, mid-merge failure).
+Once open: run the **`git-publish` skill** (base=`develop` only). Escalate to the `git-publisher` agent only for the `CLAUDE.md` § Git operations edge cases (develop→main deploy, external PR triage, complex rebase, push rejection unclear cause, mid-merge failure).
 
-**Hard rule — base=main is a separate gate.** Base=main needs `"deploy"`/`"release"`/`"배포"` specifically; plain `"PR 올려"` authorizes only base=develop. base=main is always Mode 3 via the `git-publisher` agent. (Codified post-PR #105.)
+**Hard rule — base=main is a separate gate.** Base=main needs a deploy keyword specifically (deploy subset of the `AGENTS.md` list); a plain publish keyword authorizes only base=develop. base=main always goes through the `git-publisher` agent's Deploy PR procedure (`docs/runbooks/deploy.md`). (Codified post-PR #105.)
 
 ### Step 8 — Stop and report
 Summarize: what was implemented, the commit/PR, the app-test verdict, the workflow's `confirmedFindings` (if any shipped as medium/low), open follow-ups. STOP.
@@ -146,7 +146,7 @@ LLM-chat-module work (`services/parse_query.py`, `services/generation.py`, `serv
 ## Rules
 - **Never write source code yourself.** Launch the `feature` workflow. If `Workflow` appears unavailable, STOP and report — do not edit `backend/`/`frontend/` directly.
 - **Never commit ad-hoc.** Default: `git-commit` skill. Escalate to `git-publisher` agent only for multi-commit reorganization / diagnosis failure.
-- **Never push ad-hoc.** Default: `git-publish` skill for feature → develop (base=develop only). Escalate to `git-publisher` agent only for Mode 3 deploy / external PR / complex rebase / push rejection / mid-merge failure.
+- **Never push ad-hoc.** Default: `git-publish` skill for feature → develop (base=develop only). Escalate to `git-publisher` agent only for develop→main deploy / external PR / complex rebase / push rejection / mid-merge failure.
 - **Fix-cycle budget = 2, shared** across the workflow's internal loop AND session-side app-test FAIL re-launches. Track it via `args.cyclesUsed` / `result.cyclesUsed`.
 - If a task is ambiguous, ask ONE clarifying question before decomposing.
 - If you notice a `CLAUDE.md` convention that needs updating, propose it in your final output — do not write it yourself.

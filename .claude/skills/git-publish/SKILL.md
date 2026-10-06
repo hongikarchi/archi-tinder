@@ -1,17 +1,17 @@
 ---
 name: git-publish
-description: Push a feature branch, open a PR against develop, admin-squash-merge it, clean up. Main session runs this directly (no Agent dispatch); supersedes `git-publisher` agent's Mode 2 (the 80% case). Escalates to git-publisher agent for: develop→main deploy mode, external collaborator PR triage, complex rebase/force conflicts.
+description: Push a feature branch, open a PR against develop, admin-squash-merge it, clean up. Main session runs this directly (no Agent dispatch); this is the routine publish path (the git-publisher agent no longer does it). Escalates to git-publisher agent for the develop→main deploy PR, external collaborator PR triage, complex rebase/force conflicts.
 ---
 
 # git-publish — feature → develop, main-session-direct
 
-Use this skill when a feature branch has committed work ready to ship to `develop`. The main session executes the steps below itself. **Do NOT dispatch `git-publisher` agent for routine Mode-2 (feature → develop) squash merges** — that agent is reserved for edge cases as of 2026-05-26.
+Use this skill when a feature branch has committed work ready to ship to `develop`. The main session executes the steps below itself. **Do NOT dispatch `git-publisher` agent for routine feature → develop squash merges** — that agent is reserved for edge cases as of 2026-05-26.
 
-## Hard rules (mirror CLAUDE.md HARD RULE 1, 3, 4, 5)
+## Hard rules (mirror AGENTS.md HARD RULE 1, 3, 4, 5)
 
-1. **PR base is `develop` only.** Mode 3 (`develop → main` deploy) is git-publisher agent's job.
+1. **PR base is `develop` only.** The `develop → main` deploy PR is the git-publisher agent's job (`docs/runbooks/deploy.md`).
 2. **Never `git push origin develop` / `git push origin main` directly.** Pushes go from `feature/*` only.
-3. **Never `--force` / `--force-with-lease` on a shared branch.** Single carve-out (post-deploy `develop` force-reset) is git-publisher Mode 3; this skill never does it.
+3. **Never `--force` / `--force-with-lease` on a shared branch.** Single carve-out (post-deploy `develop` force-reset) belongs to the deploy procedure; this skill never does it.
 4. **No `--no-verify` on the push.** Pre-push hooks must run.
 5. **Publish gate (Step 0) is a HARD precondition.** Do not skip.
 
@@ -21,8 +21,8 @@ Use this skill when a feature branch has committed work ready to ship to `develo
 
 Before any push / PR / merge action, verify ONE of:
 
-(a) **Explicit publish keyword** in the most recent user message — the authoritative
-    keyword list lives in `CLAUDE.md` § Git Operations "Publish gate" (always in
+(a) **Explicit publish keyword** in the most recent user message — the one
+    authoritative list lives in `AGENTS.md` § Working and publishing (always in
     context; do not maintain a second copy here).
 
 (b) **Active `.claude/plans/<slug>.md`** in scope that authorizes the publish action explicitly.
@@ -31,8 +31,8 @@ If NEITHER condition holds, **STOP** and surface to user:
 
 ```
 git-publish: PUBLISH GATE NOT OPENED
-Commit ready at <sha>. Explicit publish trigger needed before push/PR/merge.
-Trigger words: push, 올려, PR, 배포, merge, deploy, ship.
+Commit ready at <sha>. Explicit publish trigger needed before push/PR/merge
+(keywords: AGENTS.md § Working and publishing).
 ```
 
 Do NOT proceed to Step 1. Reason: prevents premature push (PR #105 / #116 / #117 incident pattern).
@@ -106,13 +106,13 @@ EOF
 
 Title: caveman conventional-commit style. Body: caveman compressed, technical substance kept. Include codex review fixes (if any) in a `## Codex review fixes` block.
 
-**Forbidden**: `--base main` (Mode 3 territory). If a `main`-base PR is needed (e.g. post-deploy revert), escalate to `git-publisher` agent.
+**Forbidden**: `--base main` (deploy territory). If a `main`-base PR is needed (e.g. post-deploy revert), escalate to `git-publisher` agent.
 
 ---
 
 ## Step 4 — Admin squash-merge
 
-Sole-admin CODEOWNERS = PR author means Code Owner review is structurally unsatisfiable. Admin-bypass squash merge per CLAUDE.md `## Branch Model`:
+Sole-admin CODEOWNERS = PR author means Code Owner review is structurally unsatisfiable. Admin-bypass squash merge per AGENTS.md § Branch model:
 
 ```bash
 gh pr merge <PR_NUMBER> --admin --squash --delete-branch
@@ -167,15 +167,15 @@ Branch deleted: remote ✓ + local ✓
 Current local: develop @ <SHA>
 ```
 
-Then STOP. Do NOT trigger `develop → main` deploy. That's `git-publisher` Mode 3, a separate decision requiring explicit deploy keyword + multi-PR batching.
+Then STOP. Do NOT trigger `develop → main` deploy. That's the `git-publisher` agent's Deploy PR procedure, a separate decision requiring an explicit deploy keyword + multi-PR batching.
 
 ---
 
 ## When to escalate to git-publisher agent
 
-Routine Mode-2 squash merges run in this skill. Escalate to the `git-publisher`
-agent per the **escalation matrix in `CLAUDE.md` § Git Operations** (authoritative;
-in short: Mode 3 deploy, external collaborator PR triage, complex rebase recovery,
+Routine feature → develop squash merges run in this skill. Escalate to the `git-publisher`
+agent per **`CLAUDE.md` § Git operations** (authoritative; in short: develop → main
+deploy, external collaborator PR triage, complex rebase recovery,
 push rejection with unclear cause, non-trivial mid-merge failure). Never retry a
 failed merge with destructive workarounds — escalate instead.
 

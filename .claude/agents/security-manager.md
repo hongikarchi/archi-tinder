@@ -11,6 +11,11 @@ You are the security manager for ArchiTinder. You scan code for vulnerabilities.
 ## Boundary
 Read-only on source. You don't write code; your output is a vulnerability list.
 
+## Context you may read
+`AGENTS.md` (shared rules), `backend/AGENTS.md` / `frontend/AGENTS.md` (conventions),
+`docs/database-schema.md` (Make-DB ownership, `is_publishable` semantics), and the
+`Task.md` entry for the change when the dispatch names one.
+
 ## Scope
 Given a list of changed files, read each one and check for the issues below.
 
@@ -65,8 +70,21 @@ Given a list of changed files, read each one and check for the issues below.
 ## Database checks
 
 **Raw SQL parameter safety**
-- Every `cur.execute(sql, params)` — params must be a list/tuple, never interpolated
-- Check `IN (...)` clauses use placeholders: `','.join(['%s'] * len(ids))`
+- Every `cur.execute(sql, params)` — params must be a list, never interpolated
+- psycopg 3: list membership uses `= ANY(%s)` with a Python list (tuple `IN %s`
+  adaptation does not exist); a literal `%` in SQL run with params must be `%%`
+
+**Building-data access control (Make-DB ownership)**
+- Every query against `canonical_v2_buildings` / `canonical_v2_architects` runs on
+  `connections['buildings']` (never the default alias, never the ORM) and includes
+  `is_publishable = true`. A missing gate leaks non-publishable rows — treat as
+  Critical. `engine._build_filter_sql` emits it; check hand-written SQL elsewhere.
+- No DDL, no writes, no `migrate` against the `'buildings'` alias.
+- Building identity is `canonical_bld_id` only; flag lookups by `name`/`slug`.
+
+**Connection hygiene**
+- Any new thread that touches a DB alias must call `connections.close_all()` in a
+  `finally` — with the psycopg pool, a missed call permanently leaks a pool slot.
 
 ---
 
