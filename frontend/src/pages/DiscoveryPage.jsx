@@ -582,7 +582,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
 
       {/* Card stack */}
       <div
-        style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative' }}
+        style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative', margin: 'auto 0' }}
       >
         {capReached ? (
           <div style={{

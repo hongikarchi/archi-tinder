@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 /**
  * Reactive swipe-card size. Same formula the app always used:
  *   width  = min(420, vw - 32)
- *   height = min(round(width * 1.55), vh - 220)
+ *   height = min(round(width * 1.55), vh - 224)
  * but recomputed on resize / orientationchange / visualViewport resize instead
  * of frozen at module import. One module-level store shared by every consumer.
  */
@@ -21,7 +21,7 @@ const isTouch = () =>
 
 export function computeCardSize(vw, vh) {
   const width = Math.min(420, vw - 32)
-  const height = Math.min(Math.round(width * 1.55), vh - 220)
+  const height = Math.min(Math.round(width * 1.55), vh - 224)
   return { width, height }
 }
 

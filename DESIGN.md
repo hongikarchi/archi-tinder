@@ -213,18 +213,19 @@ arrows, modal close, photo-hero buttons) — decided 2026-09-26:
 
 ### 3.3 TabBar Height (conditional)
 ```yaml
-tabbar-height-with-label: 64    # icon + keyword (current default)
-tabbar-height-icon-only:  56    # icon only
-tabbar-height:            60    # floating glass capsule (2026-09-26)
+tabbar-height:            64    # floating glass capsule, icon + label (2026-10-06)
 ```
-> 2026-09-26: Instagram-iOS style **floating glass capsule** — icon-only, 취향 =
+> 2026-09-26: Instagram-iOS style **floating glass capsule** — 취향 =
 > magnifying glass, active = rounded pill highlight (`--tabbar-active-bg`) +
 > filled icon. Capsule floats 16px from the sides (max-width 420 on desktop),
-> safe-area + 10px from the bottom, `blur(24px) saturate(180%)` over a clearly
-> translucent `--tabbar-glass-bg` (light themes 0.55, dark 0.50) with a hairline
+> safe-area + 10px from the bottom, `blur(16px) saturate(180%)` over a clearly
+> translucent `--tabbar-glass-bg` (light themes 0.35, dark 0.38) with a hairline
 > border + inset top highlight. Content scrolls **behind** it — no reserved band.
+> 2026-10-06: a small text label (`tabbar.*` i18n, ~11px) sits under each icon;
+> the sliding pill wraps icon + label. Glass made more see-through (was 0.55 /
+> 0.50, blur 24px) so content behind reads faintly.
 
-Tokens: `--tabbar-height` (60px), `--page-height` (full viewport, `100dvh` with
+Tokens: `--tabbar-height` (64px), `--page-height` (full viewport, `100dvh` with
 `100vh` fallback) and `--tabbar-clearance` (capsule + gap + safe-area + 12px).
 Every page shell is `height: var(--page-height)`; every scroll container ends
 with `padding-bottom: var(--tabbar-clearance)` so the last content scrolls
@@ -817,7 +818,7 @@ Type color tints:
 | Implementation | hybrid (inline + CSS variables) | §4 ✅ |
 | Accent policy | **themed (CSS variables)** | §1.2 ✅ |
 | Responsive | **mobile-first + desktop left-sidebar re-layout** | §7 ✅ |
-| TabBar | **floating glass capsule (Instagram iOS), icon-only, active = pill + filled icon** (2026-09-26) | §3.3 ✅ |
+| TabBar | **floating glass capsule (Instagram iOS), icon + small label, active = pill + filled icon** (2026-09-26, labels 2026-10-06) | §3.3 ✅ |
 | Border Radius | **tokenized by role: photos lg 20 · UI md 12 · inner sm 8 · sheet xl 24 · chips pill** (2026-09-26) | §3.1 ✅ |
 | Floating circle button | **28px visual / 44px hit area / 16px icon stroke 2, one shared component** (2026-09-26) | §3.2 ✅ |
 | Modal backdrop | **`--color-scrim-modal` 0.4; 0.65 family = photo overlay only** (2026-09-26) | §1.4 ✅ |

@@ -157,6 +157,7 @@ export default function TabBar() {
 
   const options = tabs.map(tab => ({
     value: tab.id,
+    label: t(tab.labelKey),
     ariaLabel: tab.id === 'profile' && unreadMessages > 0
       ? t('tabbar.profileUnread', { n: unreadMessages })
       : t(tab.labelKey),
@@ -175,8 +176,8 @@ export default function TabBar() {
         background: 'var(--tabbar-glass-bg)',
         border: '1px solid var(--tabbar-glass-border)',
         boxShadow: 'var(--tabbar-glass-shadow)',
-        backdropFilter: 'blur(24px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        backdropFilter: 'blur(16px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
       }}
     >
       {/* variant="pill" / size="lg" / as="nav" — the 4 tabs are real route
@@ -189,7 +190,7 @@ export default function TabBar() {
         variant="pill"
         size="lg"
         fullWidth
-        pillHeight={44}
+        pillHeight={52}
         measureContent
         options={options}
         value={activeTab}
@@ -200,14 +201,13 @@ export default function TabBar() {
           color: isActive ? 'var(--color-text)' : 'var(--color-nav-inactive)',
           transition: 'color var(--motion-fast) var(--motion-ease)',
         })}
-        optionContentStyle={{ width: 68, height: 44 }}
+        optionContentStyle={{ width: 68, height: 52, flexDirection: 'column', gap: 3 }}
         highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
         renderOption={(opt, isActive) => {
-          const icon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
-          if (opt.value !== 'profile' || unreadMessages <= 0) return icon
-          return (
+          const baseIcon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
+          const icon = (opt.value !== 'profile' || unreadMessages <= 0) ? baseIcon : (
             <span style={{ position: 'relative', display: 'inline-flex' }}>
-              {icon}
+              {baseIcon}
               <span
                 aria-hidden="true"
                 style={{
@@ -218,6 +218,21 @@ export default function TabBar() {
                 }}
               />
             </span>
+          )
+          return (
+            <>
+              {icon}
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 11, lineHeight: 1, fontWeight: 500,
+                  whiteSpace: 'nowrap', maxWidth: '100%',
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                {opt.label}
+              </span>
+            </>
           )
         }}
       />
