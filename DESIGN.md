@@ -222,7 +222,7 @@ tabbar-height:            64    # floating glass capsule, icon + label (2026-10-
 > translucent `--tabbar-glass-bg` (light themes 0.35, dark 0.38) with a hairline
 > border + inset top highlight. Content scrolls **behind** it — no reserved band.
 > 2026-10-06 (rev 2): capsule is **dark glass in every theme** — `--tabbar-glass-bg`
-> translucent black rgba(0,0,0,0.68) (Instagram-iOS style, `blur(28px) saturate(120%)`, hairline rgba(255,255,255,0.08)), white icons/labels (`--tabbar-fg`, inactive
+> translucent black rgba(0,0,0,0.35) over a darkened backdrop (Instagram-iOS style, `blur(12px) saturate(160%) brightness(0.55)`, hairline rgba(255,255,255,0.08)), white icons/labels (`--tabbar-fg`, inactive
 > `--tabbar-fg-inactive` 0.85), active pill rgba(255,255,255,0.14) + filled icon +
 > semibold label. Labels 탐색 / 검색 / 소셜 / 프로필. **Two states**: expanded
 > (icon + label, 64px) after a tab tap / on load; **compact** (icon-only,

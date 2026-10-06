@@ -228,8 +228,8 @@ export default function TabBar() {
         background: 'var(--tabbar-glass-bg)',
         border: '1px solid var(--tabbar-glass-border)',
         boxShadow: 'var(--tabbar-glass-shadow)',
-        backdropFilter: 'blur(28px) saturate(120%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(120%)',
+        backdropFilter: 'blur(12px) saturate(160%) brightness(0.55)',
+        WebkitBackdropFilter: 'blur(12px) saturate(160%) brightness(0.55)',
       }}
     >
       {/* variant="pill" / size="lg" / as="nav" — the 4 tabs are real route
