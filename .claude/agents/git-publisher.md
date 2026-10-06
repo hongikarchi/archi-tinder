@@ -129,7 +129,7 @@ Fires only with an explicit escalation reason after review gates passed and the
    `git diff <pre-deploy-main> origin/main --name-only -- 'backend/**/migrations/*.py'`
    is non-empty, your report MUST remind the operator to run `make migrate-prod`
    AFTER the Railway deploy is live (Railway cannot auto-migrate — runtime user
-   has no DDL, INFRA-DB-1; runbook: CONTRIBUTING.md § Deploy flow), and flag any
+   has no DDL, INFRA-DB-1; runbook: `docs/runbooks/deploy.md` §1 + §3), and flag any
    destructive ops (RemoveField / DeleteModel / RunSQL) you saw in those files.
    You never touch the prod DB.
 7. **Report**: PR number, main SHA, Railway status, force-reset done/deferred,
