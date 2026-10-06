@@ -23,7 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
     has_password (self-only, derived bool) so Account screen can show email +
     verified status + "set"/"change" password UI.
 
-    SELF-ONLY RULE: email, email_verified_at, has_password are private — this
+    SELF-ONLY RULE: email, email_verified_at, has_password, is_admin are private — this
     serializer is only used in _make_token_response() (own login) and MeView (GET
     /auth/me/).  Do NOT use this serializer on public-facing profile endpoints.
     """
@@ -31,6 +31,7 @@ class UserSerializer(serializers.ModelSerializer):
     providers    = serializers.SerializerMethodField()
     email        = serializers.SerializerMethodField()
     has_password = serializers.SerializerMethodField()
+    is_admin     = serializers.SerializerMethodField()
 
     class Meta:
         model  = UserProfile
@@ -39,7 +40,7 @@ class UserSerializer(serializers.ModelSerializer):
             'language', 'is_guest', 'onboarding_role', 'consent_accepted_at', 'handle',
             'notifications', 'role', 'affiliation',
             # AUTH-LOGIN-1 self-only fields
-            'email', 'email_verified_at', 'has_password',
+            'email', 'email_verified_at', 'has_password', 'is_admin',
         ]
 
     def get_providers(self, obj):
@@ -48,6 +49,14 @@ class UserSerializer(serializers.ModelSerializer):
     def get_email(self, obj):
         """Return the authenticated user's email from the underlying User row."""
         return obj.user.email
+
+    def get_is_admin(self, obj):
+        """ADMIN-DASH-1 self-only flag: same predicate as IsAdminOperator.
+
+        UX hint only (shows the 관리자 entry); the server gate is IsAdminOperator.
+        """
+        from apps.admin_dashboard.permissions import is_admin_operator
+        return is_admin_operator(obj.user)
 
     def get_has_password(self, obj):
         """Return True if the user has a usable (hashed) password set.

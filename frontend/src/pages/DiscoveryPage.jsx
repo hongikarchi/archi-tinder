@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, VerifyRequiredError } from '../api/client.js'
 import { reportWriteError } from '../utils/reportWriteError.js'
-import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
+import SwipeCard from '../components/SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
@@ -133,6 +134,7 @@ function _clearDraftSessionStorage() {
 export default function DiscoveryPage({ showToast, onLogout }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
   const isActiveRef = useRef(true)
   const requestIdRef = useRef(0)
   const fetchingRef = useRef(false)
@@ -765,13 +767,6 @@ export default function DiscoveryPage({ showToast, onLogout }) {
             )}
           </>
         )}
-      </div>
-
-      {/* Bottom area: swipe hint */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-        <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>
-          {t('discovery.swipeHintBar')}
-        </p>
       </div>
 
       {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate

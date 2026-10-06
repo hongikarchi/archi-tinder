@@ -5,6 +5,7 @@ import { useLanguage } from './hooks/useLanguage.js'
 import { useTranslation } from './i18n/index.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import AdminGate from './pages/admin/AdminGate.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
@@ -22,9 +23,12 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
+import { reportImageJobs } from './hooks/useReportImageJob.js'
 
-// ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
-// so it never lands in the prod bundle's eager import graph either.
+// ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
+// stay out of the eager import graph. Gated by AdminGate (UX only; the backend
+// IsAdminOperator permission is the real gate).
+const AdminPage = lazy(() => import('./pages/admin/AdminPage.jsx'))
 const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
@@ -645,6 +649,18 @@ export default function App() {
         setIsResultLoading(true)
         try {
           const backendId = project?.backendId
+          // FULL-REPORT-IMG-1: persona image starts NOW, in parallel with the
+          // report (facts-based prompt server-side, so it does not need the report
+          // to exist). Not awaited here — PersonaReport shows the in-progress state
+          // from the shared job store; this .then only persists the finished image
+          // into project state so ResultsPage remounts keep it.
+          if (backendId && !project.reportImage) {
+            reportImageJobs.start(backendId).then(img => {
+              if (!img?.image_data) return
+              setProjects(prev => prev.map(p => p.id === activeProjectId
+                ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
+            })
+          }
           const [resultData, reportData] = await Promise.all([
             api.getResult({ session_id: project.sessionId }),
             (backendId && !project.finalReport) ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
@@ -655,16 +671,6 @@ export default function App() {
             ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
             ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
           } : p))
-          // Fire-and-forget: generate persona image without blocking the completion screen.
-          // Backend caches the report; skip the image call too when one is already stored
-          // (belt-and-suspenders on top of the backend cache — quota conservation).
-          const hasReport = !!(reportData?.final_report || project.finalReport)
-          if (hasReport && backendId && !project.reportImage) {
-            api.generateReportImage(backendId)
-              .then(img => setProjects(prev => prev.map(p => p.id === activeProjectId
-                ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p)))
-              .catch(() => null)  // image failure is non-fatal; report text already shown
-          }
           // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
           // a temp project, but leave the sheet closed — the ResultsPage CTA
           // opens it. project.isTemp was set in handleStart (snapshot above).
@@ -913,6 +919,7 @@ export default function App() {
     api.logout(refresh)   // blacklists refresh token, clears JWT from localStorage
     // Purge ALL archithon_chat_* keys so stale chat doesn't surface on a shared device.
     purgeChatCache()
+    reportImageJobs.reset()
     sessionStorage.removeItem('archithon_user')
     // Clear Discovery session so a re-login starts a brand-new collection
     sessionStorage.removeItem('discovery_draft_id')
@@ -1126,14 +1133,12 @@ export default function App() {
             <Route path="notifications" element={<NotificationsScreen onLogout={handleLogout} />} />
             <Route path="appearance" element={<AppearanceScreen onLogout={handleLogout} />} />
           </Route>
-          {/* ADMIN-DBCHECK-1: URL-only internal QA tool, dev builds only — no TabBar/nav link */}
-          {import.meta.env.DEV && (
-            <Route path="db-check" element={
-              <Suspense fallback={null}>
-                <DbCheckPage />
-              </Suspense>
-            } />
-          )}
+          {/* ADMIN-DASH-1: operator dashboard + DB Check (URL / Settings entry, no TabBar link) */}
+          <Route path="admin" element={<AdminGate />}>
+            <Route index element={<AdminPage onLogout={handleLogout} />} />
+            <Route path="db-check" element={<DbCheckPage />} />
+          </Route>
+          <Route path="db-check" element={<Navigate to="/admin/db-check" replace />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

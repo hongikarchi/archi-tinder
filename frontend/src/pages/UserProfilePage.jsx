@@ -8,7 +8,6 @@ import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
 import { getMyPersonality } from '../api/personality.js'
-import ShareCardModal from '../components/ShareCardModal.jsx'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHero from './userProfile/ProfileHero'
 import BoardGrid from './userProfile/BoardGrid'
@@ -16,7 +15,6 @@ import PentagonChart from '../components/PentagonChart.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
-import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import Tabs from '../components/Tabs.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import PhotoTile from '../components/PhotoTile.jsx'
@@ -75,8 +73,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
-  // Share card modal
-  const [shareOpen, setShareOpen] = useState(false)
   // Tab state — 'boards' | 'studios' | 'liked'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
@@ -495,75 +491,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
       background: 'var(--color-bg)',
       paddingBottom: 'var(--tabbar-clearance)'
     }}>
-      <PageTopControls onLogout={onLogout} />
-
-      {/* Floating top-left cluster — Claude Design mock conversion.
-          isMe: bell (unread badge) + share + settings, all neutral
-          circles (no destructive tint — mock parity). !isMe: single back
-          circle via PageBackButton (value-for-value match already shipped
-          by the design-port initiative — reused rather than re-authored).
-          Logout lives in PageTopControls (top-right) like every other page. */}
-      {isMe ? (
-        <div style={{
-          position: 'fixed', top: 16, left: 12, zIndex: 300,
-          display: 'flex', gap: 6, alignItems: 'center',
-        }}>
-          {/* Notifications bell + unread badge (NOTIF-INAPP-1). FloatingIconButton's
-              own .btn class already sets position:relative, which is what the
-              badge below anchors to — no extra positioning style needed. */}
-          <FloatingIconButton
-            onClick={() => navigate('/notifications')}
-            ariaLabel={t('profile.notifications')}
-            title={t('profile.notifications')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 01-3.46 0"></path>
-            </svg>
-            {unreadCount > 0 && (
-              <span
-                aria-hidden="true"
-                style={{
-                  position: 'absolute', top: -3, right: -3,
-                  minWidth: 15, height: 15, padding: '0 4px',
-                  borderRadius: 999, background: 'var(--accent-1)', color: '#fff',
-                  fontSize: 9, fontWeight: 700, lineHeight: '15px', textAlign: 'center',
-                }}
-              >
-                {unreadBadgeLabel}
-              </span>
-            )}
-          </FloatingIconButton>
-
-          {/* Share — mock's share-network glyph, SVG paths verbatim from profile.html */}
-          <FloatingIconButton
-            onClick={() => setShareOpen(true)}
-            ariaLabel={t('profile.shareCard')}
-            title={t('profile.shareCard')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="12" r="3"></circle>
-              <circle cx="18" cy="6" r="3"></circle>
-              <circle cx="18" cy="18" r="3"></circle>
-              <path d="M8.6 10.5l6.8-3M8.6 13.5l6.8 3"></path>
-            </svg>
-          </FloatingIconButton>
-
-          {/* Settings */}
-          <FloatingIconButton
-            onClick={() => navigate('/settings')}
-            ariaLabel={t('profile.settings')}
-            title={t('profile.settings')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
-            </svg>
-          </FloatingIconButton>
-        </div>
-      ) : (
-        <PageBackButton onClick={() => navigate(-1)} />
-      )}
+      {/* Top rail: theme pill left, 한/EN + logout right (same as other tab pages).
+          isMe passes no `leading`; bell + settings live in the ProfileHero.
+          !isMe: single back circle. */}
+      <PageTopControls
+        onLogout={onLogout}
+        leading={isMe ? undefined : <PageBackButton inline onClick={() => navigate(-1)} />}
+      />
 
       <PageLogoHeader padding="20px 16px 0" />
 
@@ -596,6 +530,10 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             else setActiveTab('boards')
           }}
           isMe={isMe}
+          unreadCount={unreadCount}
+          unreadBadgeLabel={unreadBadgeLabel}
+          onOpenNotifications={() => navigate('/notifications')}
+          onOpenSettings={() => navigate('/settings')}
           onAvatarUpdated={(updatedUser) => setUser(prev => ({ ...prev, avatar_url: updatedUser.avatar_url }))}
         />
 
@@ -1075,11 +1013,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         )}
 
       </div>
-
-      {/* Share card modal */}
-      {shareOpen && user && (
-        <ShareCardModal user={user} onClose={() => setShareOpen(false)} />
-      )}
 
       {/* Work detail modal */}
       {selectedWorkId && (

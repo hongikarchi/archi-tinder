@@ -335,8 +335,10 @@ class TestProjectReportImageCache:
             'image_data', 'mime_type', 'prompt',
         }
 
-    def test_requires_final_report_first(self, auth_client, user_profile):
-        project = _make_project(user_profile)
+    def test_no_report_and_no_likes_is_400(self, auth_client, user_profile):
+        """FULL-REPORT-IMG-1: a report is no longer required (facts-based image),
+        but there must be liked buildings to derive the prompt from."""
+        project = _make_project(user_profile, liked_ids=[])
         resp = auth_client.post(
             f'/api/v1/projects/{project.project_id}/report/generate-image/',
             {}, format='json',

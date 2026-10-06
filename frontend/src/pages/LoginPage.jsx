@@ -25,7 +25,7 @@ import { getRoles } from '../api/meta.js'
 import GoogleLoginButton from '../components/GoogleLoginButton.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
-import { CARD_HEIGHT, CARD_WIDTH } from '../components/SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import { SWIPE_PREVENT_ALL, SWIPE_PREVENT_VERTICAL } from '../components/swipeGestureConfig.js'
 import {
@@ -77,12 +77,15 @@ const LINEAR_NEXT_STEP = {
 // pre-rendered back layer (see ChoiceDeck / ConsentDeck `renderBackStep`).
 const SELF_BACKED_STEPS = new Set([FLOW_STEPS.choice, FLOW_STEPS.consent])
 
-const AUTH_STAGE_WIDTH = `${CARD_WIDTH}px`
-const AUTH_CARD_HEIGHT = `${CARD_HEIGHT}px`
+// Card size is reactive (useCardSize); the static style objects below read it
+// through CSS custom properties that LoginPage sets on its root element.
+const AUTH_STAGE_WIDTH = 'var(--auth-card-w)'
+const AUTH_CARD_HEIGHT = 'var(--auth-card-h)'
 
 export default function LoginPage({ onLogin }) {
   const { t, language } = useTranslation()
   const { setLanguage } = useLanguage()
+  const cardSize = useCardSize()
 
   const [step, setStep]                         = useState(FLOW_STEPS.choice)
   // LOGIN-REWORK-1: step-history stack — advancing pushes the step being LEFT
@@ -426,7 +429,10 @@ export default function LoginPage({ onLogin }) {
   const frontCardKey = step === FLOW_STEPS.consent ? `consent-${consentResetTick}` : step
 
   return (
-    <div className={styles.page} style={pageStyle}>
+    <div
+      className={styles.page}
+      style={{ ...pageStyle, '--auth-card-w': `${cardSize.width}px`, '--auth-card-h': `${cardSize.height}px` }}
+    >
       {/* Shared top-right controls cluster (language / theme / logout) —
           see components/PageTopControls.jsx. Replaces the page-local
           LangToggle this task previously introduced here (canvas design

@@ -69,7 +69,13 @@ class TestInspectBuildingsList:
         resp = api_client.get('/api/v1/inspect/buildings/')
         assert resp.status_code == 401
 
-    def test_pagination_shape_full_page(self, auth_client):
+    def test_non_admin_user_returns_403(self, auth_client):
+        """ADMIN-DASH-1: a plain authenticated user is no longer enough."""
+        assert auth_client.get('/api/v1/inspect/buildings/').status_code == 403
+        assert auth_client.get('/api/v1/inspect/buildings/bld_000001/').status_code == 403
+        assert auth_client.post('/api/v1/inspect/search/', {'query': 'x'}, format='json').status_code == 403
+
+    def test_pagination_shape_full_page(self, admin_client):
         """page_size rows returned -> next_after is the last id, total cached."""
         ids = [('bld_000001',), ('bld_000002',)]
         id_cursor = _cursor_mock(fetchall_rows=ids)
@@ -79,7 +85,7 @@ class TestInspectBuildingsList:
         with patch('apps.recommendation.views.inspect.connections', mock_connections), \
              patch('apps.recommendation.views.inspect.engine.get_buildings_by_ids',
                    return_value=[_MOCK_CARD, _MOCK_CARD]) as mock_hydrate:
-            resp = auth_client.get('/api/v1/inspect/buildings/?page_size=2')
+            resp = admin_client.get('/api/v1/inspect/buildings/?page_size=2')
 
         assert resp.status_code == 200, resp.json()
         data = resp.json()
@@ -88,7 +94,7 @@ class TestInspectBuildingsList:
         assert data['total'] == 2500
         mock_hydrate.assert_called_once_with(['bld_000001', 'bld_000002'])
 
-    def test_pagination_last_page_next_after_null(self, auth_client):
+    def test_pagination_last_page_next_after_null(self, admin_client):
         """Fewer rows than page_size -> next_after is null (last page)."""
         ids = [('bld_000099',)]
         id_cursor = _cursor_mock(fetchall_rows=ids)
@@ -98,13 +104,13 @@ class TestInspectBuildingsList:
         with patch('apps.recommendation.views.inspect.connections', mock_connections), \
              patch('apps.recommendation.views.inspect.engine.get_buildings_by_ids',
                    return_value=[_MOCK_CARD]):
-            resp = auth_client.get('/api/v1/inspect/buildings/?page_size=60')
+            resp = admin_client.get('/api/v1/inspect/buildings/?page_size=60')
 
         assert resp.status_code == 200, resp.json()
         data = resp.json()
         assert data['next_after'] is None
 
-    def test_after_cursor_passed_to_sql(self, auth_client):
+    def test_after_cursor_passed_to_sql(self, admin_client):
         """after= param must be forwarded as a bind parameter (parameterized SQL)."""
         id_cursor = _cursor_mock(fetchall_rows=[])
         count_cursor = _cursor_mock(fetchone_row=(0,))
@@ -113,7 +119,7 @@ class TestInspectBuildingsList:
         with patch('apps.recommendation.views.inspect.connections', mock_connections), \
              patch('apps.recommendation.views.inspect.engine.get_buildings_by_ids',
                    return_value=[]):
-            resp = auth_client.get('/api/v1/inspect/buildings/?after=bld_000050')
+            resp = admin_client.get('/api/v1/inspect/buildings/?after=bld_000050')
 
         assert resp.status_code == 200
         sql, params = id_cursor.execute.call_args[0]
@@ -121,7 +127,7 @@ class TestInspectBuildingsList:
         assert 'bld_000050' in params
         assert 'is_publishable = true' in sql
 
-    def test_page_size_capped_at_100(self, auth_client):
+    def test_page_size_capped_at_100(self, admin_client):
         id_cursor = _cursor_mock(fetchall_rows=[])
         count_cursor = _cursor_mock(fetchone_row=(0,))
         mock_connections = _connections_mock([id_cursor, count_cursor])
@@ -129,13 +135,13 @@ class TestInspectBuildingsList:
         with patch('apps.recommendation.views.inspect.connections', mock_connections), \
              patch('apps.recommendation.views.inspect.engine.get_buildings_by_ids',
                    return_value=[]):
-            resp = auth_client.get('/api/v1/inspect/buildings/?page_size=9999')
+            resp = admin_client.get('/api/v1/inspect/buildings/?page_size=9999')
 
         assert resp.status_code == 200
         _sql, params = id_cursor.execute.call_args[0]
         assert params[-1] == 100
 
-    def test_total_is_cached_across_requests(self, auth_client):
+    def test_total_is_cached_across_requests(self, admin_client):
         """Second request must not re-issue the count query (cache hit)."""
         id_cursor_1 = _cursor_mock(fetchall_rows=[])
         count_cursor = _cursor_mock(fetchone_row=(42,))
@@ -144,7 +150,7 @@ class TestInspectBuildingsList:
         with patch('apps.recommendation.views.inspect.connections', mock_connections_1), \
              patch('apps.recommendation.views.inspect.engine.get_buildings_by_ids',
                    return_value=[]):
-            resp1 = auth_client.get('/api/v1/inspect/buildings/')
+            resp1 = admin_client.get('/api/v1/inspect/buildings/')
         assert resp1.json()['total'] == 42
 
         # Second call: only the id-cursor should fire; count cursor absent from
@@ -155,7 +161,7 @@ class TestInspectBuildingsList:
         with patch('apps.recommendation.views.inspect.connections', mock_connections_2), \
              patch('apps.recommendation.views.inspect.engine.get_buildings_by_ids',
                    return_value=[]):
-            resp2 = auth_client.get('/api/v1/inspect/buildings/')
+            resp2 = admin_client.get('/api/v1/inspect/buildings/')
         assert resp2.status_code == 200
         assert resp2.json()['total'] == 42
 
@@ -169,16 +175,16 @@ class TestInspectBuildingDetail:
         resp = api_client.get('/api/v1/inspect/buildings/bld_000001/')
         assert resp.status_code == 401
 
-    def test_404_on_missing_or_non_publishable(self, auth_client):
+    def test_404_on_missing_or_non_publishable(self, admin_client):
         cur = _cursor_mock(fetchone_row=None)
         mock_connections = _connections_mock([cur])
 
         with patch('apps.recommendation.views.inspect.connections', mock_connections):
-            resp = auth_client.get('/api/v1/inspect/buildings/bld_999999/')
+            resp = admin_client.get('/api/v1/inspect/buildings/bld_999999/')
 
         assert resp.status_code == 404
 
-    def test_detail_shape_excludes_raw_embedding_includes_presence_fields(self, auth_client):
+    def test_detail_shape_excludes_raw_embedding_includes_presence_fields(self, admin_client):
         cols = [
             'canonical_bld_id', 'name', 'names_alts', 'location_city', 'location_country',
             'project_year', 'architect_canonical_ids', 'architect_names', 'architects_text',
@@ -204,7 +210,7 @@ class TestInspectBuildingDetail:
         mock_connections = _connections_mock([cur])
 
         with patch('apps.recommendation.views.inspect.connections', mock_connections):
-            resp = auth_client.get('/api/v1/inspect/buildings/bld_000001/')
+            resp = admin_client.get('/api/v1/inspect/buildings/bld_000001/')
 
         assert resp.status_code == 200, resp.json()
         data = resp.json()
@@ -220,7 +226,7 @@ class TestInspectBuildingDetail:
         assert 'is_publishable = true' in sql
         assert 'vector_dims' in sql
 
-    def test_updated_at_serialized_isoformat(self, auth_client):
+    def test_updated_at_serialized_isoformat(self, admin_client):
         import datetime
         cols = ['canonical_bld_id', 'updated_at', 'embedding_present', 'embedding_dim']
         dt = datetime.datetime(2026, 1, 1, 12, 0, 0)
@@ -229,7 +235,7 @@ class TestInspectBuildingDetail:
         mock_connections = _connections_mock([cur])
 
         with patch('apps.recommendation.views.inspect.connections', mock_connections):
-            resp = auth_client.get('/api/v1/inspect/buildings/bld_000002/')
+            resp = admin_client.get('/api/v1/inspect/buildings/bld_000002/')
 
         assert resp.status_code == 200
         assert resp.json()['updated_at'] == dt.isoformat()
@@ -244,21 +250,21 @@ class TestInspectSearch:
         resp = api_client.post('/api/v1/inspect/search/', {'query': 'brutalist museum'}, format='json')
         assert resp.status_code == 401
 
-    def test_missing_query_returns_400(self, auth_client):
-        resp = auth_client.post('/api/v1/inspect/search/', {}, format='json')
+    def test_missing_query_returns_400(self, admin_client):
+        resp = admin_client.post('/api/v1/inspect/search/', {}, format='json')
         assert resp.status_code == 400
 
-    def test_blank_query_returns_400(self, auth_client):
-        resp = auth_client.post('/api/v1/inspect/search/', {'query': '   '}, format='json')
+    def test_blank_query_returns_400(self, admin_client):
+        resp = admin_client.post('/api/v1/inspect/search/', {'query': '   '}, format='json')
         assert resp.status_code == 400
 
-    def test_oversized_query_returns_400(self, auth_client):
-        resp = auth_client.post(
+    def test_oversized_query_returns_400(self, admin_client):
+        resp = admin_client.post(
             '/api/v1/inspect/search/', {'query': 'x' * 2001}, format='json',
         )
         assert resp.status_code == 400
 
-    def test_search_success_mocked(self, auth_client):
+    def test_search_success_mocked(self, admin_client):
         parsed = {
             'filters': {'program': 'Museum'},
             'filter_priority': ['program'],
@@ -270,7 +276,7 @@ class TestInspectSearch:
                    return_value=parsed) as mock_parse, \
              patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
                    return_value=[_MOCK_CARD]) as mock_search:
-            resp = auth_client.post(
+            resp = admin_client.post(
                 '/api/v1/inspect/search/',
                 {'query': 'brutalist museum', 'limit': 50},
                 format='json',
@@ -294,7 +300,7 @@ class TestInspectSearch:
         assert search_kwargs['limit'] == 50
         assert search_kwargs['filter_priority'] == ['program']
 
-    def test_limit_capped_at_100(self, auth_client):
+    def test_limit_capped_at_100(self, admin_client):
         parsed = {
             'filters': {'program': 'Museum'}, 'filter_priority': ['program'],
             'raw_query': 'q', 'image_focus': None, 'visual_description': None,
@@ -302,14 +308,14 @@ class TestInspectSearch:
         with patch('apps.recommendation.views.inspect.services.parse_query', return_value=parsed), \
              patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
                    return_value=[_MOCK_CARD]) as mock_search:
-            resp = auth_client.post(
+            resp = admin_client.post(
                 '/api/v1/inspect/search/', {'query': 'q', 'limit': 5000}, format='json',
             )
         assert resp.status_code == 200
         _, search_kwargs = mock_search.call_args
         assert search_kwargs['limit'] == 100
 
-    def test_fallback_when_search_returns_empty(self, auth_client):
+    def test_fallback_when_search_returns_empty(self, admin_client):
         parsed = {
             'filters': {}, 'filter_priority': [], 'raw_query': 'zzz nonsense',
             'image_focus': None, 'visual_description': None,
@@ -319,7 +325,7 @@ class TestInspectSearch:
                    return_value=[]), \
              patch('apps.recommendation.views.inspect.engine.get_diverse_random',
                    return_value=[_MOCK_CARD]) as mock_random:
-            resp = auth_client.post(
+            resp = admin_client.post(
                 '/api/v1/inspect/search/', {'query': 'zzz nonsense'}, format='json',
             )
         assert resp.status_code == 200, resp.json()
@@ -328,7 +334,7 @@ class TestInspectSearch:
         assert data['results'] == [_MOCK_CARD]
         mock_random.assert_called_once()
 
-    def test_blank_parsed_raw_query_falls_back_to_request_query(self, auth_client):
+    def test_blank_parsed_raw_query_falls_back_to_request_query(self, admin_client):
         """parse_query returning a blank raw_query -> view falls back to the
         request's own query string (still has signal, search IS invoked)."""
         parsed = {
@@ -339,7 +345,7 @@ class TestInspectSearch:
              patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
                    return_value=[_MOCK_CARD]) as mock_search, \
              patch('apps.recommendation.views.inspect.engine.get_diverse_random') as mock_random:
-            resp = auth_client.post(
+            resp = admin_client.post(
                 '/api/v1/inspect/search/', {'query': 'q'}, format='json',
             )
         assert resp.status_code == 200, resp.json()
@@ -348,7 +354,7 @@ class TestInspectSearch:
         mock_random.assert_not_called()
         assert resp.json()['is_fallback'] is False
 
-    def test_truly_no_signal_when_search_empty_falls_back(self, auth_client):
+    def test_truly_no_signal_when_search_empty_falls_back(self, admin_client):
         """Empty filters + search_by_filters_scored returns [] -> fallback fires
         even when has_signal was True (mirrors ParseQueryView's last-resort path)."""
         parsed = {
@@ -360,7 +366,7 @@ class TestInspectSearch:
                    return_value=[]), \
              patch('apps.recommendation.views.inspect.engine.get_diverse_random',
                    return_value=[_MOCK_CARD]) as mock_random:
-            resp = auth_client.post(
+            resp = admin_client.post(
                 '/api/v1/inspect/search/', {'query': 'q'}, format='json',
             )
         assert resp.status_code == 200

@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
-import SwipeCard, { CARD_WIDTH, CARD_HEIGHT } from '../components/SwipeCard.jsx'
+import SwipeCard from '../components/SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
 import SwipeDeck from '../components/SwipeDeck.jsx'
@@ -32,6 +33,7 @@ import {
 // title, meta body, mono hint row). Swipe semantics/props unchanged.
 function ActionCard({ card }) {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
   const message  = card.action_card_message  || t('swipe.actionCard.message')
   const subtitle = card.action_card_subtitle || t('swipe.actionCard.subtitle')
   return (
@@ -284,6 +286,7 @@ export default function SwipePage({
   onLogout,
 }) {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH } = useCardSize()
   const cardRef = useRef(null)
   const swipedCardId = useRef(null)
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
@@ -405,20 +408,21 @@ export default function SwipePage({
         padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
-        <PageTopControls onLogout={onLogout} />
-
-        {/* Exit button */}
-        <FloatingIconButton
-          onClick={() => setShowExitConfirm(true)}
-          ariaLabel="Exit session"
-          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
-          </svg>
-        </FloatingIconButton>
+        <PageTopControls
+          onLogout={onLogout}
+          leading={
+            <FloatingIconButton
+              onClick={() => setShowExitConfirm(true)}
+              ariaLabel="Exit session"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
+              </svg>
+            </FloatingIconButton>
+          }
+        />
 
         {/* Header / confidence bar — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -482,7 +486,21 @@ export default function SwipePage({
 
   return (
     <>
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls
+          onLogout={onLogout}
+          leading={
+            <FloatingIconButton
+              onClick={() => setShowExitConfirm(true)}
+              ariaLabel="Exit session"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" />
+                <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
+              </svg>
+            </FloatingIconButton>
+          }
+        />
 
       {showExitConfirm && (
         <ExitConfirmPopup
@@ -505,20 +523,6 @@ export default function SwipePage({
         background: 'var(--color-bg)', padding: '20px 16px var(--tabbar-clearance)',
         position: 'relative',
       }}>
-
-        {/* F3 — Exit button, top-left floating (moved from right to avoid Logout button occlusion) */}
-        <FloatingIconButton
-          onClick={() => setShowExitConfirm(true)}
-          ariaLabel="Exit session"
-          style={{ position: 'absolute', top: 16, left: 12, zIndex: 10 }}
-        >
-          {/* Restart / new-session icon */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 .49-4.95" />
-          </svg>
-        </FloatingIconButton>
 
         {/* Header — Arch|ibe logo (DESIGN.md-mock parity, taste-swipe.html) */}
         <div style={{ textAlign: 'center', width: '100%' }}>
@@ -640,11 +644,6 @@ export default function SwipePage({
         </SwipeDeck>
 
         </div>{/* end center wrapper */}
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <p style={{ color: 'var(--color-text-dimmest)', fontSize: 11, margin: 0 }}>← skip · tap card · save →</p>
-        </div>
 
       </div>
     </>

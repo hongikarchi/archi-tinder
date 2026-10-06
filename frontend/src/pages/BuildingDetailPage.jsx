@@ -148,18 +148,17 @@ export default function BuildingDetailPage({ onLogout }) {
   if (loading) {
     return (
       <>
-        <PageTopControls onLogout={onLogout} />
-        <LoadingState onBack={handleBack} />
+        <PageTopControls onLogout={onLogout} leading={<Header onBack={handleBack} />} />
+        <LoadingState />
       </>
     )
   }
   if (error || !building) {
     return (
       <>
-        <PageTopControls onLogout={onLogout} />
+        <PageTopControls onLogout={onLogout} leading={<Header onBack={handleBack} />} />
         <ErrorState
           message={error || 'No building matched this ID.'}
-          onBack={handleBack}
           onRetry={() => setReloadKey(k => k + 1)}
         />
       </>
@@ -174,10 +173,8 @@ export default function BuildingDetailPage({ onLogout }) {
       overflowY: 'auto',
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
-      <PageTopControls onLogout={onLogout} />
+      <PageTopControls onLogout={onLogout} leading={<Header onBack={handleBack} />} />
       <PageLogoHeader />
-
-      <Header onBack={handleBack} />
 
       {saveModalOpen && building && (
         <SaveToBoardModal

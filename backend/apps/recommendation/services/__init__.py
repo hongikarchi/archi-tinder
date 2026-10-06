@@ -112,6 +112,7 @@ from .generation import (  # noqa: F401
     generate_visual_description,
     generate_persona_report,
     generate_persona_image,
+    build_image_report_from_facts,
     generate_taste_board_name,
 )
 
@@ -166,6 +167,7 @@ __all__ = [
     'generate_visual_description',
     'generate_persona_report',
     'generate_persona_image',
+    'build_image_report_from_facts',
     'generate_taste_board_name',
     'rerank_candidates',
 ]

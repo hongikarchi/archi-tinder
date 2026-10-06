@@ -12,6 +12,7 @@
  */
 import { useSyncExternalStore } from 'react'
 import { getMe } from '../api/auth.js'
+import { setAdminStatus } from './useAdminStatus.js'
 
 let messagingEnabled = false
 let generation = 0
@@ -39,9 +40,12 @@ export async function loadMessagingFeature() {
     const me = await getMe()
     if (mine !== generation) return
     setEnabled(me?.features?.messaging === true)
+    // ADMIN-DASH-1: same /auth/me/ answer also carries `is_admin` (UX gate only).
+    setAdminStatus(me?.is_admin === true)
   } catch {
     if (mine !== generation) return
     setEnabled(false)
+    setAdminStatus(false)
   }
 }
 
@@ -49,6 +53,7 @@ export async function loadMessagingFeature() {
 export function resetMessagingFeature() {
   generation += 1
   setEnabled(false)
+  setAdminStatus(null)
 }
 
 export function useMessagingEnabled() {

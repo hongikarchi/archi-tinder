@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — FULL-MESSAGING-1 완료 2026-10-02, ## Done 참조)_
+_(비어 있음 — ADMIN-DASH-1 완료 2026-10-06, ## Done 참조)_
 
 ## Next
 
@@ -180,6 +180,15 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 
 ### MEDIUM
 
+#### ADMIN-DASH-2 — 관리자 페이지 2~4단계
+2단계 호스팅·LLM 상태/계정/비용(Railway/Vercel/Neon/CF R2/OpenAI/Gemini/HF; 로그인 방식은 메모) → 3단계 신고 처리·작품 검수·계정 정지/삭제(PIPA)·동의 이력(typed-confirm + audit) → 4단계 실시간 API 성능(ServerTimingMiddleware→Redis) + 제품 지표 설계. 계획: ADMIN-DASH-1 plan "Later PRs".
+
+#### ADMIN-DASH-HARDEN-1 — 관리자 페이지 low 4건
+version 캐시 키에 RAILWAY_GIT_COMMIT_SHA 포함(배포 직후 거짓 불일치 배지); audit IP = 신뢰 프록시 기준 XFF; compare 250커밋 초과 시 develop_sha null; User.email 쓰기 경로 추가 감지 테스트. ADMIN-DASH-1 Deferred.
+
+#### FRONT-IMG-TELEMETRY-1 — 카드 이미지 실패 원인 호스트별 집계
+`/api/v1/telemetry/image-load/` 실패 이벤트(100% 수집)를 호스트별(archdaily/dezeen/divisare/imgix…)로 묶어 실패율·지연 확인 → 외부 핫링크 차단 비중 판단, 필요 시 R2 미러링 검토. MOBILE-FIX-1 Deferred.
+
 #### FULL-MESSAGING-2 — 새로고침하면 차단 해제를 못 함
 차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 '차단'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.
 
@@ -188,8 +197,8 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 #### BACK-VOCAB-2 — 재료 어휘 timber vs wood 불일치
 검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).
 
-#### PERF-MEASURE-2 — round2 배포 후 prod 재측정
-PERF-ROUND2 배포 후 `tools/perf/prod_bench.py --label round2` (사용자 실행 — prod 쓰기) + Server-Timing 열로 서버/네트워크 분리. 확인 포인트: 스와이프 +25~40ms 원인, 검색 필터 도착 시간, 결과 조회, PoolTimeout 로그(SSE가 default 슬롯 점유 — 필요시 `DB_POOL_MAX_SIZE` 상향).
+#### PERF-PROMOTE-2 — 취향 분석 콜드 쿼리 2개
+prod 컨테이너 실측(2026-10-03): 데워진 상태 0.22-0.25s, 식은 상태 15.9s = HNSW 후보 450개 쿼리 10.4s + 무작위 후보용 전체 publishable id 스캔 5.2s. 후보안: id 스캔 제거(TABLESAMPLE 또는 Redis 공유 캐시), `taste_pool_overfetch` 3→~1.33(k=200). 사용자 결정: 지금은 보류 — Neon scale-to-zero 해제(사용자 증가 시) 때 재검토.
 
 #### INFRA-IMG-2 — prod 이미지 r2.dev → 커스텀 도메인
 prod `IMAGE_BASE_URL`이 속도 제한 있는 개발용 `r2.dev`. 출시 전 R2 커스텀 도메인 연결.
@@ -342,6 +351,28 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### ADMIN-DASH-1 — 관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계) — RESOLVED 2026-10-06 (`fa38b8e`)
+- 앱 내 `/admin` 관리자 페이지 + 서버 다중 잠금 `IsAdminOperator`(is_staff + `ADMIN_EMAILS` env + 비게스트 + Google SocialAccount); 거부는 logger만(DB 행 없음), 통과 호출 throttle `admin` 120/min.
+- 새 app `admin_dashboard`: GET `/api/v1/admin/dashboard/{version,migrations,flags,stats,audit-log}/`; `AdminAuditLog` 모델(0001) + `grant_admin <email> [--revoke]`(JWT 유저 캐시 무효화).
+- version = Railway SHA + GitHub compare/CI(15분 캐시, 실패 시 null+error 200); migrations = MigrationExecutor 미적용 목록; flags = 한국어 설명 + ON/OFF 읽기전용(비밀값 없음); stats = 유저/작품/신고/세션/건물(is_publishable).
+- office_claims + `/api/v1/inspect/*` 동일 잠금으로 교체; `/auth/me/` `is_admin`; DbCheck → `/admin/db-check`(DEV 전용 해제); 설정 화면 관리자 행(관리자만).
+- 죽은 `IMAGE_BASE_URL` 제거; 예전 건물사진 R2 bucket은 사용자가 정리.
+- 검증: pytest 311 passed(admin_dashboard/profiles/inspect/accounts, 로컬 branch owner), flake8·ESLint·build PASS, code-review low 4 / security PASS.
+- Ops 남음: Railway env `ADMIN_EMAILS` + `GITHUB_TOKEN` 추가, `IMAGE_BASE_URL` env 삭제, 배포 후 `make migrate-prod` → prod `grant_admin`.
+- Deferred: low 4건 → ADMIN-DASH-HARDEN-1; 2~4단계 → ADMIN-DASH-2.
+
+### MOBILE-FIX-1 — 모바일 스와이프 카드·상단 컨트롤 정비 — RESOLVED 2026-10-06 (`4384ae2`)
+- 스와이프 카드 모바일 7건: 갤러리 버튼 터치 무반응(tinderCard touchstart preventDefault → closest('.pressable')), 캐시 이미지 opacity 0 고착 + 4s 타이머 stale closure 수정, 상세 정보 하단 정렬, 드래그 기울기 위치 기반(속도 튐 제거), 하단 힌트 문구 삭제, 프로필 공유 버튼 + ShareCardModal 삭제.
+- 카드 크기: 모듈 로드 시 고정 → `hooks/useCardSize` 반응형(같은 공식, 주소창 80px 미만 높이 변화 무시).
+- 상단 컨트롤: 모든 페이지 light/dark 왼쪽 레일(뒤로가기/종료 옆), 한/EN·로그아웃 오른쪽; splitMobile 삭제; 내 프로필 알림·설정은 히어로 통계 아래로 이동(<386px 로고 겹침 해소).
+- 이미지 미표시 원인 중 외부 CDN 핫링크 비중은 미측정 — Deferred: 이미지 로드 텔레메트리 호스트별 실패율 집계(FRONT-IMG-TELEMETRY-1).
+
+### FULL-REPORT-IMG-1 + PERF-MEASURE-2 — 취향 이미지 자동 생성 + 배포 후 prod 측정 — RESOLVED 2026-10-03 (`a2a4b91`)
+- 이미지: 생성/재생성 버튼 삭제, 스와이프 완료 시 리포트와 동시에 생성 시작(리포트 없으면 파이썬 취향 데이터로 프롬프트), '이미지 생성 중…' 스켈레톤 + 실패 문구, 프로젝트별 토큰 락으로 중복 유료 생성 방지, 소유자 화면에서 이미지 없으면 1회 자동 생성 (`8d839e1`).
+- 측정(웜, `prod_bench --warmup 1 --stream`): 검색 카드 1.67s(배포전 3.53s), 결과 414ms(695), 세션생성 228ms(280), 스와이프 212ms(202, 노이즈). 1초 초과: 이미지 11.3s, 리포트 첫 생성 2.7s, 취향분석(식으면 15.9s), 검색 완료 1.93s.
+- Neon: Launch 플랜, user_data+archi_data 한 컴퓨트(0.25-8 CU), scale-to-zero 5분 ON 유지(사용자 결정; 끄면 0.25CU 월 ~$19).
+- Deferred: `PERF-PROMOTE-2` (## Next MEDIUM).
+
 ### FULL-MESSAGING-1 — 관심 있어요 버튼이 아무 동작 안 함 — RESOLVED 2026-10-02 (`15116cf`)
 - 관심 요청 → 수락/무시 → 앱 내 1:1 메시지(폴링) + 차단/신고 구현. 플래그 `MESSAGING_ENABLED` 기본 OFF — prod는 OFF로 배포 후 Railway env에서 ON. 설계 `docs/plans/2026-10-02-contact-messaging-design.md` (D1–D13).
 - [x] 백엔드 `apps.messaging` (`dbb40b7`): ContactRequest/Conversation/Message/Block/Report, API 11뷰, OFF 시 전 엔드포인트 404, MeView `features.messaging`. 수락 시 인사말 + `connected` 시스템 메시지(요청자 안 읽음 1 / 수락자 0, D13). 무시 30일 쿨다운 비공개(D10), 수신 가드 진단+opt-in(D11), 알림 row 미생성(D9). 차단 → 대화 closed + 발견 피드 양방향 제외(플래그 무관). 스로틀 3종. 상호 요청 경합 정리 + connect 멱등. 테스트 61개.

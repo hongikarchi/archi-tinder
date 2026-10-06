@@ -208,6 +208,27 @@ def _extract_lang_block(raw, lang_key):
     return {field: block.get(field, '') for field in _REPORT_TEXT_FIELDS}
 
 
+def _fetch_taste_rows(building_ids):
+    """Fetch the taste-axis attributes of `building_ids` (publishable-gated) in
+    one query on the buildings connection. Returns a list of row dicts."""
+    from apps.recommendation import services as _svc  # noqa: PLC0415
+
+    if not building_ids:
+        return []
+    placeholders = ','.join(['%s'] * len(building_ids))
+    with _svc.connection.cursor() as cur:
+        cur.execute(
+            f'SELECT canonical_bld_id, program, style, atmosphere, color_tone,'
+            f' material_visual, typology_primary, typology_tags, architectural_elements,'
+            f' project_year, location_country, architect_names, architects_text,'
+            f' visual_description'
+            f' FROM canonical_v2_buildings'
+            f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
+            list(building_ids),
+        )
+        return _svc._dictfetchall(cur)
+
+
 def generate_persona_report(liked_building_ids, disliked_building_ids=None, language='ko'):
     """
     Generate an architect persona report from liked (+ optionally disliked)
@@ -257,18 +278,7 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     # Fetch attributes of liked+disliked buildings (publishable-gated) in one
     # query -- taste_facts needs BOTH sides to compute shown-set ratios.
     all_ids = list(dict.fromkeys(liked_building_ids + disliked_building_ids))
-    placeholders = ','.join(['%s'] * len(all_ids))
-    with _svc.connection.cursor() as cur:
-        cur.execute(
-            f'SELECT canonical_bld_id, program, style, atmosphere, color_tone,'
-            f' material_visual, typology_primary, typology_tags, architectural_elements,'
-            f' project_year, location_country, architect_names, architects_text,'
-            f' visual_description'
-            f' FROM canonical_v2_buildings'
-            f' WHERE canonical_bld_id IN ({placeholders}) AND is_publishable = true',
-            all_ids,
-        )
-        rows = _svc._dictfetchall(cur)
+    rows = _fetch_taste_rows(all_ids)
 
     if not rows:
         return None
@@ -650,6 +660,65 @@ def _to_webp(raw):
     except Exception as e:
         logger.warning('webp convert failed: %s: %s', type(e).__name__, e)
         return raw, None
+
+
+_FACTS_IMAGE_DEFAULT_ATMOSPHERE = 'serene and monumental'
+
+
+def build_image_report_from_facts(liked_building_ids, disliked_building_ids=None):
+    """FULL-REPORT-IMG-1: build a pseudo persona report for generate_persona_image
+    from Python-computed taste facts ONLY (no LLM, no stored final_report), so
+    the persona image can start generating in parallel with the report.
+
+    Returns the dict shape generate_persona_image reads --
+    {dominant_styles, dominant_programs, dominant_materials, one_liner} -- or
+    None when none of the ids resolve to a publishable building row.
+
+    Each dominant_* list is led by the values of the `like` facts on the
+    matching axis (compute_taste_facts: strongest liked-vs-shown signal),
+    then topped up with the most frequent value among LIKED buildings so a
+    short swipe session (no fact clears its thresholds) still yields a
+    grounded prompt. `one_liner` is a deterministic phrase from the liked
+    atmosphere (fallback color_tone) values -- no LLM call.
+    """
+    liked_building_ids = list(liked_building_ids or [])
+    disliked_building_ids = list(disliked_building_ids or [])
+    if not liked_building_ids:
+        return None
+
+    all_ids = list(dict.fromkeys(liked_building_ids + disliked_building_ids))
+    rows = _fetch_taste_rows(all_ids)
+    if not rows:
+        return None
+    rows_by_id = {r['canonical_bld_id']: r for r in rows if r.get('canonical_bld_id')}
+
+    taste_facts = compute_taste_facts(
+        rows_by_id, liked_building_ids, disliked_building_ids, settings.RECOMMENDATION,
+    )
+    like_facts = [f for f in taste_facts.get('facts', []) if f.get('polarity') == 'like']
+
+    liked_unique = list(dict.fromkeys(liked_building_ids))
+
+    def _top_values(axis, limit):
+        values = [f['value'] for f in like_facts if f.get('axis') == axis]
+        counter = Counter()
+        for bid in liked_unique:  # ordered iteration keeps ties deterministic
+            row = rows_by_id.get(bid)
+            if row:
+                for value in sorted(extract_axis_values(row, axis)):
+                    counter[value] += 1
+        for value, _count in counter.most_common():
+            if value not in values:
+                values.append(value)
+        return values[:limit]
+
+    atmosphere = _top_values('atmosphere', 2) or _top_values('color_tone', 2)
+    return {
+        'dominant_styles': _top_values('style', 1),
+        'dominant_programs': _top_values('program', 1),
+        'dominant_materials': _top_values('material_visual', 3),
+        'one_liner': ', '.join(atmosphere) if atmosphere else _FACTS_IMAGE_DEFAULT_ATMOSPHERE,
+    }
 
 
 def generate_persona_image(report):

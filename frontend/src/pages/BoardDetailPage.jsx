@@ -220,8 +220,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       contentStyle={{ padding: '20px 20px 0' }}
       chrome={
         <>
-          <PageBackButton onClick={() => navigate(-1)} label={t('board.back')} />
-          <PageTopControls onLogout={onLogout} />
+          <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('board.back')} />} />
           <PageLogoHeader />
           {/* Share — stacked under the back button (ArchitectProfilePage precedent:
               top:50/left:12, zIndex 299 — one below PageBackButton's 300), so its

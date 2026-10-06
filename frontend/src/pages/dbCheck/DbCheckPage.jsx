@@ -1,7 +1,7 @@
 /**
  * DbCheckPage.jsx — ADMIN-DBCHECK-1 internal DB-quality inspection page.
  *
- * Dev-build only, URL-only route (/db-check, no TabBar/nav link). Lets us
+ * Admin-only route (/admin/db-check, linked from the /admin dashboard; ADMIN-DASH-1). Lets us
  * visually audit canonical_v2_buildings quality:
  *   - Browse mode: infinite-scroll grid of every publishable building
  *     (keyset pagination via GET /inspect/buildings/).

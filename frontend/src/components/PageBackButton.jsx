@@ -15,6 +15,9 @@ import FloatingIconButton from './FloatingIconButton.jsx'
  * `position:absolute` inside its own 1440x900 canvas; the real app has no
  * positioned ancestor at that level, so `fixed` is the faithful equivalent.
  *
+ * `inline` — skip the fixed positioning; use when passed as `leading` to
+ * PageTopControls (the rail owns position so the theme pill sits beside it).
+ *
  * `onClick` is passed through unchanged — this component owns layout only,
  * never the navigation behavior. Callers keep their existing handler
  * (`navigate(-1)`, a custom back guard, etc.) exactly as before.
@@ -24,12 +27,12 @@ import FloatingIconButton from './FloatingIconButton.jsx'
  * component only owns the fixed top-left position, matching every other
  * caller of that component.
  */
-export default function PageBackButton({ onClick, label = 'Back', icon, style }) {
+export default function PageBackButton({ onClick, label = 'Back', icon, style, inline = false }) {
   return (
     <FloatingIconButton
       onClick={onClick}
       ariaLabel={label}
-      style={{ ...wrapStyle, ...style }}
+      style={inline ? style : { ...wrapStyle, ...style }}
     >
       {icon || (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -100,8 +100,8 @@ export async function generateReport(projectId, { regenerate = false } = {}) {
   return callApi('POST', `/projects/${projectId}/report/generate/`, regenerate ? { regenerate: true } : undefined)
 }
 
-export async function generateReportImage(projectId, { regenerate = false } = {}) {
-  return callApi('POST', `/projects/${projectId}/report/generate-image/`, regenerate ? { regenerate: true } : undefined)
+export async function generateReportImage(projectId, { regenerate = false, timeoutMs } = {}) {
+  return callApi('POST', `/projects/${projectId}/report/generate-image/`, regenerate ? { regenerate: true } : undefined, true, timeoutMs)
 }
 
 /**

@@ -5,13 +5,13 @@
  *   RIGHT swipe → promote Discovery draft to a Taste session (→ /swipe)
  *   LEFT  swipe → dismiss, keep swiping Discovery
  *
- * Dimensions match SwipeCard (CARD_WIDTH × CARD_HEIGHT) so the stack layout is
+ * Dimensions match SwipeCard (useCardSize width × height) so the stack layout is
  * identical. FRONT-FLOW-1: retheme from the blue-purple accent-gradient card to
  * the paper business-card language (components/cardLanguage.js) — same brand
  * identity as LoginPage. The paper look intentionally contrasts with the photo
  * cards around it in the deck (interstitial), same idiom as the login deck.
  */
-import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
+import { useCardSize } from '../hooks/useCardSize.js'
 import { useTranslation } from '../i18n/index.js'
 import {
   INK,
@@ -23,6 +23,7 @@ import {
 
 export default function DiscoveryTriggerCard() {
   const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
   return (
     <div
       style={{

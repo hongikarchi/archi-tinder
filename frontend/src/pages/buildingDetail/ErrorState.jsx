@@ -1,8 +1,7 @@
 import { useTranslation } from '../../i18n/index.js'
-import Header from './Header.jsx'
 import PageLogoHeader from '../../components/PageLogoHeader.jsx'
 
-export default function ErrorState({ message, onBack, onRetry }) {
+export default function ErrorState({ message, onRetry }) {
   const { t } = useTranslation()
   return (
     <div style={{
@@ -14,7 +13,6 @@ export default function ErrorState({ message, onBack, onRetry }) {
       flexDirection: 'column',
       paddingBottom: 'var(--tabbar-clearance)',
     }}>
-      <Header onBack={onBack} />
       <PageLogoHeader />
       <div style={{
         flex: 1,

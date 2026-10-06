@@ -7,25 +7,19 @@
  * question-shaped style exports below are retained because AssessmentCard
  * still consumes them. Change a value here and every consumer moves together.
  *
- * Size comes from SwipeCard's CARD_WIDTH/CARD_HEIGHT — the same constants
- * SwipeDeck's static ladder and DiscoveryPage's deck wrapper use, so a card
- * built on this shell drops into a SwipeDeck at exactly the ladder's footprint.
+ * Size is NOT in the static style: it is reactive (hooks/useCardSize.js), so
+ * consumers spread `{ width, height }` from useCardSize() over this style —
+ * the same source SwipeDeck's ladder and DiscoveryPage's deck wrapper use.
  *
  * Radius is var(--radius-lg) (= 20px, tokens.css), which is the value
  * SwipeCard/SwipeDeck hardcode as `borderRadius: 20`. Referencing the token
  * here is deliberate: it lets a future radius change land in tokens.css.
  */
-import { CARD_WIDTH, CARD_HEIGHT } from './SwipeCard.jsx'
-
-export { CARD_WIDTH, CARD_HEIGHT }
-
 /** Ground shadow — matches the original calibration-card value. */
 export const CARD_SHADOW = '0 25px 50px rgba(0,0,0,0.4)'
 
 /** The card surface itself: footprint, radius, background, border, shadow. */
 export const cardShellStyle = {
-  width: CARD_WIDTH,
-  height: CARD_HEIGHT,
   borderRadius: 'var(--radius-lg)',
   overflow: 'hidden',
   background: 'var(--color-surface)',

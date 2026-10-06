@@ -7,8 +7,13 @@ import SegmentedControl from './SegmentedControl.jsx'
 import styles from './PageTopControls.module.css'
 
 /**
- * PageTopControls — shared top-right controls cluster: language pill + theme
- * pill + (optional) logout button.
+ * PageTopControls — shared top controls on two fixed rails (decision
+ * 2026-10-03): LEFT rail = [`leading` controls (back / exit / bell+settings),
+ * theme pill]; RIGHT rail = [language pill, optional logout]. Both rails sit
+ * at top 16, 8px gap, 28px circles vertically centered. Pages with a top-left
+ * control pass it via `leading` (render PageBackButton with `inline`) so the
+ * theme pill lands immediately to its right and nothing overlaps. Pages with
+ * no leading control get the theme pill alone at top-left.
  *
  * Design port (.claude/plans/canvas-design-port.md): 42 boards render this
  * exact cluster (frontend/public/__mocks/discovery.html markup) — the user
@@ -39,7 +44,7 @@ import styles from './PageTopControls.module.css'
  * LoginPage passes no `onLogout` (unauthenticated page) -> no logout button,
  * even though the mock's markup includes one (meaningless pre-login).
  */
-export default function PageTopControls({ onLogout, splitMobile = false }) {
+export default function PageTopControls({ onLogout, leading = null }) {
   const { theme, setTheme } = useTheme()
   const { language, setLanguage } = useLanguage()
   const { t } = useTranslation()
@@ -55,36 +60,15 @@ export default function PageTopControls({ onLogout, splitMobile = false }) {
   }
 
   return (
-    <div
-      onPointerDown={stop}
-      onMouseDown={stop}
-      onTouchStart={stop}
-      className={`${styles.controls} ${splitMobile ? styles.splitMobile : ''}`}
-      style={wrapStyle}
-    >
-      {/* Language pill — variant="pill" size="sm": the shared sliding
-          highlight replaces the old per-button background swap (see
-          SegmentedControl docblock); `pillHeight=22` matches the buttons'
-          own height so the highlight fills them exactly (the outer 28px
-          pill height belongs to the track, not the highlight). */}
-      <SegmentedControl
-        as="radio"
-        variant="pill"
-        size="sm"
-        pillHeight={22}
-        className={styles.languagePill}
-        style={pillStyle}
-        options={[
-          { value: 'ko', label: t('login.common.langKo') },
-          { value: 'en', label: t('login.common.langEn') },
-        ]}
-        value={language}
-        onChange={setLanguage}
-        optionClassName="pressable"
-        optionStyle={(opt, isActive) => tgStyle(isActive)}
-        highlightStyle={{ background: 'var(--color-bg)', boxShadow: '0 1px 3px rgba(0,0,0,0.14)' }}
-        renderOption={(opt) => opt.label}
-      />
+    <>
+      <div
+        onPointerDown={stop}
+        onMouseDown={stop}
+        onTouchStart={stop}
+        className={styles.controls}
+        style={leftRailStyle}
+      >
+        {leading}
 
       {/* Theme pill — sun / moon, mock parity (see module docblock).
           "selected" (and the sliding highlight) shows only on an EXACT theme
@@ -117,6 +101,36 @@ export default function PageTopControls({ onLogout, splitMobile = false }) {
         highlightStyle={{ background: 'var(--color-bg)', boxShadow: '0 1px 3px rgba(0,0,0,0.14)' }}
         renderOption={(opt) => opt.icon}
       />
+      </div>
+      <div
+        onPointerDown={stop}
+        onMouseDown={stop}
+        onTouchStart={stop}
+        className={styles.controls}
+        style={rightRailStyle}
+      >
+      {/* Language pill — variant="pill" size="sm": the shared sliding
+          highlight replaces the old per-button background swap (see
+          SegmentedControl docblock); `pillHeight=22` matches the buttons'
+          own height so the highlight fills them exactly (the outer 28px
+          pill height belongs to the track, not the highlight). */}
+      <SegmentedControl
+        as="radio"
+        variant="pill"
+        size="sm"
+        pillHeight={22}
+        style={pillStyle}
+        options={[
+          { value: 'ko', label: t('login.common.langKo') },
+          { value: 'en', label: t('login.common.langEn') },
+        ]}
+        value={language}
+        onChange={setLanguage}
+        optionClassName="pressable"
+        optionStyle={(opt, isActive) => tgStyle(isActive)}
+        highlightStyle={{ background: 'var(--color-bg)', boxShadow: '0 1px 3px rgba(0,0,0,0.14)' }}
+        renderOption={(opt) => opt.label}
+      />
 
       {/* Logout — only when a caller has one to wire up */}
       {onLogout && (
@@ -133,7 +147,8 @@ export default function PageTopControls({ onLogout, splitMobile = false }) {
           </svg>
         </FloatingIconButton>
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -142,15 +157,16 @@ export default function PageTopControls({ onLogout, splitMobile = false }) {
 // tokens throughout; the one literal is the mock's own selected-state shadow
 // (shadows are a §4 exemption).
 
-const wrapStyle = {
+const railBase = {
   position: 'fixed',
   top: 16,
-  right: 12,
   zIndex: 300,
   display: 'flex',
-  gap: 6,
+  gap: 8,
   alignItems: 'center',
 }
+const leftRailStyle = { ...railBase, left: 12 }
+const rightRailStyle = { ...railBase, right: 12 }
 
 const pillStyle = {
   display: 'flex',
