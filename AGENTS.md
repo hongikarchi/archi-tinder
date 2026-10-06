@@ -101,11 +101,13 @@ save the work on a new `feature/*` branch first. Never stage on a protected bran
   publishable; semantics in `docs/database-schema.md`). `engine._build_filter_sql`
   already emits it; raw SQL elsewhere must add it.
 - Embeddings are pre-computed; SentenceTransformers is not a dependency.
-- `docs/algorithm.md` holds **design intent**; the hyperparameter table is kept in
-  sync with `backend/config/settings.py` RECOMMENDATION by the audit step only
-  (Production Value column, one-line `_(Updated YYYY-MM-DD <sha>: …)_` notes,
-  `Last Synced` line). Theory edits are admin PRs. Nobody rewrites theory inline
-  with implementation work.
+- `docs/algorithm.md` holds **design intent** (admin / algorithm collaborator via
+  PR). Parameter values live only in `backend/config/settings.py` RECOMMENDATION;
+  `docs/algorithm-hyperparameters.md` is **generated** from it by
+  `make hyperparams` (`tools/gen-hyperparams.py`, CI fails when stale) — never edit
+  it by hand; document a key by commenting it in `settings.py`. Implementation
+  work may only append dated `_(Updated YYYY-MM-DD <sha>: …)_` one-liners to
+  `docs/algorithm.md` and bump its "Last verified" line.
 
 ## Product Constitution
 
@@ -141,7 +143,8 @@ tactical code → foundational correctness over polish.
 | Category | Location | Writer |
 |---|---|---|
 | Backlog + done log | `Task.md` (→ GitHub Issues + Project, staged migration) | the session, same PR as the work |
-| Algorithm reference (design intent) | `docs/algorithm.md` | admin via PR; audit step syncs the table |
+| Algorithm reference (design intent) | `docs/algorithm.md` | admin / algorithm collaborator via PR; sessions append dated notes |
+| Hyperparameter table (generated) | `docs/algorithm-hyperparameters.md` via `tools/gen-hyperparams.py` | never hand-edited |
 | Execution plans (branches, delegation, PR sequence) | `.claude/plans/*.md` (Claude), archived on ship per its README | the session |
 | Design decision records (what/why, Korean) | `docs/plans/*.md` | admin + session via PR |
 | Operator runbooks | `docs/runbooks/*.md` | admin via PR |
