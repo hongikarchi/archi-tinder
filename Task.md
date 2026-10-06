@@ -57,7 +57,9 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — ADMIN-DASH-1 완료 2026-10-06, ## Done 참조)_
+### ADMIN-DASH-2a — 관리자 페이지 외부 서비스 (상태·계정·비용)
+- `/admin` 외부 서비스 카드 8개: 공식 status + 계정(API/관리자 메모) + 읽기전용 토큰 가능한 곳만 사용량·비용(CF R2, OpenAI) + 대시보드 링크.
+- 쓰기 권한 토큰은 서버에 두지 않음(Railway/Neon/Vercel = 링크만). 메모 수정은 작업 기록.
 
 ## Next
 

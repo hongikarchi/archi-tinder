@@ -551,6 +551,11 @@ ADMIN_EMAILS = frozenset(
 # (unauth = 60 req/h per egress IP; results are cached 15 min regardless).
 GITHUB_REPO  = os.getenv('GITHUB_REPO', 'hongikarchi/archi-tinder')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
+# External-services panel (ADMIN-DASH-2a). READ-ONLY credentials only; empty = that provider's
+# usage block shows "not configured" and no outbound call is made. Never returned or logged.
+OPENAI_ADMIN_KEY      = os.getenv('OPENAI_ADMIN_KEY', '')
+CLOUDFLARE_API_TOKEN  = os.getenv('CLOUDFLARE_API_TOKEN', '')
+CLOUDFLARE_ACCOUNT_ID = os.getenv('CLOUDFLARE_ACCOUNT_ID', '')
 
 # -- External API keys -----------------------------------------------------
 GEMINI_API_KEY              = os.getenv('GEMINI_API_KEY', '')
