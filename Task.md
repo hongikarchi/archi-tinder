@@ -57,7 +57,7 @@ Algorithm work (`engine.py`, `services/embeddings.py`, etc.) is owned by a separ
 
 ## Now
 
-_(비어 있음 — ADMIN-DASH-1 완료 2026-10-06, ## Done 참조)_
+_(비어 있음 — ADMIN-DASH-2a 완료 2026-10-06, ## Done 참조)_
 
 ## Next
 
@@ -184,7 +184,7 @@ _(2026-07-12 감사 re-pin: 전제 유효, 라인 이동 — resume guard `sessi
 2단계 호스팅·LLM 상태/계정/비용(Railway/Vercel/Neon/CF R2/OpenAI/Gemini/HF; 로그인 방식은 메모) → 3단계 신고 처리·작품 검수·계정 정지/삭제(PIPA)·동의 이력(typed-confirm + audit) → 4단계 실시간 API 성능(ServerTimingMiddleware→Redis) + 제품 지표 설계. 계획: ADMIN-DASH-1 plan "Later PRs".
 
 #### ADMIN-DASH-HARDEN-1 — 관리자 페이지 low 4건
-version 캐시 키에 RAILWAY_GIT_COMMIT_SHA 포함(배포 직후 거짓 불일치 배지); audit IP = 신뢰 프록시 기준 XFF; compare 250커밋 초과 시 develop_sha null; User.email 쓰기 경로 추가 감지 테스트. ADMIN-DASH-1 Deferred.
+version 캐시 키에 RAILWAY_GIT_COMMIT_SHA 포함(배포 직후 거짓 불일치 배지); audit IP = 신뢰 프록시 기준 XFF; compare 250커밋 초과 시 develop_sha null; User.email 쓰기 경로 추가 감지 테스트. ADMIN-DASH-1 Deferred. + 2a: R2 storageClass별 합산, `?refresh=1` 최소간격/락, 백엔드 사용량 라벨 i18n 키화, 메모 audit에 원문 대신 길이/해시.
 
 #### FRONT-IMG-TELEMETRY-1 — 카드 이미지 실패 원인 호스트별 집계
 `/api/v1/telemetry/image-load/` 실패 이벤트(100% 수집)를 호스트별(archdaily/dezeen/divisare/imgix…)로 묶어 실패율·지연 확인 → 외부 핫링크 차단 비중 판단, 필요 시 R2 미러링 검토. MOBILE-FIX-1 Deferred.
@@ -351,6 +351,14 @@ Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) s
 Why LOW (YAGNI): Celery+worker for one product-unconsumed telemetry field = over-investment (Redis add-on, worker process, monitoring, deploy step). Revisit when ≥2 background jobs accumulate (image batch / embedding refresh / snapshots) → single INFRA-JOBS ticket. Do NOT re-enable synchronous compute in the bookmark hot path.
 
 ## Done
+### ADMIN-DASH-2a — 관리자 페이지 외부 서비스 (상태·계정·비용) — RESOLVED 2026-10-06 (`f7165a0`)
+- `/admin` 외부 서비스 카드 8개(Railway·Vercel·Neon·Cloudflare R2·OpenAI·Gemini·HF·GitHub): 공식 status + 계정(HF whoami 자동 + 관리자 메모 `ProviderNote` 0002, 수정 시 작업 기록) + 대시보드 링크.
+- 숫자는 읽기전용 자격만: OpenAI 이번 달 비용(`OPENAI_ADMIN_KEY`), CF R2 bucket별 저장량·Class A/B 요청 + 무료구간 반영 추정비용(`CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID`). Railway·Neon·Vercel은 쓰기권한 토큰뿐 → 링크만(사용자 결정).
+- GET `services/`(10분 캐시, `?refresh=1`, 공급자별 실패 격리) + PATCH `services/<slug>/note/`.
+- 검증: pytest admin_dashboard 188 passed(로컬 owner), flake8·ESLint·build PASS, review/security PASS; 실 토큰 로컬 조회 8곳 정상(OpenAI 비용·R2 사용량 확인). Railway env 3개 설정됨(skip-deploys, 다음 배포 반영).
+- 참고: 사용자가 OpenAI/CF 토큰 값을 채팅에 붙여넣음 → 재발급 권고, 사용자 판단으로 그대로 사용(권한 읽기전용).
+- Deferred: low 4건(R2 storageClass 합산, refresh 최소간격, 백엔드 한국어 라벨, 메모 원문 audit 저장) → ADMIN-DASH-HARDEN-1에 추가.
+
 ### ADMIN-DASH-1 — 관리자 페이지 PR 1 (인증 기반 + 배포/migration/CI/flag/DB 통계) — RESOLVED 2026-10-06 (`fa38b8e`)
 - 앱 내 `/admin` 관리자 페이지 + 서버 다중 잠금 `IsAdminOperator`(is_staff + `ADMIN_EMAILS` env + 비게스트 + Google SocialAccount); 거부는 logger만(DB 행 없음), 통과 호출 throttle `admin` 120/min.
 - 새 app `admin_dashboard`: GET `/api/v1/admin/dashboard/{version,migrations,flags,stats,audit-log}/`; `AdminAuditLog` 모델(0001) + `grant_admin <email> [--revoke]`(JWT 유저 캐시 무효화).

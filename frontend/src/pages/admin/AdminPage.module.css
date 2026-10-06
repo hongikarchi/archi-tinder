@@ -309,3 +309,113 @@ a.badge:focus-visible,
   flex-direction: column;
   gap: 8px;
 }
+
+/* -- Services section (ADMIN-DASH-2a) ---------------------------------- */
+
+.svcGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+
+.svcCard {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.svcHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.svcName {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+
+.svcRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-body);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.svcRowLabel {
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+}
+
+.usageRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-caption);
+  color: var(--color-text);
+}
+
+.usageValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-medium);
+  text-align: right;
+}
+
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  resize: vertical;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent-1);
+}
+
+.btnSmall {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-caption);
+}
+
+.actionRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.errorText {
+  margin: 0;
+  color: var(--color-destructive);
+  font-size: var(--fs-caption);
+}
+
+.svcFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}

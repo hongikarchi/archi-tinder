@@ -20,6 +20,7 @@ import CiSection from './CiSection.jsx'
 import FlagsSection from './FlagsSection.jsx'
 import StatsSection from './StatsSection.jsx'
 import AuditSection from './AuditSection.jsx'
+import ServicesSection from './ServicesSection.jsx'
 import styles from './AdminPage.module.css'
 
 export default function AdminPage({ onLogout }) {
@@ -50,6 +51,9 @@ export default function AdminPage({ onLogout }) {
       >
         <DeploySection section={version} />
         <CiSection section={version} />
+        <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+          <ServicesSection />
+        </div>
         <MigrationSection section={migrations} />
         <FlagsSection section={flags} />
         <StatsSection section={stats} />
