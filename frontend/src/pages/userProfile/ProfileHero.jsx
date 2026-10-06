@@ -2,8 +2,6 @@ import { Fragment, useState, useCallback, useEffect } from 'react'
 import { uploadAvatar } from '../../api/profiles.js'
 import { getRoles } from '../../api/meta.js'
 import { useLanguage } from '../../hooks/useLanguage.js'
-import { useTranslation } from '../../i18n/index.js'
-import FloatingIconButton from '../../components/FloatingIconButton.jsx'
 import styles from './ProfileHero.module.css'
 
 // Canvas-based center-crop + downscale to ≤512px, exported as webp (jpeg fallback).
@@ -59,18 +57,12 @@ export default function ProfileHero({
   // Avatar upload props (owner-only)
   isMe,
   onAvatarUpdated,
-  // Owner-only action row (bell + settings)
-  unreadCount = 0,
-  unreadBadgeLabel,
-  onOpenNotifications,
-  onOpenSettings,
 }) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
   const [roleOptions, setRoleOptions] = useState([])
   const [imgFailed, setImgFailed] = useState(false)
   const { language } = useLanguage()
-  const { t } = useTranslation()
 
   // Reset the broken-image fallback whenever the avatar URL changes (e.g. a
   // fresh upload after a prior failure) so the user isn't stuck on the
@@ -338,46 +330,6 @@ export default function ProfileHero({
             </Fragment>
           ))}
         </div>
-
-        {/* Owner-only action row: bell (unread badge, NOTIF-INAPP-1) + settings.
-            In-flow circles (FloatingIconButton owns no positioning). */}
-        {isMe && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14 }}>
-            <FloatingIconButton
-              onClick={onOpenNotifications}
-              ariaLabel={t('profile.notifications')}
-              title={t('profile.notifications')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                <path d="M13.73 21a2 2 0 01-3.46 0"></path>
-              </svg>
-              {unreadCount > 0 && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute', top: -3, right: -3,
-                    minWidth: 15, height: 15, padding: '0 4px',
-                    borderRadius: 999, background: 'var(--accent-1)', color: '#fff',
-                    fontSize: 9, fontWeight: 700, lineHeight: '15px', textAlign: 'center',
-                  }}
-                >
-                  {unreadBadgeLabel}
-                </span>
-              )}
-            </FloatingIconButton>
-            <FloatingIconButton
-              onClick={onOpenSettings}
-              ariaLabel={t('profile.settings')}
-              title={t('profile.settings')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path>
-              </svg>
-            </FloatingIconButton>
-          </div>
-        )}
 
         {/* External links — Instagram + email + website pills */}
         {linkPills.length > 0 && (
