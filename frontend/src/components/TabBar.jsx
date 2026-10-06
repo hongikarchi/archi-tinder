@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
@@ -125,6 +126,10 @@ function getActiveTab(pathname) {
   return 'discovery'
 }
 
+const SCROLL_COLLAPSE_PX = 8
+const COLLAPSE_GRACE_MS = 250
+const TRANSITION = 'var(--motion-slow) var(--motion-ease)'
+
 export default function TabBar() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -135,6 +140,46 @@ export default function TabBar() {
   // Flag OFF -> count is always 0 and no request is made.
   const { count: unreadMessages } = useUnreadMessages()
 
+  // Collapse state: expanded (icon + label) on load / tab tap; compact
+  // (icon only) after scrolling any scroller > 8px or a pointerdown outside
+  // the bar, ignoring triggers for 250ms after the last expand.
+  const [compact, setCompact] = useState(false)
+  const navRef = useRef(null)
+  const lastExpandRef = useRef(0)
+  const scrollAccumRef = useRef(0)
+
+  const expand = useCallback(() => {
+    lastExpandRef.current = performance.now()
+    scrollAccumRef.current = 0
+    setCompact(false)
+  }, [])
+
+  useEffect(() => {
+    const positions = new WeakMap()
+    const graceOver = () => performance.now() - lastExpandRef.current > COLLAPSE_GRACE_MS
+    function onScroll(e) {
+      const tgt = e.target
+      const el = tgt === document || tgt === window ? document.scrollingElement : tgt
+      if (!el || (navRef.current && navRef.current.contains(el))) return
+      const pos = el.scrollTop ?? 0
+      const prev = positions.get(el)
+      positions.set(el, pos)
+      if (prev === undefined || !graceOver()) return
+      scrollAccumRef.current += Math.abs(pos - prev)
+      if (scrollAccumRef.current > SCROLL_COLLAPSE_PX) setCompact(true)
+    }
+    function onPointerDown(e) {
+      if (navRef.current && navRef.current.contains(e.target)) return
+      if (graceOver()) setCompact(true)
+    }
+    window.addEventListener('scroll', onScroll, true)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => {
+      window.removeEventListener('scroll', onScroll, true)
+      document.removeEventListener('pointerdown', onPointerDown, true)
+    }
+  }, [])
+
   const tabs = [
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
     { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/search' },
@@ -143,6 +188,7 @@ export default function TabBar() {
   ]
 
   function handleSelect(tabId) {
+    expand()
     const tab = tabs.find(t => t.id === tabId)
     if (!tab || tab.path === location.pathname) return
 
@@ -157,6 +203,7 @@ export default function TabBar() {
 
   const options = tabs.map(tab => ({
     value: tab.id,
+    label: t(tab.labelKey),
     ariaLabel: tab.id === 'profile' && unreadMessages > 0
       ? t('tabbar.profileUnread', { n: unreadMessages })
       : t(tab.labelKey),
@@ -164,19 +211,25 @@ export default function TabBar() {
 
   return (
     <nav
+      ref={navRef}
+      onClick={() => { if (compact) expand() }}
       aria-label={t('tabbar.nav')}
       style={{
         position: 'fixed',
         left: 16, right: 16,
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
-        maxWidth: 420, margin: '0 auto',
-        display: 'flex', zIndex: 100, height: 'var(--tabbar-height)',
+        maxWidth: compact ? 280 : 420, margin: '0 auto',
+        display: 'flex', zIndex: 100,
+        boxSizing: 'border-box',
+        height: compact ? 'var(--tabbar-height-compact)' : 'var(--tabbar-height)',
+        padding: compact ? '4px 0' : '6px 0',
+        transition: `height ${TRANSITION}, padding ${TRANSITION}, max-width ${TRANSITION}`,
         borderRadius: 'var(--radius-pill)',
         background: 'var(--tabbar-glass-bg)',
         border: '1px solid var(--tabbar-glass-border)',
         boxShadow: 'var(--tabbar-glass-shadow)',
-        backdropFilter: 'blur(24px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        backdropFilter: 'blur(12px) saturate(160%) brightness(0.55)',
+        WebkitBackdropFilter: 'blur(12px) saturate(160%) brightness(0.55)',
       }}
     >
       {/* variant="pill" / size="lg" / as="nav" — the 4 tabs are real route
@@ -189,7 +242,7 @@ export default function TabBar() {
         variant="pill"
         size="lg"
         fullWidth
-        pillHeight={44}
+        pillHeight="100%"
         measureContent
         options={options}
         value={activeTab}
@@ -197,27 +250,48 @@ export default function TabBar() {
         style={{ width: '100%', height: '100%' }}
         optionStyle={(opt, isActive) => ({
           height: '100%',
-          color: isActive ? 'var(--color-text)' : 'var(--color-nav-inactive)',
+          color: isActive ? 'var(--tabbar-fg)' : 'var(--tabbar-fg-inactive)',
           transition: 'color var(--motion-fast) var(--motion-ease)',
         })}
-        optionContentStyle={{ width: 68, height: 44 }}
+        optionContentStyle={{
+          width: compact ? 44 : 68, height: '100%', flexDirection: 'column',
+          transition: `width ${TRANSITION}`,
+        }}
         highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
         renderOption={(opt, isActive) => {
-          const icon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
-          if (opt.value !== 'profile' || unreadMessages <= 0) return icon
-          return (
+          const baseIcon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
+          const icon = (opt.value !== 'profile' || unreadMessages <= 0) ? baseIcon : (
             <span style={{ position: 'relative', display: 'inline-flex' }}>
-              {icon}
+              {baseIcon}
               <span
                 aria-hidden="true"
                 style={{
                   position: 'absolute', top: -1, right: -3,
                   width: 9, height: 9, borderRadius: '50%',
                   background: 'var(--accent-1)',
-                  boxShadow: '0 0 0 2px var(--color-bg)',
+                  boxShadow: '0 0 0 2px #121214',
                 }}
               />
             </span>
+          )
+          return (
+            <>
+              {icon}
+              <span
+                aria-hidden="true"
+                style={{
+                  fontSize: 11, lineHeight: '13px', fontWeight: isActive ? 600 : 400,
+                  whiteSpace: 'nowrap', maxWidth: '100%',
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                  maxHeight: compact ? 0 : 13,
+                  marginTop: compact ? 0 : 3,
+                  opacity: compact ? 0 : 1,
+                  transition: `max-height ${TRANSITION}, margin-top ${TRANSITION}, opacity var(--motion-normal) var(--motion-ease)`,
+                }}
+              >
+                {opt.label}
+              </span>
+            </>
           )
         }}
       />

@@ -29,14 +29,20 @@ function Spinner() {
  *   disabled        bool
  *   loading         bool
  *   label           string — button text (default: "Verify with Google")
+ *   renderTrigger   ({ onClick, loading, disabled }) => node — optional custom trigger;
+ *                   replaces the default button (the hook stays inside this component)
  */
-export default function GoogleVerifyButton({ onSuccess, onError, onNonOAuthError, disabled, loading, label }) {
+export default function GoogleVerifyButton({ onSuccess, onError, onNonOAuthError, disabled, loading, label, renderTrigger }) {
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
     onSuccess,
     onError,
     onNonOAuthError,
   })
+
+  if (renderTrigger) {
+    return renderTrigger({ onClick: () => googleLogin(), loading: !!loading, disabled: !!disabled })
+  }
 
   return (
     <button

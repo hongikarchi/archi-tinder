@@ -23,11 +23,17 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-06 20:52 KST',
-    head: '0f8c231',
-    branch: 'feature/claude-admin-dash-2a',
+    updatedAt: '2026-10-06 22:15 KST',
+    head: '67011cc',
+    branch: 'feature/claude-mobile-fix-2',
   },
   done: [
+    {
+      id: 'MOBILE-FIX-2',
+      title: '모바일 후속: 탭바 글래스·라벨·접힘, 프로필·계정 정리',
+      completedAt: '2026-10-06',
+      note: '탭바: 아이콘 아래 라벨(탐색/검색/소셜/프로필), 모든 테마 어두운 글래스(bg 0.35 + backdrop blur 12 saturate 160 brightness 0.55, 흰 아이콘), 스크롤/바깥 터치 시 아이콘만 48px로 접힘·탭하면 펼침; Discovery 카드 세로 가운데 복원.',
+    },
     {
       id: 'ADMIN-DASH-2a',
       title: '관리자 페이지 외부 서비스 (상태·계정·비용)',
@@ -69,12 +75,6 @@ window.PROJECT_STATE = {
       title: '속도 개선 2차 (스트리밍·풀·코드분할·런타임)',
       completedAt: '2026-09-30',
       note: '검색 해석 SSE 스트리밍(`/parse-query/stream/`): 필터 먼저 → 답변 타이핑 → 기존과 동일한 final. 로컬 실측 필터 1.4-2.6s (기존 전체 3.1-3.6s). 스키마·few-shot 필터 우선 순서.',
-    },
-    {
-      id: 'PERF-SWIPE-1',
-      title: '스와이프 왕복 축소 + HNSW 후보 부족 수정',
-      completedAt: '2026-09-30',
-      note: 'HNSW 필터 top-k가 `ef_search` 40 후보에서 끊겨 후보가 모자라던 정확도 버그 수정: buildings 연결 시작옵션 `hnsw.iterative_scan=strict_order` (왕복 추가 0). 실측 LIMIT 60 → off 8행 / on 60행.',
     },
   ],
   now: [],
@@ -330,6 +330,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 350,
+      title: 'feat(ADMIN-DASH-2a): admin external services panel — status / account / cost',
+      mergedAt: '2026-10-06T12:14:48Z',
+      mergedAtKST: '2026-10-06 21:14 KST',
+      sha: '04f166a',
+    },
+    {
       number: 348,
       title: 'feat(ADMIN-DASH-1): admin dashboard PR1 — gate + deploy/migration/CI/flag/stats',
       mergedAt: '2026-10-06T09:05:35Z',
@@ -377,13 +384,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-09-30T10:26:56Z',
       mergedAtKST: '2026-09-30 19:26 KST',
       sha: 'f3d7e2d',
-    },
-    {
-      number: 338,
-      title: 'feat(UI-CONSISTENCY-B): 디자인 통일성 정비 — 규칙·토큰 → 공통 부품 → 페이지 교체',
-      mergedAt: '2026-09-29T13:39:33Z',
-      mergedAtKST: '2026-09-29 22:39 KST',
-      sha: '2551611',
     },
   ],
   agents: [
@@ -2403,6 +2403,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/PageTopControls.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PasswordInput.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/PasswordInput.module.css',
       role: '',
     },
     {

@@ -40,7 +40,6 @@ import {
   photoCardScrimStyle,
   photoCardCaptionStyle,
   photoCardTitleStyle,
-  photoCardSubtitleStyle,
 } from './photoCardShell.js'
 import styles from './PersonCard.module.css'
 
@@ -175,10 +174,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
             </svg>
           </button>
           <div style={photoCardCaptionStyle}>
-            <h2 style={photoCardTitleStyle}>{person.display_name}</h2>
-            {person.handle && (
-              <p style={photoCardSubtitleStyle}>@{person.handle}</p>
-            )}
+            <h2 style={photoCardTitleStyle}>{person.handle || person.display_name}</h2>
           </div>
         </div>
 
