@@ -106,7 +106,7 @@ const TAB_ICONS = {
  * `/liked-projects` previously fell through to the `discovery` default even
  * though they are profile-cluster screens (see App.jsx routes). Added here.
  * `/architects/:id`, `/buildings/:id`, `/library*`, `/my/liked-offices`
- * (dead redirect), `/db-check` (dev-only) intentionally still fall through
+ * (dead redirect), `/admin*` intentionally still fall through
  * to `discovery` — "stay on the tab the user came from" is not tracked by
  * this pure-function mapping, and discovery is the simplest acceptable
  * default per the task spec.

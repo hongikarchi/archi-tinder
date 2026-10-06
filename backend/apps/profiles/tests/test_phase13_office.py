@@ -59,15 +59,23 @@ def auth_client(db):
 
 
 @pytest.fixture
-def admin_client(db):
-    """APIClient with JWT for an is_staff + is_superuser user."""
-    admin_user = User.objects.create_superuser(
-        username='adminuser_prof1', email='admin_prof1@test.com', password='admin123',
+def admin_client(db, settings):
+    """Full IsAdminOperator user (ADMIN-DASH-1): staff + allow-listed + Google + non-guest."""
+    from apps.admin_dashboard.testing import make_operator_client
+    client, _user = make_operator_client(settings, username='adminuser_prof1')
+    return client
+
+
+@pytest.fixture
+def staff_only_client(db, settings):
+    """is_staff + superuser but NOT in ADMIN_EMAILS / no Google account: must be denied."""
+    from apps.admin_dashboard.testing import make_operator_client
+    client, user = make_operator_client(
+        settings, username='staffonly_prof1', email='staffonly@test.com',
+        google=False, in_list=False,
     )
-    UserProfile.objects.create(user=admin_user, display_name='Admin User')
-    client = APIClient()
-    refresh = RefreshToken.for_user(admin_user)
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
+    user.is_superuser = True
+    user.save(update_fields=['is_superuser'])
     return client
 
 
@@ -417,6 +425,12 @@ class TestOfficeAdminQueueView:
     @pytest.mark.django_db
     def test_admin_queue_unauthorized_for_non_admin(self, auth_client):
         response = auth_client.get('/api/v1/admin/office_claims/')
+        assert response.status_code == 403
+
+    @pytest.mark.django_db
+    def test_admin_queue_denies_staff_superuser_outside_operator_gate(self, staff_only_client):
+        """ADMIN-DASH-1: Django is_staff/is_superuser alone no longer opens the queue."""
+        response = staff_only_client.get('/api/v1/admin/office_claims/')
         assert response.status_code == 403
 
 

@@ -1,0 +1,311 @@
+/*
+ * AdminPage.module.css — ADMIN-DASH-1 operator dashboard.
+ * DESIGN.md section 4 hybrid: tokens.css variables + CSS Module for interactive
+ * parts (:hover / :focus-visible); layout stays mostly inline in the JSX.
+ * Status colors: ok = --accent-2 (DESIGN.md 8.11 success tint), warn =
+ * --accent-3, bad = --color-destructive. No literal colors.
+ */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--fs-emphasis);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.kvList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.kv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-body);
+  min-width: 0;
+}
+
+.kvLabel {
+  color: var(--color-text-muted);
+}
+
+.kvValue {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: var(--fw-medium);
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-caption);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  margin: 0;
+}
+
+/* -- Badges / pills ---------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-soft);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.ok {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}
+
+.warn {
+  color: var(--accent-3);
+  border-color: var(--accent-3);
+  background: color-mix(in srgb, var(--accent-3) 12%, transparent);
+}
+
+.bad {
+  color: var(--color-destructive);
+  border-color: var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
+}
+
+a.badge:hover {
+  filter: brightness(0.95);
+}
+
+a.badge:focus-visible,
+.linkRow:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* -- Lists / tables ---------------------------------------------------- */
+
+.nameList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nameList li {
+  font-size: var(--fs-caption);
+  color: var(--color-text);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  overflow-wrap: anywhere;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+}
+
+.table th {
+  text-align: left;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  padding: 8px 8px 8px 0;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 10px 8px 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: top;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.flagDesc {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular);
+  color: var(--color-text-muted);
+}
+
+.flagKey {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text-dim);
+}
+
+/* -- Stat tiles -------------------------------------------------------- */
+
+.statGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.statGroupTitle {
+  margin: 0;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tileValue {
+  font-size: var(--fs-heading);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.tileLabel {
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+}
+
+/* -- Buttons / links --------------------------------------------------- */
+
+.btn {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.linkRow:hover {
+  background: var(--color-surface-2);
+}
+
+.chevron {
+  color: var(--color-text-dim);
+  font-size: var(--fs-emphasis);
+  line-height: 1;
+}
+
+.errorBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--color-destructive);
+  font-size: var(--fs-body);
+}
+
+.skeletonCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

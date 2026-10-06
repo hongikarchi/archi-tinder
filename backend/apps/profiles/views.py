@@ -6,6 +6,8 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.admin_dashboard.permissions import IsAdminOperator
+
 from .models import Office, OfficeProjectLink
 from .serializers import OfficeSerializer, OfficeClaimSerializer, OfficeAdminSerializer
 from .throttles import OfficeClaimThrottle
@@ -145,7 +147,7 @@ class OfficeClaimView(APIView):
 
 class OfficeAdminQueueView(APIView):
     """GET /api/v1/admin/office_claims/ -- admin queue for pending claims."""
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminOperator]
 
     def get(self, request):
         offices = Office.objects.filter(claim_status='pending').order_by('updated_at')
@@ -154,7 +156,7 @@ class OfficeAdminQueueView(APIView):
 
 class OfficeAdminVerifyView(APIView):
     """PATCH /api/v1/admin/office_claims/{office_id}/ -- admin verifies/rejects."""
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsAdminOperator]
 
     def patch(self, request, office_id):
         office = get_object_or_404(Office, office_id=office_id)

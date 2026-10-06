@@ -97,3 +97,11 @@ def other_auth_client(other_profile):
 def api_client():
     from rest_framework.test import APIClient
     return APIClient()
+
+
+@pytest.fixture
+def admin_client(db, settings):
+    """Full IsAdminOperator user (ADMIN-DASH-1): staff + allow-listed + Google + non-guest."""
+    from apps.admin_dashboard.testing import make_operator_client
+    client, _user = make_operator_client(settings)
+    return client

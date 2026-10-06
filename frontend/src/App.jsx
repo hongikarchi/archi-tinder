@@ -5,6 +5,7 @@ import { useLanguage } from './hooks/useLanguage.js'
 import { useTranslation } from './i18n/index.js'
 import MainLayout from './layouts/MainLayout.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
+import AdminGate from './pages/admin/AdminGate.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
@@ -24,8 +25,10 @@ import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
 
-// ADMIN-DBCHECK-1: internal DB-quality inspection page — dev-build only, lazy
-// so it never lands in the prod bundle's eager import graph either.
+// ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
+// stay out of the eager import graph. Gated by AdminGate (UX only; the backend
+// IsAdminOperator permission is the real gate).
+const AdminPage = lazy(() => import('./pages/admin/AdminPage.jsx'))
 const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
@@ -1130,14 +1133,12 @@ export default function App() {
             <Route path="notifications" element={<NotificationsScreen onLogout={handleLogout} />} />
             <Route path="appearance" element={<AppearanceScreen onLogout={handleLogout} />} />
           </Route>
-          {/* ADMIN-DBCHECK-1: URL-only internal QA tool, dev builds only — no TabBar/nav link */}
-          {import.meta.env.DEV && (
-            <Route path="db-check" element={
-              <Suspense fallback={null}>
-                <DbCheckPage />
-              </Suspense>
-            } />
-          )}
+          {/* ADMIN-DASH-1: operator dashboard + DB Check (URL / Settings entry, no TabBar link) */}
+          <Route path="admin" element={<AdminGate />}>
+            <Route index element={<AdminPage onLogout={handleLogout} />} />
+            <Route path="db-check" element={<DbCheckPage />} />
+          </Route>
+          <Route path="db-check" element={<Navigate to="/admin/db-check" replace />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,6 @@
 """inspect.py -- ADMIN-DBCHECK-1: internal DB-quality inspection endpoints.
 
-Three read-only, IsAuthenticated endpoints used by the internal /db-check
+Three read-only, IsAdminOperator-gated (ADMIN-DASH-1) endpoints used by the internal /db-check
 frontend tool to eyeball the full canonical_v2_buildings corpus:
 
   GET  /api/v1/inspect/buildings/            -- keyset-paginated grid list
@@ -19,9 +19,10 @@ from django.core.cache import cache
 from django.db import connections
 from django.shortcuts import get_object_or_404  # noqa: F401 -- kept for parity with sibling views
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.admin_dashboard.permissions import IsAdminOperator
 
 from .. import engine, services
 
@@ -67,7 +68,7 @@ class InspectBuildingsListView(APIView):
         "total": <int, cached ~1h>,
       }
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOperator]
 
     def get(self, request):
         after = request.query_params.get('after') or None
@@ -139,7 +140,7 @@ class InspectBuildingDetailView(APIView):
     Excludes the raw embedding vector; includes embedding_present/embedding_dim
     instead. 404 when the id does not exist or is not publishable.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOperator]
 
     def get(self, request, canonical_bld_id):
         with connections['buildings'].cursor() as cur:
@@ -170,7 +171,7 @@ class InspectSearchView(APIView):
     Body: {"query": str (required, max 2000 chars), "limit": int (optional, default
     100, cap 100)}
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOperator]
 
     def post(self, request):
         query = request.data.get('query')
