@@ -65,9 +65,9 @@ newcomer:
 **Shared (in git, you get them on fetch):**
 - `tools/*` (CLI scripts)
 - `docs/` (specs, algorithm, database schema)
-- `.claude/agents/`, `.claude/skills/` (Claude) + `.codex/agents/`, `.agents/skills/` (Codex) — sub-agent definitions + skills
-- `Task.md` (shared root board, both tools), `.claude/WORKFLOW.md` + `.codex/WORKFLOW.md`, `.claude/plans/` + `.codex/plans/`
-- Root: `CLAUDE.md` (Claude) + `AGENTS.md` (Codex), `CONTRIBUTING.md`, `DESIGN.md`, `README.md`
+- `.claude/agents/`, `.claude/skills/` (Claude, the maintained copies) + `.codex/agents/`, `.agents/skills/` (Codex pointers / thin Codex-native bodies) — sub-agent definitions + skills
+- `Task.md` (shared root board, both tools), `.claude/WORKFLOW.md` (Claude pipeline doc), `.claude/plans/` (execution plans), `docs/plans/` (design decision records)
+- Root: `AGENTS.md` (shared rulebook, read by Codex directly and imported by `CLAUDE.md`), `CLAUDE.md` (Claude-only), `CONTRIBUTING.md`, `DESIGN.md`, `README.md`
 
 **Not shared (each clone has its own copy or none):**
 - `.claude/settings*.json` (personal harness settings)
@@ -114,7 +114,7 @@ from 4 tabs to 3 (Discovery / Taste / Profile), DB cutover to
 
 ## 7. When stuck
 
-- Workflow questions → `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex)
+- Workflow questions → `.claude/WORKFLOW.md` (Claude); Codex follows `AGENTS.md` + `.agents/skills/orchestrate`
 - Branch / push errors → `CLAUDE.md` / `AGENTS.md` § Branch Model + `CONTRIBUTING.md`
 - Algorithm theory → `docs/algorithm.md`
 - DB schema → `docs/database-schema.md`

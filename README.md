@@ -134,4 +134,4 @@ git branch -d feature/algo-mmr-tuning
 `frontend/` (React 18 + Vite) ↔ `backend/` (Django 4.2 + DRF + pgvector + Gemini)
 ↔ Neon PostgreSQL (`canonical_v2_buildings` table owned by Make DB, read-only here).
 
-DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex).
+DB schema: `docs/database-schema.md`. Claude Code workflow + agents: `.claude/WORKFLOW.md`. Codex: `AGENTS.md` + `.agents/skills/` + `.codex/` (agents, hooks, rules).
