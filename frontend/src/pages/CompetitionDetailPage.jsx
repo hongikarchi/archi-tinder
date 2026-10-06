@@ -2,7 +2,7 @@
  * CompetitionDetailPage.jsx — 공모전 상세 (PROTOTYPE)
  * Route: /competitions/:competitionId
  *
- * 설계: docs/plans/2026-09-17-competition-team-design.md §7-2
+ * 설계: docs/decisions/2026-09-17-competition-team-design.md §7-2
  *
  * 이 설계의 핵심 화면. 찜 → 같은 의도를 가진 사람 발견 → 팀으로 이어지는
  * 전환이 이 한 화면에서 일어난다.

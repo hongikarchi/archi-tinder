@@ -822,7 +822,7 @@ export const locales = {
       profileNotFound: '프로필을 찾을 수 없습니다.',
     },
     // UI-CONSISTENCY-B Phase 3b-3 — CompetitionListPage / CompetitionDetailPage
-    // (#333 mock-data prototype, docs/plans/2026-09-17-competition-team-design.md).
+    // (#333 mock-data prototype, docs/decisions/2026-09-17-competition-team-design.md).
     competitionB3: {
       dday: 'D-{d}',
       protoNote: '프로토타입 — 공모전 정보와 참가자는 예시 데이터입니다',
@@ -1803,7 +1803,7 @@ export const locales = {
       profileNotFound: 'Profile not found.',
     },
     // UI-CONSISTENCY-B Phase 3b-3 — CompetitionListPage / CompetitionDetailPage
-    // (#333 mock-data prototype, docs/plans/2026-09-17-competition-team-design.md).
+    // (#333 mock-data prototype, docs/decisions/2026-09-17-competition-team-design.md).
     competitionB3: {
       dday: 'D-{d}',
       protoNote: 'Prototype — competition info and participants are sample data',

@@ -1,7 +1,7 @@
 /**
  * SocialSegment.jsx — Social 탭 안의 [사람] / [공모전] 전환 (PROTOTYPE)
  *
- * 설계: docs/plans/2026-09-17-competition-team-design.md §7
+ * 설계: docs/decisions/2026-09-17-competition-team-design.md §7
  *
  * 새 탭을 만들지 않는다. TabBar 3개(디스커버리 / Taste / 프로필) 구조는
  * 건드리지 않고, Social 탭 루트 안에서만 갈라진다.
