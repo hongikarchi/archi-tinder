@@ -116,7 +116,7 @@
    * the capsule edge stays legible over bright/white content underneath.
    * `--tabbar-active-bg` is unchanged in this pass — see PR notes for the
    * inactive-icon contrast tradeoff this alpha increase does NOT address. */
-  --tabbar-glass-bg:     rgba(38,38,40,0.55);
+  --tabbar-glass-bg:     rgba(0,0,0,0.55);
   --tabbar-glass-border: rgba(255,255,255,0.08);
   --tabbar-glass-shadow: 0 8px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
   --tabbar-active-bg:    rgba(255,255,255,0.14);
@@ -253,7 +253,7 @@
    * Phase 2d: alpha lowered 0.70 → 0.50 for real translucency (see :root
    * comment); inset uses a faint white top highlight (dark themes don't need
    * as strong a rim as light themes since the ground itself is already dark). */
-  --tabbar-glass-bg:     rgba(38,38,40,0.55);
+  --tabbar-glass-bg:     rgba(0,0,0,0.55);
   --tabbar-glass-border: rgba(255,255,255,0.08);
   --tabbar-glass-shadow: 0 8px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
   --tabbar-active-bg:    rgba(255,255,255,0.14);
@@ -314,7 +314,7 @@
    * off-white ground (#FCFCFC) rather than neutral white.
    * Phase 2d: alpha lowered 0.72 → 0.55, border strengthened, inset top
    * highlight added — same rationale as GitHub Light (see :root comment). */
-  --tabbar-glass-bg:     rgba(38,38,40,0.55);
+  --tabbar-glass-bg:     rgba(0,0,0,0.55);
   --tabbar-glass-border: rgba(255,255,255,0.08);
   --tabbar-glass-shadow: 0 8px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
   --tabbar-active-bg:    rgba(255,255,255,0.14);
@@ -380,7 +380,7 @@
    * neutral black/white, matching the scrim family's tinting rationale above.
    * Phase 2d: alpha lowered 0.70 → 0.50, border bumped, faint inset top
    * highlight — same rationale as GitHub Dark (see that block's comment). */
-  --tabbar-glass-bg:     rgba(38,38,40,0.55);
+  --tabbar-glass-bg:     rgba(0,0,0,0.55);
   --tabbar-glass-border: rgba(255,255,255,0.08);
   --tabbar-glass-shadow: 0 8px 28px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
   --tabbar-active-bg:    rgba(255,255,255,0.14);
