@@ -2,7 +2,7 @@
  * EditProfileScreen — /settings/edit-profile
  *
  * Full-screen settings child layout (same pattern as AccountScreen).
- * Edits: display_name, role, affiliation, bio, external_links.
+ * Edits: role, affiliation, bio, external_links.
  * Saves via PATCH /api/v1/users/me/ (updateMyProfile).
  *
  * Uses EditCardForm for all fields.
@@ -65,7 +65,6 @@ export default function EditProfileScreen({ onLogout }) {
       // NOT hardcode `role: patch.role` here, that would always send an
       // (often blank) role and defeat the preservation rule.
       const payload = {
-        display_name: patch.display_name,
         affiliation: patch.affiliation,
         bio: patch.bio,
         external_links: patch.external_links,

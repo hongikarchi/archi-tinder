@@ -278,23 +278,8 @@ export default function ProfileHero({
           color: 'var(--color-text)', fontSize: 24, fontWeight: 700,
           margin: '0 0 4px', lineHeight: 1.2, letterSpacing: '-0.01em',
         }}>
-          {user.display_name}
+          {handleStr || user.display_name}
         </h1>
-
-        {/* @handle — monospace muted, only if present */}
-        {handleStr && (
-          <p style={{
-            margin: '0 0 4px',
-            color: 'var(--color-text-muted)',
-            fontSize: 13,
-            fontFamily: '"IBM Plex Mono", "Courier New", monospace',
-            fontWeight: 500,
-            letterSpacing: '0.01em',
-            lineHeight: 1.3,
-          }}>
-            @{handleStr}
-          </p>
-        )}
 
         {/* Role · Affiliation — only if at least one present */}
         {roleAffiliation && (

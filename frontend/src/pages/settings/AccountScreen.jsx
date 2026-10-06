@@ -124,7 +124,7 @@ export default function AccountScreen({ onLogout }) {
 
     // Client-side format check (backend also validates; this is UX-only)
     const trimmed = handle.trim()
-    if (trimmed && !/^[a-z0-9_]{3,30}$/.test(trimmed)) {
+    if (trimmed && !/^[가-힣ᄀ-ᇿꥠ-꥿ힰ-퟿a-zA-Z0-9_]{2,20}$/.test(trimmed)) {
       setHandleError(t('account.idHandleFormatError'))
       return
     }
