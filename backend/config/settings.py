@@ -219,9 +219,8 @@ REST_FRAMEWORK = {
         'image_load_telemetry': '120/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
-        # BACK-CONTEST-2: contest interest toggle + poster takedown report.
+        # BACK-CONTEST-2: contest interest toggle.
         'contest_interest': '60/min',
-        'contest_poster_report': '10/hour',
         # NOTE (BACK-THROTTLE-2): entries below whose throttle CLASS also sets a
         # `rate` attr are registry/documentation only — DRF's SimpleRateThrottle
         # reads DEFAULT_THROTTLE_RATES solely when the class omits `rate`, so the
@@ -607,10 +606,6 @@ KAKAO_CLIENT_ID   = os.getenv('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
 NAVER_CLIENT_ID   = os.getenv('NAVER_CLIENT_ID', '')
 NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET', '')
-
-# Public address rights holders mail to request contest poster removal. While
-# empty, no poster may be set to allowed and the frontend hides the mail link.
-CONTEST_TAKEDOWN_EMAIL = os.getenv('CONTEST_TAKEDOWN_EMAIL', '').strip()
 
 # -- Production security ---------------------------------------------------
 if not DEBUG:

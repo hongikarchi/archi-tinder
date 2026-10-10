@@ -117,12 +117,6 @@ class Contest(models.Model):
         max_length=1000, null=True, blank=True, validators=[validate_http_url],
     )
     poster_credit = models.CharField(max_length=120, blank=True)
-    poster_status = models.CharField(
-        max_length=12, choices=POSTER_STATUS_CHOICES, default=POSTER_UNVERIFIED,
-    )
-    # D6: evidence for poster_status='allowed' (공공누리 type or permission mail date).
-    poster_permission_basis = models.CharField(max_length=200, blank=True)
-    poster_permission_at = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_HIDDEN, db_index=True,
@@ -201,41 +195,3 @@ class ContestInterest(models.Model):
 
     def __str__(self):
         return f'{self.user_id} -> contest:{self.contest_id}'
-
-
-class ContestPosterReport(models.Model):
-    """Rights-holder / user takedown report for a contest poster (D5).
-
-    Receiving a report hides the poster immediately (poster_status='none');
-    restoring is command-only (contest_poster restore).
-    """
-    contest = models.ForeignKey(
-        Contest,
-        on_delete=models.CASCADE,
-        related_name='poster_reports',
-    )
-    reporter = models.ForeignKey(
-        'accounts.UserProfile',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='contest_poster_reports',
-    )
-    reporter_email = models.EmailField(blank=True)
-    reason = models.CharField(max_length=500, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-created_at']
-        constraints = [
-            # One report per attributable reporter per contest (anonymous rows,
-            # e.g. after reporter SET_NULL, are exempt).
-            models.UniqueConstraint(
-                fields=['contest', 'reporter'],
-                condition=Q(reporter__isnull=False),
-                name='contest_poster_report_once',
-            ),
-        ]
-
-    def __str__(self):
-        return f'report contest:{self.contest_id} by {self.reporter_id}'

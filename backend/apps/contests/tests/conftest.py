@@ -20,12 +20,6 @@ os.environ.setdefault('GEMINI_API_KEY', 'test-gemini-key')
 import pytest  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def _takedown_email(settings):
-    """Posters need a takedown address; 'unset' tests override this."""
-    settings.CONTEST_TAKEDOWN_EMAIL = 'takedown@example.com'
-
-
 @pytest.fixture(scope='session')
 def django_db_modify_db_settings():
     """Override database to SQLite in-memory for isolated test runs."""

@@ -71,8 +71,8 @@ class TestList:
             'submission_deadline', 'apply_deadline', 'notice_date',
             'theme', 'summary', 'eligibility', 'team_size',
             'source_url', 'listing_source', 'listing_url',
-            'poster_url', 'poster_credit', 'poster_status',
-            'interest_count', 'interested', 'takedown_email', 'next_deadline_kind', 'next_deadline', 'is_closed',
+            'poster_url', 'poster_credit',
+            'interest_count', 'interested', 'next_deadline_kind', 'next_deadline', 'is_closed',
         }
         assert row['is_closed'] is False
         # ISO 8601 with offset.
@@ -106,10 +106,27 @@ class TestPoster:
             row = resp.data['results'][0] if 'results' in resp.data else resp.data
             assert row['poster_url'] == url
             assert 'poster_status' not in row
+            assert 'takedown_email' not in row
 
     def test_poster_url_null_when_unset(self, auth_client_a):
         c = _make(poster_url=None)
         assert auth_client_a.get(_detail_url(c.id)).data['poster_url'] is None
+
+    @pytest.mark.parametrize('url,expected', [
+        ('http://example.com/p.png', 'http://example.com/p.png'),
+        ('https://example.com/p.png', 'https://example.com/p.png'),
+        ('javascript:alert(1)', None),
+        ('ftp://example.com/p.png', None),
+        ('', None),
+        (None, None),
+    ])
+    def test_serializer_poster_url_http_only(self, url, expected):
+        from apps.contests.serializers import ContestSerializer
+        c = Contest(
+            title='T', organizer='O', source_url='https://example.com/',
+            submission_deadline=timezone.now() + timedelta(days=5), poster_url=url,
+        )
+        assert ContestSerializer(c).data['poster_url'] == expected
 
 
 class TestNextDeadline:
@@ -151,13 +168,3 @@ class TestNextDeadline:
         assert rows[b.id]['next_deadline_kind'] == 'submission'
         assert rows[c.id]['next_deadline_kind'] == 'submission'
         assert rows[c.id]['next_deadline'] == rows[c.id]['submission_deadline']
-
-
-@pytest.mark.django_db
-class TestTakedownEmailField:
-    def test_list_and_detail(self, auth_client_a, settings):
-        c = _make()
-        for addr in ('', 'td@example.com'):
-            settings.CONTEST_TAKEDOWN_EMAIL = addr
-            assert auth_client_a.get(LIST_URL).data['results'][0]['takedown_email'] == addr
-            assert auth_client_a.get(_detail_url(c.id)).data['takedown_email'] == addr

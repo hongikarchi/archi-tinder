@@ -1,5 +1,5 @@
 """
-test_contest_interest.py -- interest API + poster report API (BACK-CONTEST-2).
+test_contest_interest.py -- interest API (BACK-CONTEST-2).
 """
 from datetime import timedelta
 
@@ -9,17 +9,13 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.contests.models import Contest, ContestInterest, ContestPosterReport
+from apps.contests.models import Contest, ContestInterest
 
 LIST_URL = '/api/v1/contests/'
 
 
 def _interest_url(pk):
     return f'/api/v1/contests/{pk}/interest/'
-
-
-def _report_url(pk):
-    return f'/api/v1/contests/{pk}/poster-report/'
 
 
 def _detail_url(pk):
@@ -163,133 +159,3 @@ class TestInterest:
         from apps.contests.views import ContestInterestThrottle
         assert ContestInterestThrottle.scope == 'contest_interest'
         assert settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['contest_interest'] == '60/min'
-
-
-@pytest.mark.django_db
-class TestPosterReport:
-    def test_creates_report_and_hides_poster(self, auth_client_a, user_a):
-        _, profile = user_a
-        c = _make(poster_url='https://img.example.com/p.jpg',
-                  poster_status=Contest.POSTER_ALLOWED)
-        assert auth_client_a.get(_detail_url(c.id)).data['poster_url'] == 'https://img.example.com/p.jpg'
-
-        resp = auth_client_a.post(
-            _report_url(c.id), {'reason': 'my poster', 'reporter_email': 'owner@example.com'},
-            format='json',
-        )
-        assert resp.status_code == 201
-        assert resp.data == {'status': 'received'}
-        rep = ContestPosterReport.objects.get(contest=c)
-        assert rep.reporter_id == profile.pk
-        assert rep.reason == 'my poster'
-        assert rep.reporter_email == 'owner@example.com'
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
-        detail = auth_client_a.get(_detail_url(c.id)).data
-        assert detail['poster_url'] is None
-        assert detail['poster_status'] == 'none'
-
-    def test_body_optional(self, auth_client_a):
-        c = _make()
-        assert auth_client_a.post(_report_url(c.id)).status_code == 201
-        assert ContestPosterReport.objects.filter(contest=c).count() == 1
-
-    def test_invalid_email_400(self, auth_client_a):
-        c = _make()
-        resp = auth_client_a.post(_report_url(c.id), {'reporter_email': 'nope'}, format='json')
-        assert resp.status_code == 400
-        assert not ContestPosterReport.objects.exists()
-
-    def test_unverified_becomes_none(self, auth_client_a):
-        c = _make(poster_status=Contest.POSTER_UNVERIFIED)
-        auth_client_a.post(_report_url(c.id))
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
-
-    def test_repeat_by_same_user_is_already_reported(self, auth_client_a):
-        c = _make(poster_status=Contest.POSTER_ALLOWED, poster_url='https://i.example.com/p.png')
-        assert auth_client_a.post(_report_url(c.id)).status_code == 201
-        for _ in range(2):
-            r = auth_client_a.post(_report_url(c.id))
-            assert r.status_code == 200
-            assert r.data == {'status': 'already_reported'}
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
-        assert ContestPosterReport.objects.filter(contest=c).count() == 1
-
-    def test_repeat_after_operator_restore_does_not_rehide(self, auth_client_a):
-        c = _make(poster_status=Contest.POSTER_ALLOWED, poster_url='https://i.example.com/p.png')
-        auth_client_a.post(_report_url(c.id))
-        Contest.objects.filter(pk=c.pk).update(poster_status=Contest.POSTER_ALLOWED)
-        r = auth_client_a.post(_report_url(c.id))
-        assert r.status_code == 200
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_ALLOWED
-        assert ContestPosterReport.objects.filter(contest=c).count() == 1
-
-    def test_different_user_can_report_and_rehides(self, auth_client_a, auth_client_b):
-        c = _make(poster_status=Contest.POSTER_ALLOWED, poster_url='https://i.example.com/p.png')
-        auth_client_a.post(_report_url(c.id))
-        Contest.objects.filter(pk=c.pk).update(poster_status=Contest.POSTER_ALLOWED)
-        r = auth_client_b.post(_report_url(c.id))
-        assert r.status_code == 201
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
-        assert ContestPosterReport.objects.filter(contest=c).count() == 2
-
-    def test_no_profile_403(self, db):
-        from django.contrib.auth.models import User
-        from rest_framework.test import APIClient
-        from rest_framework_simplejwt.tokens import RefreshToken
-        user = User.objects.create_user(username='noprof', password='x')
-        client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f'Bearer {RefreshToken.for_user(user).access_token}')
-        c = _make()
-        assert client.post(_report_url(c.id)).status_code == 403
-        assert not ContestPosterReport.objects.exists()
-
-    def test_db_unique_constraint_one_per_reporter(self, user_a):
-        from django.db import IntegrityError, transaction
-        _, profile = user_a
-        c = _make()
-        ContestPosterReport.objects.create(contest=c, reporter=profile)
-        with pytest.raises(IntegrityError):
-            with transaction.atomic():
-                ContestPosterReport.objects.create(contest=c, reporter=profile)
-        # anonymous (reporter NULL) rows are exempt
-        ContestPosterReport.objects.create(contest=c, reporter=None)
-        ContestPosterReport.objects.create(contest=c, reporter=None)
-
-    @pytest.mark.parametrize('st', [Contest.STATUS_HIDDEN, Contest.STATUS_PENDING])
-    def test_404_unpublished(self, auth_client_a, st):
-        c = _make(status=st, poster_status=Contest.POSTER_ALLOWED)
-        assert auth_client_a.post(_report_url(c.id)).status_code == 404
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_ALLOWED
-        assert not ContestPosterReport.objects.exists()
-
-    def test_401_anonymous(self, anon_client):
-        c = _make()
-        assert anon_client.post(_report_url(c.id)).status_code == 401
-
-    def test_guest_allowed(self, user_a, auth_client_a):
-        user, profile = user_a
-        profile.is_guest = True
-        profile.save(update_fields=['is_guest'])
-        c = _make()
-        assert auth_client_a.post(_report_url(c.id)).status_code == 201
-
-    def test_reporter_set_null_on_user_delete(self, user_a, auth_client_a):
-        user, _ = user_a
-        c = _make()
-        auth_client_a.post(_report_url(c.id))
-        user.delete()
-        rep = ContestPosterReport.objects.get(contest=c)
-        assert rep.reporter_id is None
-
-    def test_throttle(self, auth_client_a):
-        c = _make()
-        codes = [auth_client_a.post(_report_url(c.id)).status_code for _ in range(11)]
-        assert codes[0] == 201
-        assert codes[1:10] == [200] * 9
-        assert codes[10] == 429
