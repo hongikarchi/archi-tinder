@@ -74,9 +74,32 @@ class TestList:
             'poster_url', 'poster_credit',
             'interest_count', 'next_deadline_kind', 'next_deadline', 'is_closed',
         }
+        assert 'import_key' not in row
         assert row['is_closed'] is False
         # ISO 8601 with offset.
         assert datetime.fromisoformat(row['submission_deadline'].replace('Z', '+00:00')).tzinfo
+
+    def test_blank_source_url_serializes_empty(self, auth_client_a):
+        c = _make(source_url='')
+        c.refresh_from_db()
+        assert c.source_url == ''
+        row = auth_client_a.get(LIST_URL).data['results'][0]
+        assert row['source_url'] == ''
+
+
+@pytest.mark.django_db
+class TestImportKey:
+    def test_duplicate_key_integrity_error(self):
+        from django.db import IntegrityError, transaction
+        _make(title='A', import_key='k1')
+        with pytest.raises(IntegrityError):
+            with transaction.atomic():
+                _make(title='B', import_key='k1')
+
+    def test_multiple_null_keys_ok(self):
+        _make(title='A')
+        _make(title='B')
+        assert Contest.objects.filter(import_key__isnull=True).count() == 2
 
 
 @pytest.mark.django_db

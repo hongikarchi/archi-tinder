@@ -71,3 +71,20 @@ class TestSeedContests:
         )
         _run('--clean')
         assert list(Contest.objects.values_list('id', flat=True)) == [keep.id]
+
+    @override_settings(DEBUG=True)
+    def test_hanok_has_blank_source_and_listing(self):
+        _run()
+        c = Contest.objects.get(title='제14회 한옥디자인 국제공모')
+        assert c.source_url == ''
+        assert c.listing_url == 'https://lectus.kr/14th-hanok-design-int-competition/'
+
+    @override_settings(DEBUG=True)
+    def test_air_beat_stays_pending(self):
+        _run()
+        c = Contest.objects.get(title__startswith='에어-비트 시티')
+        assert c.status == 'pending'
+        assert c.source_url == 'https://airbeatcity.com/contest'
+        assert c.import_key is None
+        assert Contest.objects.count() == 7
+        assert Contest.objects.filter(status='published').count() == 6
