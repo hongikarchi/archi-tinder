@@ -30,10 +30,10 @@
 |---|---|---|
 | D1 | **범위**: 건축 + 도시·공간·경관·조경·인테리어·건설(공공디자인 포함). `AGENTS.md` Product Constitution의 "건축 외 업종" 경계에 대해 **사용자가 2026-10-09 이 범위를 명시 승인** | 실내건축대전·도로경관디자인 대전 등 포함. 로고·패키지·영상 등은 제외 |
 | D2 | Phase 2 수집은 카테고리를 통째로 받지 않고 **키워드(건축, 도시, 공간, 경관, 조경, 인테리어, 건설) 통과분만** | D1 |
-| D3 | **관리자 페이지 없음.** 사람 손이 필요한 지점(pending 해제, 포스터 allowed 전환, 포스터 복구)은 **관리 커맨드** | 저장소 선례(`seed_discovery`, `sync_offices`) |
-| D4 | **포스터는 hotlink만.** 서버·R2에 저장/재호스팅 금지. `poster_status = allowed`일 때만 노출, 그 외·로딩 실패는 폴백 카드 | 저작권 위험 최소화 |
-| D5 | **포스터 신고 접수 즉시 자동 숨김**(`poster_status → none`). 복구는 커맨드로만 | 숨겨도 폴백 카드일 뿐이라 손해가 작고, 내려달라는 포스터를 며칠 보여주는 쪽이 훨씬 위험 |
-| D6 | 포스터 `allowed` 전환은 자동 금지. 공공누리 표시 확인 또는 주최처 서면 허락이 있을 때만, 근거를 남김 | D4 |
+| D3 | **관리자 페이지 없음.** 사람 손이 필요한 지점(pending 해제, 포스터 넣기·내리기)은 **관리 커맨드** | 저장소 선례(`seed_discovery`, `sync_offices`) |
+| D4 | **포스터는 hotlink로 기본 노출.** `poster_url`이 있으면 보여주고, 없거나 이미지 로딩이 실패하면 폴백 카드. 서버·R2에 저장/재호스팅은 금지 | **2026-10-10 개정** (아래 §3-1). 원본을 복제하지 않고 주최 측이 올린 이미지를 가리키기만 함 |
+| D5 | **포스터 신고·삭제 요청 경로 없음.** 권리자가 요청하면 운영자가 `contest_poster <id> clear`로 URL을 지워 내린다 | **2026-10-10 개정** (§3-1). 신고 즉시 숨김은 아무 사용자나 포스터를 지울 수 있어 "포스터가 보여야 한다"는 목표와 충돌 |
+| D6 | **포스터 허락 상태 없음.** `poster_status` / 허락 근거 필드를 두지 않는다. 수집기는 **주최처 공식 페이지의 이미지 URL**을 넣는다(모음 사이트 이미지 서버 hotlink 지양) | **2026-10-10 개정** (§3-1) |
 | D7 | **마감일을 못 읽으면 임의 값으로 채우지 않는다.** 교차검증 실패 → `hidden` | 틀린 마감일은 사용자 피해 |
 | D8 | 주최처 유형이 협회/지자체/공공기관이면 자동 `published`, 임의단체·미확인은 `pending`(사람이 풀기 전 비노출) | 신뢰도 |
 | D9 | **D-day 기준 = 남은 마감 중 가장 가까운 것**(신청 마감이 미래면 신청 마감, 아니면 제출 마감) + 어떤 마감인지 라벨. 목록 제외 기준은 `submission_deadline` 경과 | 신청을 놓치면 제출도 못 하는 공모전이 많음 |
@@ -41,6 +41,16 @@
 | D11 | 화면 색상은 `DESIGN.md` 테마 토큰에 대응. 포스터 확대 오버레이의 어두운 배경만 고정값 | 다크·타 테마에서 깨지지 않게 |
 | D12 | 배치 실행 = **Railway cron** (Phase 2). 수집기는 1회 실행 후 종료하는 관리 커맨드 | DB·LLM 키가 이미 Railway에 있음. UTC, 최소 5분 간격, 이전 실행 중이면 skip (Railway docs). 플랜별 가용 여부는 미확인 — Phase 2 착수 시 확인 |
 | D13 | 이름: 모델·API는 `Contest` / `contests/`, 화면 경로는 `/competitions` 유지 | 기존 링크 보존 |
+
+### 3-1. 2026-10-10 개정 — 포스터 기본 노출
+
+처음 결정(D4~D6 초안)은 "허락이 확인된 포스터만 노출(`poster_status = allowed`) + 신고 즉시 자동 숨김 + 삭제 요청 메일 주소가 없으면 허용 불가"였고 PR #420/#421에 구현까지 됐다.
+사용자 결정으로 뒤집었다: **포스터는 꼭 화면에 보여야 하고, URL 연결(hotlink) 방식으로 기본 노출한다. 삭제 요청 장치(앱 내 신고, 메일 링크)는 두지 않는다.**
+
+- 근거: 관리자 페이지 없이 자동 수집으로 운영하면 공모전마다 허락을 받을 사람이 없어 포스터가 사실상 한 장도 안 보인다. hotlink는 복제본을 만들지 않고, 공모전 포스터는 배포 목적의 홍보물이라 실질 위험이 낮다고 판단(법률 자문 아님).
+- 남기는 안전장치: 운영자가 URL을 지워 즉시 내릴 수 있음(`contest_poster clear`), `http`/`https`만 허용(모델·저장·bulk/update·DB CHECK·직렬화·프론트 렌더), 재호스팅 금지.
+- 한계: hotlink는 원본 사이트의 차단·`http` 혼합 콘텐츠·파일 이동으로 깨질 수 있다 → 폴백 카드 유지. "무조건 노출"을 보장하려면 복제가 필요한데 그것은 하지 않는다.
+- 구현: 머지·적용 전이라 `poster_status`·`ContestPosterReport`·`poster_permission_*`·`CONTEST_TAKEDOWN_EMAIL`을 **마이그레이션 재생성으로 처음부터 없앴다**(제거 마이그레이션 없음).
 
 ## 4. Phase 1 — 모델 + API + 화면
 
@@ -58,14 +68,12 @@
 | `theme`, `summary`(≤300), `eligibility`, `team_size`(nullable 문자열) | |
 | `source_url` | 공식 공고 원문 |
 | `listing_source`, `listing_url` | 예: `'wevity'` |
-| `poster_url`(nullable), `poster_credit`, `poster_status` | `allowed` / `unverified`(기본) / `none` |
+| `poster_url`(nullable), `poster_credit` | URL이 있으면 노출(D4). 상태 필드 없음 |
 | `status` | `published` / `hidden` / `pending` |
 | `interest_count` | `Reaction`과 같은 signal 기반 denormalize |
 | `created_at`, `updated_at`, `last_verified_at` | |
 
 **`ContestInterest`** — `social.Reaction`과 동형(user FK + contest FK, 쌍 unique, `created_at` index).
-
-**`ContestPosterReport`** — contest FK, `reporter_email`(선택), `reason`, `created_at`.
 
 마이그레이션은 신규 테이블 추가만. 기존 데이터 삭제·변경 없음.
 
@@ -76,14 +84,13 @@
 | `GET contests/` | `status=published` AND `submission_deadline` 미경과, 마감 임박순 |
 | `GET contests/<id>/` | 상세. 마감이 지나도 열림. `hidden`/`pending`은 404 |
 | `POST` / `DELETE contests/<id>/interest/` | 관심 등록·해제(인증, 스로틀) |
-| `POST contests/<id>/poster-report/` | 접수 + 즉시 `poster_status = none` (D5), 스로틀 |
 | `GET contests/<id>/interested/` | (PR 4) 진단 완료 + `discovery_opt_in` 관심 등록자, 본인·차단 관계 제외, 성향 벡터 포함 |
 
 ### 4-3. 관리 커맨드
 
 - `seed_contests` — 개발용 시드(§4-5). `DEBUG`에서만 실행.
 - `contest_status <id> published|hidden|pending`
-- `contest_poster <id> allow --basis "<공공누리 유형/메일 날짜>"` · `contest_poster <id> restore|none`
+- `contest_poster <id> set --url <http(s)> [--credit "<이름>"]` · `contest_poster <id> clear`
 
 운영용 "검증된 JSON 임포트" 커맨드는 Phase 1 종료 시점에 다시 논의한다(사용자 결정 2026-10-10).
 
@@ -94,11 +101,11 @@
 ④ 출처 줄 + "원문 보기 ↗"(≥44px) ⑤ 관심 등록 버튼 + "N명이 이 공모전을 보고 있어요" ⑥ 추천 섹션(PR 4, D10).
 
 포스터 썸네일은 `<button>` → 확대 오버레이(같은 원본 URL, 별도 저장 없음; X·바깥 클릭·Esc로 닫힘, 포커스 이동, aria-label; "포스터 © 주최처" + "원문 보기" 노출).
-`poster_status != allowed` 또는 이미지 로딩 실패 → 폴백 카드("제출 마감" 칩, 주제, summary; 출처 줄 "포스터 없음 · 출처 …"). 색은 D11.
+`poster_url`이 없거나 이미지 로딩 실패 → 폴백 카드("제출 마감" 칩, 주제, summary; 출처 줄 "포스터 없음 · 출처 …"). 색은 D11.
 
 ### 4-5. 개발용 시드 7건
 
-**실서비스 전 전부 재검증 필요.** 2026-10-09 조사에서 공식 사이트 직접 확인은 대부분 실패(ggkia.or.kr 인증서 오류/IP 차단, kosid.or.kr 403) — 정림(junglimaward.com) 외에는 모음 사이트·기사 기준이다. 포스터 URL·공공누리는 7건 모두 미확인 → 전부 `poster_status = unverified`.
+**실서비스 전 전부 재검증 필요.** 2026-10-09 조사에서 공식 사이트 직접 확인은 대부분 실패(ggkia.or.kr 인증서 오류/IP 차단, kosid.or.kr 403) — 정림(junglimaward.com) 외에는 모음 사이트·기사 기준이다. 공식 포스터 이미지 URL은 7건 모두 미확인 → 전부 `poster_url` 없음(폴백 카드).
 
 | 공모전 | status | 제출 마감 (KST) | 신청 마감 | 비고 |
 |---|---|---|---|---|
@@ -116,7 +123,7 @@
 |---|---|
 | 0 | 이 문서 + 이슈 등록 |
 | 1 | 백엔드: `Contest` + 마이그레이션, 목록·상세 API, `seed_contests`, 테스트 |
-| 2 | 백엔드: `ContestInterest` · `ContestPosterReport`, 관심·포스터 신고 API, 스로틀, 관리 커맨드, 테스트 |
+| 2 | 백엔드: `ContestInterest`, 관심 API, 스로틀, `http`/`https` URL 검증(저장·bulk·update·DB CHECK), 관리 커맨드, 테스트 |
 | 3 | 프론트: `api/contests.js`, 목록·상세 화면(시안 B), 포스터 확대, 폴백, D-day 유틸, i18n, 목 데이터·localStorage 관심 제거. 추천·팀 섹션 숨김 |
 | 4 | 관심 등록자 API + 추천 섹션 재개(`utils/teamFit.js` 재사용) |
 
@@ -128,7 +135,7 @@
 3. 주최처 공식 페이지를 따라가 LLM(`recommendation/services/_gemini.py` 재사용)으로 제출 마감·신청 마감·주제·참가 자격·요약을 구조화 추출. 스키마 검증(신규 의존성 없이 수기 검증기) + **원문 근거 문장 저장**.
 4. 교차검증: 공식 페이지에서 제출 마감을 못 읽었거나 위비티 값과 충돌 → `hidden` (D7).
 5. 주최처 필터 (D8).
-6. 포스터 기본 `unverified`; 허락 근거 필드(공공누리 유형 / 메일 날짜)를 `Contest`에 nullable 추가 (D6).
+6. 포스터: 주최처 공식 페이지의 이미지 URL(예: og:image)을 `poster_url`로 저장, `http`/`https` 검증 통과분만. 모음 사이트 이미지 서버 URL은 넣지 않는다 (D6).
 7. 하루 1~2회 Railway cron (D12). 실패해도 기존 `published` 유지.
 8. 수집 로그 테이블(실행 단위 + 후보 단위: 성공/실패/hidden 사유, 원본 D-n, 수집 시각, 근거 문장).
 
@@ -141,4 +148,4 @@
 - Railway 플랜의 cron 가용 여부·최대 실행 시간 (Phase 2 착수 시)
 - 위비티 약관 (Phase 2 게이트)
 - 운영용 검증된 JSON 임포트 커맨드 (Phase 1 종료 시 논의)
-- 시드 7건의 공식 페이지 재검증, 포스터 허락
+- 시드 7건의 공식 페이지 재검증, 공식 포스터 이미지 URL 확보
