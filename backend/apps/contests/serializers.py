@@ -4,6 +4,7 @@ serializers.py -- apps/contests
 Datetimes are stored tz-aware (UTC) and serialized as ISO 8601 with offset;
 the frontend converts to KST.
 """
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -19,6 +20,7 @@ class ContestSerializer(serializers.ModelSerializer):
     source_url = serializers.SerializerMethodField()
     listing_url = serializers.SerializerMethodField()
     interested = serializers.SerializerMethodField()
+    takedown_email = serializers.SerializerMethodField()
 
     class Meta:
         model = Contest
@@ -28,7 +30,7 @@ class ContestSerializer(serializers.ModelSerializer):
             'theme', 'summary', 'eligibility', 'team_size',
             'source_url', 'listing_source', 'listing_url',
             'poster_url', 'poster_credit', 'poster_status',
-            'interest_count', 'interested',
+            'interest_count', 'interested', 'takedown_email',
             'next_deadline_kind', 'next_deadline', 'is_closed',
         ]
         read_only_fields = fields
@@ -49,9 +51,17 @@ class ContestSerializer(serializers.ModelSerializer):
 
     def get_poster_url(self, obj):
         # Never leak an unverified / removed poster URL to clients (D4-D6).
-        if obj.poster_status == Contest.POSTER_ALLOWED and is_http_url(obj.poster_url):
+        # No takedown contact configured -> no poster is shown (output gating only).
+        if (
+            obj.poster_status == Contest.POSTER_ALLOWED
+            and is_http_url(obj.poster_url)
+            and settings.CONTEST_TAKEDOWN_EMAIL
+        ):
             return obj.poster_url
         return None
+
+    def get_takedown_email(self, obj):
+        return settings.CONTEST_TAKEDOWN_EMAIL or ''
 
     # Defense in depth: never emit a non-http(s) URL even if a bad row got in
     # through queryset.update() / raw SQL (Contest.save() validates the normal path).

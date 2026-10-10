@@ -608,6 +608,10 @@ KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
 NAVER_CLIENT_ID   = os.getenv('NAVER_CLIENT_ID', '')
 NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET', '')
 
+# Public address rights holders mail to request contest poster removal. While
+# empty, no poster may be set to allowed and the frontend hides the mail link.
+CONTEST_TAKEDOWN_EMAIL = os.getenv('CONTEST_TAKEDOWN_EMAIL', '').strip()
+
 # -- Production security ---------------------------------------------------
 if not DEBUG:
     # HTTP headers

@@ -224,3 +224,25 @@ class TestBlankAndNullAccepted:
             with transaction.atomic():
                 with connection.cursor() as cur:
                     cur.execute("UPDATE contests_contest SET source_url = '' WHERE id = %s", [c.pk])
+
+
+@pytest.mark.django_db
+class TestTakedownGate:
+    def _allowed(self):
+        return Contest.objects.create(**_kwargs(
+            poster_url='https://i.example.com/p.jpg', poster_status=Contest.POSTER_ALLOWED,
+        ))
+
+    def test_hidden_when_unset(self, settings):
+        settings.CONTEST_TAKEDOWN_EMAIL = ''
+        c = self._allowed()
+        data = ContestSerializer(c).data
+        assert data['poster_url'] is None
+        assert data['takedown_email'] == ''
+        assert Contest.objects.get(pk=c.pk).poster_status == Contest.POSTER_ALLOWED
+
+    def test_shown_when_set(self, settings):
+        settings.CONTEST_TAKEDOWN_EMAIL = 'td@example.com'
+        data = ContestSerializer(self._allowed()).data
+        assert data['poster_url'] == 'https://i.example.com/p.jpg'
+        assert data['takedown_email'] == 'td@example.com'

@@ -9,8 +9,10 @@ Production-usable (not DEBUG-gated). Poster 'allowed' needs documented
 permission evidence (D6). Prints before -> after; exits non-zero on an unknown
 id or a refused transition.
 """
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
+from django.core.validators import validate_email
 from django.utils import timezone
 
 from apps.contests.models import Contest
@@ -35,6 +37,16 @@ class Command(BaseCommand):
         before = contest.poster_status
         action = options['action']
         fields = {}
+
+        if action in ('allow', 'restore'):
+            email = getattr(settings, 'CONTEST_TAKEDOWN_EMAIL', '') or ''
+            try:
+                validate_email(email)
+            except ValidationError:
+                raise CommandError(
+                    'CONTEST_TAKEDOWN_EMAIL must be configured with a valid email '
+                    'address before a poster can be allowed or restored'
+                )
 
         if action == 'allow':
             url = (options['url'] or '').strip()

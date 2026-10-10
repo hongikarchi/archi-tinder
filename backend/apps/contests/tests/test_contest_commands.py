@@ -129,3 +129,43 @@ class TestContestPoster:
     def test_unknown_id_errors(self, action):
         with pytest.raises(CommandError):
             call_command('contest_poster', '999999', action)
+
+
+@pytest.mark.django_db
+class TestTakedownEmailRequired:
+    ALLOW = ('--url', 'https://i.example.com/p.jpg', '--basis', 'mail')
+
+    @pytest.mark.parametrize('bad', ['', 'not-an-email'])
+    def test_allow_refused(self, settings, bad):
+        settings.CONTEST_TAKEDOWN_EMAIL = bad
+        c = _make()
+        with pytest.raises(CommandError, match='CONTEST_TAKEDOWN_EMAIL'):
+            call_command('contest_poster', str(c.pk), 'allow', *self.ALLOW)
+        c.refresh_from_db()
+        assert c.poster_status == Contest.POSTER_UNVERIFIED and c.poster_url is None
+
+    @pytest.mark.parametrize('bad', ['', 'not-an-email'])
+    def test_restore_refused(self, settings, bad):
+        settings.CONTEST_TAKEDOWN_EMAIL = bad
+        c = _make(poster_status=Contest.POSTER_NONE,
+                  poster_url='https://i.example.com/p.jpg', poster_permission_basis='mail')
+        with pytest.raises(CommandError, match='CONTEST_TAKEDOWN_EMAIL'):
+            call_command('contest_poster', str(c.pk), 'restore')
+        c.refresh_from_db()
+        assert c.poster_status == Contest.POSTER_NONE
+
+    def test_allow_and_restore_succeed_with_valid(self, settings):
+        settings.CONTEST_TAKEDOWN_EMAIL = 'takedown@example.com'
+        c = _make()
+        call_command('contest_poster', str(c.pk), 'allow', *self.ALLOW, stdout=StringIO())
+        call_command('contest_poster', str(c.pk), 'none', stdout=StringIO())
+        call_command('contest_poster', str(c.pk), 'restore', stdout=StringIO())
+        c.refresh_from_db()
+        assert c.poster_status == Contest.POSTER_ALLOWED
+
+    def test_none_unaffected(self, settings):
+        settings.CONTEST_TAKEDOWN_EMAIL = ''
+        c = _make(poster_status=Contest.POSTER_ALLOWED, poster_url='https://i.example.com/p.jpg')
+        call_command('contest_poster', str(c.pk), 'none', stdout=StringIO())
+        c.refresh_from_db()
+        assert c.poster_status == Contest.POSTER_NONE
