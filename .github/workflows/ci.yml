@@ -129,5 +129,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Node's built-in test runner (no extra deps); the file list lives in
+      # frontend/package.json "test". Job name stays unchanged: it is a required
+      # status check in branch protection.
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         run: npm run build
