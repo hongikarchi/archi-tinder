@@ -30,6 +30,10 @@ export async function startSession(params) {
       ...(params.visual_description ? { visual_description: params.visual_description } : {}),
       ...(params.image_focus ? { image_focus: params.image_focus } : {}),
       ...(params.force_new ? { force_new: true } : {}),
+      // Taste-start v2 body: tags are sent back exactly as the server returned them.
+      ...(params.taste_tags ? { taste_tags: params.taste_tags } : {}),
+      ...(params.start_ids?.length ? { start_ids: params.start_ids } : {}),
+      ...(params.exclude_ids?.length ? { exclude_ids: params.exclude_ids } : {}),
     }, true, SESSION_CREATE_TIMEOUT_MS)
     return {
       ...result,

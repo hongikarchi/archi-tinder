@@ -39,6 +39,7 @@ function lazyPage(loader) {
 // ── Loaders (also used for prefetch) ──────────────────────────────────────
 export const loadSwipePage = () => import('./pages/SwipePage.jsx')
 export const loadLLMSearchPage = () => import('./pages/LLMSearchPage.jsx')
+export const loadTasteStartPage = () => import('./pages/TasteStartPage.jsx')
 export const loadUserProfilePage = () => import('./pages/UserProfilePage.jsx')
 export const loadPeopleDiscoveryPage = () => import('./pages/PeopleDiscoveryPage.jsx')
 export const loadResultsPage = () => import('./pages/ResultsPage.jsx')
@@ -47,6 +48,7 @@ export const loadResultsPage = () => import('./pages/ResultsPage.jsx')
 export const SwipePage = lazyPage(loadSwipePage)
 export const LoginPage = lazyPage(() => import('./pages/LoginPage.jsx'))
 export const LLMSearchPage = lazyPage(loadLLMSearchPage)
+export const TasteStartPage = lazyPage(loadTasteStartPage)
 export const LLMSearchUpdateWrapper = lazyPage(() => import('./components/LLMSearchUpdateWrapper.jsx'))
 export const UserProfilePage = lazyPage(loadUserProfilePage)
 export const ResultsPage = lazyPage(loadResultsPage)
@@ -77,7 +79,7 @@ export const VerifyGateModal = lazyPage(() => import('./components/VerifyGateMod
  */
 export function prefetchLikelyNextPages() {
   const run = () => {
-    ;[loadSwipePage, loadLLMSearchPage, loadUserProfilePage, loadPeopleDiscoveryPage, loadResultsPage]
+    ;[loadSwipePage, loadTasteStartPage, loadUserProfilePage, loadPeopleDiscoveryPage, loadResultsPage]
       .forEach(load => { load().catch(() => {}) })
   }
   if (typeof window.requestIdleCallback === 'function') {
