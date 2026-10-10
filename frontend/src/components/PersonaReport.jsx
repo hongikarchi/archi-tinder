@@ -118,7 +118,7 @@ export default function PersonaReport({ boardId, finalReport, axisScores, report
       <p style={{
         color: 'var(--accent-1)',
         fontSize: 'var(--fs-body)',
-        fontWeight: 'var(--fw-semibold)',
+        fontWeight: 'var(--fw-medium)',
         margin: '0 0 12px',
         lineHeight: 1.5,
       }}>
