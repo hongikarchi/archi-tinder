@@ -400,6 +400,22 @@ RECOMMENDATION = {
         'element': 2, 'atmosphere': 1, 'color': 1,
     },
     'taste_exclude_penalty_factor': 1.0,  # exclude tag = penalty (factor x axis weight), never a hard filter
+    # taste_v2 -- Taste-start redesign (docs/plans/2026-10-11-taste-start-redesign.md §5/§8)
+    'taste_v2_check_share_one_like': 0.5,       # check-card share with exactly 1 like
+    'taste_v2_check_share_consistent': 0.25,    # >=2 likes, mutually similar (3:1 match:check)
+    'taste_v2_check_share_inconsistent': 0.5,   # >=2 likes, dissimilar (1:1)
+    'taste_v2_consistency_window': 4,           # last N likes used for the consistency test
+    'taste_v2_consistent_min_cos': 0.6,         # mean pairwise cosine >= this = consistent
+    'taste_v2_skip_streak': 3,                  # trailing skips -> check share >= 0.5
+    'taste_v2_skip_streak_hard': 5,             # trailing skips -> all check cards
+    'taste_v2_like_saturation': 6,              # likes at which the tag weight bottoms out
+    'taste_v2_tag_weight_end': 0.3,             # tag weight at saturation (never 0)
+    'taste_v2_dislike_penalty': 0.3,            # penalty x max cosine to recent skips
+    'taste_v2_dislike_window': 10,              # recent skips considered
+    'taste_v2_check_min_tag_ratio': 0.5,        # check-card band: tag score >= ratio x best remaining
+    'taste_v2_analyzing_min_likes': 1,
+    'taste_v2_convergence_min_swipes': 8,       # "taste found" needs at least this many swipes
+    'taste_v2_pool_refresh_threshold': 20,      # refill the pool when unexposed candidates drop below
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty

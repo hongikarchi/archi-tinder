@@ -158,6 +158,33 @@ def _run(tags, exclude_ids, limit):
     return out
 
 
+def score_ids(tags, ids):
+    """Tag score for a given id list: {canonical_bld_id: score}.
+
+    Same scoring as score_sql/top_matches, but no LIMIT and no ">= 1 want tag"
+    filter. Ids missing from the DB (or not publishable) are simply absent.
+    One parameterised query; no query when there is nothing to score.
+    """
+    ids = list(ids or [])
+    if not ids or not scored_tags(tags):
+        return {}
+    score_expr, params, bool_exprs = score_sql(tags)
+    select_bools = ', '.join(f'{e} AS t{i}' for i, e in enumerate(bool_exprs))
+    sql = f"""
+        SELECT canonical_bld_id, ({score_expr}) AS score
+        FROM (
+            SELECT canonical_bld_id, {select_bools}
+            FROM canonical_v2_buildings
+            WHERE is_publishable = true
+              AND canonical_bld_id = ANY(%s)
+        ) s
+    """
+    with connections['buildings'].cursor() as cur:
+        cur.execute(sql, list(params) + [ids])
+        rows = cur.fetchall()
+    return {row[0]: float(row[1]) for row in rows}
+
+
 def top_matches(tags, exclude_ids=(), limit=3):
     """Top `limit` buildings by tag match: [{canonical_bld_id, score, matched_keys, hit, total}]."""
     return _run(tags, exclude_ids, limit)

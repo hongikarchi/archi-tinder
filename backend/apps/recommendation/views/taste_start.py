@@ -12,8 +12,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from .. import engine
-from ..taste_start import matching, recognize_tags, vocab
-from ..taste_start.recognizer import make_tag
+from ..taste_start import matching, recognize_tags, tag_io
 from ..throttles import LLMSearchThrottle
 
 logger = logging.getLogger('apps.recommendation')
@@ -22,64 +21,24 @@ MAX_TEXT_LEN = 500
 MAX_EXCLUDE_IDS = 100
 MAX_TAGS = 30
 CARD_COUNT = 3
-_TAG_AXES = ('style', 'atmosphere', 'color', 'country', 'material', 'element', 'built')
 
 
 def _bad(detail):
     return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
 
 
-def _is_year(v):
-    return isinstance(v, int) and not isinstance(v, bool) and 1800 <= v <= 2100
-
-
-def _rebuild_tag(item):
-    """Rebuild one client tag server-side from (axis, value, polarity) ONLY.
-
-    `match`, labels and prob from the client are ignored (trust boundary): they
-    come from our vocab/normalization via make_tag. Raises ValueError if invalid.
-    """
-    if not isinstance(item, dict):
-        raise ValueError('tag must be an object')
-    axis, value = item.get('axis'), item.get('value')
-    polarity = item.get('polarity', 'want')
-    if polarity not in ('want', 'exclude'):
-        raise ValueError('bad polarity')
-    if axis == 'year':
-        if (not isinstance(value, (list, tuple)) or len(value) != 2
-                or not all(v is None or _is_year(v) for v in value)
-                or (value[0] is None and value[1] is None)
-                or (value[0] is not None and value[1] is not None and value[0] > value[1])):
-            raise ValueError('bad year value')
-        return make_tag('year', (value[0], value[1]), polarity)
-    if not isinstance(axis, str) or not isinstance(value, str):
-        raise ValueError('bad axis/value')
-    if axis == 'use':
-        # `kind` only picks the vocab (program and typology share some values);
-        # the value itself is validated against that vocab.
-        client_match = item.get('match')
-        is_typology = isinstance(client_match, dict) and 'typology_primary' in client_match
-        kind = 'typology' if is_typology else 'program'
-        table = vocab.TYPOLOGY if is_typology else vocab.PROGRAM
-        if value not in table:
-            raise ValueError('unknown use value')
-        return make_tag('use', value, polarity, kind=kind)
-    if axis not in _TAG_AXES or value not in vocab.AXIS_VOCAB[axis]:
-        raise ValueError('unknown axis/value')
-    return make_tag(axis, value, polarity)
+_rebuild_tag = tag_io.rebuild_tag   # kept alias (old private name)
 
 
 def _parse_tags(raw, field):
     """Return (tags, error_response). Invalid tags -> 400."""
-    if not isinstance(raw, list) or len(raw) > MAX_TAGS:
-        return None, _bad(f'{field} must be a list of at most {MAX_TAGS} tags')
-    tags = []
-    for item in raw:
-        try:
-            tags.append(_rebuild_tag(item))
-        except (ValueError, TypeError, KeyError):
-            return None, _bad(f'{field} contains an invalid tag')
-    return tags, None
+    try:
+        return tag_io.parse_tags(raw, MAX_TAGS), None
+    except ValueError as exc:
+        msg = str(exc)
+        if msg.startswith('must be'):
+            return None, _bad(f'{field} {msg}')
+        return None, _bad(f'{field} contains an invalid tag')
 
 
 def _parse_exclude_ids(raw):
