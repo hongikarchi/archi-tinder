@@ -393,6 +393,13 @@ AVATAR_OUTPUT_EDGE    = 512                 # square output side in pixels
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
     'bounded_pool_target': 150,
+    # Taste-start tag matching: fixed per-axis weights for ranking buildings by recognised tags.
+    # score = sum(weight of matched want tags) - factor * sum(weight of matched exclude tags).
+    'taste_tag_weights': {
+        'use': 3, 'country': 3, 'material': 2, 'style': 2, 'year': 2, 'built': 2,
+        'element': 2, 'atmosphere': 1, 'color': 1,
+    },
+    'taste_exclude_penalty_factor': 1.0,  # exclude tag = penalty (factor x axis weight), never a hard filter
     'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty

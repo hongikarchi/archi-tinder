@@ -10,6 +10,7 @@ from .views import (
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
     RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
     InspectBuildingsListView, InspectBuildingDetailView, InspectSearchView,
+    TasteRecognizeView, TasteCardsView,
 )
 
 urlpatterns = [
@@ -50,5 +51,8 @@ urlpatterns = [
     # ADMIN-DBCHECK-1: internal DB-quality inspection API (list must come before detail).
     path('inspect/buildings/',                                InspectBuildingsListView.as_view()),
     re_path(r'^inspect/buildings/(?P<canonical_bld_id>bld_[0-9]{6})/$', InspectBuildingDetailView.as_view()),
+    # Taste-start: tag recognition + top-3 tag-match cards
+    path('taste/recognize/',                                  TasteRecognizeView.as_view()),
+    path('taste/cards/',                                      TasteCardsView.as_view()),
     path('inspect/search/',                                   InspectSearchView.as_view()),
 ]

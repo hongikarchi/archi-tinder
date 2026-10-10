@@ -67,6 +67,7 @@ from .inspect import (
     InspectBuildingDetailView,
     InspectSearchView,
 )
+from .taste_start import TasteRecognizeView, TasteCardsView
 from ._shared import (
     # Private helpers accessed by tests
     _liked_id_only,
@@ -88,6 +89,8 @@ __all__ = [
     'DiverseRandomView',
     'ParseQueryView',
     'ParseQueryStreamView',
+    'TasteRecognizeView',
+    'TasteCardsView',
     'DiscoveryFeedView',
     'DiscoveryFeedbackView',
     'DiscoveryPromoteView',
