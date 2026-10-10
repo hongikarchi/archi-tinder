@@ -9,8 +9,52 @@ interest_count is a denormalized column maintained by signals on ContestInterest
 (apps/contests/signals.py, BACK-CONTEST-2).
 """
 from django.db import models
+from django.db.models import Q
 
 from .validators import validate_http_url
+
+URL_FIELDS = ('source_url', 'listing_url', 'poster_url')
+# DB-level scheme check (case-insensitive, matching validators.is_http_url which
+# lower-cases the scheme). The constraint checks the scheme prefix only; the
+# validator additionally requires a host and no surrounding whitespace.
+_HTTP_RE = r'^https?://'
+
+
+def _validate_url_value(name, value):
+    """Same semantics as Contest.save(): blank listing_url / null poster_url OK."""
+    if value in (None, '') and name != 'source_url':
+        return
+    validate_http_url(value)
+
+
+class ContestQuerySet(models.QuerySet):
+    """Applies the http(s)-only URL guard to bulk paths that skip Contest.save()."""
+
+    def bulk_create(self, objs, *args, **kwargs):
+        objs = list(objs)
+        for obj in objs:
+            for name in URL_FIELDS:
+                _validate_url_value(name, getattr(obj, name))
+        return super().bulk_create(objs, *args, **kwargs)
+
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        objs = list(objs)
+        fields = list(fields)
+        for name in URL_FIELDS:
+            if name in fields:
+                for obj in objs:
+                    _validate_url_value(name, getattr(obj, name))
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
+    def update(self, **kwargs):
+        for name in URL_FIELDS:
+            if name in kwargs:
+                value = kwargs[name]
+                # Expressions (F(), Value(), ...) cannot be checked here; the
+                # DB CheckConstraint still covers them.
+                if value is None or isinstance(value, str):
+                    _validate_url_value(name, value)
+        return super().update(**kwargs)
 
 
 def compute_next_deadline(apply_deadline, submission_deadline, now):
@@ -98,12 +142,30 @@ class Contest(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     last_verified_at = models.DateTimeField(null=True, blank=True)
 
+    objects = ContestQuerySet.as_manager()
+
     class Meta:
         ordering = ['submission_deadline']
         indexes = [
             models.Index(
                 fields=['status', 'submission_deadline'],
                 name='contest_status_deadline_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(source_url__iregex=_HTTP_RE), name='contest_source_url_http',
+            ),
+            models.CheckConstraint(
+                condition=Q(listing_url='') | Q(listing_url__iregex=_HTTP_RE),
+                name='contest_listing_url_http',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(poster_url__isnull=True) | Q(poster_url='')
+                    | Q(poster_url__iregex=_HTTP_RE)
+                ),
+                name='contest_poster_url_http',
             ),
         ]
 
@@ -114,11 +176,8 @@ class Contest(models.Model):
         # Django validators do not run on save(); enforce http/https here so
         # update_or_create / commands / importers cannot store a bad URL.
         # Blank listing_url and null poster_url stay allowed.
-        for name in ('source_url', 'listing_url', 'poster_url'):
-            value = getattr(self, name)
-            if value in (None, '') and name != 'source_url':
-                continue
-            validate_http_url(value)
+        for name in URL_FIELDS:
+            _validate_url_value(name, getattr(self, name))
         super().save(*args, **kwargs)
 
     def next_deadline(self, now):
@@ -177,6 +236,15 @@ class ContestPosterReport(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            # One report per attributable reporter per contest (anonymous rows,
+            # e.g. after reporter SET_NULL, are exempt).
+            models.UniqueConstraint(
+                fields=['contest', 'reporter'],
+                condition=Q(reporter__isnull=False),
+                name='contest_poster_report_once',
+            ),
+        ]
 
     def __str__(self):
         return f'report contest:{self.contest_id} by {self.reporter_id}'
