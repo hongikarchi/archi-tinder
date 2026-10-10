@@ -218,3 +218,69 @@ class TestBlankAndNullAccepted:
             with transaction.atomic():
                 with connection.cursor() as cur:
                     cur.execute("UPDATE contests_contest SET source_url = '' WHERE id = %s", [c.pk])
+
+
+from apps.contests.validators import validate_poster_url  # noqa: E402
+
+
+@pytest.mark.parametrize('host', [
+    'wevity.com', 'www.wevity.com', 'img.wevity.com', 'WWW.WEVITY.COM', 'wevity.com.',
+])
+def test_poster_blocked_hosts(host):
+    with pytest.raises(ValidationError) as exc:
+        validate_poster_url('https://%s/upload/x.jpg' % host)
+    assert 'wevity.com' in str(exc.value)
+
+
+@pytest.mark.parametrize('url', [
+    None, '', 'https://notwevity.com/x.jpg', 'https://wevity.com.example.org/x.jpg',
+    'https://org.example.com/p.jpg',
+])
+def test_poster_allowed_hosts(url):
+    validate_poster_url(url)
+
+
+@pytest.mark.django_db
+class TestWevityPoster:
+    BAD = 'https://www.wevity.com/upload/x.jpg'
+
+    def test_command_set_rejected_and_unchanged(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        c = Contest.objects.create(**_kwargs(poster_url='https://org.example.com/p.jpg'))
+        with pytest.raises(CommandError):
+            call_command('contest_poster', str(c.pk), 'set', '--url', self.BAD)
+        c.refresh_from_db()
+        assert c.poster_url == 'https://org.example.com/p.jpg'
+
+    def test_save_rejected(self):
+        with pytest.raises(ValidationError):
+            Contest.objects.create(**_kwargs(poster_url=self.BAD))
+
+    def test_bulk_create_rejected(self):
+        with pytest.raises(ValidationError):
+            Contest.objects.bulk_create([_valid(poster_url=self.BAD)])
+        assert not Contest.objects.exists()
+
+    def test_bulk_update_rejected(self):
+        c = Contest.objects.create(**_kwargs())
+        c.poster_url = self.BAD
+        with pytest.raises(ValidationError):
+            Contest.objects.bulk_update([c], ['poster_url'])
+
+    def test_update_rejected(self):
+        c = Contest.objects.create(**_kwargs())
+        with pytest.raises(ValidationError):
+            Contest.objects.filter(pk=c.pk).update(poster_url=self.BAD)
+
+    def test_source_and_listing_on_wevity_accepted(self):
+        c = Contest.objects.create(**_kwargs(
+            source_url='https://www.wevity.com/?c=find&gbn=view&gp=1&ix=1',
+            listing_url='https://www.wevity.com/?c=find',
+        ))
+        assert 'wevity.com' in c.source_url and 'wevity.com' in c.listing_url
+
+    def test_serializer_nulls_blocked_poster(self):
+        c = Contest(**_kwargs(poster_url=self.BAD))
+        c.interested = False
+        assert ContestSerializer(c, context={'now': timezone.now()}).data['poster_url'] is None

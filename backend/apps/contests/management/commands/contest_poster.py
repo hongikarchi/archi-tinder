@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.contests.models import Contest
-from apps.contests.validators import validate_http_url
+from apps.contests.validators import validate_poster_url
 
 
 class Command(BaseCommand):
@@ -39,9 +39,9 @@ class Command(BaseCommand):
             if not url:
                 raise CommandError('set requires --url')
             try:
-                validate_http_url(url)
-            except ValidationError:
-                raise CommandError('--url must be an http(s) URL')
+                validate_poster_url(url)
+            except ValidationError as exc:
+                raise CommandError('--url rejected: %s' % ' '.join(exc.messages))
             fields['poster_url'] = url
             if options['credit'] is not None:
                 fields['poster_credit'] = options['credit'].strip()

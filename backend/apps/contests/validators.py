@@ -30,3 +30,23 @@ def validate_http_url(value):
         raise ValidationError(
             'Enter a valid http:// or https:// URL.', code='invalid_url_scheme',
         )
+
+
+# Listing/aggregator sites whose image servers must not be hotlinked: a contest
+# poster must be the ORGANIZER's own image (D6). Extend here. Subdomains match.
+POSTER_BLOCKED_HOSTS = ('wevity.com',)
+
+
+def validate_poster_url(value):
+    """poster_url: None/'' allowed; else http(s) and not on a blocked listing host."""
+    if value is None or value == '':
+        return
+    validate_http_url(value)
+    host = (urlsplit(value).hostname or '').lower().rstrip('.')
+    for blocked in POSTER_BLOCKED_HOSTS:
+        if host == blocked or host.endswith('.' + blocked):
+            raise ValidationError(
+                'Poster images from %s are not allowed; use the organizer\'s own image.'
+                % blocked,
+                code='poster_host_blocked',
+            )
