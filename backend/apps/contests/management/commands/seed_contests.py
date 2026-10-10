@@ -55,7 +55,8 @@ SEED_CONTESTS = [
         'apply_deadline': kst(2026, 10, 19, 15),
         'eligibility': '건축(공)학 전공 대학(원)생',
         'summary': '모듈러 건축을 주제로 한 대학(원)생 대상 건축 설계 공모전.',
-        # Official announcement URL unverified.
+        # Official announcement URL unverified. Do NOT use the KIRA board link
+        # with ba_id=264476 (user instruction 2026-10-11).
         'source_url': 'https://www.kira.or.kr/',
     },
     {
@@ -83,7 +84,7 @@ SEED_CONTESTS = [
         'summary': '신청 및 1차 작품 접수 10/14까지. 2차 작품 접수 11/11, PT심사·시상식 11/14.',
         'eligibility': '대학생·대학원생',
         'team_size': '3인 이내',
-        'source_url': 'https://kosid.or.kr/78',
+        'source_url': 'https://kosid.or.kr/22',
         'listing_url': 'https://linkareer.com/activity/330489',
     },
     {
@@ -128,7 +129,7 @@ SEED_CONTESTS = [
         'submission_deadline': kst(2027, 1, 11, 23, 59),
         'apply_deadline': kst(2027, 1, 4, 23, 59),
         'summary': '과제 제출 2027/1/7~1/11, 참가신청 2026/10/26~2027/1/4.',
-        'source_url': 'https://www.junglimaward.com/',
+        'source_url': 'https://www.junglimaward.com/2027',
     },
     {
         # (g)
@@ -142,7 +143,7 @@ SEED_CONTESTS = [
         'submission_deadline': kst(2026, 11, 19, 23, 59),
         'summary': '에어-비트 시티를 주제로 한 건축 디자인 공모전.',
         'listing_url': 'https://lectus.kr/2026-air-beat-city-arch-competition/',
-        'source_url': 'https://lectus.kr/2026-air-beat-city-arch-competition/',
+        'source_url': 'https://airbeatcity.com/contest',
     },
 ]
 
