@@ -21,8 +21,8 @@ _HTTP_RE = r'^https?://'
 
 
 def _validate_url_value(name, value):
-    """Same semantics as Contest.save(): blank listing_url / null poster_url OK."""
-    if value in (None, '') and name != 'source_url':
+    """Same semantics as Contest.save(): blank source/listing_url, null poster_url OK."""
+    if value in (None, ''):
         return
     if name == 'poster_url':
         validate_poster_url(value)
@@ -95,6 +95,11 @@ class Contest(models.Model):
         (STATUS_PENDING, 'pending'),
     ]
 
+    # Stable identifier used by the upcoming `import_contests` command to upsert
+    # rows idempotently (title/URL can change); NULL for rows created otherwise.
+    # NULLs do not collide under the unique constraint.
+    import_key = models.CharField(max_length=80, unique=True, null=True, blank=True)
+
     title = models.CharField(max_length=200)
     organizer = models.CharField(max_length=120)
     organizer_type = models.CharField(
@@ -112,7 +117,9 @@ class Contest(models.Model):
     eligibility = models.CharField(max_length=120, blank=True)
     team_size = models.CharField(max_length=60, null=True, blank=True)
 
-    source_url = models.URLField(max_length=500, validators=[validate_http_url])
+    source_url = models.URLField(
+        max_length=500, blank=True, default='', validators=[validate_http_url],
+    )
     listing_source = models.CharField(max_length=40, blank=True)
     listing_url = models.URLField(max_length=500, blank=True, validators=[validate_http_url])
 
@@ -142,7 +149,8 @@ class Contest(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                condition=Q(source_url__iregex=_HTTP_RE), name='contest_source_url_http',
+                condition=Q(source_url='') | Q(source_url__iregex=_HTTP_RE),
+                name='contest_source_url_http',
             ),
             models.CheckConstraint(
                 condition=Q(listing_url='') | Q(listing_url__iregex=_HTTP_RE),
@@ -163,7 +171,7 @@ class Contest(models.Model):
     def save(self, *args, **kwargs):
         # Django validators do not run on save(); enforce http/https here so
         # update_or_create / commands / importers cannot store a bad URL.
-        # Blank listing_url and null poster_url stay allowed.
+        # Blank source_url / listing_url and null poster_url stay allowed.
         for name in URL_FIELDS:
             _validate_url_value(name, getattr(self, name))
         super().save(*args, **kwargs)

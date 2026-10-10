@@ -58,9 +58,10 @@ class TestSaveValidation:
         c = Contest.objects.create(**_kwargs(listing_url='', poster_url=None))
         assert c.listing_url == '' and c.poster_url is None
 
-    def test_blank_source_url_rejected(self):
-        with pytest.raises(ValidationError):
-            Contest.objects.create(**_kwargs(source_url=''))
+    def test_blank_source_url_accepted(self):
+        c = Contest.objects.create(**_kwargs(source_url=''))
+        c.refresh_from_db()
+        assert c.source_url == ''
 
     def test_resave_with_bad_value_rejected(self):
         c = Contest.objects.create(**_kwargs())
@@ -212,12 +213,21 @@ class TestBlankAndNullAccepted:
         with connection.cursor() as cur:
             cur.execute("UPDATE contests_contest SET poster_url = '' WHERE id = %s", [c.pk])
 
-    def test_source_url_empty_still_rejected_by_db(self):
+    def test_source_url_empty_accepted_by_db(self):
         c = Contest.objects.create(**_kwargs())
-        with pytest.raises(IntegrityError):
-            with transaction.atomic():
-                with connection.cursor() as cur:
-                    cur.execute("UPDATE contests_contest SET source_url = '' WHERE id = %s", [c.pk])
+        with connection.cursor() as cur:
+            cur.execute("UPDATE contests_contest SET source_url = '' WHERE id = %s", [c.pk])
+        c.refresh_from_db()
+        assert c.source_url == ''
+
+    def test_blank_source_url_via_bulk_and_update(self):
+        Contest.objects.bulk_create([_valid(source_url='')])
+        c = Contest.objects.get()
+        c.source_url = 'https://example.com/'
+        Contest.objects.bulk_update([c], ['source_url'])
+        c.source_url = ''
+        Contest.objects.bulk_update([c], ['source_url'])
+        assert Contest.objects.filter(pk=c.pk).update(source_url='') == 1
 
 
 from apps.contests.validators import validate_poster_url  # noqa: E402
