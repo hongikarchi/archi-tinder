@@ -45,6 +45,8 @@ class ProjectSerializer(serializers.ModelSerializer):
     user = UserMiniSerializer(read_only=True)
     latest_session_id = serializers.SerializerMethodField()
     latest_session_meta = serializers.SerializerMethodField()
+    taste_tags = serializers.SerializerMethodField()
+    taste_tags_source = serializers.SerializerMethodField()
 
     # ------------------------------------------------------------------
     # Ownership gate: returns True iff the requesting user owns this project
@@ -147,6 +149,32 @@ class ProjectSerializer(serializers.ModelSerializer):
             'created_at': session.created_at.isoformat() if session.created_at else None,
         }
 
+    # ------------------------------------------------------------------
+    # Taste-start tags (read-only; pure Python, no extra queries)
+    # ------------------------------------------------------------------
+    def _resolve_taste_tags(self, obj):
+        """(tag dicts, source). Board tags win; old boards map their filters."""
+        cache_key = '_taste_tags_cache'
+        if cache_key in obj.__dict__:
+            return obj.__dict__[cache_key]
+        from .taste_start import session_pool
+        from .taste_start.legacy_filters import filters_to_tags
+        filters = obj.filters if isinstance(obj.filters, dict) else {}
+        if isinstance(filters.get('taste_tags'), list):
+            result = ([t.to_dict() for t in session_pool.tags_from_dicts(filters['taste_tags'])],
+                      'board')
+        else:
+            legacy = [t.to_dict() for t in filters_to_tags(filters)]
+            result = (legacy, 'legacy' if legacy else 'none')
+        obj.__dict__[cache_key] = result
+        return result
+
+    def get_taste_tags(self, obj):
+        return self._resolve_taste_tags(obj)[0]
+
+    def get_taste_tags_source(self, obj):
+        return self._resolve_taste_tags(obj)[1]
+
     class Meta:
         model  = Project
         fields = [
@@ -168,6 +196,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             'is_temp',
             'latest_session_id',
             'latest_session_meta',
+            'taste_tags',
+            'taste_tags_source',
             'created_at',
             'updated_at',
         ]
@@ -191,6 +221,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             'is_temp',
             'latest_session_id',
             'latest_session_meta',
+            'taste_tags',
+            'taste_tags_source',
             'created_at',
             'updated_at',
         ]
