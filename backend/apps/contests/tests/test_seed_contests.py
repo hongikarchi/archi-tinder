@@ -50,11 +50,10 @@ class TestSeedContests:
         assert c.apply_deadline.isoformat() == '2027-01-04T14:59:00+00:00'
 
     @override_settings(DEBUG=True)
-    def test_posters_unverified_without_url(self):
+    def test_posters_without_url(self):
         _run()
         for c in Contest.objects.all():
             assert c.poster_url is None
-            assert c.poster_status == 'unverified'
             assert c.listing_source == 'seed'
 
     @override_settings(DEBUG=True)

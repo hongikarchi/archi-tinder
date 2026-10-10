@@ -14,7 +14,6 @@ class ContestSerializer(serializers.ModelSerializer):
     next_deadline_kind = serializers.SerializerMethodField()
     next_deadline = serializers.SerializerMethodField()
     is_closed = serializers.SerializerMethodField()
-    poster_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Contest
@@ -23,7 +22,7 @@ class ContestSerializer(serializers.ModelSerializer):
             'submission_deadline', 'apply_deadline', 'notice_date',
             'theme', 'summary', 'eligibility', 'team_size',
             'source_url', 'listing_source', 'listing_url',
-            'poster_url', 'poster_credit', 'poster_status',
+            'poster_url', 'poster_credit',
             'interest_count',
             'next_deadline_kind', 'next_deadline', 'is_closed',
         ]
@@ -42,9 +41,3 @@ class ContestSerializer(serializers.ModelSerializer):
 
     def get_is_closed(self, obj):
         return obj.submission_deadline < self._now()
-
-    def get_poster_url(self, obj):
-        # Never leak an unverified / removed poster URL to clients (D4-D6).
-        if obj.poster_status == Contest.POSTER_ALLOWED:
-            return obj.poster_url
-        return None

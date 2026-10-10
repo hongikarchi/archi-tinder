@@ -37,15 +37,6 @@ class Contest(models.Model):
         (ORGANIZER_UNKNOWN, 'unknown'),
     ]
 
-    POSTER_ALLOWED = 'allowed'
-    POSTER_UNVERIFIED = 'unverified'
-    POSTER_NONE = 'none'
-    POSTER_STATUS_CHOICES = [
-        (POSTER_ALLOWED, 'allowed'),
-        (POSTER_UNVERIFIED, 'unverified'),
-        (POSTER_NONE, 'none'),
-    ]
-
     STATUS_PUBLISHED = 'published'
     STATUS_HIDDEN = 'hidden'
     STATUS_PENDING = 'pending'
@@ -76,11 +67,10 @@ class Contest(models.Model):
     listing_source = models.CharField(max_length=40, blank=True)
     listing_url = models.URLField(max_length=500, blank=True)
 
+    # Shown via hotlink whenever set; null -> frontend fallback card.
+    # To take a poster down, an operator clears the URL.
     poster_url = models.URLField(max_length=1000, null=True, blank=True)
     poster_credit = models.CharField(max_length=120, blank=True)
-    poster_status = models.CharField(
-        max_length=12, choices=POSTER_STATUS_CHOICES, default=POSTER_UNVERIFIED,
-    )
 
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_HIDDEN, db_index=True,
