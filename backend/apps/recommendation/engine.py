@@ -478,7 +478,7 @@ def get_building_thumbnails(canonical_bld_ids):
 def search_by_filters(filters, limit=20, image_focus=None):
     """
     Return buildings matching the given filters dict.
-    Used by ParseQueryView (Phase 3).
+    Used by /inspect/search/ and the QC tooling.
     image_focus: forwarded to _row_to_card; falls back to filters.get('image_focus').
     """
     if image_focus is None and filters:
@@ -506,7 +506,7 @@ def search_by_filters_scored(
 ):
     """LLM-SEARCH-RANK-1: 2-stage bounded CTE ranking (tag-score topK + BM25 rerank).
 
-    Replaces the 3-tier relaxation ladder in ParseQueryView with a single pure-soft
+    Replaces the old 3-tier relaxation ladder with a single pure-soft
     ranked query:
       1. scored CTE: is_publishable=true gate + IDF-weighted tag-score per row.
       2. topk CTE:   ORDER BY tag_score DESC LIMIT K  (arithmetic sort, fast).
@@ -524,7 +524,7 @@ def search_by_filters_scored(
     with zero lexemes → bm25_score = 0 for all rows → graceful no-op.
 
     Args:
-        filters:         dict from parse_query (may include atmosphere/color_tone/typology_primary).
+        filters:         filter dict (may include atmosphere/color_tone/typology_primary).
         raw_query:       first user text verbatim (used for BM25).
         filter_priority: ordered list of axis names (highest priority first).
         limit:           number of cards to return (default 20).

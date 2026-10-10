@@ -324,57 +324,6 @@ class TestSessionRawQueryPersistence:
             f"Fix #1.1 regression: _raw_query_early must read 'raw_query' key"
         )
 
-    def test_raw_query_threaded_to_vinitial_cache(self, auth_client, user_profile, monkeypatch):
-        """Codex audit #1.1: raw_query is passed to services.get_cached_v_initial when stage_decouple_enabled.
-
-        Sends raw_query='test query' (the FE key), enables stage_decouple_enabled,
-        and asserts that services.get_cached_v_initial receives 'test query' as
-        the second positional argument (raw_query / cache key parameter).
-        """
-        from django.conf import settings
-
-        monkeypatch.setitem(settings.RECOMMENDATION, 'stage_decouple_enabled', True)
-
-        cache_call_args = []
-
-        def _mock_get_cached_v_initial(user_id, raw_query):
-            cache_call_args.append((user_id, raw_query))
-            return None  # simulate cache miss
-
-        custom_patches = dict(_SESSION_PATCHES)
-
-        patchers = []
-        for target, side_effect in custom_patches.items():
-            p = patch(target, side_effect=side_effect)
-            p.start()
-            patchers.append(p)
-
-        services_patch = patch(
-            'apps.recommendation.views.services.get_cached_v_initial',
-            side_effect=_mock_get_cached_v_initial,
-        )
-        services_patch.start()
-        patchers.append(services_patch)
-
-        try:
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'filters': {}, 'raw_query': 'test query'},
-                format='json',
-            )
-        finally:
-            for p in reversed(patchers):
-                p.stop()
-
-        assert resp.status_code == 201
-        assert len(cache_call_args) == 1, (
-            f"Expected 1 call to get_cached_v_initial, got {len(cache_call_args)}"
-        )
-        assert cache_call_args[0][1] == 'test query', (
-            f"get_cached_v_initial received raw_query={cache_call_args[0][1]!r}, "
-            f"expected 'test query' -- Fix #1.1 regression"
-        )
-
 
 @pytest.mark.django_db
 class TestSwipeRecording:

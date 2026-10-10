@@ -1,6 +1,6 @@
 ---
 name: app-test
-description: Pre-push verification agent. Runs in one of two modes — FULL (the live-browser 3-persona swipe journey: dev-login → AI search → swipe lifecycle → results → error recovery, with latency budgets) or FEATURE-SCOPED (preflight + a caller-supplied feature checklist + a light regression smoke, for changes that do not touch the recommendation/swipe path). Both modes end with an origin/develop drift check. Returns a single APP-TEST verdict — PASS / PASS-WITH-MINORS / FAIL / ABORTED (drift) — to its caller. Persists nothing.
+description: Pre-push verification agent. Runs in one of two modes — FULL (the live-browser 3-persona swipe journey: dev-login → taste start (tags → 3 cards) → swipe lifecycle → results → error recovery, with latency budgets) or FEATURE-SCOPED (preflight + a caller-supplied feature checklist + a light regression smoke, for changes that do not touch the recommendation/swipe path). Both modes end with an origin/develop drift check. Returns a single APP-TEST verdict — PASS / PASS-WITH-MINORS / FAIL / ABORTED (drift) — to its caller. Persists nothing.
 model: sonnet
 effort: default
 tools: mcp__playwright__browser_navigate, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_screenshot, mcp__playwright__browser_snapshot, mcp__playwright__browser_evaluate, mcp__playwright__browser_press_key, mcp__playwright__browser_wait_for, mcp__playwright__browser_network_requests, mcp__playwright__browser_console_messages, mcp__playwright__browser_close, Bash
@@ -36,7 +36,7 @@ never silently under-test.
 - **FULL** — the complete journey below. Required when the change touches the
   recommendation/swipe path: anything under `backend/apps/recommendation/`, the
   `RECOMMENDATION` dict in `backend/config/settings.py`, session-lifecycle code, or
-  the frontend swipe surface (`SwipePage.jsx`, `LLMSearchPage.jsx`, swipe/session
+  the frontend swipe surface (`SwipePage.jsx`, `TasteStartPage.jsx`, swipe/session
   logic in `App.jsx`).
 - **FEATURE-SCOPED** — preflight + the caller's feature checklist + a light
   regression smoke, for changes off the swipe path (profiles, theme/font, boards,
@@ -90,23 +90,22 @@ note the discrepancy in the verdict).
 
 ## Gate 1 — Time-to-first-card (3-run p50)
 
-**Measurement boundary (spec v1.9)**: TTFC = last user clarification submit →
-first card visible. System-attributable latency only — excludes user-paced
-clarification reading/typing the system cannot compress. Also record total
-user-felt latency (initial submit → first card) as an observability metric, NOT a
-gate; flag as a UX concern (non-blocking) when `p50_total − p50_system > 5000 ms`
-— the clarification gap must stay visible even when the system side is fast.
+**Flow (Taste-start redesign, `docs/plans/2026-10-11-taste-start-redesign.md`)**:
+on `/search`, type the persona query in the composer and send → the page calls
+`POST /api/v1/taste/recognize/` and renders a round (tag chips + 3 stacked cards +
+"N개 중 M개 일치") → click "이 세 장으로 스와이프 시작" → `POST /api/v1/analysis/sessions/`
+(v2 body with `taste_tags` + `start_ids`) → `/swipe` shows the round's card 1.
+There is no clarification turn any more.
 
-**Clarification detection must use the network signal, not a DOM heuristic**: the
-`probe_needed` field in each `/parse-query/` response body is the authoritative
-backend flag (it is exactly what `LLMSearchPage.jsx` branches on). Gemini's
-terminal replies sometimes contain "?" (rhetorical "맞으시죠?"), so DOM/text
-heuristics false-positive. Coerce missing/malformed to `false` (terminal). No
-`/parse-query/` response within 8s → FAIL the run as a harness timeout.
+**Measurement boundary**: TTFC = query submit → first swipe card visible, minus the
+harness's own wait between the round rendering and the start click (record the
+recognize latency and the session-create latency separately as observability
+metrics). No `/taste/recognize/` response within 8s → FAIL the run as a harness
+timeout.
 
-**Multi-turn loop**: on `probe_needed=true`, send one persona-appropriate canned
-affirmative reply and re-measure from that submit. Cap at 3 user turns — a 4th
-needed submit FAILs the persona (`max clarification turns exceeded`).
+**Round checks** (each persona, every run): the recognize response has ≥1 tag for
+the two non-bare personas; the round shows 3 cards (or as many as returned); the
+first 3 swipe cards are exactly the round's 3 cards in order.
 
 **Method**: run the flow 3× per persona in fresh contexts; gate on the **p50** of
 the three system-attributable measurements. Single-shot masks ~5% Gemini variance
@@ -116,7 +115,7 @@ upstream, NOT a retry (retries on deterministic steps stay forbidden). Keep the
 the swipe loop continues against.
 
 **Gate**: p50 < persona budget, else **FAIL** with all three run values, min/max,
-and how many runs hit a clarification turn. p50 PASS with min<budget<max
+p50 PASS with min<budget<max
 (variance masking) → note as informational MINOR in the verdict.
 
 ## Gate 2 — Swipe lifecycle
@@ -184,8 +183,8 @@ After preflight + baseline:
    control genuinely can't be located, fall back to app handlers but still assert
    observable state. Screenshot each verified state. Any item fails → **FAIL**
    with expected vs actual.
-2. **Regression smoke** — one AI search (canned reply for any clarification
-   turn) → first card → ~5 alternating swipes. Gates: cards load, every
+2. **Regression smoke** — one taste search (send query → start with the round's
+   3 cards) → first card → ~5 alternating swipes. Gates: cards load, every
    `/swipes/` POST 200, no crash/blank, zero console errors. Do **not** assert
    TTFC budgets, swipe counts, persona coverage, or latency — those are FULL-mode
    gates over code this change didn't touch.
@@ -221,7 +220,7 @@ Drift: origin/develop unchanged ✓
 APP-TEST: PASS (FEATURE-SCOPED)
 Preflight: dev-login ✓ · migrations ✓ · console baseline clean ✓
 Feature checklist: <N>/<N> passed — <one line per item>
-Regression smoke: AI search → 5 swipes ✓ · swipe API 200 ✓ · zero console errors
+Regression smoke: taste search → 5 swipes ✓ · swipe API 200 ✓ · zero console errors
 Drift: origin/develop unchanged ✓
 ```
 

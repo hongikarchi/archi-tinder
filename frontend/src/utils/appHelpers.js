@@ -56,7 +56,8 @@ export function extractSavedIds(rawSavedIds) {
 }
 
 /**
- * Purge localStorage keys matching archithon_chat_* pattern.
+ * Purge LEGACY localStorage keys matching archithon_chat_* (old Gemini search chat,
+ * removed 2026-10; nothing writes them anymore - this only clears stale data).
  * Called on logout (all keys) and project delete (that project's keys).
  *
  * @param {string|null} projectId - if provided, only purge keys containing

@@ -464,25 +464,6 @@ RECOMMENDATION = {
     # 3600s default keeps building-card payloads warm across requests without
     # going stale relative to Make DB updates.
     'card_cache_ttl': 3600,
-    # IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT
-    'context_caching_enabled': False,                  # default OFF; flip True only after Redis cache backend is wired
-    'context_caching_ttl_seconds': 3600,               # Gemini cache TTL; also used as Django cache TTL for resource name
-    # IMP-6 (Spec v1.10 §11.1): 2-stage decouple — late-binding V_initial plumbing.
-    # Commit 1 (2d): scaffolding only. With flag OFF (default) all paths are byte-identical
-    # to pre-IMP-6. With flag ON (Commit 2): parse_query returns Stage 1 output
-    # (filters + reply, ~150-220 tokens) immediately; Stage 2 (visual_description,
-    # ~140-180 tokens) fires async. SessionCreateView reads V_initial from Django cache
-    # (key: v_initial:{user_id}:{sha256(raw_query)[:16]}); on cache miss, creates pool
-    # with filters only (BM25-only RRF per spec v1.5 Topic 01 graceful-degrade).
-    # Expected TTFC improvement (M1-grounded): ~45-55% Gemini wall-time drop.
-    #
-    # Production canary (Sprint D Commit 4): set STAGE_DECOUPLE_ENABLED=true in
-    # Railway dashboard env vars to flip flag ON for production traffic. Default
-    # 'false' preserves byte-identical pre-IMP-6 behavior. Roll back instantly by
-    # unsetting the env var or changing to 'false'. No code redeploy needed for
-    # rollback. Monitor parse_query_timing.stage='1' rate + stage2_timing.outcome
-    # distribution + Brutalist sys_p50 trend post-flip.
-    'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
     # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
     'discovery_chunk_size': 10,
     'discovery_tier2_min_likes': 10,
@@ -497,7 +478,7 @@ RECOMMENDATION = {
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
     'discovery_promote_threshold': 10,
-    # LLM search (get_corpus_tag_df / engine.llm_search_by_filters) TF-IDF corpus DF cache TTL (24h)
+    # Search (get_corpus_tag_df / engine.search_by_filters_scored) TF-IDF corpus DF cache TTL (24h)
     'corpus_df_cache_ttl_seconds': 86400,
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
     # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
@@ -507,7 +488,7 @@ RECOMMENDATION = {
     # sample that avoids a full seq scan of the large canonical_v2_buildings table
     # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
     'discovery_tablesample_pct': 2.0,
-    # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for ParseQueryView.
+    # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for engine.search_by_filters_scored.
     # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
     # All axes are soft (no hard gate except is_publishable=true).
     'llm_search_topk': 200,               # K: tag-score candidate set before BM25 rerank
@@ -587,12 +568,6 @@ GEMINI_TEXT_MODEL_FALLBACK  = os.getenv('GEMINI_TEXT_MODEL_FALLBACK', 'gemini-2.
 GEMINI_IMAGE_MODEL          = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image')
 GEMINI_IMAGE_MODEL_FALLBACK = os.getenv('GEMINI_IMAGE_MODEL_FALLBACK', 'gemini-2.5-flash-image')
 GEMINI_IMAGE_FORMAT         = os.getenv('GEMINI_IMAGE_FORMAT', 'webp')   # webp|native
-# LLM-AB-KNOB-2: thinking-budget override for the two Gemini PARSE paths only
-# (parse_query.py parse_query() + parse_query_stage1()). 0 = thinking off
-# (current/default, byte-identical to the pre-knob literal 0), -1 = dynamic
-# budget, >0 = fixed token budget. generation.py (stage2/persona/board) stays
-# hardcoded at 0 -- this knob does NOT touch it.
-GEMINI_THINKING_BUDGET      = int(os.getenv('GEMINI_THINKING_BUDGET', '0'))
 # BACK-LLM-PROVIDER-1: A/B provider switch for the TEXT-PARSE path only
 # (apps.recommendation.services._gemini). Image generation always uses Gemini
 # regardless of this flag (see _get_gemini_client() in _gemini.py).
@@ -611,11 +586,6 @@ _OPENAI_EFFORT_ALLOWED = ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh
 OPENAI_REASONING_EFFORT = os.getenv('OPENAI_REASONING_EFFORT', '')
 if OPENAI_REASONING_EFFORT not in _OPENAI_EFFORT_ALLOWED:
     OPENAI_REASONING_EFFORT = ''
-# LLM-AB-KNOB-1: opt-in OpenAI strict structured-output mode (json_schema,
-# strict=True) for the LEGACY parse path only -- see _dispatch_generate's
-# openai json branch in _gemini.py. Default off (non-strict json_object,
-# unchanged behaviour) so this is byte-identical when unset.
-OPENAI_STRICT_SCHEMA = os.getenv('OPENAI_STRICT_SCHEMA', '') == 'true'
 # BACK-LLM-PROVIDER-2: separate A/B provider switch for the IMAGE-GEN path
 # (generation.py _gen_native), independent of LLM_PROVIDER above so text/image
 # providers mix freely (e.g. LLM_PROVIDER=openai + LLM_IMAGE_PROVIDER=gemini).

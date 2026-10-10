@@ -226,7 +226,7 @@ class TestCreateSessionAutoName:
         """Return a lightweight namespace that satisfies every request.* attribute
         create_session reads:
           - request.data  (dict-like, all payload keys)
-          - request.user.id  (accessed when stage_decouple_enabled=True; False in tests
+          - request.user.id  (no longer read by session create; kept for mock parity
                               but the attribute must exist to avoid AttributeError)
         """
         from types import SimpleNamespace

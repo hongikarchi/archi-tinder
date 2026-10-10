@@ -8,7 +8,7 @@ is driven directly (synchronously) with a BaseException as the "work raises" cas
 the assertion proves the close sits in a `finally`, not in an `except Exception`.
 """
 import importlib.util
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -141,65 +141,6 @@ class TestBackgroundThreadsCloseConnections:
                     'sid', 1, 'exploring', ['a', 'b'], [], None, [], [], 0,
                 )
         _assert_closed(conns)
-
-    def test_spawn_stage2_thread_closes_on_raise(self):
-        from apps.recommendation.views import search
-        captured = {}
-
-        class _CapThread:
-            def __init__(self, target=None, **kw):
-                captured['target'] = target
-
-            def start(self):
-                pass
-
-        with patch.object(search.threading, 'Thread', _CapThread):
-            search._spawn_stage2({}, 'q', 1)
-        assert 'target' in captured
-
-        with patch('django.db.connections.close_all') as close_all, \
-                patch.object(search.services, 'generate_visual_description', side_effect=_Boom):
-            with pytest.raises(_Boom):
-                captured['target']()
-        assert close_all.call_count >= 1
-
-    def test_spawn_stage2_thread_closes_when_work_raises_exception(self):
-        from apps.recommendation.views import search
-        captured = {}
-
-        class _CapThread:
-            def __init__(self, target=None, **kw):
-                captured['target'] = target
-
-            def start(self):
-                pass
-
-        with patch.object(search.threading, 'Thread', _CapThread):
-            search._spawn_stage2({}, 'q', 1)
-        with patch('django.db.connections.close_all') as close_all, \
-                patch.object(search.services, 'generate_visual_description',
-                             side_effect=RuntimeError('llm down')):
-            captured['target']()   # swallowed by the thread body
-        assert close_all.call_count >= 1
-
-    def test_parse_query_stream_worker_closes_on_raise(self):
-        from apps.recommendation.views import search
-        conns = MagicMock()
-        with patch.object(search, '_db_connections', conns), \
-                patch.object(search.services, 'parse_query', side_effect=_Boom):
-            with pytest.raises(_Boom):
-                search._stream_worker(lambda *a, **k: None, [], 'ko', None, 1)
-        conns.close_all.assert_called()
-
-    def test_parse_query_stream_worker_closes_and_emits_error_on_exception(self):
-        from apps.recommendation.views import search
-        conns = MagicMock()
-        events = []
-        with patch.object(search, '_db_connections', conns), \
-                patch.object(search.services, 'parse_query', side_effect=RuntimeError('x')):
-            search._stream_worker(lambda e, d: events.append(e), [], 'ko', None, 1)
-        conns.close_all.assert_called()
-        assert events[-1] == 'error'
 
     def test_works_process_thread_closes_on_raise(self):
         from apps.works import services as works_services

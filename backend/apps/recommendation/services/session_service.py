@@ -222,7 +222,7 @@ def create_session(request, profile, recent_cutoff):
         _raw_query_early = None
     q_text_param = _raw_query_early if RC.get('hybrid_retrieval_enabled', False) else None
 
-    # V_initial: IMP-6 late-bind path (flag ON) or HyDE sync path (flag OFF)
+    # V_initial: HyDE sync path (client-supplied visual_description)
     visual_description = request.data.get('visual_description') or None
     if visual_description is not None and (
         not isinstance(visual_description, str) or len(visual_description) > 5000
@@ -230,14 +230,8 @@ def create_session(request, profile, recent_cutoff):
         visual_description = None
     v_initial = None
     with stage('v_initial'):
-        if RC.get('stage_decouple_enabled', False):
-            # IMP-6 Commit 1: late-bind path — try Django cache for Stage 2 product.
-            # Cache miss (Commit 1: Stage 2 not yet implemented) returns None.
-            # Filter-only pool creation follows per spec v1.5 Topic 01 graceful-degrade
-            # (BM25-only RRF; rank-level fusion is order-independent, no structural issue).
-            v_initial = services.get_cached_v_initial(request.user.id, _raw_query_early)
-        elif RC.get('hyde_vinitial_enabled', False) and visual_description:
-            # IMP-6 OFF: existing sync HyDE V_initial path — byte-identical to pre-IMP-6
+        if RC.get('hyde_vinitial_enabled', False) and visual_description:
+            # Sync HyDE V_initial path (legacy client-supplied visual_description)
             v_initial = services.embed_visual_description(
                 visual_description,
                 session=None,  # session not yet created

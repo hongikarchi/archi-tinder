@@ -11,8 +11,7 @@ Sub-modules use `from apps.recommendation import services as _svc` and access
 cross-module symbols via `_svc.X` at call time (late-bound), so mock.patch
 modifications to this module object are visible to all sub-module functions.
 
-Import order matters: _gemini has no sibling deps, so load first; _caches
-lazily accesses _CHAT_PHASE_SYSTEM_PROMPT via _svc so ordering is safe.
+Import order matters: _gemini has no sibling deps, so load first.
 """
 
 # ---------------------------------------------------------------------------
@@ -38,9 +37,6 @@ from ..engine import _dictfetchall  # noqa: F401
 # ---------------------------------------------------------------------------
 from ._gemini import _get_client, _retry_gemini_call  # noqa: F401
 from ._gemini import generate_content_with_fallback, _is_model_unavailable  # noqa: F401
-# PERF-SEARCH-1: streaming variant + incremental-JSON sink (late-bound via _svc like the rest).
-from ._gemini import generate_content_streaming  # noqa: F401
-from ._stream import ParseStreamSink, PartialJSONScanner  # noqa: F401
 from ._gemini import _GEMINI_MAX_RETRIES, _GEMINI_RETRY_DELAY  # noqa: F401
 # BACK-LLM-PROVIDER-1: always-Gemini client for the image path (generation.py
 # _gen_native) -- must stay accessible via the _svc facade for late-binding.
@@ -49,46 +45,6 @@ from ._gemini import _get_gemini_client  # noqa: F401
 # _gen_native) when settings.LLM_IMAGE_PROVIDER='openai' -- same late-binding
 # facade requirement as _get_gemini_client above.
 from ._gemini import _get_openai_client  # noqa: F401
-
-# ---------------------------------------------------------------------------
-# _caches: IMP-5 chat cache + IMP-6 V_initial cache
-# ---------------------------------------------------------------------------
-from ._caches import (  # noqa: F401
-    _get_prompt_hash,
-    _get_cache_name,
-    _get_django_cache_key,
-    _ensure_chat_cache,
-    _v_initial_cache_key,
-    get_cached_v_initial,
-    set_cached_v_initial,
-)
-
-# ---------------------------------------------------------------------------
-# parse_query: query parsing + constants
-# ---------------------------------------------------------------------------
-from .parse_query import (  # noqa: F401
-    PROGRAM_VALUES,
-    REQUIRED_SLATE_FIELDS,
-    REQUIRED_SLATE_PROBE_PRIORITY,
-    _CHAT_PHASE_SYSTEM_PROMPT,
-    _CALIBRATION_PROMPT_EXTENSION,
-    _STAGE1_RESPONSE_SCHEMA,
-    _STYLE_TOKENS,
-    _PROGRAM_TOKENS,
-    _MATERIAL_TOKENS,
-    _ADJECTIVE_TOKENS,
-    _ALL_SPECIFICITY_TOKENS,
-    _classify_query_complexity,
-    _has_required_slate,
-    _normalise_filter_priority,
-    _repair_required_slate,
-    _compute_confidence_fallback,
-    _extract_calibration_fields,
-    _finalize_parsed,
-    resolve_filters_from_partial,
-    parse_query,
-    parse_query_stage1,
-)
 
 # ---------------------------------------------------------------------------
 # vocab: BACK-PARSER-VOCAB-1 -- live DB vocabulary for the 5 grounded axes
@@ -101,7 +57,7 @@ from .vocab import get_axis_vocab, _VOCAB_SNAPSHOT  # noqa: F401
 from .embeddings import embed_visual_description  # noqa: F401
 
 # ---------------------------------------------------------------------------
-# generation: Stage 2 visual description + persona report + persona image
+# generation: persona report + persona image + board name
 # ---------------------------------------------------------------------------
 from .generation import (  # noqa: F401
     _NAME_FILTER_PRIORITY,
@@ -109,7 +65,6 @@ from .generation import (  # noqa: F401
     _deterministic_board_name,
     _dedup_board_name,
     _gemini_board_name_raw,
-    generate_visual_description,
     generate_persona_report,
     generate_persona_image,
     build_image_report_from_facts,
@@ -137,15 +92,14 @@ class _BuildingsConnectionProxy:
     """Route attribute access to connections['buildings'] at call time.
 
     Mirrors django.db.DefaultConnectionProxy: re-resolves the thread-local
-    wrapper on every __getattr__ call so background threads (search.py Stage 2,
-    swipe.py prefetch) get their own connection, not the main thread's.
+    wrapper on every __getattr__ call so background threads (swipe.py prefetch) get their own connection, not the main thread's.
     """
 
     def __getattr__(self, name):
         return getattr(_connections['buildings'], name)
 
 
-# patched in test_topic02, test_chat_phase
+# patched in test_topic02
 connection = _BuildingsConnectionProxy()
 
 
@@ -157,14 +111,8 @@ __all__ = [
     'connection',
     'event_log',
     # Public functions + constants
-    'PROGRAM_VALUES',
     'get_axis_vocab',
-    'get_cached_v_initial',
-    'set_cached_v_initial',
     'embed_visual_description',
-    'parse_query',
-    'parse_query_stage1',
-    'generate_visual_description',
     'generate_persona_report',
     'generate_persona_image',
     'build_image_report_from_facts',
