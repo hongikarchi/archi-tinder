@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from ..models import AnalysisSession, SwipeEvent
 from .. import engine, event_log
+from ..taste_start import swipe_rules
 from ._shared import _get_profile, _progress
 from ..services.swipe_service import _merge_buffer_into_exposed  # noqa: F401 — re-exported via views/__init__.py
 from ..services.swipe_service import (
@@ -51,6 +52,7 @@ def _async_prefetch_thread(
     pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
     like_vectors_snap, initial_batch_snap, current_round_snap,
     multimodal_floor_snap=None,
+    *, selector_ctx_snap=None,
 ):
     """IMP-8 (Spec v1.6 §11.1): background thread to compute prefetch cards
     after primary swipe response returns. Result cached for the NEXT swipe's
@@ -94,7 +96,13 @@ def _async_prefetch_thread(
         # snapshot perspective). The main thread at T+1 selects next_card =
         # initial_batch[current_round_snap+1]; the cache consumer needs the ID
         # that fills the *prefetch* slot of that same response, which is index +2.
-        if phase == 'exploring':
+        if selector_ctx_snap is not None:
+            # taste_v2: lookahead slots for the NEXT swipe (see swipe_rules.lookahead)
+            pf_bid, pf2_bid = swipe_rules.lookahead(
+                pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
+                initial_batch_snap, selector_ctx_snap, skip_next=True,
+            )
+        elif phase == 'exploring':
             exposed_set = set(exposed_ids_snap)
             if current_round_snap + 2 < len(initial_batch_snap):
                 cand = initial_batch_snap[current_round_snap + 2]
@@ -116,7 +124,7 @@ def _async_prefetch_thread(
         # Action-card sentinel '__action_card__' is never emitted by compute_mmr_next
         # or initial_batch (both produce real building IDs), so no explicit guard
         # needed — the `if pf_bid` already excludes empty/None.
-        if pf_bid:
+        if pf_bid and selector_ctx_snap is None:
             temp_exposed = exposed_ids_snap + [pf_bid]
             if phase == 'exploring':
                 exposed_set_2 = set(temp_exposed)
@@ -309,6 +317,8 @@ class SwipeView(APIView):
         saved_multimodal_floor  = result['saved_multimodal_floor']
         saved_pool_embeddings   = result['saved_pool_embeddings']
         saved_recent_actions  = result['saved_recent_actions']
+        saved_selector_ctx    = result.get('saved_selector_ctx')
+        _card_kind            = result.get('_card_kind', '-')
         _embedding_stats      = result['_embedding_stats']
         _pool_escalation_fired = result['_pool_escalation_fired']
         _timing_marks         = result['_timing_marks']
@@ -411,6 +421,7 @@ class SwipeView(APIView):
                 ),
                 kwargs={
                     'multimodal_floor_snap': saved_multimodal_floor,
+                    'selector_ctx_snap': saved_selector_ctx,
                 },
                 daemon=True,
             )
@@ -423,6 +434,7 @@ class SwipeView(APIView):
                 saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
                 saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
                 saved_multimodal_floor=saved_multimodal_floor,
+                selector_ctx=saved_selector_ctx,
             )
 
             # ── Phase 2: single batch DB call (1 RTT for next + pf + pf2) ────
@@ -448,7 +460,7 @@ class SwipeView(APIView):
 
         # §6 logging
         logger.info(
-            '[SWIPE TIMING] lock=%dms embed=%dms select=%dms prefetch=%dms total=%dms | phase=%s cache_hit=%s',
+            '[SWIPE TIMING] lock=%dms embed=%dms select=%dms prefetch=%dms total=%dms | phase=%s cache_hit=%s kind=%s',
             _timing_breakdown['lock_ms'],
             _timing_breakdown['embed_ms'],
             _timing_breakdown['select_ms'],
@@ -456,6 +468,7 @@ class SwipeView(APIView):
             _timing_breakdown['total_ms'],
             saved_phase,
             _cache_misses == 0,
+            _card_kind,
         )
 
         threading.Thread(

@@ -101,17 +101,19 @@ def build_pool(tags, start_ids, exclude_ids):
     return pool_ids, {i: scores.get(i, 0.0) for i in pool_ids}
 
 
-def refresh_if_low(session, like_vectors):
+def refresh_if_low(session, like_vectors, *, force=False):
     """Top up session.pool_ids when unexposed candidates fall below the threshold.
 
     Mutates session.pool_ids / pool_scores / current_pool_tier / original_filters
     (caller saves those fields). Returns True when the pool grew.
+    `force=True` skips the threshold check (used when the selector found nothing
+    selectable although the pool still lists unexposed ids, e.g. no embeddings).
     """
     rc = _rc()
     pool_ids = list(session.pool_ids or [])
     exposed = set(session.exposed_ids or [])
     remaining = [p for p in pool_ids if p not in exposed]
-    if len(remaining) >= int(rc['taste_v2_pool_refresh_threshold']):
+    if not force and len(remaining) >= int(rc['taste_v2_pool_refresh_threshold']):
         return False
 
     target = int(rc['bounded_pool_target'])
@@ -170,21 +172,32 @@ def refresh_if_low(session, like_vectors):
     return True
 
 
-def build_session_ctx(session, like_vectors):
-    """SelectorCtx for a v2 session (reads recent swipes + dislike embeddings)."""
-    from ..services.swipe_service import _recent_actions   # lazy: avoids an import cycle
+def recent_actions_window():
+    """How many trailing swipe actions the selector context needs."""
+    rc = _rc()
+    return max(int(rc.get('taste_v2_skip_streak_hard', 5)),
+               int(rc.get('taste_v2_consistency_window', 4)), 5)
+
+
+def build_session_ctx(session, like_vectors, *, project=None, recent_actions=None):
+    """SelectorCtx for a v2 session (reads dislike embeddings).
+
+    Pass `project` / `recent_actions` (oldest first, >= recent_actions_window()
+    long) to avoid extra queries; otherwise they are fetched here.
+    """
     from . import session_selector
 
     rc = _rc()
     window = int(rc['taste_v2_dislike_window'])
-    project = session.project
+    if project is None:
+        project = session.project
     disliked = [d for d in (project.disliked_ids or []) if isinstance(d, str)]
     dis_ids = disliked[-window:] if window > 0 else []
     emb = engine.get_pool_embeddings(dis_ids) if dis_ids else {}
     dis_embs = [emb[d] for d in dis_ids if d in emb]
-    recent = _recent_actions(session, max(
-        int(rc.get('taste_v2_skip_streak_hard', 5)),
-        int(rc.get('taste_v2_consistency_window', 4)), 5))
+    if recent_actions is None:
+        from ..services.swipe_service import _recent_actions   # lazy: avoids an import cycle
+        recent_actions = _recent_actions(session, recent_actions_window())
     return session_selector.build_ctx(
         dict(session.pool_scores or {}), stored_tags(session), like_vectors,
-        dis_embs, recent, session.multimodal_floor, session.current_round)
+        dis_embs, recent_actions, session.multimodal_floor, session.current_round)
