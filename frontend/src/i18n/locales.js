@@ -823,6 +823,11 @@ export const locales = {
     },
     // FRONT-CONTEST-1 — real contests (CompetitionListPage / CompetitionDetailPage).
     // docs/decisions/2026-10-09-contest-real-data.md. Replaces the competitionB3 prototype strings.
+    socialSegment: {
+      people: '사람',
+      competitions: '공모전',
+      aria: '소셜 보기 전환',
+    },
     contest: {
       dday: 'D-{d}',
       ddayToday: 'D-DAY',
@@ -831,17 +836,12 @@ export const locales = {
         apply: '신청 마감',
         submission: '제출 마감',
       },
-      segment: {
-        people: '사람',
-        competitions: '공모전',
-        aria: '소셜 보기 전환',
-      },
       list: {
         loadError: '공모전을 불러오지 못했어요.',
         retry: '다시 시도',
         emptyTitle: '진행 중인 공모전이 아직 없어요',
         emptyBody: '새 공모전이 올라오면 여기에 보여요.',
-        interestCount: '{count}명이 보고 있어요',
+        interestCount: '{count}명이 관심 등록했어요',
       },
       detail: {
         loadError: '공모전을 불러오지 못했어요.',
@@ -859,7 +859,7 @@ export const locales = {
         viewSource: '원문 보기 ↗',
         interestOff: '관심 등록',
         interestOn: '관심 등록됨 ✓',
-        interestCount: '{count}명이 이 공모전을 보고 있어요',
+        interestCount: '{count}명이 관심 등록했어요',
         interestError: '관심 등록을 바꾸지 못했어요. 다시 시도해주세요.',
       },
       poster: {
@@ -1815,6 +1815,11 @@ export const locales = {
     },
     // FRONT-CONTEST-1 — real contests (CompetitionListPage / CompetitionDetailPage).
     // docs/decisions/2026-10-09-contest-real-data.md. Replaces the competitionB3 prototype strings.
+    socialSegment: {
+      people: 'People',
+      competitions: 'Competitions',
+      aria: 'Switch social view',
+    },
     contest: {
       dday: 'D-{d}',
       ddayToday: 'D-DAY',
@@ -1823,17 +1828,12 @@ export const locales = {
         apply: 'Application deadline',
         submission: 'Submission deadline',
       },
-      segment: {
-        people: 'People',
-        competitions: 'Competitions',
-        aria: 'Switch social view',
-      },
       list: {
         loadError: "Couldn't load competitions.",
         retry: 'Try again',
         emptyTitle: 'No open competitions yet',
         emptyBody: 'New competitions will show up here.',
-        interestCount: '{count} people are viewing',
+        interestCount: '{count} interested',
       },
       detail: {
         loadError: "Couldn't load this competition.",
@@ -1851,7 +1851,7 @@ export const locales = {
         viewSource: 'View original ↗',
         interestOff: 'Mark interest',
         interestOn: 'Interested ✓',
-        interestCount: '{count} people are viewing this competition',
+        interestCount: '{count} interested',
         interestError: "Couldn't update your interest. Please try again.",
       },
       poster: {

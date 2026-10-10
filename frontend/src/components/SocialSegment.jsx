@@ -44,15 +44,15 @@ export default function SocialSegment({ active }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const ITEMS = [
-    { value: 'people', label: t('contest.segment.people'), path: PATHS.people },
-    { value: 'competitions', label: t('contest.segment.competitions'), path: PATHS.competitions },
+    { value: 'people', label: t('socialSegment.people'), path: PATHS.people },
+    { value: 'competitions', label: t('socialSegment.competitions'), path: PATHS.competitions },
   ]
   return (
     <SegmentedControl
       as="tabs"
       variant="pill"
       pillHeight={32}
-      ariaLabel={t('contest.segment.aria')}
+      ariaLabel={t('socialSegment.aria')}
       className={styles.row}
       options={ITEMS}
       value={active}

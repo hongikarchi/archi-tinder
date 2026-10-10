@@ -153,6 +153,7 @@ export default function CompetitionDetailPage({ onLogout }) {
   const applyAt = contest.apply_deadline ? new Date(contest.apply_deadline) : null
   const showApplyRow = Boolean(applyAt) && !Number.isNaN(applyAt.getTime()) && applyAt.getTime() > now.getTime()
   const noticeText = contest.notice_date ? formatKstDate(contest.notice_date, language) : ''
+  const posterCredit = (contest.poster_credit || '').trim() || (contest.organizer || '').trim()
   const interestCount = Number(contest.interest_count) || 0
   const interested = Boolean(contest.interested)
 
@@ -248,9 +249,9 @@ export default function CompetitionDetailPage({ onLogout }) {
                 onError={() => setPosterFailed(true)}
               />
             </button>
-            {contest.poster_credit && (
+            {posterCredit && (
               <p className={styles.posterCredit}>
-                {t('contest.poster.credit', { credit: contest.poster_credit })}
+                {t('contest.poster.credit', { credit: posterCredit })}
               </p>
             )}
           </div>
@@ -316,7 +317,7 @@ export default function CompetitionDetailPage({ onLogout }) {
         <PosterLightbox
           posterUrl={posterUrl}
           title={title}
-          credit={contest.poster_credit}
+          credit={posterCredit}
           sourceUrl={sourceUrl}
           returnFocusRef={thumbRef}
           onClose={() => setLightboxOpen(false)}
