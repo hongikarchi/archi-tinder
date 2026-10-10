@@ -99,21 +99,16 @@ class TestDetail:
 
 @pytest.mark.django_db
 class TestPoster:
-    @pytest.mark.parametrize('ps,expected_visible', [
-        (Contest.POSTER_ALLOWED, True),
-        (Contest.POSTER_UNVERIFIED, False),
-        (Contest.POSTER_NONE, False),
-    ])
-    def test_poster_url_gated(self, auth_client_a, ps, expected_visible):
+    def test_poster_url_returned_when_set(self, auth_client_a):
         url = 'https://example.com/poster.png'
-        c = _make(poster_url=url, poster_status=ps)
+        c = _make(poster_url=url)
         for resp in (auth_client_a.get(LIST_URL), auth_client_a.get(_detail_url(c.id))):
             row = resp.data['results'][0] if 'results' in resp.data else resp.data
-            assert row['poster_url'] == (url if expected_visible else None)
-            assert row['poster_status'] == ps
+            assert row['poster_url'] == url
+            assert 'poster_status' not in row
 
-    def test_allowed_without_url_is_null(self, auth_client_a):
-        c = _make(poster_url=None, poster_status=Contest.POSTER_ALLOWED)
+    def test_poster_url_null_when_unset(self, auth_client_a):
+        c = _make(poster_url=None)
         assert auth_client_a.get(_detail_url(c.id)).data['poster_url'] is None
 
 

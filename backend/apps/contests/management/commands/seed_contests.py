@@ -39,8 +39,8 @@ def kst(year, month, day, hour, minute=0):
 # (ggkia.or.kr: certificate error / IP block; kosid.or.kr: 403), so the values
 # below come from listing sites and news articles -- except 정림
 # (junglimaward.com), whose dates were read on the official site.
-# Poster URLs and 공공누리 (KOGL) marks are unverified for all 7, so every
-# seed row has poster_url=None and poster_status='unverified'.
+# Poster URLs and 공공누리 (KOGL) marks are unverified for all 7, so no seed
+# row carries a poster; poster_url stays None (frontend shows the fallback card).
 # ---------------------------------------------------------------------------
 SEED_CONTESTS = [
     {
@@ -179,8 +179,6 @@ class Command(BaseCommand):
         for row in SEED_CONTESTS:
             fields = dict(row)
             title = fields.pop('title')
-            fields['poster_url'] = None
-            fields['poster_status'] = Contest.POSTER_UNVERIFIED
             _, created = Contest.objects.update_or_create(
                 listing_source=SEED_SOURCE, title=title, defaults=fields,
             )

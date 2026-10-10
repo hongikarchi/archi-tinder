@@ -83,15 +83,6 @@ class Contest(models.Model):
         (ORGANIZER_UNKNOWN, 'unknown'),
     ]
 
-    POSTER_ALLOWED = 'allowed'
-    POSTER_UNVERIFIED = 'unverified'
-    POSTER_NONE = 'none'
-    POSTER_STATUS_CHOICES = [
-        (POSTER_ALLOWED, 'allowed'),
-        (POSTER_UNVERIFIED, 'unverified'),
-        (POSTER_NONE, 'none'),
-    ]
-
     STATUS_PUBLISHED = 'published'
     STATUS_HIDDEN = 'hidden'
     STATUS_PENDING = 'pending'
