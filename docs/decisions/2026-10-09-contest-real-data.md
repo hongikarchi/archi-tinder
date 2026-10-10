@@ -66,7 +66,8 @@
 | `apply_deadline` | nullable. 참가신청 마감이 제출 마감과 다를 때만 |
 | `notice_date` | nullable date. 없어도 화면이 깨지지 않아야 함 |
 | `theme`, `summary`(≤300), `eligibility`, `team_size`(nullable 문자열) | |
-| `source_url` | 공식 공고 원문 |
+| `source_url` | 공식 공고 원문. 목록 사이트 주소만 아는 경우 비워 두고 `listing_url`에만 넣는다 |
+| `import_key` | unique, nullable. `import_contests` upsert 식별자(§4-6). API 비노출 |
 | `listing_source`, `listing_url` | 예: `'wevity'` |
 | `poster_url`(nullable), `poster_credit` | URL이 있으면 노출(D4). 상태 필드 없음 |
 | `status` | `published` / `hidden` / `pending` |
@@ -92,7 +93,7 @@
 - `contest_status <id> published|hidden|pending`
 - `contest_poster <id> set --url <http(s)> [--credit "<이름>"]` · `contest_poster <id> clear`
 
-운영용 "검증된 JSON 임포트" 커맨드는 Phase 1 종료 시점에 다시 논의한다(사용자 결정 2026-10-10).
+운영용 임포트는 §4-6 (설계 확정 2026-10-11, 구현은 별도 PR).
 
 ### 4-4. 상세 화면 (시안 B)
 
@@ -103,6 +104,20 @@
 포스터 썸네일은 `<button>` → 확대 오버레이(같은 원본 URL, 별도 저장 없음; X·바깥 클릭·Esc로 닫힘, 포커스 이동, aria-label; "포스터 © 주최처" + "원문 보기" 노출).
 `poster_url`이 없거나 이미지 로딩 실패 → 폴백 카드("제출 마감" 칩, 주제, summary; 출처 줄 "포스터 없음 · 출처 …"). 색은 D11.
 
+### 4-6. 운영용 임포트 — `import_contests` (설계 확정 2026-10-11, 미구현)
+
+운영 DB에 검증된 공모전을 넣는 유일한 수동 경로. 시드(`seed_contests`)는 DEBUG 전용이라 운영에 쓸 수 없다.
+
+- **흐름**: 검증된 값을 JSON 파일로 저장소에 커밋(`backend/apps/contests/data/*.json`) → **PR로 검토** → 배포 → **Railway 셸에서** `python manage.py import_contests <파일> [--dry-run]` 실행. 데이터 변경 이력이 git에 남고, 사람이 값을 본 뒤에만 운영에 들어간다.
+- **식별**: 항목마다 `key` → `Contest.import_key`. 같은 key면 갱신, 없으면 생성(멱등). 제목·URL은 바뀔 수 있어 식별에 쓰지 않는다.
+- **파일**: `{verified_by, verified_at(ISO, 오프셋 필수), contests:[{key, title, organizer, organizer_type, submission_deadline, apply_deadline, notice_date, theme, summary, eligibility, team_size, source_url, listing_source, listing_url, poster_url, poster_credit, status}]}`
+- **검증 — 하나라도 실패하면 전체를 저장하지 않는다(한 트랜잭션)**:
+  - 필수 값, 선택지, 길이; 날짜는 오프셋 포함 ISO만(naive 거부); `verified_at` 필수; 파일 안 key 중복 거부.
+  - URL은 `http`/`https`만(기존 검증기), 포스터는 목록 사이트 이미지 호스트 거부(기존 `validate_poster_url`).
+  - **`status = published`인 항목은 `source_url`이 비어 있지 않아야 하고, 공모전 정보(목록) 사이트 도메인이면 거부**한다 — 위비티(`wevity.com`), 링크리어(`linkareer.com`), 씽유, 더팀스, 렉터스(`lectus.kr`), 씽굿(`thinkcontest.com`), 콘테스트코리아(`contestkorea.com`), 올콘(`all-con.co.kr`) 등. 목록은 코드 상수로 관리. 씽유·더팀스 도메인은 구현 시 확인. 목록 사이트 주소는 `listing_url`에만 둔다.
+- **동작**: 파일에 없는 기존 행은 건드리지 않는다(삭제 없음). `interest_count`는 덮어쓰지 않는다. `last_verified_at` ← `verified_at`. `--dry-run`은 생성/변경/동일 항목과 바뀌는 필드만 출력.
+- **개발용 시드와의 차이**: 시드의 한옥디자인 행은 `source_url`이 빈 채 published다(개발 전용 예외). 같은 값으로는 임포트의 published 검증을 통과하지 못한다 — 공식 주소를 찾기 전에는 운영에 올리지 않는다.
+
 ### 4-5. 개발용 시드 7건
 
 **실서비스 전 전부 재검증 필요.** 2026-10-09 조사에서 공식 사이트 직접 확인은 대부분 실패(ggkia.or.kr 인증서 오류/IP 차단, kosid.or.kr 403) — 정림(junglimaward.com) 외에는 모음 사이트·기사 기준이다. 공식 포스터 이미지 URL은 7건 모두 미확인 → 전부 `poster_url` 없음(폴백 카드).
@@ -110,12 +125,12 @@
 | 공모전 | status | 제출 마감 (KST) | 신청 마감 | 비고 |
 |---|---|---|---|---|
 | 대한건축사협회 모듈러건축 공모 | published | 2026-12-02 15:00 | 2026-10-19 15:00 | 신청 마감은 이전 조사값, 재확인 필요 |
-| 제14회 한옥디자인 국제공모 | published | 2026-12-28 18:00 | — | |
+| 제14회 한옥디자인 국제공모 | published | 2026-12-28 18:00 | — | `source_url` 비움 — lectus.kr은 목록 사이트라 `listing_url`에만. 공식 주소 미확인 |
 | 제38회 대한민국 실내건축대전 | published | 2026-10-14 17:00 | — | 신청+1차 작품 접수 마감. 2차 접수 11/11은 summary |
 | 제15회 도로경관디자인 대전 | published | 2026-10-29 18:00 | — | 18시는 이전 조사값, 재확인 필요. 누구나 |
 | 제62회 경기건축대전 | published | 2026-10-28 18:00 | — | 1차 = 온라인 작품 제출. 입선 발표 11/2, 2차(패널·모형) 11/21은 summary. 주최 "한국건축가협회 경기지회"(모음 사이트 기준) |
 | 정림학생건축상 2027 | published | 2027-01-11 23:59 | 2027-01-04 23:59 | 날짜는 공식 사이트 확인, **시각 미확인**(23:59는 자리표시). 원문 `junglimaward.com/2027` |
-| 에어-비트 시티 건축디자인 | pending | 2026-11-19 23:59 | — | 주최가 임의단체. 11/20은 위비티 D-n 환산값이라 오차 가능 → 출처 있는 11/19 사용. 시각 미확인 |
+| 에어-비트 시티 건축디자인 | pending | 2026-11-19 23:59 | — | 마감일 세 값: 11/19(렉터스), 11/20(위비티 D-n 환산), 11/20(링크리어 activity/344917, 접수 8/24~11/20). 공식 사이트 `airbeatcity.com/contest`에서는 일정 확인 불가 → 확인 전까지 pending. 시각 미확인 |
 
 ## 5. PR 분할 (Phase 1)
 
@@ -148,5 +163,5 @@
 
 - Railway 플랜의 cron 가용 여부·최대 실행 시간 (Phase 2 착수 시)
 - 위비티 약관 (Phase 2 게이트)
-- 운영용 검증된 JSON 임포트 커맨드 (Phase 1 종료 시 논의)
+- `import_contests` 구현(§4-6), 목록 사이트 도메인 목록 확정(씽유·더팀스)
 - 시드 7건의 공식 페이지 재검증, 공식 포스터 이미지 URL 확보
