@@ -1,5 +1,5 @@
 /**
- * SocialSegment.jsx — Social 탭 안의 [사람] / [공모전] 전환 (PROTOTYPE)
+ * SocialSegment.jsx — Social 탭 안의 [사람] / [공모전] 전환
  *
  * 설계: docs/decisions/2026-09-17-competition-team-design.md §7
  *
@@ -13,6 +13,7 @@
  * 데스크탑 hover 양쪽에서 뜻이 드러나야 한다.
  */
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from '../i18n/index.js'
 import SegmentedControl from './SegmentedControl.jsx'
 import styles from './SocialSegment.module.css'
 
@@ -37,19 +38,21 @@ const ICONS = {
   ),
 }
 
-const ITEMS = [
-  { value: 'people', label: '사람', path: '/people' },
-  { value: 'competitions', label: '공모전', path: '/competitions' },
-]
+const PATHS = { people: '/people', competitions: '/competitions' }
 
 export default function SocialSegment({ active }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const ITEMS = [
+    { value: 'people', label: t('contest.segment.people'), path: PATHS.people },
+    { value: 'competitions', label: t('contest.segment.competitions'), path: PATHS.competitions },
+  ]
   return (
     <SegmentedControl
       as="tabs"
       variant="pill"
       pillHeight={32}
-      ariaLabel="소셜 보기 전환"
+      ariaLabel={t('contest.segment.aria')}
       className={styles.row}
       options={ITEMS}
       value={active}
