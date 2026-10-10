@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import FloatingIconButton from '../FloatingIconButton.jsx'
-import PosterReportModal from './PosterReportModal.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import styles from './PosterLightbox.module.css'
 
@@ -20,28 +19,19 @@ const FOCUSABLE = 'a[href], button:not([disabled]), textarea:not([disabled]), in
  * `returnFocusRef` (the thumbnail button). If the image fails to load,
  * `onImageError` fires (the caller closes the lightbox and shows the fallback).
  *
- * `onReport(reason)` runs the in-app takedown report after the confirm step
- * (shared Modal, portaled above this overlay); `sourceUrl` / `mailHref` render
- * only when the caller found them usable.
+ * `sourceUrl` renders only when the caller found it usable.
  */
 export default function PosterLightbox({
   posterUrl,
   title,
   credit,
   sourceUrl,
-  mailHref,
   returnFocusRef,
   onClose,
   onImageError,
-  onReport,
 }) {
   const { t } = useTranslation()
   const overlayRef = useRef(null)
-  const reportBtnRef = useRef(null)
-  const [reportOpen, setReportOpen] = useState(false)
-  // Latest-ref so the document listener below never needs re-subscribing.
-  const reportOpenRef = useRef(false)
-  reportOpenRef.current = reportOpen
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
@@ -59,11 +49,9 @@ export default function PosterLightbox({
     }
   }, [returnFocusRef])
 
-  // Esc to close + Tab trap. Stands down while the report confirm modal is up:
-  // that modal owns Esc and its own focus.
+  // Esc to close + Tab trap.
   useEffect(() => {
     function onKey(e) {
-      if (reportOpenRef.current) return
       if (e.key === 'Escape') {
         e.preventDefault()
         onCloseRef.current()
@@ -89,16 +77,6 @@ export default function PosterLightbox({
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
-
-  function closeReport() {
-    setReportOpen(false)
-    // Hand focus back to the control that opened the confirm step.
-    requestAnimationFrame(() => reportBtnRef.current?.focus())
-  }
-
-  async function submitReport(reason) {
-    await onReport(reason)
-  }
 
   const node = (
     <div
@@ -140,27 +118,8 @@ export default function PosterLightbox({
               {t('contest.detail.viewSource')}
             </a>
           )}
-          {mailHref && (
-            <a className={`${styles.action} ${styles.actionMuted}`} href={mailHref}>
-              {t('contest.takedown.mailLink')}
-            </a>
-          )}
-          {onReport && (
-            <button
-              ref={reportBtnRef}
-              type="button"
-              className={`${styles.action} ${styles.actionMuted}`}
-              onClick={() => setReportOpen(true)}
-            >
-              {t('contest.takedown.report')}
-            </button>
-          )}
         </div>
       </div>
-
-      {onReport && (
-        <PosterReportModal open={reportOpen} onClose={closeReport} onSubmit={submitReport} />
-      )}
     </div>
   )
 

@@ -8,7 +8,7 @@
  * 요약, 포스터가 없으면 폴백 카드) -> 출처 줄 -> 관심 등록.
  *
  * 포스터는 hotlink 만 한다(D4): 내려받지도, 프록시·캐시·재호스팅하지도 않는다.
- * API 가 준 모든 href/src 는 렌더 시점에 safeHttpUrl / safeMailto 를 다시 통과한다.
+ * API 가 준 모든 href/src 는 렌더 시점에 safeHttpUrl 를 다시 통과한다.
  * 추천(관심 있는 사람)·모집 중인 팀 섹션은 가짜 유저 방지(D10)를 위해 이 화면에서
  * 제거됐다 — 실제 데이터와 함께 후속 PR 에서 돌아온다.
  */
@@ -29,12 +29,11 @@ import {
   getContest,
   addContestInterest,
   removeContestInterest,
-  reportContestPoster,
 } from '../api/contests.js'
 import { VerifyRequiredError } from '../api/projects.js'
 import { useNow } from '../hooks/useNow.js'
 import { formatKstDateTime, formatKstDate } from '../utils/contestDeadline.js'
-import { safeHttpUrl, safeMailto } from '../utils/safeUrl.js'
+import { safeHttpUrl } from '../utils/safeUrl.js'
 import styles from './CompetitionDetailPage.module.css'
 
 const TOAST_MS = 3000
@@ -48,7 +47,7 @@ export default function CompetitionDetailPage({ onLogout }) {
   const [status, setStatus] = useState('loading')   // 'loading' | 'notfound' | 'error' | 'ready'
   const [contest, setContest] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [posterHidden, setPosterHidden] = useState(false)   // report done / image failed to load
+  const [posterFailed, setPosterFailed] = useState(false)   // image failed to load
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [pending, setPending] = useState(false)             // interest request in flight
   const [toast, setToast] = useState(null)
@@ -70,7 +69,7 @@ export default function CompetitionDetailPage({ onLogout }) {
     let cancelled = false
     setStatus('loading')
     setContest(null)
-    setPosterHidden(false)
+    setPosterFailed(false)
     setLightboxOpen(false)
     setPending(false)
     setToast(null)
@@ -148,16 +147,9 @@ export default function CompetitionDetailPage({ onLogout }) {
 
   // ── Derived, render-time-safe values ─────────────────────────────────────
   const title = contest.title
-  const posterUrl = contest.poster_status === 'allowed' ? safeHttpUrl(contest.poster_url) : null
-  const showPoster = Boolean(posterUrl) && !posterHidden
+  const posterUrl = safeHttpUrl(contest.poster_url)
+  const showPoster = Boolean(posterUrl) && !posterFailed
   const sourceUrl = safeHttpUrl(contest.source_url) || safeHttpUrl(contest.listing_url)
-  const mailHref = contest.takedown_email
-    ? safeMailto(
-        contest.takedown_email,
-        t('contest.takedown.mailSubject', { title }),
-        t('contest.takedown.mailBody', { title, url: window.location.href }),
-      )
-    : null
   const applyAt = contest.apply_deadline ? new Date(contest.apply_deadline) : null
   const showApplyRow = Boolean(applyAt) && !Number.isNaN(applyAt.getTime()) && applyAt.getTime() > now.getTime()
   const noticeText = contest.notice_date ? formatKstDate(contest.notice_date, language) : ''
@@ -179,10 +171,10 @@ export default function CompetitionDetailPage({ onLogout }) {
     try {
       const res = next ? await addContestInterest(prev.id) : await removeContestInterest(prev.id)
       if (res && typeof res.interest_count === 'number') {
-        setContest(c => (c ? { ...c, interest_count: res.interest_count, interested: next } : c))
+        setContest(c => (c && c.id === prev.id ? { ...c, interest_count: res.interest_count, interested: next } : c))
       }
     } catch (err) {
-      setContest(c => (c ? { ...c, interested: prev.interested, interest_count: prev.interest_count } : c))
+      setContest(c => (c && c.id === prev.id ? { ...c, interested: prev.interested, interest_count: prev.interest_count } : c))
       // The global VerifyGateModal already explains a guest 403.
       if (!(err instanceof VerifyRequiredError)) showToast(t('contest.detail.interestError'))
     } finally {
@@ -190,24 +182,9 @@ export default function CompetitionDetailPage({ onLogout }) {
     }
   }
 
-  async function handleReport(reason) {
-    try {
-      await reportContestPoster(contest.id, { reason })
-    } catch {
-      showToast(t('contest.takedown.error'))
-      return
-    }
-    // 201 received / 200 already_reported: the poster is hidden server-side
-    // already — mirror that here immediately, then refetch in the background.
-    setPosterHidden(true)
-    setLightboxOpen(false)
-    showToast(t('contest.takedown.done'))
-    getContest(contest.id).then(setContest).catch(() => {})
-  }
-
   function handlePosterError() {
     setLightboxOpen(false)
-    setPosterHidden(true)
+    setPosterFailed(true)
   }
 
   // ── Pieces ───────────────────────────────────────────────────────────────
@@ -268,18 +245,13 @@ export default function CompetitionDetailPage({ onLogout }) {
                 loading="lazy"
                 decoding="async"
                 referrerPolicy="no-referrer"
-                onError={() => setPosterHidden(true)}
+                onError={() => setPosterFailed(true)}
               />
             </button>
             {contest.poster_credit && (
               <p className={styles.posterCredit}>
                 {t('contest.poster.credit', { credit: contest.poster_credit })}
               </p>
-            )}
-            {mailHref && (
-              <a className={styles.takedownLink} href={mailHref}>
-                {t('contest.takedown.mailLink')}
-              </a>
             )}
           </div>
 
@@ -346,11 +318,9 @@ export default function CompetitionDetailPage({ onLogout }) {
           title={title}
           credit={contest.poster_credit}
           sourceUrl={sourceUrl}
-          mailHref={mailHref}
           returnFocusRef={thumbRef}
           onClose={() => setLightboxOpen(false)}
           onImageError={handlePosterError}
-          onReport={handleReport}
         />
       )}
 

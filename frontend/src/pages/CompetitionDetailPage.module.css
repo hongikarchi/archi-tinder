@@ -82,27 +82,6 @@
   overflow-wrap: anywhere;
 }
 
-.takedownLink {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  margin-top: -6px;
-  font-size: var(--fs-caption);
-  color: var(--color-text-muted);
-  text-decoration: underline;
-}
-
-.takedownLink:hover {
-  color: var(--accent-1);
-}
-
-.takedownLink:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
 .details {
   flex: 1;
   min-width: 0;

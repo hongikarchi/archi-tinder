@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { safeHttpUrl, safeMailto } from './safeUrl.js'
+import { safeHttpUrl } from './safeUrl.js'
 
 describe('safeHttpUrl', () => {
   test('accepts http and https, returns normalized href', () => {
@@ -48,38 +48,5 @@ describe('safeHttpUrl', () => {
     assert.equal(safeHttpUrl(undefined), null)
     assert.equal(safeHttpUrl(42), null)
     assert.equal(safeHttpUrl('https://'), null)
-  })
-})
-
-describe('safeMailto', () => {
-  test('builds a mailto href for a plausible address', () => {
-    assert.equal(safeMailto('takedown@example.com'), 'mailto:takedown@example.com')
-    assert.equal(safeMailto(' a.b+c@sub.example.co.kr '), 'mailto:a.b+c@sub.example.co.kr')
-  })
-
-  test('encodes subject and body', () => {
-    const href = safeMailto('a@example.com', '[Archibe] 포스터 삭제 요청 — X&Y', 'line1\nhttps://x.test/?a=1&b=2')
-    assert.ok(href.startsWith('mailto:a@example.com?subject='))
-    assert.ok(href.includes(`subject=${encodeURIComponent('[Archibe] 포스터 삭제 요청 — X&Y')}`))
-    assert.ok(href.includes(`&body=${encodeURIComponent('line1\nhttps://x.test/?a=1&b=2')}`))
-    // the only raw '?' and '&' are the ones we added
-    assert.equal(href.split('?').length, 2)
-    assert.equal(href.split('&').length, 2)
-    assert.ok(!href.includes('\n'))
-  })
-
-  test('rejects injection and malformed addresses', () => {
-    assert.equal(safeMailto('a@example.com\nbcc:evil@example.com'), null)
-    assert.equal(safeMailto('a@example.com,b@example.com'), null)
-    assert.equal(safeMailto('a@example.com?cc=evil@example.com'), null)
-    assert.equal(safeMailto('a@example.com&bcc=x@y.zz'), null)
-    assert.equal(safeMailto('a b@example.com'), null)
-    assert.equal(safeMailto('<a@example.com>'), null)
-    assert.equal(safeMailto('a@example'), null)
-    assert.equal(safeMailto('@example.com'), null)
-    assert.equal(safeMailto('plainstring'), null)
-    assert.equal(safeMailto(''), null)
-    assert.equal(safeMailto(null), null)
-    assert.equal(safeMailto(undefined), null)
   })
 })

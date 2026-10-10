@@ -82,11 +82,3 @@
   outline: 2px solid var(--accent-1);
   outline-offset: 2px;
 }
-
-/* Quieter than the primary link — takedown paths stay findable, not loud. */
-.actionMuted {
-  border-color: transparent;
-  color: var(--tabbar-fg-inactive);
-  font-weight: var(--fw-medium);
-  font-size: var(--fs-caption);
-}

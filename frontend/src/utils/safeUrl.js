@@ -28,22 +28,3 @@ export function safeHttpUrl(value) {
   if (parsed.username || parsed.password) return null   // no userinfo
   return parsed.href
 }
-
-// One plausible address: no whitespace, commas, quotes, angle brackets or
-// query/fragment characters, so nothing can smuggle in extra recipients or
-// header fields.
-const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/
-
-/**
- * mailto: href for a single plausible email, else null. Subject and body are
- * encodeURIComponent'ed (newlines in the body become %0A, which is intended).
- */
-export function safeMailto(email, subject, body) {
-  if (typeof email !== 'string') return null
-  const addr = email.trim()
-  if (!addr || addr.length > 254 || !EMAIL_RE.test(addr)) return null
-  const query = []
-  if (subject) query.push(`subject=${encodeURIComponent(String(subject))}`)
-  if (body) query.push(`body=${encodeURIComponent(String(body))}`)
-  return `mailto:${addr}${query.length ? `?${query.join('&')}` : ''}`
-}

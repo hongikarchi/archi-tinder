@@ -15,7 +15,7 @@ export { listProjects, getProject, updateProject, deleteProject, getBuildings, g
 export { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste, fetchBoardSurprise } from './discovery.js'
 export { getUserProfile, updateMyProfile } from './profiles.js'
 export { getProjectReactors, reactToProject, unreactToProject } from './social.js'
-export { listContests, getContest, addContestInterest, removeContestInterest, reportContestPoster } from './contests.js'
+export { listContests, getContest, addContestInterest, removeContestInterest } from './contests.js'
 export { addLikedBuilding, getLikedBuildings } from './liked.js'
 export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.js'
 export { listNotifications, getUnreadCount, markRead } from './notifications.js'

@@ -1,6 +1,6 @@
 /**
  * api/contests.js
- * Real contests (공모전): list / detail, interest toggle, poster takedown report.
+ * Real contests (공모전): list / detail, interest toggle.
  * Design: docs/decisions/2026-10-09-contest-real-data.md
  */
 
@@ -48,19 +48,4 @@ export async function removeContestInterest(contestId) {
     throwIfVerifyRequired(err)
     throw err
   }
-}
-
-/**
- * POST contests/<id>/poster-report/ → { status: 'received' | 'already_reported' }
- * The server hides the poster on the first report.
- */
-export async function reportContestPoster(contestId, { reason, reporterEmail } = {}) {
-  const body = {}
-  if (reason) body.reason = reason
-  if (reporterEmail) body.reporter_email = reporterEmail
-  return await callApi(
-    'POST',
-    `/contests/${encodeURIComponent(contestId)}/poster-report/`,
-    Object.keys(body).length ? body : undefined,
-  )
 }
