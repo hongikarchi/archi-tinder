@@ -6,12 +6,9 @@ views.py -- apps/contests
 
   POST   /api/v1/contests/<id>/interest/       -- 201 new / 200 existing {interest_count, interested}
   DELETE /api/v1/contests/<id>/interest/       -- 204 (idempotent)
-  POST   /api/v1/contests/<id>/poster-report/  -- 201 {status:'received'} (first report per user; hides
-                                                poster at once, D5) / 200 {status:'already_reported'}
 
 Design record: docs/decisions/2026-10-09-contest-real-data.md (§4-2).
 """
-from django.db import IntegrityError, transaction
 from django.db.models import BooleanField, Exists, OuterRef, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -21,8 +18,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from .models import Contest, ContestInterest, ContestPosterReport
-from .serializers import ContestSerializer, PosterReportSerializer
+from .models import Contest, ContestInterest
+from .serializers import ContestSerializer
 
 _LIST_CAP = 100
 
@@ -67,11 +64,6 @@ class ContestInterestThrottle(UserRateThrottle):
     scope = 'contest_interest'
 
 
-class ContestPosterReportThrottle(UserRateThrottle):
-    """10 poster reports per user per hour (rate in DEFAULT_THROTTLE_RATES)."""
-    scope = 'contest_poster_report'
-
-
 class ContestInterestView(APIView):
     """POST + DELETE /api/v1/contests/<id>/interest/ (published contests only).
 
@@ -104,48 +96,3 @@ class ContestInterestView(APIView):
         for interest in ContestInterest.objects.filter(user=profile, contest=contest):
             interest.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class ContestPosterReportView(APIView):
-    """POST /api/v1/contests/<id>/poster-report/ -- takedown report (D5).
-
-    One report per user per contest. The first records the report and hides the
-    poster (poster_status='none') in one transaction; a repeat returns 200
-    {status:'already_reported'} and changes nothing (so an operator restore is
-    not undone). Restoring is command-only. Requires a profile (403 otherwise)
-    so every report is attributable; guests are allowed.
-    """
-
-    permission_classes = [IsAuthenticated]
-    throttle_classes = [ContestPosterReportThrottle]
-
-    def post(self, request, pk):
-        profile = getattr(request.user, 'profile', None)
-        if profile is None:
-            return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
-        ser = PosterReportSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        already = Response({'status': 'already_reported'}, status=status.HTTP_200_OK)
-        try:
-            with transaction.atomic():
-                contest = get_object_or_404(
-                    Contest.objects.select_for_update(),
-                    pk=pk, status=Contest.STATUS_PUBLISHED,
-                )
-                if ContestPosterReport.objects.filter(contest=contest, reporter=profile).exists():
-                    return already
-                ContestPosterReport.objects.create(
-                    contest=contest,
-                    reporter=profile,
-                    reporter_email=ser.validated_data.get('reporter_email', ''),
-                    reason=ser.validated_data.get('reason', ''),
-                )
-                # queryset.update(): writes no URL field, so the URL guard is not
-                # triggered and a report can hide the poster even for a legacy row.
-                Contest.objects.filter(pk=contest.pk).update(
-                    poster_status=Contest.POSTER_NONE, updated_at=timezone.now(),
-                )
-        except IntegrityError:
-            # Race: a concurrent request inserted the same (contest, reporter).
-            return already
-        return Response({'status': 'received'}, status=status.HTTP_201_CREATED)

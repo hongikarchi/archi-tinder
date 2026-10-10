@@ -75,7 +75,7 @@ class TestSerializerDefense:
         # Both the ORM guard and the DB constraint block bad rows, so bypass
         # them deliberately: serialize an unsaved in-memory instance.
         c = Contest(**_kwargs(
-            poster_url='ftp://example.com/p.jpg', poster_status=Contest.POSTER_ALLOWED,
+            poster_url='ftp://example.com/p.jpg',
             listing_url='data:text/html,x',
         ))
         c.source_url = 'javascript:alert(1)'
@@ -88,18 +88,12 @@ class TestSerializerDefense:
     def test_good_values_pass_through(self):
         c = Contest.objects.create(**_kwargs(
             listing_url='http://example.com/l',
-            poster_url='https://i.example.com/p.jpg', poster_status=Contest.POSTER_ALLOWED,
+            poster_url='https://i.example.com/p.jpg',
         ))
         data = ContestSerializer(c).data
         assert data['source_url'] == 'https://example.com/'
         assert data['listing_url'] == 'http://example.com/l'
         assert data['poster_url'] == 'https://i.example.com/p.jpg'
-
-    def test_unverified_poster_not_emitted(self):
-        c = Contest.objects.create(**_kwargs(
-            poster_url='https://i.example.com/p.jpg', poster_status=Contest.POSTER_UNVERIFIED,
-        ))
-        assert ContestSerializer(c).data['poster_url'] is None
 
 
 def _valid(**o):
@@ -149,7 +143,7 @@ class TestBulkGuards:
     def test_update_non_url_fields_unaffected(self):
         c = Contest.objects.create(**_kwargs())
         assert Contest.objects.filter(pk=c.pk).update(
-            poster_status=Contest.POSTER_NONE, updated_at=timezone.now(),
+            interest_count=0, updated_at=timezone.now(),
         ) == 1
 
     def test_update_with_expression_skipped(self):
@@ -224,25 +218,3 @@ class TestBlankAndNullAccepted:
             with transaction.atomic():
                 with connection.cursor() as cur:
                     cur.execute("UPDATE contests_contest SET source_url = '' WHERE id = %s", [c.pk])
-
-
-@pytest.mark.django_db
-class TestTakedownGate:
-    def _allowed(self):
-        return Contest.objects.create(**_kwargs(
-            poster_url='https://i.example.com/p.jpg', poster_status=Contest.POSTER_ALLOWED,
-        ))
-
-    def test_hidden_when_unset(self, settings):
-        settings.CONTEST_TAKEDOWN_EMAIL = ''
-        c = self._allowed()
-        data = ContestSerializer(c).data
-        assert data['poster_url'] is None
-        assert data['takedown_email'] == ''
-        assert Contest.objects.get(pk=c.pk).poster_status == Contest.POSTER_ALLOWED
-
-    def test_shown_when_set(self, settings):
-        settings.CONTEST_TAKEDOWN_EMAIL = 'td@example.com'
-        data = ContestSerializer(self._allowed()).data
-        assert data['poster_url'] == 'https://i.example.com/p.jpg'
-        assert data['takedown_email'] == 'td@example.com'

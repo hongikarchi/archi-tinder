@@ -63,109 +63,44 @@ class TestContestStatus:
 
 @pytest.mark.django_db
 class TestContestPoster:
-    def test_allow_sets_fields(self):
+    def test_set_url_and_credit(self):
         c = _make()
-        out = _run('contest_poster', str(c.pk), 'allow',
-                   '--url', 'https://img.example.com/p.jpg',
-                   '--credit', '주최처', '--basis', '공공누리 제1유형')
-        assert 'unverified -> allowed' in out
+        out = _run('contest_poster', str(c.pk), 'set',
+                   '--url', 'https://img.example.com/p.jpg', '--credit', '주최처')
+        assert 'None -> https://img.example.com/p.jpg' in out
         c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_ALLOWED
         assert c.poster_url == 'https://img.example.com/p.jpg'
         assert c.poster_credit == '주최처'
-        assert c.poster_permission_basis == '공공누리 제1유형'
-        assert c.poster_permission_at is not None
 
-    def test_allow_requires_basis(self):
-        c = _make()
-        with pytest.raises(CommandError):
-            call_command('contest_poster', str(c.pk), 'allow', '--url', 'https://i.example.com/p.jpg')
-        with pytest.raises(CommandError):
-            call_command('contest_poster', str(c.pk), 'allow',
-                         '--url', 'https://i.example.com/p.jpg', '--basis', '   ')
+    def test_set_credit_optional_keeps_existing(self):
+        c = _make(poster_credit='old')
+        call_command('contest_poster', str(c.pk), 'set', '--url', 'http://i.example.com/p.jpg')
         c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_UNVERIFIED
+        assert c.poster_url == 'http://i.example.com/p.jpg'
+        assert c.poster_credit == 'old'
 
     @pytest.mark.parametrize('bad', ['javascript:alert(1)', 'ftp://x.com/p.jpg', '//h/p', ''])
-    def test_allow_requires_http_url(self, bad):
+    def test_set_rejects_invalid_url(self, bad):
         c = _make()
         with pytest.raises(CommandError):
-            call_command('contest_poster', str(c.pk), 'allow', '--url', bad, '--basis', 'mail')
+            call_command('contest_poster', str(c.pk), 'set', '--url', bad)
         c.refresh_from_db()
-        assert c.poster_url is None and c.poster_status == Contest.POSTER_UNVERIFIED
+        assert c.poster_url is None
 
-    def test_restore_after_none(self):
+    def test_set_requires_url(self):
         c = _make()
-        call_command('contest_poster', str(c.pk), 'allow',
-                     '--url', 'https://i.example.com/p.jpg', '--basis', 'mail 2026-10-01')
-        call_command('contest_poster', str(c.pk), 'none')
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
-        out = _run('contest_poster', str(c.pk), 'restore')
-        assert 'none -> allowed' in out
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_ALLOWED
-
-    def test_restore_refused_without_url_or_basis(self):
-        no_url = _make(poster_status=Contest.POSTER_NONE, poster_permission_basis='mail')
         with pytest.raises(CommandError):
-            call_command('contest_poster', str(no_url.pk), 'restore')
-        no_basis = _make(poster_status=Contest.POSTER_NONE, poster_url='https://i.example.com/p.jpg')
-        with pytest.raises(CommandError):
-            call_command('contest_poster', str(no_basis.pk), 'restore')
-        no_url.refresh_from_db()
-        no_basis.refresh_from_db()
-        assert no_url.poster_status == Contest.POSTER_NONE
-        assert no_basis.poster_status == Contest.POSTER_NONE
+            call_command('contest_poster', str(c.pk), 'set')
 
-    def test_none(self):
-        c = _make(poster_status=Contest.POSTER_ALLOWED, poster_url='https://i.example.com/p.jpg')
-        out = _run('contest_poster', str(c.pk), 'none')
-        assert 'allowed -> none' in out
+    def test_clear_keeps_credit(self):
+        c = _make(poster_url='https://i.example.com/p.jpg', poster_credit='주최처')
+        out = _run('contest_poster', str(c.pk), 'clear')
+        assert 'https://i.example.com/p.jpg -> None' in out
         c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
+        assert c.poster_url is None
+        assert c.poster_credit == '주최처'
 
-    @pytest.mark.parametrize('action', ['none', 'restore'])
+    @pytest.mark.parametrize('action', ['set', 'clear'])
     def test_unknown_id_errors(self, action):
         with pytest.raises(CommandError):
-            call_command('contest_poster', '999999', action)
-
-
-@pytest.mark.django_db
-class TestTakedownEmailRequired:
-    ALLOW = ('--url', 'https://i.example.com/p.jpg', '--basis', 'mail')
-
-    @pytest.mark.parametrize('bad', ['', 'not-an-email'])
-    def test_allow_refused(self, settings, bad):
-        settings.CONTEST_TAKEDOWN_EMAIL = bad
-        c = _make()
-        with pytest.raises(CommandError, match='CONTEST_TAKEDOWN_EMAIL'):
-            call_command('contest_poster', str(c.pk), 'allow', *self.ALLOW)
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_UNVERIFIED and c.poster_url is None
-
-    @pytest.mark.parametrize('bad', ['', 'not-an-email'])
-    def test_restore_refused(self, settings, bad):
-        settings.CONTEST_TAKEDOWN_EMAIL = bad
-        c = _make(poster_status=Contest.POSTER_NONE,
-                  poster_url='https://i.example.com/p.jpg', poster_permission_basis='mail')
-        with pytest.raises(CommandError, match='CONTEST_TAKEDOWN_EMAIL'):
-            call_command('contest_poster', str(c.pk), 'restore')
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
-
-    def test_allow_and_restore_succeed_with_valid(self, settings):
-        settings.CONTEST_TAKEDOWN_EMAIL = 'takedown@example.com'
-        c = _make()
-        call_command('contest_poster', str(c.pk), 'allow', *self.ALLOW, stdout=StringIO())
-        call_command('contest_poster', str(c.pk), 'none', stdout=StringIO())
-        call_command('contest_poster', str(c.pk), 'restore', stdout=StringIO())
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_ALLOWED
-
-    def test_none_unaffected(self, settings):
-        settings.CONTEST_TAKEDOWN_EMAIL = ''
-        c = _make(poster_status=Contest.POSTER_ALLOWED, poster_url='https://i.example.com/p.jpg')
-        call_command('contest_poster', str(c.pk), 'none', stdout=StringIO())
-        c.refresh_from_db()
-        assert c.poster_status == Contest.POSTER_NONE
+            call_command('contest_poster', '999999', action, '--url', 'https://x.example.com/p.jpg')
