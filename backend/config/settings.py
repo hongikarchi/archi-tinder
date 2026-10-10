@@ -576,6 +576,12 @@ GEMINI_THINKING_BUDGET      = int(os.getenv('GEMINI_THINKING_BUDGET', '0'))
 LLM_PROVIDER      = os.getenv('LLM_PROVIDER', 'gemini')  # gemini|openai
 OPENAI_API_KEY    = os.getenv('OPENAI_API_KEY', '')
 OPENAI_TEXT_MODEL = os.getenv('OPENAI_TEXT_MODEL', 'gpt-5.6-luna')
+# Taste-start tag recognition (TypeSafe "System One" / JEV). Missing key or any
+# failure -> apps.recommendation.taste_start falls back to a local dictionary.
+TYPESAFE_API_KEY    = os.getenv('TYPESAFE_API_KEY', '')
+JEV_API_URL         = 'https://api.typesafe.ai/v1/systemone'
+JEV_MODEL           = os.getenv('JEV_MODEL', 'jev-latest')
+JEV_TIMEOUT_SECONDS = float(os.getenv('JEV_TIMEOUT_SECONDS', '2.0'))
 # Optional reasoning-effort knob; allowlist-validated here so a typo'd env var
 # degrades to "not sent" instead of a per-request 400 on the parse path.
 _OPENAI_EFFORT_ALLOWED = ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
