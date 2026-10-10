@@ -72,7 +72,7 @@ class TestList:
             'theme', 'summary', 'eligibility', 'team_size',
             'source_url', 'listing_source', 'listing_url',
             'poster_url', 'poster_credit', 'poster_status',
-            'interest_count', 'next_deadline_kind', 'next_deadline', 'is_closed',
+            'interest_count', 'interested', 'next_deadline_kind', 'next_deadline', 'is_closed',
         }
         assert row['is_closed'] is False
         # ISO 8601 with offset.
