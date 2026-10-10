@@ -95,6 +95,11 @@ class Contest(models.Model):
         (STATUS_PENDING, 'pending'),
     ]
 
+    # Stable identifier used by the upcoming `import_contests` command to upsert
+    # rows idempotently (title/URL can change); NULL for rows created otherwise.
+    # NULLs do not collide under the unique constraint.
+    import_key = models.CharField(max_length=80, unique=True, null=True, blank=True)
+
     title = models.CharField(max_length=200)
     organizer = models.CharField(max_length=120)
     organizer_type = models.CharField(

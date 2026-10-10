@@ -69,8 +69,9 @@ SEED_CONTESTS = [
         'theme': '목구조의 확장: 전통과 현대 재료의 구조적 융합',
         'summary': '전통 목구조와 현대 재료의 구조적 융합을 다루는 한옥 디자인 국제공모.',
         'listing_url': 'https://lectus.kr/14th-hanok-design-int-competition/',
-        # Official site unverified -- listing URL used as the source for now.
-        'source_url': 'https://lectus.kr/14th-hanok-design-int-competition/',
+        # Official announcement URL not found yet; lectus.kr is a listing site
+        # so it must not be used as source_url.
+        'source_url': '',
     },
     {
         # (c)
@@ -138,8 +139,12 @@ SEED_CONTESTS = [
         'organizer_type': Contest.ORGANIZER_UNKNOWN,
         # Organizer is an unverified ad-hoc body -> stays hidden from users.
         'status': Contest.STATUS_PENDING,
-        # 11/20 was a wevity D-n conversion and may be off by one; 11/19 is
-        # the sourced value. Time of day unconfirmed.
+        # Three values were found: 11/19 (lectus.kr listing), 11/20 (wevity D-n
+        # conversion, may be off by one), 11/20 (linkareer
+        # https://linkareer.com/activity/344917, 접수 8/24~11/20). The official
+        # site https://airbeatcity.com/contest shows no schedule (could not
+        # confirm). Time of day unconfirmed. Keep PENDING until the official
+        # schedule is confirmed.
         'submission_deadline': kst(2026, 11, 19, 23, 59),
         'summary': '에어-비트 시티를 주제로 한 건축 디자인 공모전.',
         'listing_url': 'https://lectus.kr/2026-air-beat-city-arch-competition/',
