@@ -4,11 +4,12 @@ serializers.py -- apps/contests
 Datetimes are stored tz-aware (UTC) and serialized as ISO 8601 with offset;
 the frontend converts to KST.
 """
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Contest
-from .validators import is_http_url
+from .validators import is_http_url, validate_poster_url
 
 
 class ContestSerializer(serializers.ModelSerializer):
@@ -49,7 +50,13 @@ class ContestSerializer(serializers.ModelSerializer):
 
     def get_poster_url(self, obj):
         # Hotlinked by default: show whenever a stored http(s) URL exists.
-        return obj.poster_url if is_http_url(obj.poster_url) else None
+        if not is_http_url(obj.poster_url):
+            return None
+        try:
+            validate_poster_url(obj.poster_url)
+        except ValidationError:
+            return None
+        return obj.poster_url
 
     # Defense in depth: never emit a non-http(s) URL even if a bad row got in
     # through queryset.update() / raw SQL (Contest.save() validates the normal path).

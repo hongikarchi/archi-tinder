@@ -11,7 +11,7 @@ interest_count is a denormalized column maintained by signals on ContestInterest
 from django.db import models
 from django.db.models import Q
 
-from .validators import validate_http_url
+from .validators import validate_http_url, validate_poster_url
 
 URL_FIELDS = ('source_url', 'listing_url', 'poster_url')
 # DB-level scheme check (case-insensitive, matching validators.is_http_url which
@@ -23,6 +23,9 @@ _HTTP_RE = r'^https?://'
 def _validate_url_value(name, value):
     """Same semantics as Contest.save(): blank listing_url / null poster_url OK."""
     if value in (None, '') and name != 'source_url':
+        return
+    if name == 'poster_url':
+        validate_poster_url(value)
         return
     validate_http_url(value)
 
@@ -114,7 +117,7 @@ class Contest(models.Model):
     listing_url = models.URLField(max_length=500, blank=True, validators=[validate_http_url])
 
     poster_url = models.URLField(
-        max_length=1000, null=True, blank=True, validators=[validate_http_url],
+        max_length=1000, null=True, blank=True, validators=[validate_poster_url],
     )
     poster_credit = models.CharField(max_length=120, blank=True)
 
