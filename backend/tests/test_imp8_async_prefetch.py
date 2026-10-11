@@ -160,6 +160,9 @@ def _base_engine_patches(pool_ids):
             'requested': 10, 'cache_hits': 10, 'cache_misses': 0,
         },
         f'{_ENGINE}.get_last_clustering_stats': lambda: None,
+        # v2 pool top-up (pools here are below the refresh threshold) must not hit the buildings DB
+        f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+        f'{_ENGINE}._random_pool': lambda target: [],
         # Telemetry thread patches: run synchronously so test transaction sees DB writes.
         'apps.recommendation.views.swipe._emit_telemetry_thread': _sync_emit_telemetry,
         'apps.recommendation.views.threading.Thread': _DiscThread,
@@ -340,34 +343,36 @@ class TestAsyncThreadComputesPrefetch:
         """Clear cache before each test to avoid cross-test pollution."""
         cache.clear()
 
-    def test_cache_entry_written_after_thread(self):
-        """_async_prefetch_thread writes a cache entry for the given cache_round."""
+    def _run_thread(self, session_id, cache_round, pool_ids, lookahead_result=None):
+        """Call the thread with a (mocked-lookahead) selector ctx. Returns the lookahead mock."""
         from apps.recommendation.views import _async_prefetch_thread
 
-        pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        fake_embs = _fake_embs(pool_ids)
-        session_id = 'test-session-cache-entry-001'
-        cache_round = 2  # matches integration: saved_current_round(1) + 1
-
+        if lookahead_result is None:
+            lookahead_result = (pool_ids[1], pool_ids[2])
         with patch('django.db.connections.close_all', lambda: None), \
-             patch('apps.recommendation.views.engine.farthest_point_from_pool',
-                   side_effect=lambda pid, exp, embs: next(
-                       (b for b in pid if b not in set(exp)), None
-                   )), \
-             patch('apps.recommendation.views.engine.get_building_card',
-                   side_effect=_mock_card):
-
+             patch('apps.recommendation.views.swipe.swipe_rules.lookahead',
+                   return_value=lookahead_result) as look:
             _async_prefetch_thread(
                 session_id=session_id,
                 cache_round=cache_round,
-                phase='exploring',
+                phase='analyzing',
                 pool_ids_snap=pool_ids,
                 exposed_ids_snap=[pool_ids[0]],
-                pool_embeddings_snap=fake_embs,
+                pool_embeddings_snap=_fake_embs(pool_ids),
                 like_vectors_snap=[],
-                initial_batch_snap=pool_ids[:3],
+                initial_batch_snap=[],
                 current_round_snap=1,
+                selector_ctx_snap=object(),
             )
+        return look
+
+    def test_cache_entry_written_after_thread(self):
+        """_async_prefetch_thread writes a cache entry for the given cache_round."""
+        pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
+        session_id = 'test-session-cache-entry-001'
+        cache_round = 2  # matches integration: saved_current_round(1) + 1
+
+        self._run_thread(session_id, cache_round, pool_ids)
 
         cache_key = f'prefetch:{session_id}:{cache_round}'
         cached = cache.get(cache_key)
@@ -378,32 +383,11 @@ class TestAsyncThreadComputesPrefetch:
 
     def test_cache_key_format(self):
         """Cache key is prefetch:{session_id}:{cache_round}."""
-        from apps.recommendation.views import _async_prefetch_thread
-
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        fake_embs = _fake_embs(pool_ids)
         session_id = 'test-session-cache-key-002'
         cache_round = 5  # arbitrary; we check the key includes this exact value
 
-        with patch('django.db.connections.close_all', lambda: None), \
-             patch('apps.recommendation.views.engine.farthest_point_from_pool',
-                   side_effect=lambda pid, exp, embs: next(
-                       (b for b in pid if b not in set(exp)), None
-                   )), \
-             patch('apps.recommendation.views.engine.get_building_card',
-                   side_effect=_mock_card):
-
-            _async_prefetch_thread(
-                session_id=session_id,
-                cache_round=cache_round,
-                phase='exploring',
-                pool_ids_snap=pool_ids,
-                exposed_ids_snap=[pool_ids[0]],
-                pool_embeddings_snap=fake_embs,
-                like_vectors_snap=[],
-                initial_batch_snap=pool_ids[:3],
-                current_round_snap=1,
-            )
+        self._run_thread(session_id, cache_round, pool_ids)
 
         expected_key = f'prefetch:{session_id}:{cache_round}'
         assert cache.get(expected_key) is not None, (
@@ -415,32 +399,11 @@ class TestAsyncThreadComputesPrefetch:
 
     def test_cache_entry_has_required_fields(self):
         """Cached entry has prefetch_card_id, prefetch_card_2_id, computed_at."""
-        from apps.recommendation.views import _async_prefetch_thread
-
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        fake_embs = _fake_embs(pool_ids)
         session_id = 'test-session-fields-003'
         cache_round = 2
 
-        with patch('django.db.connections.close_all', lambda: None), \
-             patch('apps.recommendation.views.engine.farthest_point_from_pool',
-                   side_effect=lambda pid, exp, embs: next(
-                       (b for b in pid if b not in set(exp)), None
-                   )), \
-             patch('apps.recommendation.views.engine.get_building_card',
-                   side_effect=_mock_card):
-
-            _async_prefetch_thread(
-                session_id=session_id,
-                cache_round=cache_round,
-                phase='exploring',
-                pool_ids_snap=pool_ids,
-                exposed_ids_snap=[pool_ids[0]],
-                pool_embeddings_snap=fake_embs,
-                like_vectors_snap=[],
-                initial_batch_snap=pool_ids[:3],
-                current_round_snap=1,
-            )
+        self._run_thread(session_id, cache_round, pool_ids)
 
         cached = cache.get(f'prefetch:{session_id}:{cache_round}')
         assert cached is not None
@@ -449,42 +412,22 @@ class TestAsyncThreadComputesPrefetch:
         assert isinstance(cached['computed_at'], str)
         assert len(cached['computed_at']) > 10
 
-    def test_analyzing_phase_uses_compute_mmr_next(self):
-        """In analyzing phase, thread uses compute_mmr_next (not farthest_point)."""
-        from apps.recommendation.views import _async_prefetch_thread
-
+    def test_thread_uses_v2_selector_lookahead_for_next_swipe(self):
+        """taste_v2: the thread asks swipe_rules.lookahead (skip_next=True) for the slots
+        of the NEXT swipe and caches exactly those ids."""
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 8)]
-        fake_embs = _fake_embs(pool_ids)
-        session_id = 'test-session-analyzing-004'
+        session_id = 'test-session-lookahead-004'
         cache_round = 3
-        mmr_calls = []
 
-        def _counting_mmr(*args, **kwargs):
-            mmr_calls.append(args)
-            return pool_ids[2]
+        look = self._run_thread(
+            session_id, cache_round, pool_ids, lookahead_result=(pool_ids[2], pool_ids[3]))
 
-        with patch('django.db.connections.close_all', lambda: None), \
-             patch('apps.recommendation.views.engine.compute_mmr_next',
-                   side_effect=_counting_mmr), \
-             patch('apps.recommendation.views.engine.get_building_card',
-                   side_effect=_mock_card):
-
-            _async_prefetch_thread(
-                session_id=session_id,
-                cache_round=cache_round,
-                phase='analyzing',
-                pool_ids_snap=pool_ids,
-                exposed_ids_snap=[pool_ids[0]],
-                pool_embeddings_snap=fake_embs,
-                like_vectors_snap=[list(np.ones(384))],
-                initial_batch_snap=pool_ids[:3],
-                current_round_snap=2,
-            )
-
-        assert len(mmr_calls) >= 1, 'compute_mmr_next should be called in analyzing phase'
+        assert look.call_count == 1
+        assert look.call_args.kwargs.get('skip_next') is True
         cached = cache.get(f'prefetch:{session_id}:{cache_round}')
         assert cached is not None
         assert cached['prefetch_card_id'] == pool_ids[2]
+        assert cached['prefetch_card_2_id'] == pool_ids[3]
 
 
 # ---------------------------------------------------------------------------
@@ -543,8 +486,8 @@ class TestAsyncThreadFailureGraceful:
     def test_bg_thread_failure_leaves_cache_empty(self):
         """When bg thread fails internally, cache entry for that round is absent.
 
-        Direct-call test: invokes _async_prefetch_thread with engine functions raising,
-        verifies no cache entry is written (exception caught before cache.set).
+        Direct-call test: invokes _async_prefetch_thread with the selector lookahead
+        raising, verifies no cache entry is written (exception caught before cache.set).
         """
         from apps.recommendation.views import _async_prefetch_thread
 
@@ -553,11 +496,7 @@ class TestAsyncThreadFailureGraceful:
         cache_round = 2
 
         with patch('django.db.connections.close_all', lambda: None), \
-             patch('apps.recommendation.views.engine.farthest_point_from_pool',
-                   side_effect=RuntimeError('forced failure')), \
-             patch('apps.recommendation.views.engine.compute_mmr_next',
-                   side_effect=RuntimeError('forced failure')), \
-             patch('apps.recommendation.views.engine.get_building_card',
+             patch('apps.recommendation.views.swipe.swipe_rules.lookahead',
                    side_effect=RuntimeError('forced failure')):
 
             # Should NOT raise (exception is caught inside the function)
@@ -571,6 +510,7 @@ class TestAsyncThreadFailureGraceful:
                 like_vectors_snap=[],
                 initial_batch_snap=[],
                 current_round_snap=0,
+                selector_ctx_snap=object(),
             )
 
         # Cache should be empty (not populated on failure)
@@ -586,9 +526,7 @@ class TestAsyncThreadFailureGraceful:
         pool_ids = [f'B{str(i).zfill(5)}' for i in range(1, 4)]
 
         with patch('django.db.connections.close_all', lambda: None), \
-             patch('apps.recommendation.views.engine.farthest_point_from_pool',
-                   side_effect=ValueError('boom')), \
-             patch('apps.recommendation.views.engine.compute_mmr_next',
+             patch('apps.recommendation.views.swipe.swipe_rules.lookahead',
                    side_effect=ValueError('boom')):
 
             # Must not raise
@@ -603,6 +541,7 @@ class TestAsyncThreadFailureGraceful:
                     like_vectors_snap=[],
                     initial_batch_snap=[],
                     current_round_snap=0,
+                    selector_ctx_snap=object(),
                 )
             except Exception as exc:
                 pytest.fail(f'_async_prefetch_thread raised unexpectedly: {exc!r}')
@@ -623,9 +562,8 @@ class TestConnectionClosureOnExit:
         fake_embs = {bid: np.ones(384) / np.linalg.norm(np.ones(384)) for bid in pool_ids}
         close_calls = []
 
-        with patch('apps.recommendation.views.engine.farthest_point_from_pool', return_value=pool_ids[1]), \
-             patch('apps.recommendation.views.engine.get_building_card', side_effect=_mock_card), \
-             patch('apps.recommendation.views.engine.compute_mmr_next', return_value=pool_ids[1]), \
+        with patch('apps.recommendation.views.swipe.swipe_rules.lookahead',
+                   return_value=(pool_ids[1], pool_ids[2])), \
              patch('apps.recommendation.views.cache.set'), \
              patch('apps.recommendation.views.timezone') as mock_tz:
 
@@ -643,6 +581,7 @@ class TestConnectionClosureOnExit:
                     like_vectors_snap=[],
                     initial_batch_snap=pool_ids[:3],
                     current_round_snap=0,
+                    selector_ctx_snap=object(),
                 )
 
         # connections.close_all() must be called at least twice:
@@ -660,10 +599,7 @@ class TestConnectionClosureOnExit:
 
         # Force an exception inside the try block
         with patch(
-            'apps.recommendation.views.engine.farthest_point_from_pool',
-            side_effect=RuntimeError('boom'),
-        ), patch(
-            'apps.recommendation.views.engine.compute_mmr_next',
+            'apps.recommendation.views.swipe.swipe_rules.lookahead',
             side_effect=RuntimeError('boom'),
         ), patch('django.db.connections.close_all', side_effect=lambda: close_calls.append('close_all')):
             # Should NOT raise (exception caught inside the function)
@@ -677,6 +613,7 @@ class TestConnectionClosureOnExit:
                 like_vectors_snap=[],
                 initial_batch_snap=[],
                 current_round_snap=0,
+                selector_ctx_snap=object(),
             )
 
         # Even on exception, finally block must have fired
@@ -924,10 +861,11 @@ class TestAsyncBranchConsumerIntegration:
         the same card to the user. Post-fix: pf_id is degraded to None
         (same as cache miss) — user never sees a dupe.
 
-        Setup: session starts exploring, current_round=0, initial_batch=pool_ids[:5].
+        Setup: legacy-seeded session (lazily upgraded to taste_v2 on the swipe), pool of
+        identical embeddings so the selector's pick is the first unexposed pool id.
         After swipe on pool_ids[0]:
           - current_round becomes 1 (saved_current_round=1)
-          - exploring picker: initial_batch[1] = pool_ids[1] -> next_bid = pool_ids[1]
+          - v2 selector: first unexposed candidate = pool_ids[1] -> next_bid = pool_ids[1]
           - consumer reads prefetch:{sid}:1 -> pf_id = pool_ids[1] (== next_bid)
           - dedupe guard: pf_id degraded to None
         Response: next_image.canonical_bld_id == pool_ids[1], prefetch_image is None.

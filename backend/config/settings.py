@@ -416,7 +416,6 @@ RECOMMENDATION = {
     'taste_v2_analyzing_min_likes': 1,
     'taste_v2_convergence_min_swipes': 8,       # "taste found" needs at least this many swipes
     'taste_v2_pool_refresh_threshold': 20,      # refill the pool when unexposed candidates drop below
-    'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
     'taste_pool_overfetch': 3,       # promote-to-taste pool: HNSW neighbours fetched = overfetch * pool target, MMR-downsampled to target
@@ -428,11 +427,9 @@ RECOMMENDATION = {
     'convergence_min_recent_likes': 2,  # recent positive evidence required before backend declares convergence
     'k_clusters': 2,
     'min_likes_for_multimodal': 11,  # keep the <=10-swipe loop single-centroid; KMeans only after the target window
-    'max_consecutive_dislikes': 5,
     'top_k_results': 20,
     'like_weight': 0.5,              # kept for pref vector update
     'dislike_weight': -1.0,
-    'initial_explore_rounds': 10,    # kept for initial batch size
     'adaptive_k_clustering_enabled': False,  # Topic 06: silhouette-based k selection {1, 2}
     'soft_relevance_enabled':        False,  # Topic 06: softmax over centroid distances vs max
     'gemini_rerank_enabled':         False,  # Topic 02: Gemini setwise rerank at session end

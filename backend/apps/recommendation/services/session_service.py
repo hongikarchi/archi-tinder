@@ -12,7 +12,6 @@ Mock-patch discipline (CRITICAL):
   module's namespace and breaks the patch path.
 """
 import logging
-from collections import defaultdict
 
 from django.conf import settings
 from django.core.cache import cache
@@ -83,14 +82,7 @@ def create_session(request, profile, recent_cutoff):
     _raw_name       = (request.data.get('name') or '').strip()[:100]
     # Detect placeholder names that should be replaced with an auto-generated name.
     _is_placeholder_name = _raw_name.lower() in _PLACEHOLDER_NAMES
-    project_name    = _raw_name or 'Untitled'
     filters         = request.data.get('filters') or {}
-
-    # Validate and sanitize filter_priority: must be a list of known filter key strings, max 10
-    raw_priority = request.data.get('filter_priority') or []
-    if not isinstance(raw_priority, list):
-        raw_priority = []
-    filter_priority = [k for k in raw_priority if isinstance(k, str) and k in _VALID_FILTER_KEYS][:10]
 
     # Validate and sanitize seed_ids: must be a list of strings, max 50
     raw_seeds = request.data.get('seed_ids') or []
@@ -147,13 +139,29 @@ def create_session(request, profile, recent_cutoff):
             _raw_name, _is_placeholder_name, raw_query,
         )
 
-    # Dedupe guard (2026-05-26 Codex retest INFRA-DEPLOY-3 follow-up):
-    # If the same user has an active session created in the last 30s with the
-    # same name + raw_query + filters, the inbound POST is most likely a duplicate
-    # caused by client-side retry-on-timeout (the frontend's earlier behavior).
-    # Reuse the existing session instead of creating a second Project/Session pair.
-    # Only runs when client did NOT supply a valid project_id (implicit project intent).
-    # See sessions.js startSession; core.js retry loop; tests/test_session_create_dedupe.py.
+    # Legacy-filters create (no taste_tags): convert the filters to tags and go
+    # through the SAME v2 create path as the Taste-start screen. Used by the
+    # frontend resume fallback when a board has no resumable session.
+    return _create_session_from_filters(
+        request, profile, recent_cutoff, project, force_new,
+        _raw_name, _is_placeholder_name, raw_query, filters, seed_ids,
+    )
+
+
+def _create_session_from_filters(request, profile, recent_cutoff, project, force_new,
+                                 raw_name, is_placeholder_name, raw_query, filters, seed_ids):
+    """Legacy-filters create -> tags -> start cards -> shared v2 create core."""
+    from ..taste_start import legacy_filters, matching, tag_io
+
+    if not isinstance(filters, dict):
+        filters = {}
+    project_name = raw_name or 'Untitled'
+
+    # Dedupe guard (INFRA-DEPLOY-3 follow-up): a client retry-on-timeout within 30 s
+    # with the same name + raw_query + filters reuses the existing session instead of
+    # creating a second Project/Session pair. Only when the client did NOT supply a
+    # valid project_id. The board's stored filters carry the v2 tags next to the
+    # original filters, so compare without the 'taste_tags' key.
     if project is None:
         existing_session = (
             AnalysisSession.objects.filter(
@@ -165,8 +173,10 @@ def create_session(request, profile, recent_cutoff):
             .order_by('-created_at')
             .first()
         )
-        # Verify filters match (filters is JSONField, no direct lookup; compare in Python)
-        if existing_session and existing_session.project.filters == (filters or {}):
+        if existing_session and {
+            k: v for k, v in (existing_session.project.filters or {}).items()
+            if k != 'taste_tags'
+        } == (filters or {}):
             with stage('dedupe_return_existing', session_id=str(existing_session.session_id)):
                 initial_batch = list(existing_session.initial_batch or [])
                 image_focus = (existing_session.original_filters or {}).get('image_focus')
@@ -180,8 +190,6 @@ def create_session(request, profile, recent_cutoff):
                     existing_session.session_id, profile.id, project_name,
                     raw_query[:40] if raw_query else '',
                 )
-                # Defensive eviction: in case a concurrent request populated a stale
-                # entry between this dedupe lookup and the response.
                 evict_projects_list(profile.id)
                 evict_user_profile_detail(profile.user.id)
                 return Response({
@@ -197,222 +205,57 @@ def create_session(request, profile, recent_cutoff):
                     'deduped': True,
                 }, status=status.HTTP_200_OK)
 
-    # Guest board-limit gate: mirrors Discovery views/discovery.py ~line 268-271.
-    # Only blocks genuinely NEW board creation (project is None and no dedupe/resume
-    # shortcut returned above).  Resuming an existing board (project_id resolved, or
-    # Case #3 resume returned at line 121) is never affected.
+    # Guest board-limit gate -- same rule (and same position) as before the refactor,
+    # so a blocked guest gets 403 without any pool / start-card queries.
     if project is None and profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
         return Response(
             {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Fix 3: project creation deferred to after pool fetch to avoid orphan rows.
-    # (was: Project.objects.create here when project is None)
-
-    # Topic 01 RRF: extract raw_query early — needed for both RRF q_text and
-    # IMP-6 cache key. Accept 'raw_query' (FE key, sessions.js:25) with
-    # 'query' fallback for old clients — mirrors the line-54 dual-key dispatch.
-    # Coerce to None for non-string or oversized values.
-    _raw_query_early = request.data.get('raw_query') or request.data.get('query') or None
-    if _raw_query_early and not isinstance(_raw_query_early, str):
-        _raw_query_early = None
-    # Security: coerce oversized queries to None (RRF wants a focused query, not an essay)
-    if _raw_query_early and len(_raw_query_early) > 1000:
-        _raw_query_early = None
-    q_text_param = _raw_query_early if RC.get('hybrid_retrieval_enabled', False) else None
-
-    # V_initial: HyDE sync path (client-supplied visual_description)
-    visual_description = request.data.get('visual_description') or None
-    if visual_description is not None and (
-        not isinstance(visual_description, str) or len(visual_description) > 5000
-    ):
-        visual_description = None
-    v_initial = None
-    with stage('v_initial'):
-        if RC.get('hyde_vinitial_enabled', False) and visual_description:
-            # Sync HyDE V_initial path (legacy client-supplied visual_description)
-            v_initial = services.embed_visual_description(
-                visual_description,
-                session=None,  # session not yet created
-                user=profile,
-            )
-
-    # Create bounded pool with weighted scoring (3-tier relaxation fallback via helper)
-    # Fix 3: project may be None here (deferred create) -- use request filters directly.
+    # image_focus rider: explicit request param, else filters['image_focus'].
     active_filters = dict(filters or (project.filters if project else None) or {})
-
-    # image_focus: rider on filters dict (NOT a WHERE-clause filter, but
-    # threads through to _row_to_card so cards get the user-picked cover).
-    # Accept either from explicit `image_focus` param OR from filters['image_focus'].
     req_focus = request.data.get('image_focus')
     if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS:
-        active_filters['image_focus'] = req_focus
-    elif active_filters.get('image_focus') not in _VALID_IMAGE_FOCUS:
-        active_filters.pop('image_focus', None)
+        image_focus = req_focus
+    elif active_filters.get('image_focus') in _VALID_IMAGE_FOCUS:
+        image_focus = active_filters['image_focus']
+    else:
+        image_focus = None
 
-    # TASTE-BOARD-NAME (PERF-MISC-1): the auto-name is computed synchronously from
-    # filters ONLY (cheap, DB-dedup-read, NO LLM call) at insert time below.
-    _filters_for_name = dict(active_filters)
-    _filters_for_name.pop('image_focus', None)
+    # Tags: the board's own v2 tags win; else convert the (request or board) filters.
+    tags = session_pool.stored_tags(project) if project is not None else []
+    if not tags:
+        tags = legacy_filters.filters_to_tags(active_filters)
+    tag_dicts = [t.to_dict() for t in tags]
+    # Re-read through tag_io (same trust boundary as browser-sent tags).
+    tags = tag_io.parse_tags(tag_dicts)
 
-    with stage('create_pool', filter_keys=','.join(sorted(active_filters.keys()))):
-        pool_ids, pool_scores, current_pool_tier = engine.create_pool_with_relaxation(
-            active_filters, filter_priority, seed_ids,
-            v_initial=v_initial, q_text=q_text_param,
-        )
-    filter_relaxed = current_pool_tier > 1
-    if filter_relaxed:
-        logger.info('Session pool relaxed to tier %d: %d buildings', current_pool_tier, len(pool_ids))
+    exclude_ids = []
+    if project is not None:
+        exclude_ids = _liked_id_only(project.liked_ids) + [
+            d for d in (project.disliked_ids or []) if isinstance(d, str)]
 
-    if not pool_ids:
-        # Truly unrecoverable (even random pool empty)
+    # Start cards: best tag matches, else 3 diverse buildings (as the recognize view does).
+    with stage('legacy_start_ids'):
+        if matching.has_want_tags(tags):
+            start_ids = [m['canonical_bld_id'] for m in
+                         matching.top_matches(tags, exclude_ids=exclude_ids, limit=_MAX_START_IDS)]
+        else:
+            excl = set(exclude_ids)
+            start_ids = [c['canonical_bld_id'] for c in
+                         engine.get_diverse_random(n=_MAX_START_IDS + len(excl))
+                         if c and c.get('canonical_bld_id') not in excl][:_MAX_START_IDS]
+    if not start_ids:
         return Response({'detail': 'No buildings match your criteria'}, status=404)
 
-    with stage('get_pool_embeddings', pool_size=len(pool_ids)):
-        pool_embeddings = engine.get_pool_embeddings(pool_ids)
-
-    with stage('build_initial_batch'):
-        # Tier-ordered initial_batch: farthest-point within highest score tier first
-        tiers = defaultdict(list)
-        for bid in pool_ids:
-            tiers[pool_scores.get(bid, 0)].append(bid)
-
-        initial_batch = []
-        exposed_temp = []
-        for score in sorted(tiers.keys(), reverse=True):
-            tier_ids = list(tiers[score])  # copy so we can mutate
-            while len(initial_batch) < RC['initial_explore_rounds'] and tier_ids:
-                next_bid = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
-                if next_bid:
-                    initial_batch.append(next_bid)
-                    exposed_temp.append(next_bid)
-                    tier_ids.remove(next_bid)
-                else:
-                    break
-            if len(initial_batch) >= RC['initial_explore_rounds']:
-                break
-
-        # Guard: if initial_batch is empty (shouldn't happen), fall back
-        if not initial_batch:
-            initial_batch = pool_ids[:1]
-
-    with stage('fetch_initial_cards', n=min(3, len(initial_batch))):
-        _initial_cards = engine.get_buildings_by_ids(
-            initial_batch[:3], image_focus=active_filters.get('image_focus')
-        )
-    first_card      = _initial_cards[0] if len(_initial_cards) > 0 else None
-    prefetch_card   = _initial_cards[1] if len(_initial_cards) > 1 else None
-    prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
-
-    with stage('session_insert'):
-        # Fix 3: auto-create Project only after pool/initial_batch succeeded.
-        # Deferred from the old position (~line 113) to avoid orphan Project rows
-        # when create_pool_with_relaxation fails or returns empty (404 branch above).
-        # Fix 2: wrap both creates in a savepoint so a session-insert failure
-        # rolls back the project create, leaving no orphan row.
-
-        # TASTE-BOARD-NAME (PERF-MISC-1): deterministic-from-filters name + a cheap
-        # DB-dedup read -- no LLM call, no background thread, all languages.
-        # With no usable filter the deterministic name is the generic 'Untitled';
-        # keep the client's own label instead (e.g. the Korean placeholder) so a
-        # Korean user does not get an English 'Untitled' board.
-        _is_new_project = project is None
-        if _is_placeholder_name and _is_new_project:
-            _base_name = services._deterministic_board_name(_filters_for_name)
-            if _base_name == 'Untitled' and _raw_name:
-                _base_name = _raw_name
-            project_name = services._dedup_board_name(_base_name, profile)
-
-        with transaction.atomic():
-            if project is None:
-                project = Project.objects.create(
-                    user=profile, name=project_name, filters=filters, raw_query=raw_query,
-                    is_temp=True,
-                )
-            session = AnalysisSession.objects.create(
-                user                     = profile,
-                project                  = project,
-                phase                    = 'exploring',
-                pool_ids                 = pool_ids,
-                pool_scores              = pool_scores,
-                current_round            = 0,
-                preference_vector        = [],
-                exposed_ids              = [initial_batch[0]],
-                initial_batch            = initial_batch,
-                like_vectors             = [],
-                convergence_history      = [],
-                previous_pref_vector     = [],
-                original_filters         = active_filters,
-                original_filter_priority = list(filter_priority or []),
-                original_seed_ids        = list(seed_ids or []),
-                current_pool_tier        = current_pool_tier,
-                v_initial                = v_initial,
-                original_q_text          = q_text_param,  # Topic 01 RRF: persisted for re-relaxation
-            )
-
-    # Fix 1: evict /projects/ cache after new session+project created.
-    # The cache includes latest_session_meta and project counts; stale up to 60s otherwise.
-    evict_projects_list(profile.id)
-    evict_user_profile_detail(profile.user.id)
-    # BACK-BOARD-PERF-1: evict project detail — latest_session_id changes on session create.
-    evict_project_detail(str(project.project_id))
-
-    # F4: seed prefetch cache for round 1 (first swipe's cache-read key).
-    # IMP-8 consumer (swipe.py L764) reads prefetch:{sid}:{saved_current_round}
-    # where saved_current_round = session.current_round AFTER first swipe's
-    # increment (0 → 1). Without this seed, first swipe always misses.
-    # Cache value shape mirrors _async_prefetch_thread's write (swipe.py L151-155).
-    _pf_seed = {
-        'prefetch_card_id': initial_batch[1] if len(initial_batch) > 1 else None,
-        'prefetch_card_2_id': initial_batch[2] if len(initial_batch) > 2 else None,
-    }
-    cache.set(
-        f'prefetch:{session.session_id}:1',
-        _pf_seed,
-        timeout=RC.get('async_prefetch_cache_timeout_seconds', 60),
+    saved_filters = {k: v for k, v in active_filters.items() if k != 'image_focus'}
+    return _create_v2_core(
+        profile, recent_cutoff, project, raw_name, is_placeholder_name, raw_query,
+        tags, start_ids, exclude_ids, image_focus,
+        seed_ids=seed_ids, name_filters=saved_filters, board_filters=filters,
+        dedupe=False, guest_gate=False,
     )
-
-    logger.info('Session created: %s (pool=%d, tiers=%d, relaxed=%s)', session.session_id, len(pool_ids), len(tiers), filter_relaxed)
-
-    # §6 logging: session_start + pool_creation. Keep this synchronous:
-    # emit_event_batch is best-effort, and using the established request
-    # connection avoids thread-local DB connection setup failures.
-    with stage('emit_events'):
-        event_log.emit_event_batch([
-            {
-                'event_type': 'session_start',
-                'session': session,
-                'user': profile,
-                'query': raw_query or None,
-                'filters': active_filters,
-                'filter_priority': list(filter_priority or []),
-                'raw_query': raw_query or None,
-                'visual_description': visual_description,
-                'v_initial_success': v_initial is not None,
-            },
-            {
-                'event_type': 'pool_creation',
-                'session': session,
-                'user': profile,
-                'pool_size': len(pool_ids),
-                'tier_used': current_pool_tier,
-                'filter_relaxed': filter_relaxed,
-                'seed_count': len(seed_ids or []),
-            },
-        ])
-
-    return Response({
-        'session_id':      str(session.session_id),
-        'project_id':      str(project.project_id),
-        'name':            project.name,
-        'session_status':  session.status,
-        'next_image':      first_card,
-        'prefetch_image':  prefetch_card,
-        'prefetch_image_2': prefetch_card_2,
-        'progress':        _progress(session),
-        'filter_relaxed':  filter_relaxed,
-    }, status=status.HTTP_201_CREATED)
 
 
 # ---------------------------------------------------------------------------
@@ -455,8 +298,6 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
         tags = parse_tags(request.data.get('taste_tags'))
     except ValueError as exc:
         return _bad_request(f'invalid taste_tags: {exc}')
-    tag_dicts = [t.to_dict() for t in tags]
-
     raw_start = request.data.get('start_ids')
     if (not isinstance(raw_start, list) or not raw_start or len(raw_start) > _MAX_START_IDS
             or not all(isinstance(s, str) and 0 < len(s) <= 20 for s in raw_start)
@@ -471,16 +312,34 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
     req_focus = request.data.get('image_focus')
     image_focus = req_focus if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS else None
 
+    return _create_v2_core(
+        profile, recent_cutoff, project, raw_name, is_placeholder_name, raw_query,
+        tags, raw_start, raw_excl, image_focus,
+    )
+
+
+def _create_v2_core(profile, recent_cutoff, project, raw_name, is_placeholder_name, raw_query,
+                    tags, raw_start, raw_excl, image_focus, *, seed_ids=(),
+                    name_filters=None, board_filters=None, dedupe=True, guest_gate=True):
+    """Shared taste_v2 create: tags + 1..3 start cards (in order) -> session.
+
+    Used by the Taste-start screen (`_create_session_v2`) and by the legacy-filters
+    create (`_create_session_from_filters`). `seed_ids` (client seeds) stay in the
+    pool right after the start cards; they remain untrusted (original_seed_ids).
+    """
+    tag_dicts = [t.to_dict() for t in tags]
     project_name = raw_name or 'Untitled'
 
     # -- dedupe (same user, last 30 s, same tags + start cards) -------------
-    dedupe_qs = AnalysisSession.objects.filter(user=profile, created_at__gte=recent_cutoff)
-    if project is not None:
-        dedupe_qs = dedupe_qs.filter(project=project)
-    elif not is_placeholder_name:
-        # placeholder names get replaced by an auto-name, so they cannot be compared
-        dedupe_qs = dedupe_qs.filter(project__name=project_name)
-    existing = dedupe_qs.order_by('-created_at').first()
+    existing = None
+    if dedupe:
+        dedupe_qs = AnalysisSession.objects.filter(user=profile, created_at__gte=recent_cutoff)
+        if project is not None:
+            dedupe_qs = dedupe_qs.filter(project=project)
+        elif not is_placeholder_name:
+            # placeholder names get replaced by an auto-name, so they cannot be compared
+            dedupe_qs = dedupe_qs.filter(project__name=project_name)
+        existing = dedupe_qs.order_by('-created_at').first()
     if (existing is not None and session_pool.is_v2(existing)
             and (existing.project.filters or {}).get('taste_tags') == tag_dicts
             and list(existing.initial_batch or []) == list(raw_start)):
@@ -504,7 +363,7 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
             }, status=status.HTTP_200_OK)
 
     # Guest board-limit gate (same rule as the legacy path).
-    if project is None and profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
+    if guest_gate and project is None and profile.is_guest and Project.objects.filter(user=profile).count() >= 3:
         return Response(
             {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
             status=status.HTTP_403_FORBIDDEN,
@@ -525,7 +384,8 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
         exclude_ids += _liked_id_only(project.liked_ids) + [
             d for d in (project.disliked_ids or []) if isinstance(d, str)]
     with stage('create_pool', mode='taste_v2'):
-        pool_ids, pool_scores = session_pool.build_pool(tags, start_ids, exclude_ids)
+        pool_ids, pool_scores = session_pool.build_pool(
+            tags, start_ids, exclude_ids, head_ids=list(seed_ids or []))
 
     original_filters = {
         session_pool.SELECTOR_KEY: session_pool.SELECTOR_V2,
@@ -538,12 +398,14 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
         with transaction.atomic():
             if project is None:
                 if is_placeholder_name:
-                    base = services._deterministic_board_name(_tags_to_name_filters(tags))
+                    base = services._deterministic_board_name(
+                        name_filters if name_filters is not None else _tags_to_name_filters(tags))
                     if base == 'Untitled' and raw_name:
                         base = raw_name
                     project_name = services._dedup_board_name(base, profile)
                 project = Project.objects.create(
-                    user=profile, name=project_name, filters={'taste_tags': tag_dicts},
+                    user=profile, name=project_name,
+                    filters={**(board_filters or {}), 'taste_tags': tag_dicts},
                     raw_query=raw_query, is_temp=True,
                 )
             else:
@@ -564,7 +426,7 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
                 previous_pref_vector     = [],
                 original_filters         = original_filters,
                 original_filter_priority = [],
-                original_seed_ids        = [],
+                original_seed_ids        = list(seed_ids or []),
                 current_pool_tier        = 1,
             )
 
@@ -604,7 +466,7 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
                 'pool_size': len(pool_ids),
                 'tier_used': 1,
                 'filter_relaxed': False,
-                'seed_count': 0,
+                'seed_count': len(seed_ids or []),
             },
         ])
 
@@ -650,16 +512,18 @@ def get_session_state(request, session):
             'can_continue':    False,
         })
 
+    # Every session uses the taste_v2 rule: upgrade a marker-less (pre-deploy)
+    # session lazily, under a row lock, before anything reads it.
+    session = session_pool.ensure_v2_locked(session)
+
     # Current card: the last card added to exposed_ids (or the first if brand-new)
     # If phase is converged, return an action card instead of a building card.
     exposed_ids = list(session.exposed_ids or [])
     pool_ids = list(session.pool_ids or [])
     initial_batch = list(session.initial_batch or [])
     like_vectors = hydrate_like_vectors(session) if session.like_vectors else []
-    current_round = session.current_round
     phase = session.phase
     image_focus = (session.original_filters or {}).get('image_focus')
-    is_v2 = session_pool.is_v2(session)
 
     if phase == 'converged':
         residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
@@ -682,7 +546,7 @@ def get_session_state(request, session):
 
         # residual >= 1: mirror the swipe path's converged card-serving logic
         # (swipe_service.py lines 895-913) so resume == live behaviour.
-        # Do NOT call refresh_pool_if_low — the live path skips it for converged.
+        # Do NOT top up the pool — the live path skips it for converged.
         pool_embeddings = engine.get_pool_embeddings(pool_ids) if pool_ids else {}
         prefetch_card = None
         prefetch_card_2 = None
@@ -693,26 +557,11 @@ def get_session_state(request, session):
             session.action_card_shown = True
             session.save(update_fields=['action_card_shown'])
         else:
-            # Action card already shown — select the next real card via MMR
-            # (mirrors swipe_service lines 904-913).
-            _hydrated_lv = like_vectors  # already hydrated above
-            _v2_ctx = session_pool.build_session_ctx(session, like_vectors) if is_v2 else None
-            if is_v2:
-                next_card, next_bid = _v2_next_card(
-                    session, _v2_ctx, pool_ids, exposed_ids, pool_embeddings,
-                    initial_batch, image_focus)
-            elif _hydrated_lv:
-                next_bid = engine.compute_mmr_next(
-                    pool_ids, exposed_ids, pool_embeddings,
-                    _hydrated_lv, current_round,
-                    multimodal_floor=session.multimodal_floor,
-                )
-            else:
-                next_bid = engine.farthest_point_from_pool(
-                    pool_ids, exposed_ids, pool_embeddings
-                )
-            if not is_v2:
-                next_card = engine.get_building_card(next_bid, image_focus=image_focus) if next_bid else None
+            # Action card already shown — select the next real card (taste_v2 selector).
+            _v2_ctx = session_pool.build_session_ctx(session, like_vectors)
+            next_card, next_bid = _v2_next_card(
+                session, _v2_ctx, pool_ids, exposed_ids, pool_embeddings,
+                initial_batch, image_focus)
 
             # Add served card to exposed_ids (sentinel is never added).
             if next_bid and next_bid not in set(exposed_ids):
@@ -721,21 +570,11 @@ def get_session_state(request, session):
                 session.save(update_fields=['exposed_ids'])
 
             # Prefetch: one lookahead card for converged-continue
-            # (mirrors the non-converged analyzing path's single-step lookahead).
             try:
-                if is_v2:
-                    if next_bid:
-                        prefetch_card, _ = _v2_next_card(
-                            session, _v2_ctx, pool_ids, exposed_ids, pool_embeddings,
-                            initial_batch, image_focus)
-                elif next_bid and _hydrated_lv:
-                    pf_exposed = exposed_ids  # already includes next_bid
-                    pf_id = engine.compute_mmr_next(
-                        pool_ids, pf_exposed, pool_embeddings,
-                        _hydrated_lv, current_round + 1,
-                        multimodal_floor=session.multimodal_floor,
-                    )
-                    prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
+                if next_bid:
+                    prefetch_card, _ = _v2_next_card(
+                        session, _v2_ctx, pool_ids, exposed_ids, pool_embeddings,
+                        initial_batch, image_focus)
             except Exception:
                 prefetch_card = None
 
@@ -776,78 +615,17 @@ def get_session_state(request, session):
 
     prefetch_card = None
     prefetch_card_2 = None
-    exposed_set = set(exposed_ids)
-
-    if is_v2:
-        # taste_v2: both lookahead cards come from the selector (spec §5-3).
-        try:
-            ctx = session_pool.build_session_ctx(session, like_vectors)
-            prefetch_card, pf1 = _v2_next_card(
-                session, ctx, pool_ids, exposed_ids, pool_embeddings, initial_batch, image_focus)
-            if pf1:
-                prefetch_card_2, _ = _v2_next_card(
-                    session, ctx, pool_ids, exposed_ids + [pf1], pool_embeddings,
-                    initial_batch, image_focus)
-        except Exception:
-            logger.exception('taste_v2 prefetch failed for session %s', session.session_id)
-        return Response({
-            'session_id':      str(session.session_id),
-            'project_id':      str(session.project.project_id),
-            'session_status':  session.status,
-            'next_image':      current_card,
-            'prefetch_image':  prefetch_card,
-            'prefetch_image_2': prefetch_card_2,
-            'progress':        _progress(session),
-            'filter_relaxed':  False,
-            'can_continue':    False,
-        })
-
+    # taste_v2: both lookahead cards come from the selector (spec §5-3).
     try:
-        if phase == 'exploring':
-            # Use the next entries from initial_batch if still in range and not already exposed
-            pf_bid = None
-            for idx in range(current_round + 1, len(initial_batch)):
-                cand = initial_batch[idx]
-                if cand and cand not in exposed_set:
-                    pf_bid = cand
-                    break
-            if pf_bid is None:
-                pf_bid = engine.farthest_point_from_pool(pool_ids, exposed_ids, pool_embeddings)
-            prefetch_card = engine.get_building_card(pf_bid, image_focus=image_focus) if pf_bid else None
-        elif phase == 'analyzing':
-            pf_id = engine.compute_mmr_next(
-                pool_ids, exposed_ids, pool_embeddings,
-                like_vectors, current_round + 1,
-                multimodal_floor=session.multimodal_floor,
-            )
-            prefetch_card = engine.get_building_card(pf_id, image_focus=image_focus) if pf_id else None
+        ctx = session_pool.build_session_ctx(session, like_vectors)
+        prefetch_card, pf1 = _v2_next_card(
+            session, ctx, pool_ids, exposed_ids, pool_embeddings, initial_batch, image_focus)
+        if pf1:
+            prefetch_card_2, _ = _v2_next_card(
+                session, ctx, pool_ids, exposed_ids + [pf1], pool_embeddings,
+                initial_batch, image_focus)
     except Exception:
-        prefetch_card = None
-
-    try:
-        if prefetch_card and prefetch_card.get('canonical_bld_id') != '__action_card__':
-            temp_exposed = exposed_ids + [prefetch_card['canonical_bld_id']]
-            temp_set = set(temp_exposed)
-            if phase == 'exploring':
-                pf2_bid = None
-                for idx in range(current_round + 1, len(initial_batch)):
-                    cand = initial_batch[idx]
-                    if cand and cand not in temp_set:
-                        pf2_bid = cand
-                        break
-                if pf2_bid is None:
-                    pf2_bid = engine.farthest_point_from_pool(pool_ids, temp_exposed, pool_embeddings)
-                prefetch_card_2 = engine.get_building_card(pf2_bid, image_focus=image_focus) if pf2_bid else None
-            elif phase == 'analyzing':
-                pf2_id = engine.compute_mmr_next(
-                    pool_ids, temp_exposed, pool_embeddings,
-                    like_vectors, current_round + 2,
-                    multimodal_floor=session.multimodal_floor,
-                )
-                prefetch_card_2 = engine.get_building_card(pf2_id, image_focus=image_focus) if pf2_id else None
-    except Exception:
-        prefetch_card_2 = None
-
+        logger.exception('taste_v2 prefetch failed for session %s', session.session_id)
     return Response({
         'session_id':      str(session.session_id),
         'project_id':      str(session.project.project_id),

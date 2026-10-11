@@ -19,9 +19,13 @@ def should_enter_analyzing(like_count):
     return like_count >= int(_rc().get('taste_v2_analyzing_min_likes', 1))
 
 
-def convergence_floor_met(current_round):
-    """'Taste found' needs at least this many real swipes (§5-4)."""
-    return current_round >= int(_rc().get('taste_v2_convergence_min_swipes', 8))
+def convergence_floor_met(swipes_in_session):
+    """'Taste found' needs at least this many swipes made IN this session (§5-4).
+
+    Pass `current_round - original_filters.get('round_offset', 0)` (a promoted
+    session starts at current_round = seeded likes, which are not swipes here).
+    """
+    return swipes_in_session >= int(_rc().get('taste_v2_convergence_min_swipes', 8))
 
 
 def lookahead(pool_ids, exposed_ids, emb, initial_batch, ctx, *, skip_next=False):

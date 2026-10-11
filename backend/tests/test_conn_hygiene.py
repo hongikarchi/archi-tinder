@@ -135,10 +135,11 @@ class TestBackgroundThreadsCloseConnections:
     def test_async_prefetch_thread_closes_on_raise(self):
         from apps.recommendation.views import swipe
         with patch('django.db.connections') as conns, \
-                patch.object(swipe.engine, 'farthest_point_from_pool', side_effect=_Boom):
+                patch.object(swipe.swipe_rules, 'lookahead', side_effect=_Boom):
             with pytest.raises(_Boom):
                 swipe._async_prefetch_thread(
                     'sid', 1, 'exploring', ['a', 'b'], [], None, [], [], 0,
+                    selector_ctx_snap=object(),
                 )
         _assert_closed(conns)
 

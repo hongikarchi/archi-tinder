@@ -15,9 +15,10 @@ import logging
 
 import numpy as np
 from django.conf import settings
+from django.db import transaction
 
 from .. import engine
-from . import matching
+from . import legacy_filters, matching
 from .tag_io import rebuild_tag
 
 logger = logging.getLogger('apps.recommendation')
@@ -81,11 +82,13 @@ def _scores_for(tags, ids):
     return {i: float(scored.get(i, 0.0)) for i in ids}
 
 
-def build_pool(tags, start_ids, exclude_ids):
-    """(pool_ids, pool_scores) for a new v2 session. Start ids come first."""
+def build_pool(tags, start_ids, exclude_ids, head_ids=None):
+    """(pool_ids, pool_scores) for a new v2 session. Start ids come first,
+    then `head_ids` (e.g. client seed ids, kept in the pool), then the ranked rest."""
     target = int(_rc()['bounded_pool_target'])
     start_ids = list(start_ids or [])
-    excl = _unique(start_ids + list(exclude_ids or []))
+    head_ids = list(head_ids or [])
+    excl = _unique(start_ids + head_ids + list(exclude_ids or []))
 
     ranked = matching.ranked_pool(tags, limit=target, exclude_ids=excl)
     if ranked:
@@ -96,9 +99,64 @@ def build_pool(tags, start_ids, exclude_ids):
         rest = _diverse_ids(excl, target)
         scores = _scores_for(tags, rest)
 
-    scores.update(_scores_for(tags, start_ids))
-    pool_ids = _unique(start_ids + rest)
+    scores.update(_scores_for(tags, _unique(start_ids + head_ids)))
+    pool_ids = _unique(start_ids + head_ids + rest)
     return pool_ids, {i: scores.get(i, 0.0) for i in pool_ids}
+
+
+UPGRADE_FIELDS = ['original_filters', 'pool_scores', 'initial_batch']
+
+
+def ensure_v2(session):
+    """Lazily upgrade a pre-v2 (marker-less) session in memory. Returns True if changed.
+
+    Tags come from the board's stored v2 tags if present, else from the session's
+    old filters. pool_scores are recomputed (legacy scores use another scale),
+    initial_batch is cleared (unexposed legacy start cards are not re-served) and
+    the selector marker + round_offset=0 are set. The CALLER saves UPGRADE_FIELDS
+    inside the transaction / row lock it already holds (see ensure_v2_locked).
+    """
+    if is_v2(session):
+        return False
+    old = dict(session.original_filters) if isinstance(session.original_filters, dict) else {}
+    project = getattr(session, 'project', None)
+    tags = stored_tags(project) if project is not None else []
+    if not tags:
+        tags = legacy_filters.filters_to_tags(old)
+    session.pool_scores = _scores_for(tags, list(session.pool_ids or []))
+    session.original_filters = {
+        **old, SELECTOR_KEY: SELECTOR_V2,
+        'taste_tags': [t.to_dict() for t in tags], 'round_offset': 0,
+    }
+    session.initial_batch = []
+    return True
+
+
+def ensure_v2_locked(session):
+    """ensure_v2 for entry points without a row lock: re-reads the session under
+    select_for_update, upgrades + saves, returns the (fresh) session."""
+    if is_v2(session):
+        return session
+    from ..models import AnalysisSession   # lazy: keeps this module import-light
+    with transaction.atomic():
+        locked = (AnalysisSession.objects.select_for_update()
+                  .select_related('project').get(pk=session.pk))
+        if ensure_v2(locked):
+            locked.save(update_fields=UPGRADE_FIELDS)
+    return locked
+
+
+def round_offset(session):
+    """Swipes already made before this session started (promote seeds)."""
+    filters = getattr(session, 'original_filters', None)
+    try:
+        return int((filters or {}).get('round_offset', 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
+def swipes_in_session(session):
+    return max(0, int(session.current_round or 0) - round_offset(session))
 
 
 def refresh_if_low(session, like_vectors, *, force=False):

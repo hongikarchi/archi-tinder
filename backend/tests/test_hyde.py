@@ -207,7 +207,6 @@ class TestHydeFlagGating:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -222,8 +221,8 @@ class TestHydeFlagGating:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN) as mock_embed, \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',
@@ -331,7 +330,6 @@ class TestHydeFlagOnFailure:
         import numpy as np
 
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -346,8 +344,8 @@ class TestHydeFlagOnFailure:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN, return_value=None), \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',
@@ -499,7 +497,6 @@ class TestVisualDescriptionInputValidation:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -514,8 +511,8 @@ class TestVisualDescriptionInputValidation:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN) as mock_embed, \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',
@@ -541,7 +538,6 @@ class TestVisualDescriptionInputValidation:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -556,8 +552,8 @@ class TestVisualDescriptionInputValidation:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN) as mock_embed, \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',

@@ -289,24 +289,58 @@ class TestV2Prefetch:
 
 
 @pytest.mark.django_db
-class TestLegacySwipeUnchanged:
+class TestLegacySessionUpgradedOnSwipe:
+    """A marker-less (pre-deploy) session is upgraded under the swipe's row lock and
+    then goes through the v2 selector -- nothing legacy is left on the swipe path."""
 
-    def test_legacy_session_never_touches_v2_selector(self, auth_client, user_profile):
-        from tests.test_swipe import _apply_patches, _create_session, _stop_patches
-        project, sid = _create_session(auth_client, user_profile, 'Legacy v2 guard')
-        s = AnalysisSession.objects.get(session_id=sid)
-        assert not session_pool.is_v2(s)
-        patchers = _apply_patches()
-        try:
-            with mock.patch.object(session_selector, 'select_next') as sel, \
-                    mock.patch.object(session_pool, 'refresh_if_low') as rf, \
-                    mock.patch.object(session_pool, 'build_session_ctx') as bc:
-                resp = auth_client.post(
-                    f'{URL}{sid}/swipes/',
-                    {'canonical_bld_id': 'B00001', 'action': 'like', 'idempotency_key': 'leg1'},
-                    format='json')
-        finally:
-            _stop_patches(patchers)
-        assert resp.status_code == 200
-        assert sel.call_count == 0 and rf.call_count == 0 and bc.call_count == 0
+    def _legacy_session(self, user_profile, phase='exploring'):
+        proj = Project.objects.create(user=user_profile, name='Old board', filters={})
+        return AnalysisSession.objects.create(
+            user=user_profile, project=proj, phase=phase, status='active',
+            pool_ids=VALID[:20], pool_scores={b: 9.0 for b in VALID[:20]},
+            exposed_ids=[VALID[0]], initial_batch=VALID[:5], like_vectors=[],
+            original_filters={'program': 'Housing'})
+
+    def test_first_swipe_upgrades_and_uses_selector(self, auth_client, user_profile, world):
+        s = self._legacy_session(user_profile)
+        with mock.patch.object(session_selector, 'select_next',
+                               wraps=session_selector.select_next) as sel:
+            r = swipe(auth_client, str(s.session_id), VALID[0], 'like', 'leg1')
+        assert sel.call_count >= 1
+        assert r['next_image'] is not None
+        s.refresh_from_db()
+        assert session_pool.is_v2(s)
+        assert s.initial_batch == []                         # legacy start cards not re-served
+        assert s.original_filters['round_offset'] == 0
+        assert s.phase == 'analyzing'                        # first like
         assert SwipeEvent.objects.filter(session=s).count() == 1
+
+    def test_extend_upgrades_a_converged_legacy_session(self, auth_client, user_profile, world):
+        s = self._legacy_session(user_profile, phase='converged')
+        resp = auth_client.post(
+            f'{URL}{s.session_id}/swipes/',
+            {'canonical_bld_id': VALID[0], 'action': 'like', 'extend': True}, format='json')
+        assert resp.status_code == 200
+        s.refresh_from_db()
+        assert session_pool.is_v2(s) and s.initial_batch == []
+        assert s.phase == 'analyzing'
+
+
+@pytest.mark.django_db
+class TestPromotedSessionConvergenceFloor:
+
+    def test_floor_counts_swipes_in_this_session(self, auth_client, user_profile, world):
+        """current_round starts at the seeded like count; only own swipes count."""
+        sid = create(auth_client)['session_id']
+        s = AnalysisSession.objects.get(session_id=sid)
+        s.current_round = 10
+        s.original_filters = {**s.original_filters, 'round_offset': 10}
+        s.phase = 'analyzing'
+        s.save(update_fields=['current_round', 'original_filters', 'phase'])
+        nxt = VALID[0]
+        with mock.patch.object(engine, 'check_convergence', return_value=True):
+            for n in range(1, 9):
+                resp = swipe(auth_client, sid, nxt, 'like', f'f{n}')
+                phase = AnalysisSession.objects.get(session_id=sid).phase
+                assert phase == ('converged' if n == 8 else 'analyzing'), f'swipe {n}'
+                nxt = nid(resp)

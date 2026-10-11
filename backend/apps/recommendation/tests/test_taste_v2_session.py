@@ -159,24 +159,83 @@ class TestCreateV2:
         assert r2.status_code == 200
         assert r2.json()['session_id'] == r1.json()['session_id']
 
-    def test_legacy_create_unchanged(self, auth_client, user_profile):
-        pool = VALID[:15]
-        with mock.patch.object(engine, 'create_pool_with_relaxation',
-                               return_value=(pool, {b: 1 for b in pool}, 1)), \
-                mock.patch.object(engine, 'get_pool_embeddings',
-                                  side_effect=lambda ids: {i: EMB[i] for i in ids if i in EMB}), \
-                mock.patch.object(engine, 'get_buildings_by_ids', side_effect=_by_ids), \
-                mock.patch.object(engine, 'farthest_point_from_pool',
-                                  side_effect=lambda ids, exp, emb: next(
-                                      (i for i in ids if i not in exp), None)):
-            resp = auth_client.post(URL, {'filters': {'program': 'Housing'}, 'name': 'Legacy'},
-                                    format='json')
+    def test_legacy_filters_create_goes_through_v2(self, auth_client, user_profile, env):
+        """No taste_tags in the request: filters -> tags -> top matches as start cards -> v2."""
+        top = [{'canonical_bld_id': b, 'score': 3.0, 'matched_keys': [], 'hit': 1, 'total': 2}
+               for b in VALID[:3]]
+        with mock.patch.object(matching, 'top_matches', return_value=top) as tm:
+            resp = auth_client.post(
+                URL, {'filters': {'program': 'Housing', 'location_country': 'Japan'},
+                      'name': 'Legacy', 'force_new': True}, format='json')
+        assert resp.status_code == 201
+        data = resp.json()
+        assert [data['next_image']['canonical_bld_id'], data['prefetch_image']['canonical_bld_id'],
+                data['prefetch_image_2']['canonical_bld_id']] == VALID[:3]
+        tags = tm.call_args.args[0]
+        assert {t.axis for t in tags} == {'use', 'country'}
+        assert tm.call_args.kwargs['limit'] == 3
+        s = AnalysisSession.objects.get(session_id=data['session_id'])
+        assert session_pool.is_v2(s)
+        assert {t['axis'] for t in s.original_filters['taste_tags']} == {'use', 'country'}
+        assert s.initial_batch == VALID[:3] and s.exposed_ids == [VALID[0]]
+        assert s.phase == 'exploring'
+        # board keeps the original filters next to the v2 tags
+        assert s.project.filters['program'] == 'Housing'
+        assert {t['axis'] for t in s.project.filters['taste_tags']} == {'use', 'country'}
+
+    def test_legacy_create_without_tags_uses_diverse_start_cards(self, auth_client, user_profile, env):
+        diverse = [card(b) for b in VALID[5:8]]
+        with mock.patch.object(engine, 'get_diverse_random', return_value=diverse), \
+                mock.patch.object(matching, 'top_matches') as tm:
+            resp = auth_client.post(URL, {'filters': {}, 'name': 'Plain'}, format='json')
+        assert resp.status_code == 201
+        tm.assert_not_called()
+        s = AnalysisSession.objects.get(session_id=resp.json()['session_id'])
+        assert session_pool.is_v2(s) and s.original_filters['taste_tags'] == []
+        assert s.initial_batch == VALID[5:8]
+
+    def test_legacy_create_seed_ids_stay_in_pool_after_start_cards(self, auth_client, user_profile, env):
+        top = [{'canonical_bld_id': b, 'score': 3.0, 'matched_keys': [], 'hit': 1, 'total': 1}
+               for b in VALID[:3]]
+        with mock.patch.object(matching, 'top_matches', return_value=top):
+            resp = auth_client.post(
+                URL, {'filters': {'location_country': 'Japan'}, 'seed_ids': ['SEEDX', VALID[25]],
+                      'name': 'Seeds'}, format='json')
         assert resp.status_code == 201
         s = AnalysisSession.objects.get(session_id=resp.json()['session_id'])
-        assert not session_pool.is_v2(s)
-        assert 'selector' not in s.original_filters
-        assert 'taste_tags' not in s.project.filters
-        assert len(s.initial_batch) >= 1
+        assert s.pool_ids[:5] == VALID[:3] + ['SEEDX', VALID[25]]
+        assert s.original_seed_ids == ['SEEDX', VALID[25]]          # stay untrusted for the swipe guard
+
+    def test_legacy_create_prefers_board_v2_tags(self, auth_client, user_profile, env):
+        proj = Project.objects.create(user=user_profile, name='Tagged board',
+                                      filters={'taste_tags': TAG_DICTS})
+        top = [{'canonical_bld_id': b, 'score': 3.0, 'matched_keys': [], 'hit': 1, 'total': 1}
+               for b in VALID[:3]]
+        with mock.patch.object(matching, 'top_matches', return_value=top) as tm:
+            resp = auth_client.post(
+                URL, {'project_id': str(proj.project_id), 'filters': {}, 'force_new': True},
+                format='json')
+        assert resp.status_code == 201
+        assert [(t.axis, t.polarity) for t in tm.call_args.args[0]] == [
+            ('country', 'want'), ('material', 'exclude')]
+
+    def test_legacy_create_no_match_is_404_without_board(self, auth_client, user_profile, env):
+        with mock.patch.object(matching, 'top_matches', return_value=[]):
+            resp = auth_client.post(URL, {'filters': {'location_country': 'Japan'}, 'name': 'Empty'},
+                                    format='json')
+        assert resp.status_code == 404
+        assert Project.objects.count() == 0
+
+    def test_legacy_create_does_not_use_hyde_or_relaxation(self, auth_client, user_profile, env):
+        diverse = [card(b) for b in VALID[:3]]
+        with mock.patch.object(engine, 'get_diverse_random', return_value=diverse), \
+                mock.patch.object(engine, 'create_pool_with_relaxation') as relax, \
+                mock.patch('apps.recommendation.services.embed_visual_description') as hyde:
+            resp = auth_client.post(
+                URL, {'filters': {}, 'visual_description': 'a glass pavilion'}, format='json')
+        assert resp.status_code == 201
+        relax.assert_not_called()
+        hyde.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -267,3 +326,49 @@ class TestProjectSerializerTags:
         assert resp.status_code in (200, 400)
         p.refresh_from_db()
         assert p.filters == {}
+
+
+@pytest.mark.django_db
+class TestLazyUpgradeOnResume:
+    """A session created before this deploy (no selector marker) is upgraded the
+    first time it is read, under a row lock, and then behaves like any v2 session."""
+
+    def _legacy_session(self, user_profile, board=None, original_filters=None):
+        proj = Project.objects.create(user=user_profile, name='Old board', filters=board or {})
+        return AnalysisSession.objects.create(
+            user=user_profile, project=proj, phase='exploring', status='active',
+            pool_ids=VALID[:15], pool_scores={b: 9.0 for b in VALID[:15]},
+            exposed_ids=[VALID[0]], initial_batch=VALID[:5], like_vectors=[],
+            original_filters=original_filters or {'program': 'Housing'})
+
+    def test_state_endpoint_upgrades_and_persists(self, auth_client, user_profile, env):
+        s = self._legacy_session(user_profile)
+        resp = auth_client.get(f'{URL}{s.session_id}/state/')
+        assert resp.status_code == 200
+        s.refresh_from_db()
+        assert session_pool.is_v2(s)
+        assert s.original_filters['round_offset'] == 0
+        assert s.original_filters['program'] == 'Housing'               # old keys kept
+        assert [t['axis'] for t in s.original_filters['taste_tags']] == ['use']
+        assert s.initial_batch == []
+        assert set(s.pool_scores.values()) == {3.0}                      # recomputed (score_ids mock), not 9.0
+
+    def test_create_resume_guard_upgrades(self, auth_client, user_profile, env):
+        s = self._legacy_session(user_profile)
+        resp = auth_client.post(URL, {'project_id': str(s.project.project_id)}, format='json')
+        assert resp.status_code == 200
+        s.refresh_from_db()
+        assert session_pool.is_v2(s)
+
+    def test_second_read_does_not_rescore(self, auth_client, user_profile, env):
+        s = self._legacy_session(user_profile)
+        auth_client.get(f'{URL}{s.session_id}/state/')
+        with mock.patch.object(matching, 'score_ids') as sc:
+            auth_client.get(f'{URL}{s.session_id}/state/')
+        sc.assert_not_called()
+
+    def test_board_tags_preferred_when_upgrading(self, auth_client, user_profile, env):
+        s = self._legacy_session(user_profile, board={'taste_tags': TAG_DICTS})
+        auth_client.get(f'{URL}{s.session_id}/state/')
+        s.refresh_from_db()
+        assert s.original_filters['taste_tags'] == TAG_DICTS

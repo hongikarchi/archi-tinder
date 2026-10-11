@@ -195,6 +195,6 @@
 | 2 | 태그로 건물 찾기 + API (`/api/v1/taste/recognize/`, `/taste/cards/`) | ✅ `2838ad3` |
 | 3 | 새 스와이프 알고리즘 (3-1 핵심 계산 → 3-2 세션 시작·저장·이어가기 → 3-3 스와이프 경로·미리 계산) | ✅ 3-1 `6ba0d9d` · 3-2 `d086337` · 3-3 |
 | 4 | 화면 (§2) | ✅ |
-| 5 | 테스트·실사용 확인 → 옛 Gemini 코드 삭제 → 모든 세션을 새 규칙으로 → `docs/algorithm.md` 갱신 | 예정 |
+| 5 | 테스트·실사용 확인 → 옛 Gemini 코드 삭제 → 모든 세션을 새 규칙으로 → `docs/algorithm.md` 갱신 | ✅ 코드 완료 (Postgres 테스트는 CI·`make test-local`, algorithm.md는 담당자 정리 예정) |
 
 **확인 필요**: 3단계의 일부 테스트는 실제 Postgres 테스트 DB가 있어야 돌아감(`make test-local`, neondb_owner 비밀번호 입력 필요). 3단계 끝에 요청 예정.

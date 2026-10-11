@@ -106,6 +106,27 @@ def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
 
 _SESSION_PATCHES = {
     f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
+    # Taste-start v2 create path (legacy-filters create now goes through it): the
+    # buildings-DB boundary (tag matching + diverse start cards) is mocked.
+    'apps.recommendation.taste_start.matching.top_matches': (
+        lambda tags, exclude_ids=(), limit=3: [
+            {'canonical_bld_id': b, 'score': 1.0, 'matched_keys': [], 'hit': 1, 'total': 1}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.ranked_pool': (
+        lambda tags, limit=None, exclude_ids=(): [
+            {'canonical_bld_id': b, 'score': 1.0}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.score_ids': (
+        lambda tags, ids: {i: 1.0 for i in ids}
+    ),
+    # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
+    f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+    f'{_ENGINE}.get_diverse_random': (
+        lambda n=10, filters=None, image_focus=None: [
+            {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
+    ),
     f'{_ENGINE}.get_pool_embeddings': lambda pool_ids: {
         bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids
     },

@@ -80,68 +80,17 @@ def _async_prefetch_thread(
 
     _connections.close_all()  # release parent thread's connections; bg thread gets its own
     try:
-        # Cache stores IDs only — no card hydration needed in thread.
-        # Earlier impl called engine.get_building_card() just to extract
-        # canonical_bld_id back; but pf_bid IS canonical_bld_id (compute_mmr_next
-        # returns IDs, initial_batch[idx] is an ID, farthest_point_from_pool
-        # returns an ID). Removing the DB roundtrips drops thread runtime
-        # ~700ms → ~50ms (compute_mmr_next/farthest_point are pure Python),
-        # dramatically improving cache hit rate for fast swipers (cache writes
-        # before next swipe arrives). Consumer at swipe.py:764 calls
-        # engine.get_buildings_by_ids([next, pf, pf2]) in 1 batch RTT anyway.
-        pf_bid = None
-        pf2_bid = None
-
-        # Compute prefetch_card_id (T+1 swipe's prefetch slot, i.e. round+2 from
-        # snapshot perspective). The main thread at T+1 selects next_card =
-        # initial_batch[current_round_snap+1]; the cache consumer needs the ID
-        # that fills the *prefetch* slot of that same response, which is index +2.
-        if selector_ctx_snap is not None:
-            # taste_v2: lookahead slots for the NEXT swipe (see swipe_rules.lookahead)
-            pf_bid, pf2_bid = swipe_rules.lookahead(
-                pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
-                initial_batch_snap, selector_ctx_snap, skip_next=True,
-            )
-        elif phase == 'exploring':
-            exposed_set = set(exposed_ids_snap)
-            if current_round_snap + 2 < len(initial_batch_snap):
-                cand = initial_batch_snap[current_round_snap + 2]
-                if cand and cand not in exposed_set:
-                    pf_bid = cand
-                else:
-                    pf_bid = engine.farthest_point_from_pool(pool_ids_snap, exposed_ids_snap, pool_embeddings_snap)
-            else:
-                pf_bid = engine.farthest_point_from_pool(pool_ids_snap, exposed_ids_snap, pool_embeddings_snap)
-        elif phase == 'analyzing':
-            pf_bid = engine.compute_mmr_next(
-                pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
-                like_vectors_snap, current_round_snap + 2,
-                multimodal_floor=multimodal_floor_snap,
-            )
-
-        # Compute prefetch_card_2_id (T+1 swipe's prefetch_2 slot, i.e. round+3
-        # from snapshot perspective). Skip if pf_bid is None (end-of-stream).
-        # Action-card sentinel '__action_card__' is never emitted by compute_mmr_next
-        # or initial_batch (both produce real building IDs), so no explicit guard
-        # needed — the `if pf_bid` already excludes empty/None.
-        if pf_bid and selector_ctx_snap is None:
-            temp_exposed = exposed_ids_snap + [pf_bid]
-            if phase == 'exploring':
-                exposed_set_2 = set(temp_exposed)
-                if current_round_snap + 3 < len(initial_batch_snap):
-                    cand2 = initial_batch_snap[current_round_snap + 3]
-                    if cand2 and cand2 not in exposed_set_2:
-                        pf2_bid = cand2
-                    else:
-                        pf2_bid = engine.farthest_point_from_pool(pool_ids_snap, temp_exposed, pool_embeddings_snap)
-                else:
-                    pf2_bid = engine.farthest_point_from_pool(pool_ids_snap, temp_exposed, pool_embeddings_snap)
-            elif phase == 'analyzing':
-                pf2_bid = engine.compute_mmr_next(
-                    pool_ids_snap, temp_exposed, pool_embeddings_snap,
-                    like_vectors_snap, current_round_snap + 3,
-                    multimodal_floor=multimodal_floor_snap,
-                )
+        # Cache stores IDs only — no card hydration needed in thread (the selector
+        # returns building ids; the consumer batch-fetches them in one RTT).
+        # taste_v2: lookahead slots for the NEXT swipe (see swipe_rules.lookahead).
+        # `phase` / `like_vectors_snap` / `current_round_snap` / `multimodal_floor_snap`
+        # are kept for call-site compatibility; the selector ctx already holds them.
+        if selector_ctx_snap is None:
+            return   # nothing to look ahead with: leave the cache empty (consumer treats it as a miss)
+        pf_bid, pf2_bid = swipe_rules.lookahead(
+            pool_ids_snap, exposed_ids_snap, pool_embeddings_snap,
+            initial_batch_snap, selector_ctx_snap, skip_next=True,
+        )
 
         result = {
             'prefetch_card_id': pf_bid,

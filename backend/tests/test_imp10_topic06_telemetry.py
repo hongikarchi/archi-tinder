@@ -674,7 +674,8 @@ class TestConfidenceUpdate4NewFields:
              patch.object(engine, 'get_pool_embeddings', return_value=emb_map), \
              patch.object(engine, 'compute_mmr_next', return_value='B00007'), \
              patch.object(engine, 'get_building_card', return_value=fake_card), \
-             patch.object(engine, 'refresh_pool_if_low', return_value=FAKE_POOL):
+             patch.object(engine, 'taste_ranked_page', return_value=[]), \
+             patch.object(engine, '_random_pool', return_value=[]):
             resp = auth_client.post(
                 f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
                 {
@@ -706,7 +707,8 @@ class TestConfidenceUpdate4NewFields:
              patch.object(engine, 'get_pool_embeddings', return_value=emb_map_2), \
              patch.object(engine, 'compute_mmr_next', return_value='B00008'), \
              patch.object(engine, 'get_building_card', return_value=fake_card), \
-             patch.object(engine, 'refresh_pool_if_low', return_value=FAKE_POOL):
+             patch.object(engine, 'taste_ranked_page', return_value=[]), \
+             patch.object(engine, '_random_pool', return_value=[]):
             resp = auth_client.post(
                 f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
                 {
@@ -737,7 +739,8 @@ class TestConfidenceUpdate4NewFields:
              patch.object(engine, 'get_pool_embeddings', return_value=emb_map_3), \
              patch.object(engine, 'compute_mmr_next', return_value='B00009'), \
              patch.object(engine, 'get_building_card', return_value=fake_card), \
-             patch.object(engine, 'refresh_pool_if_low', return_value=FAKE_POOL):
+             patch.object(engine, 'taste_ranked_page', return_value=[]), \
+             patch.object(engine, '_random_pool', return_value=[]):
             resp = auth_client.post(
                 f'/api/v1/analysis/sessions/{session.session_id}/swipes/',
                 {
