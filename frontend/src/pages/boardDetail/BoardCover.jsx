@@ -1,6 +1,6 @@
 /**
  * BoardCover — contained cover-photo card for BoardDetailPage (option a,
- * .claude/plans/ui-consistency-b.md decision 7).
+ * .claude/plans/archive/ui-consistency-b.md decision 7).
  *
  * Isolated into its own tiny component with a SINGLE render condition (no
  * image -> render nothing, no grey placeholder slab) so switching to

@@ -1,0 +1,47 @@
+# ArchiTinder — Codex execution rules for git (AGENTS.md HARD RULES 1, 3, 4, 5).
+# Loaded only when this project is trusted. Most restrictive decision wins.
+# Patterns are exact token prefixes; the hook .codex/hooks/git-guard.py covers the
+# variants (refspecs, bare `git push` on a protected branch, --force-with-lease=…).
+
+prefix_rule(
+    pattern = ["git", "push", "origin", "develop"],
+    decision = "forbidden",
+    justification = "Direct push to develop is forbidden (HARD RULE 1/3). Push a feature/* branch and open a PR; the git-publish skill does this.",
+    match = ["git push origin develop"],
+    not_match = ["git push origin feature/codex-topic"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", "main"],
+    decision = "forbidden",
+    justification = "main moves only via the develop -> main deploy PR (docs/runbooks/deploy.md).",
+    match = ["git push origin main"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "Force pushes are forbidden on this repo (HARD RULE 4). The only sanctioned force is the post-deploy develop reset via `gh api` in the deploy runbook.",
+    match = ["git push --force origin feature/x"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "-f"],
+    decision = "forbidden",
+    justification = "Force pushes are forbidden on this repo (HARD RULE 4).",
+    match = ["git push -f"],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--no-verify"],
+    decision = "forbidden",
+    justification = "--no-verify skips the migration-numbering pre-push hook (HARD RULE 4).",
+    match = ["git push --no-verify origin feature/x"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "create", "--base", "main"],
+    decision = "prompt",
+    justification = "A base=main PR is a production deploy. Only `--base main --head develop` with an explicit deploy keyword from the user is sanctioned (docs/runbooks/deploy.md).",
+    match = ["gh pr create --base main --head develop"],
+)

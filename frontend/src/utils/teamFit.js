@@ -1,7 +1,7 @@
 /**
  * teamFit.js — 팀 적합도 점수.
  *
- * 설계: docs/plans/2026-09-17-competition-team-design.md §4
+ * 설계: docs/decisions/2026-09-17-competition-team-design.md §4
  *
  * 발견 피드는 "가까운 사람"을 보여주지만(유클리드 거리), 팀은 축마다 방향이
  * 반대다:

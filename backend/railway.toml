@@ -1,9 +1,8 @@
 [build]
 # INFRA-DB-1 (2026-05-25): Railway runtime logs in as `make_web_app` (no DDL).
-# `manage.py migrate` must be run manually from an operator machine with
-# DB_USER=neondb_owner temporarily swapped in. Running migrate here would fail
-# on any schema-changing migration. See backend/.env.example role separation
-# section for the operator-side runbook.
+# `manage.py migrate` must be run manually from an operator machine as
+# neondb_owner (`make migrate-prod`). Running migrate here would fail on any
+# schema-changing migration. Operator procedure: docs/runbooks/deploy.md.
 buildCommand = "pip install -r requirements.txt && python manage.py collectstatic --noinput"
 
 [deploy]

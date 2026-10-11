@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Use this skill to implement any feature or fix end-to-end. It reads project context, decomposes the task into backend/frontend specs, launches the `feature` Workflow (build -> review -> security -> Opus adversarial-verify -> 2-cycle fix loop) which STOPS at commit-ready, then the main session runs the git-commit skill, dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill, and stops at the publish gate (git-publish only on explicit trigger). The git-publisher agent is reserved for Mode 3 deploy, external PR triage, and complex rebase recovery.
+description: Use this skill to implement any feature or fix end-to-end. It reads project context, decomposes the task into backend/frontend specs, launches the `feature` Workflow (build -> review -> security -> Opus adversarial-verify -> 2-cycle fix loop) which STOPS at commit-ready, then the main session runs the git-commit skill, dispatches app-test (pre-push browser + drift gate), runs the reporter-inline skill, and stops at the publish gate (git-publish only on explicit trigger). The git-publisher agent is reserved for develop→main deploy, external PR triage, and complex rebase recovery.
 ---
 
 # Orchestrate — feature-implementation playbook (Workflow-tool era)
@@ -66,19 +66,19 @@ the blockage; do not work around it by editing `backend/`/`frontend/` directly. 
 
 ## Before every task
 1. Read `CLAUDE.md` — conventions, rules, DB schema, `## Product Identity` + `## Product Constitution`.
-2. Read `Task.md` — `## Now` / `## Next` / `## Done` board.
+2. Read the backlog in GitHub Issues: `gh issue list --label now` (in progress), `gh issue list --label priority:high` etc. `Task.md` holds only the ID / label conventions.
 3. Read code directly — the running code is the source of truth for architecture + API surface.
-4. If algorithm task: read `docs/algorithm.md` for theory + production hyperparameters (but see "Algorithm work — externally owned" below).
-5. If the task references a Phase / open question: read the matching `#### <SLUG>` entry under `### HIGH`/`### MEDIUM`/`### LOW` in `Task.md` `## Next`.
+4. If algorithm task: read `docs/algorithm.md` for design intent (values: `docs/algorithm-hyperparameters.md`) — but see "Algorithm work — externally owned" below.
+5. If the task references an open question: `gh issue view <N>` for the matching `<ID> — <title>` issue.
 
-## Now / Next discipline
-1. **Session start** — open `Task.md`, read `## Now` first.
-   - `## Now` non-empty + matches request: continue that entry.
-   - Empty: promote a matching `#### <SLUG>` from `## Next` into `## Now` (cut from bucket, paste into Now, raise heading one level). One slice at a time; prefer `### HIGH`.
-   - Brand-new request: write a fresh `### <ID> — <Korean title>` into `## Now` (ID convention from `Task.md ## Workflow Rules`, e.g. `BACK-LLM-1`).
-2. **Mid-session deferral** ("미루자" / "later" / "defer") — move the Now entry back to `## Next` (demote to `#### <SLUG>` under the matching bucket) with a one-line rationale. Never silently leave it in Now.
-3. **Session end (success)** — the `reporter-inline` skill moves the Now entry to `## Done` (Step 6).
-4. **Failure after 2 cycles** — leave the entry in `## Now`, add failure notes inline, report to user. Do not move to Done.
+## Issue discipline (tracking moved from Task.md to GitHub Issues, 2026-10-07)
+1. **Session start** — `gh issue list --label now`.
+   - Non-empty + matches the request: continue that issue.
+   - Empty: find the matching issue (`gh issue list --search "<keyword>"`, prefer `priority:high`) and `gh issue edit N --add-label now`. One slice at a time.
+   - Brand-new request: `gh issue create --title "<ID> — <Korean title>" --label now,priority:high,area:<x>` (ID convention in `Task.md` § Workflow Rules).
+2. **Mid-session deferral** ("미루자" / "later" / "defer") — `gh issue edit N --remove-label now --add-label deferred` + a comment with the reason. Never silently leave `now` on it.
+3. **Session end (success)** — the PR body carries `Closes #N`; `reporter-inline` (Step 6) verifies it and files deferred follow-ups as issues.
+4. **Failure after 2 cycles** — keep `now`, comment the failure notes on the issue, report to the user.
 
 ## "오늘 개발 진행해" / "continue development"
 Read `## Now` first; if empty, promote the highest-priority `## Next ### HIGH` item. Execute one slice through the full pipeline below. After the PR merges, ask before pulling the next HIGH item — do not auto-chain.
@@ -125,15 +125,15 @@ Run the **`reporter-inline` skill** in the main session BEFORE publishing. It up
 **Default: STOP after the audit commit. Do NOT run `git-publish`, do NOT dispatch `git-publisher`.**
 
 The gate opens only when one is explicitly true:
-- **(a) Explicit trigger this turn** — user typed `"PR 올려"` / `"push"` / `"publish"` / `"merge"` / `"PR 열어"` / `"deploy"` / `"배포"` / `"release"`. Cite the literal phrase.
+- **(a) Explicit trigger this turn** — the user typed one of the publish keywords listed in `AGENTS.md` § Working and publishing (the only list). Cite the literal phrase.
 - **(b) Active plan with `## PR Plan`** — `.claude/plans/<name>.md` listing N slices authorizes those N PRs.
 - **(c) In-flight fix-loop continuation** — a tiny follow-up commit from a fix loop continues the original (a)/(b) authorization.
 
 If none true: STOP. Report `commit <SHA> ready on <branch>. Say "PR 올려" when ready to publish.` and wait.
 
-Once open: run the **`git-publish` skill** (base=`develop` only). Escalate to the `git-publisher` agent only for the CLAUDE.md `## Git Operations` edge cases (Mode 3 develop→main deploy, external PR triage, complex rebase, push rejection unclear cause, mid-merge failure).
+Once open: run the **`git-publish` skill** (base=`develop` only). Escalate to the `git-publisher` agent only for the `CLAUDE.md` § Git operations edge cases (develop→main deploy, external PR triage, complex rebase, push rejection unclear cause, mid-merge failure).
 
-**Hard rule — base=main is a separate gate.** Base=main needs `"deploy"`/`"release"`/`"배포"` specifically; plain `"PR 올려"` authorizes only base=develop. base=main is always Mode 3 via the `git-publisher` agent. (Codified post-PR #105.)
+**Hard rule — base=main is a separate gate.** Base=main needs a deploy keyword specifically (deploy subset of the `AGENTS.md` list); a plain publish keyword authorizes only base=develop. base=main always goes through the `git-publisher` agent's Deploy PR procedure (`docs/runbooks/deploy.md`). (Codified post-PR #105.)
 
 ### Step 8 — Stop and report
 Summarize: what was implemented, the commit/PR, the app-test verdict, the workflow's `confirmedFindings` (if any shipped as medium/low), open follow-ups. STOP.
@@ -146,7 +146,7 @@ LLM-chat-module work (`services/parse_query.py`, `services/generation.py`, `serv
 ## Rules
 - **Never write source code yourself.** Launch the `feature` workflow. If `Workflow` appears unavailable, STOP and report — do not edit `backend/`/`frontend/` directly.
 - **Never commit ad-hoc.** Default: `git-commit` skill. Escalate to `git-publisher` agent only for multi-commit reorganization / diagnosis failure.
-- **Never push ad-hoc.** Default: `git-publish` skill for feature → develop (base=develop only). Escalate to `git-publisher` agent only for Mode 3 deploy / external PR / complex rebase / push rejection / mid-merge failure.
+- **Never push ad-hoc.** Default: `git-publish` skill for feature → develop (base=develop only). Escalate to `git-publisher` agent only for develop→main deploy / external PR / complex rebase / push rejection / mid-merge failure.
 - **Fix-cycle budget = 2, shared** across the workflow's internal loop AND session-side app-test FAIL re-launches. Track it via `args.cyclesUsed` / `result.cyclesUsed`.
 - If a task is ambiguous, ask ONE clarifying question before decomposing.
 - If you notice a `CLAUDE.md` convention that needs updating, propose it in your final output — do not write it yourself.
