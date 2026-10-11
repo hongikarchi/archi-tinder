@@ -90,7 +90,7 @@ note the discrepancy in the verdict).
 
 ## Gate 1 — Time-to-first-card (3-run p50)
 
-**Flow (Taste-start redesign, `docs/plans/2026-10-11-taste-start-redesign.md`)**:
+**Flow (Taste-start redesign, `docs/decisions/2026-10-11-taste-start-redesign.md`)**:
 on `/search`, type the persona query in the composer and send → the page calls
 `POST /api/v1/taste/recognize/` and renders a round (tag chips + 3 stacked cards +
 "N개 중 M개 일치") → click "이 세 장으로 스와이프 시작" → `POST /api/v1/analysis/sessions/`

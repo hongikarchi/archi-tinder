@@ -4,11 +4,13 @@ React + Django web app for the archi-tinder project. Reads from a PostgreSQL DB
 built by a sibling repo (Make DB).
 
 For the full picture see:
-- `CLAUDE.md` — project conventions, agent rules, DB schema (auto-loaded by Claude Code; **Codex reads the mirror `AGENTS.md`**)
+- `AGENTS.md` — the shared rulebook for humans, Claude Code and Codex (branch rules, publish gate, data rules, Product Constitution). `backend/AGENTS.md`, `frontend/AGENTS.md`, `web-testing/AGENTS.md` add path-scoped conventions.
+- `CLAUDE.md` — Claude Code–only additions (workflow, skills, agents, gates); it imports `AGENTS.md`
 - `CONTRIBUTING.md` — branch model, PR workflow, role / file ownership
+- `docs/runbooks/` — local setup (Windows + macOS) and production deploy
 - `DESIGN.md` — visual design system (consult for any UI work)
-- `docs/algorithm.md` — recommendation algorithm theory
-- `Task.md` `## Next` — pending-feature backlog (absorbed the prior `docs/specs/` folder on 2026-05-24; items use the `<SURFACE>-<TOPIC>-<N>` ID convention described in `## Workflow Rules`)
+- `docs/README.md` — map of every doc folder; `docs/algorithm.md` — algorithm design intent; `docs/decisions/` — design decision records
+- GitHub Issues — the backlog (`gh issue list`); `Task.md` keeps the `<SURFACE>-<TOPIC>-<N>` ID + label conventions and the migration map
 
 ---
 
@@ -29,22 +31,17 @@ no `@TODO-role-*` placeholders remain, so onboarding just flags this. When a rea
 Role A/B collaborator joins, replace the relevant `@hongikarchi` entries with
 their handle on the first feature branch.
 
-Then set up your environment:
+Then set up your environment — **Windows and macOS are both supported; use the
+`make` targets, which pick the right Python per OS** (on Windows `python3` is a
+Store stub that runs nothing). Step-by-step, including Neon child-branch rules,
+`.env` fields and the local-migrate / local-test commands:
+[`docs/runbooks/local-setup.md`](docs/runbooks/local-setup.md).
 
 ```bash
-# Backend
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env             # then fill in DB / GEMINI / etc.
-python3 manage.py runserver 8001 # http://localhost:8001
-
-# Frontend (separate terminal)
-cd frontend
-npm ci
-cp .env.example .env             # if needed
-npm run dev                       # http://localhost:5174
+cp backend/.env.example backend/.env     # fill in DB / LLM keys from the admin
+cp frontend/.env.example frontend/.env
+make setup                               # deps + migrate + superuser + npm install
+make dev                                 # backend http://localhost:8001 + frontend http://localhost:5174
 ```
 
 ---
@@ -137,4 +134,4 @@ git branch -d feature/algo-mmr-tuning
 `frontend/` (React 18 + Vite) ↔ `backend/` (Django 4.2 + DRF + pgvector + Gemini)
 ↔ Neon PostgreSQL (`canonical_v2_buildings` table owned by Make DB, read-only here).
 
-DB schema: `docs/database-schema.md`. Workflow + agents: `.claude/WORKFLOW.md` (Claude) / `.codex/WORKFLOW.md` (Codex).
+DB schema: `docs/database-schema.md`. Claude Code workflow + agents: `.claude/WORKFLOW.md`. Codex: `AGENTS.md` + `.agents/skills/` + `.codex/` (agents, hooks, rules).

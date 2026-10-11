@@ -26,6 +26,7 @@ import {
   saveAssessmentDraft,
   clearAssessmentDraft,
 } from '../utils/assessmentDraft.js'
+import { exitDirectionForRaw, rawFromStored } from '../utils/assessmentDirection.js'
 import styles from './AssessmentPage.module.css'
 
 // Aliased the same way lib/tinderCard.js does it — the shared ESLint config
@@ -34,9 +35,6 @@ const AnimatedDiv = animated.div
 
 const TOTAL = QUESTIONS.length
 
-// Answered cards always leave toward the same edge (requirement: one
-// consistent direction). 'left' matches DiscoveryPage's "pass" exit.
-const EXIT_DIRECTION = 'left'
 
 export default function AssessmentPage({ onLogout }) {
   const navigate = useNavigate()
@@ -68,8 +66,8 @@ export default function AssessmentPage({ onLogout }) {
   const busyRef = useRef(false)
   const cardRef = useRef(null)
 
-  // "Previous question" re-entry. The card is dropped off-screen on the same
-  // edge answers leave by (EXIT_DIRECTION = left) and springs back to centre
+  // "Previous question" re-entry. The card is dropped off-screen on the edge it
+  // left by (right for agree-side answers, left for disagree-side) and springs back to centre
   // with physics.animateBack — the very config tinderCard.js uses to snap a
   // released drag back into the deck, so the return reads as the exit undone.
   const [{ backX }, backSpring] = useSpring(() => ({
@@ -111,11 +109,12 @@ export default function AssessmentPage({ onLogout }) {
     updated[currentQ] = stored
     setResponses(updated)
 
-    // Same exit as a Discovery/Taste swipe: the vendored tinderCard fork's
+    // Direction follows the tapped option's raw value (programmatic swipe()
+    // ignores preventSwipe, so SWIPE_PREVENT_ALL does not block it). Same exit as a Discovery/Taste swipe: the vendored tinderCard fork's
     // animateOut (easeInOutCubic, duration clamped to 480-680ms, travel =
     // viewport diagonal, rotation = x * 45deg). Always runs — reduced-motion
     // does not gate interaction motion (standing project rule).
-    await cardRef.current?.swipe(EXIT_DIRECTION)
+    await cardRef.current?.swipe(exitDirectionForRaw(rawValue))
 
     if (isLast) {
       await doSubmit(updated)
@@ -142,10 +141,16 @@ export default function AssessmentPage({ onLogout }) {
       setBusy(false)
     }
 
-    // Start fully off-screen on the edge answered cards leave by, then spring
-    // home. window.innerWidth + CARD_WIDTH clears the deck no matter where it
-    // sits horizontally.
-    backSpring.set({ backX: -(window.innerWidth + CARD_WIDTH) })
+    // Start fully off-screen on the edge that card left by (derived from the
+    // raw tapped value), then spring home. window.innerWidth + CARD_WIDTH
+    // clears the deck no matter where it sits horizontally.
+    const prevQ = QUESTIONS[currentQ - 1]
+    const prevStored = responses[currentQ - 1]
+    const side = prevStored == null
+      ? 'left'
+      : exitDirectionForRaw(rawFromStored(prevStored, prevQ.reversed))
+    const offscreen = window.innerWidth + CARD_WIDTH
+    backSpring.set({ backX: side === 'right' ? offscreen : -offscreen })
     setCurrentQ(q => q - 1)
     backSpring.start({ backX: 0, config: physics.animateBack, onRest: finish })
   }

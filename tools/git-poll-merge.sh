@@ -16,7 +16,7 @@
 # Stderr: errors only.
 #
 # Does NOT merge — that's the caller's choice (operator manual or
-# git-publisher.md Mode 1 step 6).
+# git-publisher.md § Fallback push, cleanup step).
 #
 # `gh pr checks` exit-code reference (verified empirically against gh CLI 2.x
 # on PR #6 dogfood, 2026-05-09):

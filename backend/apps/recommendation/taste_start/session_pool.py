@@ -1,7 +1,7 @@
 """
 session_pool.py -- Candidate pool + stored tags for taste_v2 sessions.
 
-Spec: docs/plans/2026-10-11-taste-start-redesign.md §5-1, §6.
+Spec: docs/decisions/2026-10-11-taste-start-redesign.md §5-1, §6.
 
 Storage (no DB migration):
   session.original_filters = {'selector': 'taste_v2', 'taste_tags': [...],

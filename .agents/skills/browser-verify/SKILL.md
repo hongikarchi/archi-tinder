@@ -38,7 +38,7 @@ Use FULL-SWIPE when changes touch:
    - backend: `http://localhost:8001/api/v1/auth/dev-login/`
 3. If backend migrations changed, verify no unapplied migration:
    ```bash
-   cd backend && python3 manage.py showmigrations 2>&1 | grep -E '\[ \]'
+   cd backend && python manage.py showmigrations 2>&1 | grep -E '\[ \]'   # or ./tools/back-validate.sh; never python3 on Windows
    ```
 4. Open the in-app browser at the target URL.
 5. Capture a console/network baseline. Any non-auth 4xx/5xx or console error on

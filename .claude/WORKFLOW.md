@@ -4,7 +4,9 @@
 > Claude Code session, the `feature` Workflow it launches for build+review, its
 > sub-agents, the skills it runs itself, the model tier map, the session model, the
 > pre-push gate, and the token-saving rules.
-> Branch model + PR rules + file ownership live in `CONTRIBUTING.md`.
+> Shared rules for every worker (HARD RULES, publish gate, data rules, Constitution) live
+> in `AGENTS.md`; branch model + PR rules + file ownership in `CONTRIBUTING.md`; operator
+> procedures in `docs/runbooks/`.
 
 ---
 
@@ -40,9 +42,9 @@ flowchart TD
     WF -->|"Opus judge"| Ver["adversarial-verify<br/>(confirm real, drop false positives)"]
     Main -->|"dispatches (post-commit)"| Gate["app-test<br/>(pre-push: browser journey + drift)"]
     Main -->|runs skill| Cmt["git-commit<br/>(single commit on feature branch)"]
-    Main -->|runs skill| RIn["reporter-inline<br/>(Task.md + state.js + algorithm.md)"]
-    Main -->|"runs skill (gate-open only)"| Pub["git-publish<br/>(Mode 2: feature → develop)"]
-    Main -.->|escalation only| PubA["git-publisher agent<br/>(Mode 3 deploy / external PR / rebase)"]
+    Main -->|runs skill| RIn["reporter-inline<br/>(Issues + state.js + algorithm.md)"]
+    Main -->|"runs skill (gate-open only)"| Pub["git-publish<br/>(feature → develop)"]
+    Main -.->|escalation only| PubA["git-publisher agent<br/>(deploy PR / external PR / rebase)"]
     Impl --> Code["backend/ · frontend/"]
     Pub --> Remote["origin/develop"]
 
@@ -61,9 +63,11 @@ session then runs `git-commit` → `app-test` → `reporter-inline` and **STOPS 
 gate**. Push/PR/merge happens only on an explicit human trigger. Never add `git push`/`gh
 pr`/`merge` inside a workflow script. (Incident-driven: PR #105 main-merge, Codex HEAD-move.)
 
-**Codex** runs concurrently as a peer worker in its own clone (`make_web-codex/`, separate
-`.git`) — not a sub-agent of this session, never sharing this working dir (`CONTRIBUTING.md`
-§ Concurrent agents).
+**Codex** is a concurrent peer worker, not a sub-agent of this session. It reads the shared
+`AGENTS.md` directly (this session loads the same file through `CLAUDE.md`). A separate clone
+is recommended, not required (user ruling 2026-09-26); in a shared checkout the rule is one
+branch per active session and no branch switching under another session — `AGENTS.md`
+HARD RULE 7, `CONTRIBUTING.md` § Concurrent agents.
 
 ### 1.1 Model tier map (spend-posture: ultracode-main + cost-aware tiering)
 
@@ -93,9 +97,9 @@ pins Sonnet on workers and Opus on the verify pass.
 | Skill | Role | Touches |
 |-------|------|---------|
 | **orchestrate** | Feature playbook — decomposes, launches the `feature` workflow, then owns commit/test/audit/publish-gate | — (orchestrates) |
-| **reporter-inline** | Session-end audit — `Task.md` `## Done` + `project/state.js` + conditional `docs/algorithm.md`. Runs INLINE before squash | `Task.md`, `project/state.js`, narrow `docs/algorithm.md` |
+| **reporter-inline** | Session-end audit — issue closure (`Closes #N`), deferred follow-ups → issues, `project/state.js` regen, conditional `docs/algorithm.md` notes. Runs INLINE before squash | GitHub Issues, `project/state.js`, narrow `docs/algorithm.md` |
 | **git-commit** | Single commit on a feature branch — caveman conventional commit + secret guards. Never pushes | `git commit` |
-| **git-publish** | Mode 2: feature → develop (push + PR + admin squash + cleanup). Publish gate at Step 0 | `git push`, `gh pr create/merge` |
+| **git-publish** | feature → develop (push + PR + admin squash + cleanup). Publish gate at Step 0 | `git push`, `gh pr create/merge` |
 
 ### Sub-agents (`.claude/agents/`) — dispatched for isolated-context work
 
@@ -106,15 +110,16 @@ pins Sonnet on workers and Opus on the verify pass.
 | **code-review** | Static review — API contracts, logic bugs, error handling, integration | sonnet | read-only |
 | **security-manager** | Security scan — SQL injection, auth bypass, XSS, secret/token leakage | sonnet | read-only |
 | **app-test** | Pre-push gate — live browser user-journey + HEAD/origin drift; FULL / FEATURE-SCOPED | sonnet | read-only |
-| **git-publisher** | Edge-case escalation: Mode 3 deploy (incl. post-deploy `make migrate-prod` reminder when the range has migrations — agent never runs prod DDL itself), external PR triage, complex rebase | sonnet | `git push`, `gh pr *` |
+| **git-publisher** | Edge-case escalation: develop → main deploy PR (runbook `docs/runbooks/deploy.md`; emits the `make migrate-prod` reminder when the range has migrations — agent never runs prod DDL itself), external PR triage, fallback push / complex rebase | sonnet | `git push`, `gh pr *` |
 
 These six are the workflow's `agentType` building blocks AND directly dispatchable by the
 session (app-test, git-publisher). Frontmatter `model: sonnet` governs direct `Agent`-tool
 dispatch; inside a workflow the `agent()` call pins the tier explicitly (§ 1.1).
 
 **Agent vs skill vs workflow:** isolated work returning a result → **agent**. A procedure
-the main session runs itself → **skill**. A deterministic multi-agent fan-out (loops,
-parallel, verify) → **workflow**. There are no slash commands.
+the main session runs itself → **skill** (also invocable by the user as `/<skill-name>`,
+e.g. `/orchestrate`). A deterministic multi-agent fan-out (loops, parallel, verify) →
+**workflow**. The repo defines no separate slash commands beyond its skills.
 
 ## 3. The feature pipeline
 
@@ -176,16 +181,16 @@ locally on a `feature/*` branch; one push sweeps them as a PR. The audit commit 
 those bundled commits — same PR.
 
 **Session start:**
-1. `git status && git branch --show-current`. If on `main`/`develop`, do not edit — create a `feature/*` branch first (HARD RULE, `CONTRIBUTING.md`).
-2. Confirm you are in the **main clone `make_web/`** on `develop` or a `feature/claude-*` branch. Wrong dir → switch clones, do NOT `git reset`.
+1. `git status && git branch --show-current`. If on `main`/`develop`, do not edit — create a `feature/*` branch first (`AGENTS.md` HARD RULE 2).
+2. Check that no other session is active in this checkout (dirty tree you did not create, reflog activity in the last hour). If one is, do not switch branches, stash or reset — coordinate or use another clone (`AGENTS.md` HARD RULE 7).
 3. `git fetch origin develop --quiet`; if behind, ask before rebasing.
-4. Scan `Task.md` for any `SESSION-START-TODO`; surface it before starting the request.
+4. `gh issue list --label session-start-todo` and `--label now`; surface them before starting the request.
 
 **Session end** (before the PR squash merges):
-1. `reporter-inline` skill — update `Task.md` + `project/state.js` (conditionally `docs/algorithm.md`). Once per push-worthy unit.
+1. `reporter-inline` skill — PR body `Closes #N`, deferred follow-ups filed as issues, `project/state.js` regenerated (conditionally `docs/algorithm.md` notes). Once per push-worthy unit.
 2. `git-commit` skill — audit commit on the same feature branch.
 3. `git-publish` Step 4 — admin squash merge (gate-open only).
-4. Append a `SESSION-START-TODO` to `Task.md` if something must fire next session.
+4. Something must fire next session → an issue labelled `session-start-todo`.
 
 ## 5. Planning — before substantive work
 
@@ -231,16 +236,16 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 3. **Model tiering controls workflow cost** — workers on Sonnet, exploration on Haiku, Opus confined to orchestration + verify. A worker silently inheriting Opus is the main cost regression — pin explicitly.
 4. **Skill-first for git ops** — `git-commit`, `git-publish` run in-context; dispatch `git-publisher` agent only on the escalation matrix. Each agent dispatch costs 14-46k tokens + round-trip latency.
 5. **Bundle trivial commits; push only on push-worthy** — push-worthy = milestone / production code / migration / risky-zone (auth, token, external API, ≥4-file refactor) / explicit "지금 push" / session end. Each push runs app-test's drift check over the whole range, so bundling loses no protection.
-   **Publish gate enforcement (post-PR #105 / #116 / #117)**: `git-publish` Step 0 + `orchestrate` Step 7 + `git-publisher` guardrails 7-8 — after commit, default STOP. Push/PR/merge requires explicit keyword (`push`, `올려`, `PR`, `배포`, `merge`, `deploy`, `ship`) OR an active `.claude/plans/<slug>.md`.
+   **Publish gate enforcement (post-PR #105 / #116 / #117)**: `git-publish` Step 0 + `orchestrate` Step 7 + `git-publisher` guardrails 7-8 — after commit, default STOP. Push/PR/merge requires an explicit keyword — the single list is `AGENTS.md` § Working and publishing — OR an active `.claude/plans/<slug>.md` that authorizes it.
    **Deterministic harness guard (Phase 2)**: `.claude/hooks/git-guard.py` — a `PreToolUse(Bash)` hook wired in project `.claude/settings.json` — blocks at the tool layer: direct/force push to `develop`/`main`, `git push --no-verify`, and `gh pr create --base main`. ALLOWS `feature/*` pushes + `gh pr merge --admin`. FAIL-OPEN (parse/exec error → allow; GitHub branch protection is the server-side backstop). Converts the CLAUDE.md git HARD RULEs from prose-the-model-must-remember into harness enforcement. Activates at session start; edit + re-test via `.claude/hooks/git-guard.py` standalone (stdin JSON `{"tool_input":{"command":"..."}}`, exit 2 = block).
 
 ## 8. Known issues
 
 | Issue | Severity | Workaround |
 |---|---|---|
-| `tools/git-new-feature.sh` refuses a dirty working tree without auto-stash | LOW | `git stash push <paths>` → `git-new-feature.sh` → `git stash pop` |
+| `tools/git-new-feature.sh` auto-stashes only the "safe" review artifacts (`Task.md`, …); it still refuses a tree with dirty source files | LOW | Commit or `git stash push <paths>` the source changes first, then run it |
 | Local `develop` diverges after a deploy run from another clone (squash + origin force-reset) — `git pull` conflicts | LOW | `tools/git-sync-develop.sh` (ff, else reset to origin + `backup/develop-<sha>`); used by `git-new-feature.sh` + `git-publish` Step 5 |
-| Local `pytest` gives a false-pass signal — `backend/conftest.py`'s SQLite override is not load-bearing for direct-DB tests | MEDIUM | CI is the validation gate — green CI, not local pytest |
+| Local `pytest` gives a false-pass signal — `backend/conftest.py`'s SQLite override is not load-bearing for direct-DB tests; plain `pytest` also fails on CREATEDB | MEDIUM | `make test-local` (CI-shape run as `neondb_owner`, INFRA-DB-2); CI stays the canonical gate |
 | `reporter-inline`'s `meta.head` in `state.js` is the pre-squash develop SHA, lags one PR | LOW (by design) | Self-correcting next pass |
 | Workflow `agent()` model defaults to inherit (Opus) — an unpinned worker silently runs Opus | MEDIUM | Pin `model` on every `agent()` call in `.claude/workflows/*.js` (§ 1.1) |
 | Workflow `args` arrives as a JSON **string** across the background-task boundary, not a parsed object | MEDIUM | The script parses it (`feature.js` top); any new workflow reading `args` as an object must `JSON.parse` if `typeof args === 'string'`. Verified by dry-run 2026-06-13 |
@@ -255,7 +260,8 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 | Pin model on every workflow `agent()` | `agentType` does not carry the tier; default is inherit-session-model (most expensive) |
 | Direct edit allowed for | meta/infra (`tools/`, `hooks/`, `.github/`, `.claude/workflows/`), single-line fixes, sub-MINOR follow-ups, pure docs (`CLAUDE.md`, `.claude/*`, `docs/*`, `CONTRIBUTING.md`, `DESIGN.md`, `README.md`) — direct edit + `git-commit` skill |
 | Makers are sandboxed | `back-maker`: `backend/` only · `front-maker`: `frontend/` only |
-| Git operations use skills first | `git-commit`, `git-publish`; `git-publisher` agent only for Mode 3 / external PR / complex rebase |
+| Git operations use skills first | `git-commit`, `git-publish`; `git-publisher` agent only for the deploy PR / external PR / complex rebase |
+| Shared rules live in `AGENTS.md` | HARD RULES, publish keywords, data rules, Constitution — one copy; `CLAUDE.md` imports it and holds only Claude-specific material |
 | Audit uses `reporter-inline` skill | Runs INLINE before squash, same PR |
 | Fix-cycle limit = 2, shared | Across the workflow loop AND session app-test re-launches |
 | Keep this file in sync | When workflow / agents / skills / pre-push gate / tier map change, update `WORKFLOW.md` (text + Mermaid) in the same commit |
@@ -264,10 +270,15 @@ the heavy lane is opt-in via the workflow, with cost controlled by model tiering
 
 _History: pre-2026-05-22 the project ran across multiple cmux terminals with Codex CLI
 workers; collapsed to a single Claude Code session + sub-agents once sub-agents provided
-context isolation. 2026-05-26: routine reporter / git-manager / git-publisher Mode 2
+context isolation. 2026-05-26: routine reporter / git-manager / git-publisher publish path
 absorbed into `reporter-inline` / `git-commit` / `git-publish` skills (~30-40k tokens,
-~150-300s saved per PR cycle). 2026-05-31: Codex re-introduced as a CONCURRENT PEER in its
-own clone. 2026-06-13: Opus 4.8 + ultracode refactor — the build+review core moved from
-inline `Agent` dispatches into the `feature` Workflow (`.claude/workflows/feature.js`),
-deterministic fan-out + Opus adversarial-verify, with the publish gate kept in the session
-outside the autonomous workflow; model tier map codified (§ 1.1)._
+~150-300s saved per PR cycle); the `git-manager` + `reporter` agent files were deleted
+2026-05-31. 2026-05-31: Codex re-introduced as a CONCURRENT PEER in its own clone.
+2026-06-13: Opus 4.8 + ultracode refactor — the build+review core moved from inline `Agent`
+dispatches into the `feature` Workflow (`.claude/workflows/feature.js`), deterministic
+fan-out + Opus adversarial-verify, with the publish gate kept in the session outside the
+autonomous workflow; model tier map codified (§ 1.1). 2026-09-26: Codex harness relaxed
+(separate clone optional). 2026-10-07: docs restructure — `AGENTS.md` became the single
+shared rulebook, `CLAUDE.md` thinned to Claude-only material, nested `backend/`/`frontend/`
+AGENTS.md hold path-scoped conventions, git-publisher mode numbers retired, one publish
+keyword list._

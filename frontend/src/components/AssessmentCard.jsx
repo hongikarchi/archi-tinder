@@ -28,6 +28,10 @@ import { LIKERT_KEYS, LIKERT_VALUES } from '../constants/assessmentQuestions.js'
 import styles from './AssessmentCard.module.css'
 import { useTranslation } from '../i18n/index.js'
 
+const DISPLAY_OPTIONS = LIKERT_VALUES
+  .map((val, idx) => ({ val, key: LIKERT_KEYS[idx] }))
+  .reverse()
+
 /**
  * Props:
  *   question   { id, axis, reversed, text_ko, text_en }
@@ -59,7 +63,10 @@ export default function AssessmentCard({ question, selected, disabled, onAnswer 
         role="group"
         aria-label={t('assessmentCard.answerSelection')}
       >
-        {LIKERT_VALUES.map((val, idx) => {
+        {/* Displayed agree-first (+2 at top, -2 at bottom). Reversed at render
+            time only — constants and submitted raw values are unchanged, and DOM
+            order = visual order so tab/focus order matches. */}
+        {DISPLAY_OPTIONS.map(({ val, key }) => {
           const stored = question.reversed ? val * -1 : val
           const isSelected = selected === stored
           return (
@@ -73,7 +80,7 @@ export default function AssessmentCard({ question, selected, disabled, onAnswer 
               aria-pressed={isSelected}
             >
               <span className={`${styles.val} pressable`}>{val > 0 ? `+${val}` : val}</span>
-              <span className={`${styles.label} pressable`}>{t(`assessmentCard.likert.${LIKERT_KEYS[idx]}`)}</span>
+              <span className={`${styles.label} pressable`}>{t(`assessmentCard.likert.${key}`)}</span>
             </button>
           )
         })}

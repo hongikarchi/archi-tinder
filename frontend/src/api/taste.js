@@ -1,6 +1,6 @@
 /**
  * api/taste.js
- * Taste-start: tag recognition + top-3 card lookup (docs/plans/2026-10-11-taste-start-redesign.md).
+ * Taste-start: tag recognition + top-3 card lookup (docs/decisions/2026-10-11-taste-start-redesign.md).
  * Tags are sent back EXACTLY as received — the server rebuilds them.
  */
 

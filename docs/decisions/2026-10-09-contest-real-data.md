@@ -1,0 +1,167 @@
+# 공모전 — 목 데이터에서 실제 공모전으로
+
+**작성** 2026-10-09 · **상태** accepted (Phase 1 구현 예정 — #414 #415 #416 #417, Phase 2 설계만 — #418) · **선행** `2026-09-17-competition-team-design.md` (찜 기반 팀빌딩 프로토타입, PR #333) · **관련** #363 DEPLOY-BLOCKER-1 ①②
+
+---
+
+## 1. 배경
+
+공모전 화면(`/competitions`)은 프론트에 박아 둔 목 데이터(`constants/mockCompetitions.js`)다.
+실제 기관명이 붙은 가짜 공모전, 가짜 관심 수, 존재하지 않는 유저(@dohyun 등)가 모든 사용자에게 보인다(#363).
+백엔드 모델·API는 없고, 관심 등록은 계정 구분 없는 localStorage다. 공고 링크와 포스터도 없다.
+
+이 문서는 화면을 **실제 공모전 데이터**로 바꾸는 결정을 기록한다. 선행 문서 §6-1의 `Competition`
+(운영자 등록, 필드 9개)은 이 문서의 `Contest`로 대체된다. §6-3 `Team` / §6-4 `TeamInvite`는 범위 밖(미구현 유지).
+
+## 2. 검토한 운영 방식
+
+| 안 | 내용 | 판단 |
+|---|---|---|
+| A. 운영자 등록 + 입력 보조 | 관리자 화면에서 공고 URL을 붙여 넣고 사람이 확인 | **기각** (사용자 결정) — 관리자 페이지를 만들지 않고, 사람이 매번 검수하는 구조를 피한다 |
+| B. 공공 API(나라장터) 자동 수집 | 설계공모 입찰공고 API | 보류 — 포스터 없음, 소규모 지역 공고 위주(연 700~800건 추정), "포스터 보고 → 관심 유저 구경" 흐름과 맞지 않음 |
+| **C′. 모음 사이트 후보 수집 + 공식 페이지 LLM 추출 + 자동 검증** | 위비티 목록에서 후보만 모으고, 값은 주최처 공식 페이지에서 읽어 교차검증. 검증 실패는 노출하지 않음 | **채택** (Phase 2). 단 약관 확인이 선행 게이트(§6-0) |
+
+조사(2026-10-09): 건축HUB 설계공모는 API·RSS 없음. 위비티·씽굿·링커리어는 공식 API 미확인, `robots.txt`는 `*` 허용이나 **이용약관은 미확인**.
+판례 참고(요약 수준): 공개 데이터 접근 자체는 침입 아님(대법원 2021도1533), 경쟁 서비스의 DB를 통째로 긁어 재게시하는 패턴은 위법 인정(잡코리아 대 사람인). 포스터는 주최 측 저작물.
+
+## 3. 확정된 결정
+
+| # | 결정 | 근거 |
+|---|---|---|
+| D1 | **범위**: 건축 + 도시·공간·경관·조경·인테리어·건설(공공디자인 포함). `AGENTS.md` Product Constitution의 "건축 외 업종" 경계에 대해 **사용자가 2026-10-09 이 범위를 명시 승인** | 실내건축대전·도로경관디자인 대전 등 포함. 로고·패키지·영상 등은 제외 |
+| D2 | Phase 2 수집은 카테고리를 통째로 받지 않고 **키워드(건축, 도시, 공간, 경관, 조경, 인테리어, 건설) 통과분만** | D1 |
+| D3 | **관리자 페이지 없음.** 사람 손이 필요한 지점(pending 해제, 포스터 넣기·내리기)은 **관리 커맨드** | 저장소 선례(`seed_discovery`, `sync_offices`) |
+| D4 | **포스터는 hotlink로 기본 노출.** `poster_url`이 있으면 보여주고, 없거나 이미지 로딩이 실패하면 폴백 카드. 서버·R2에 저장/재호스팅은 금지 | **2026-10-10 개정** (아래 §3-1). 원본을 복제하지 않고 주최 측이 올린 이미지를 가리키기만 함 |
+| D5 | **포스터 신고·삭제 요청 경로 없음.** 권리자가 요청하면 운영자가 `contest_poster <id> clear`로 URL을 지워 내린다 | **2026-10-10 개정** (§3-1). 신고 즉시 숨김은 아무 사용자나 포스터를 지울 수 있어 "포스터가 보여야 한다"는 목표와 충돌 |
+| D6 | **포스터 허락 상태 없음.** `poster_status` / 허락 근거 필드를 두지 않는다. 수집기는 **주최처 공식 페이지의 이미지 URL**을 넣는다(모음 사이트 이미지 서버 hotlink 지양) | **2026-10-10 개정** (§3-1) |
+| D7 | **마감일을 못 읽으면 임의 값으로 채우지 않는다.** 교차검증 실패 → `hidden` | 틀린 마감일은 사용자 피해 |
+| D8 | 주최처 유형이 협회/지자체/공공기관이면 자동 `published`, 임의단체·미확인은 `pending`(사람이 풀기 전 비노출) | 신뢰도 |
+| D9 | **D-day 기준 = 남은 마감 중 가장 가까운 것**(신청 마감이 미래면 신청 마감, 아니면 제출 마감) + 어떤 마감인지 라벨. 목록 제외 기준은 `submission_deadline` 경과 | 신청을 놓치면 제출도 못 하는 공모전이 많음 |
+| D10 | 상세 화면의 **가짜 유저 제거.** 추천 섹션은 그 공모전에 실제 관심 등록한 사람(본인 제외), 0명이면 섹션 숨김. "모집 중인 팀"은 팀 모델이 생길 때까지 숨김 | 존재하지 않는 유저를 보여주는 것은 사용자를 속이는 것 |
+| D11 | 화면 색상은 `DESIGN.md` 테마 토큰에 대응. 포스터 확대 오버레이의 어두운 배경만 고정값 | 다크·타 테마에서 깨지지 않게 |
+| D12 | 배치 실행 = **Railway cron** (Phase 2). 수집기는 1회 실행 후 종료하는 관리 커맨드 | DB·LLM 키가 이미 Railway에 있음. UTC, 최소 5분 간격, 이전 실행 중이면 skip (Railway docs). 플랜별 가용 여부는 미확인 — Phase 2 착수 시 확인 |
+| D13 | 이름: 모델·API는 `Contest` / `contests/`, 화면 경로는 `/competitions` 유지 | 기존 링크 보존 |
+
+### 3-1. 2026-10-10 개정 — 포스터 기본 노출
+
+처음 결정(D4~D6 초안)은 "허락이 확인된 포스터만 노출(`poster_status = allowed`) + 신고 즉시 자동 숨김 + 삭제 요청 메일 주소가 없으면 허용 불가"였고 PR #420/#421에 구현까지 됐다.
+사용자 결정으로 뒤집었다: **포스터는 꼭 화면에 보여야 하고, URL 연결(hotlink) 방식으로 기본 노출한다. 삭제 요청 장치(앱 내 신고, 메일 링크)는 두지 않는다.**
+
+- 근거: 관리자 페이지 없이 자동 수집으로 운영하면 공모전마다 허락을 받을 사람이 없어 포스터가 사실상 한 장도 안 보인다. hotlink는 복제본을 만들지 않고, 공모전 포스터는 배포 목적의 홍보물이라 실질 위험이 낮다고 판단(법률 자문 아님).
+- 남기는 안전장치: 운영자가 URL을 지워 즉시 내릴 수 있음(`contest_poster clear`), `http`/`https`만 허용(모델·저장·bulk/update·DB CHECK·직렬화·프론트 렌더), 재호스팅 금지.
+- 한계: hotlink는 원본 사이트의 차단·`http` 혼합 콘텐츠·파일 이동으로 깨질 수 있다 → 폴백 카드 유지. "무조건 노출"을 보장하려면 복제가 필요한데 그것은 하지 않는다.
+- 구현: 머지·적용 전이라 `poster_status`·`ContestPosterReport`·`poster_permission_*`·`CONTEST_TAKEDOWN_EMAIL`을 **마이그레이션 재생성으로 처음부터 없앴다**(제거 마이그레이션 없음).
+
+## 4. Phase 1 — 모델 + API + 화면
+
+### 4-1. 모델 (새 앱 `backend/apps/contests/`, `'default'` DB만)
+
+**`Contest`**
+
+| 필드 | 설명 |
+|---|---|
+| `title`, `organizer` | |
+| `organizer_type` | `public_agency` / `association` / `local_gov` / `private_group` / `unknown` |
+| `submission_deadline` | 필수, aware datetime(KST 입력), `db_index`. 최종 작품 제출 마감 |
+| `apply_deadline` | nullable. 참가신청 마감이 제출 마감과 다를 때만 |
+| `notice_date` | nullable date. 없어도 화면이 깨지지 않아야 함 |
+| `theme`, `summary`(≤300), `eligibility`, `team_size`(nullable 문자열) | |
+| `source_url` | 공식 공고 원문. 목록 사이트 주소만 아는 경우 비워 두고 `listing_url`에만 넣는다 |
+| `import_key` | unique, nullable. `import_contests` upsert 식별자(§4-6). API 비노출 |
+| `listing_source`, `listing_url` | 예: `'wevity'` |
+| `poster_url`(nullable), `poster_credit` | URL이 있으면 노출(D4). 상태 필드 없음 |
+| `status` | `published` / `hidden` / `pending` |
+| `interest_count` | `Reaction`과 같은 signal 기반 denormalize |
+| `created_at`, `updated_at`, `last_verified_at` | |
+
+**`ContestInterest`** — `social.Reaction`과 동형(user FK + contest FK, 쌍 unique, `created_at` index).
+
+마이그레이션은 신규 테이블 추가만. 기존 데이터 삭제·변경 없음.
+
+### 4-2. API (`/api/v1/`)
+
+| 경로 | 동작 |
+|---|---|
+| `GET contests/` | `status=published` AND `submission_deadline` 미경과, 마감 임박순 |
+| `GET contests/<id>/` | 상세. 마감이 지나도 열림. `hidden`/`pending`은 404 |
+| `POST` / `DELETE contests/<id>/interest/` | 관심 등록·해제(인증, 스로틀) |
+| `GET contests/<id>/interested/` | (PR 4) 진단 완료 + `discovery_opt_in` 관심 등록자, 본인·차단 관계 제외, 성향 벡터 포함 |
+
+### 4-3. 관리 커맨드
+
+- `seed_contests` — 개발용 시드(§4-5). `DEBUG`에서만 실행.
+- `contest_status <id> published|hidden|pending`
+- `contest_poster <id> set --url <http(s)> [--credit "<이름>"]` · `contest_poster <id> clear`
+
+운영용 임포트는 §4-6 (설계 확정 2026-10-11, 구현은 별도 PR).
+
+### 4-4. 상세 화면 (시안 B)
+
+위에서 아래: ① 상단바(기존 `PageTopControls` + `PageBackButton` + `PageLogoHeader`) ② D-n 배지(D9, 마감 종류 라벨) · 제목 · "주최처 · 권장 인원"
+③ 카드(왼쪽 포스터 썸네일 112×158 + "포스터 © {poster_credit}", 오른쪽 주제 · 제출 마감 · `apply_deadline`이 미래면 "신청 마감" 행 · `notice_date`가 있을 때만 "공고일" · summary 4줄 말줄임)
+④ 출처 줄 + "원문 보기 ↗"(≥44px) ⑤ 관심 등록 버튼 + "N명이 이 공모전을 보고 있어요" ⑥ 추천 섹션(PR 4, D10).
+
+포스터 썸네일은 `<button>` → 확대 오버레이(같은 원본 URL, 별도 저장 없음; X·바깥 클릭·Esc로 닫힘, 포커스 이동, aria-label; "포스터 © 주최처" + "원문 보기" 노출).
+`poster_url`이 없거나 이미지 로딩 실패 → 폴백 카드("제출 마감" 칩, 주제, summary; 출처 줄 "포스터 없음 · 출처 …"). 색은 D11.
+
+### 4-6. 운영용 임포트 — `import_contests` (설계 확정 2026-10-11, 미구현)
+
+운영 DB에 검증된 공모전을 넣는 유일한 수동 경로. 시드(`seed_contests`)는 DEBUG 전용이라 운영에 쓸 수 없다.
+
+- **흐름**: 검증된 값을 JSON 파일로 저장소에 커밋(`backend/apps/contests/data/*.json`) → **PR로 검토** → 배포 → **Railway 셸에서** `python manage.py import_contests <파일> [--dry-run]` 실행. 데이터 변경 이력이 git에 남고, 사람이 값을 본 뒤에만 운영에 들어간다.
+- **식별**: 항목마다 `key` → `Contest.import_key`. 같은 key면 갱신, 없으면 생성(멱등). 제목·URL은 바뀔 수 있어 식별에 쓰지 않는다.
+- **파일**: `{verified_by, verified_at(ISO, 오프셋 필수), contests:[{key, title, organizer, organizer_type, submission_deadline, apply_deadline, notice_date, theme, summary, eligibility, team_size, source_url, listing_source, listing_url, poster_url, poster_credit, status}]}`
+- **검증 — 하나라도 실패하면 전체를 저장하지 않는다(한 트랜잭션)**:
+  - 필수 값, 선택지, 길이; 날짜는 오프셋 포함 ISO만(naive 거부); `verified_at` 필수; 파일 안 key 중복 거부.
+  - URL은 `http`/`https`만(기존 검증기), 포스터는 목록 사이트 이미지 호스트 거부(기존 `validate_poster_url`).
+  - **`status = published`인 항목은 `source_url`이 비어 있지 않아야 하고, 공모전 정보(목록) 사이트 도메인이면 거부**한다 — 위비티(`wevity.com`), 링크리어(`linkareer.com`), 씽유, 더팀스, 렉터스(`lectus.kr`), 씽굿(`thinkcontest.com`), 콘테스트코리아(`contestkorea.com`), 올콘(`all-con.co.kr`) 등. 목록은 코드 상수로 관리. 씽유·더팀스 도메인은 구현 시 확인. 목록 사이트 주소는 `listing_url`에만 둔다.
+- **동작**: 파일에 없는 기존 행은 건드리지 않는다(삭제 없음). `interest_count`는 덮어쓰지 않는다. `last_verified_at` ← `verified_at`. `--dry-run`은 생성/변경/동일 항목과 바뀌는 필드만 출력.
+- **개발용 시드와의 차이**: 시드의 한옥디자인 행은 `source_url`이 빈 채 published다(개발 전용 예외). 같은 값으로는 임포트의 published 검증을 통과하지 못한다 — 공식 주소를 찾기 전에는 운영에 올리지 않는다.
+
+### 4-5. 개발용 시드 7건
+
+**실서비스 전 전부 재검증 필요.** 2026-10-09 조사에서 공식 사이트 직접 확인은 대부분 실패(ggkia.or.kr 인증서 오류/IP 차단, kosid.or.kr 403) — 정림(junglimaward.com) 외에는 모음 사이트·기사 기준이다. 공식 포스터 이미지 URL은 7건 모두 미확인 → 전부 `poster_url` 없음(폴백 카드).
+
+| 공모전 | status | 제출 마감 (KST) | 신청 마감 | 비고 |
+|---|---|---|---|---|
+| 대한건축사협회 모듈러건축 공모 | published | 2026-12-02 15:00 | 2026-10-19 15:00 | 신청 마감은 이전 조사값, 재확인 필요 |
+| 제14회 한옥디자인 국제공모 | published | 2026-12-28 18:00 | — | `source_url` 비움 — lectus.kr은 목록 사이트라 `listing_url`에만. 공식 주소 미확인 |
+| 제38회 대한민국 실내건축대전 | published | 2026-10-14 17:00 | — | 신청+1차 작품 접수 마감. 2차 접수 11/11은 summary |
+| 제15회 도로경관디자인 대전 | published | 2026-10-29 18:00 | — | 18시는 이전 조사값, 재확인 필요. 누구나 |
+| 제62회 경기건축대전 | published | 2026-10-28 18:00 | — | 1차 = 온라인 작품 제출. 입선 발표 11/2, 2차(패널·모형) 11/21은 summary. 주최 "한국건축가협회 경기지회"(모음 사이트 기준) |
+| 정림학생건축상 2027 | published | 2027-01-11 23:59 | 2027-01-04 23:59 | 날짜는 공식 사이트 확인, **시각 미확인**(23:59는 자리표시). 원문 `junglimaward.com/2027` |
+| 에어-비트 시티 건축디자인 | pending | 2026-11-19 23:59 | — | 마감일 세 값: 11/19(렉터스), 11/20(위비티 D-n 환산), 11/20(링크리어 activity/344917, 접수 8/24~11/20). 공식 사이트 `airbeatcity.com/contest`에서는 일정 확인 불가 → 확인 전까지 pending. 시각 미확인 |
+
+## 5. PR 분할 (Phase 1)
+
+| PR | 내용 |
+|---|---|
+| 0 | 이 문서 + 이슈 등록 |
+| 1 | 백엔드: `Contest` + 마이그레이션, 목록·상세 API, `seed_contests`, 테스트 |
+| 2 | 백엔드: `ContestInterest`, 관심 API, 스로틀, `http`/`https` URL 검증(저장·bulk·update·DB CHECK), 관리 커맨드, 테스트 |
+| 3 | 프론트: `api/contests.js`, 목록·상세 화면(시안 B), 포스터 확대, 폴백, D-day 유틸, i18n, 목 데이터·localStorage 관심 제거. 추천·팀 섹션 숨김 |
+| 4 | 관심 등록자 API + 추천 섹션 재개(`utils/teamFit.js` 재사용) |
+
+## 6. Phase 2 — 수집기 (설계만, Phase 1 머지 후 별도 진행)
+
+0. **게이트**: 위비티 이용약관과 `robots.txt`를 읽고 결과를 사용자에게 보고. 허용 범위가 불분명하면 구현하지 않고 멈춘다.
+1. 후보 수집: 위비티 목록 건축/건설/인테리어(cidx=24), 디자인(cidx=19), 기획/아이디어(cidx=1) → D2 키워드 통과분만. 요청 간격, User-Agent 명시.
+2. 위비티의 "D-n"은 캐시/오프셋으로 하루씩 틀어질 수 있다 → 날짜 환산 시 **수집 시각(기준일)을 함께 저장**, 공식 페이지 날짜와 하루 이상 어긋나면 공식 페이지 우선.
+3. 주최처 공식 페이지를 따라가 LLM(`recommendation/services/_gemini.py` 재사용)으로 제출 마감·신청 마감·주제·참가 자격·요약을 구조화 추출. 스키마 검증(신규 의존성 없이 수기 검증기) + **원문 근거 문장 저장**.
+4. **제목 일치 검증**: 따라간 공식 페이지가 정말 그 공모전 공고인지 먼저 확인한다 — 공식 페이지의 제목/본문에서 읽은 공모전 이름·회차·연도가 위비티 목록의 제목과 일치해야 한다(정규화 후 비교: 공백·기호·'제N회' 표기 차이 허용, 회차나 연도가 다르면 불일치). 불일치·판단 불가 → `hidden`, 추출값을 쓰지 않는다. 지난 회차 공고나 주최처 홈 첫 화면을 잘못 읽는 사고를 막는 단계.
+5. 교차검증: 공식 페이지에서 제출 마감을 못 읽었거나 위비티 값과 충돌 → `hidden` (D7).
+6. 주최처 필터 (D8).
+7. 포스터: 주최처 공식 페이지의 이미지 URL(예: og:image)을 `poster_url`로 저장, `http`/`https` 검증 통과분만. 모음 사이트 이미지 서버 URL은 넣지 않는다 (D6).
+8. 하루 1~2회 Railway cron (D12). 실패해도 기존 `published` 유지.
+9. 수집 로그 테이블(실행 단위 + 후보 단위: 성공/실패/hidden 사유, 원본 D-n, 수집 시각, 근거 문장).
+
+## 7. 하지 않는 것
+
+포스터·위비티 이미지 다운로드/재호스팅 · 마감일 임의 채우기 · 관리자 페이지 · Make-DB(`canonical_v2_buildings`) 쓰기 · 팀/초대 모델.
+
+## 8. 미결
+
+- Railway 플랜의 cron 가용 여부·최대 실행 시간 (Phase 2 착수 시)
+- 위비티 약관 (Phase 2 게이트)
+- `import_contests` 구현(§4-6), 목록 사이트 도메인 목록 확정(씽유·더팀스)
+- 시드 7건의 공식 페이지 재검증, 공식 포스터 이미지 URL 확보

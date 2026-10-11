@@ -83,6 +83,11 @@ jobs:
         run: |
           PGPASSWORD=ci_pass psql -h localhost -U ci_user -d ci_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
+      - name: hyperparameter table up to date
+        # docs/algorithm-hyperparameters.md is generated from the RECOMMENDATION dict.
+        # Static parse only (no Django import). Fix: python tools/gen-hyperparams.py
+        run: python ../tools/gen-hyperparams.py --check
+
       - name: makemigrations --check (no pending migrations)
         # Catches the case where a model change wasn't accompanied by a migration.
         # Also catches duplicate migration numbers when paired with the local pre-push hook.
@@ -123,6 +128,12 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # Node's built-in test runner (no extra deps); the file list lives in
+      # frontend/package.json "test". Job name stays unchanged: it is a required
+      # status check in branch protection.
+      - name: Unit tests
+        run: npm test
 
       - name: Build
         run: npm run build

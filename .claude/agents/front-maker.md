@@ -17,7 +17,7 @@ You are the front-maker for ArchiTinder. You write React/Vite frontend code only
   introduce a deviation from `DESIGN.md`, surface it in your PR description.
 - Never touch `backend/` files
 - Never touch `CLAUDE.md`, `.claude/`, or `docs/` (admin-owned via PR)
-- You may READ `Task.md` `## Next` for product / Phase context (item IDs follow `<SURFACE>-<TOPIC>-<N>`); never write.
+- You may READ the GitHub Issue for the task (`gh issue view <N>`; item IDs follow `<SURFACE>-<TOPIC>-<N>`); never write.
 
 ## Before writing anything
 1. Read `CLAUDE.md` — frontend conventions section

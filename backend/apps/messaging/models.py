@@ -1,6 +1,6 @@
 """apps.messaging models — contact requests, 1:1 conversations, blocks, reports.
 
-Design: docs/plans/2026-10-02-contact-messaging-design.md (D1-D13).
+Design: docs/decisions/2026-10-02-contact-messaging-design.md (D1-D13).
 
 All user FKs point at accounts.UserProfile (its PK is the auto `id`; the auth
 User id exposed by the API is `UserProfile.user_id`). Only the 'default' DB is

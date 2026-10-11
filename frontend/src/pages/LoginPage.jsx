@@ -14,7 +14,7 @@
  * LOGIN-REWORK-1 (2026-07-07): real card deck (next card pre-rendered behind
  * the front one) + step-history stack for back-nav; no more IntroOverlay
  * modal — the first `choice` card teaches the swipe itself. See
- * .claude/plans/login-page-concept-rework.md for the full diagnosis.
+ * .claude/plans/archive/login-page-concept-rework.md for the full diagnosis.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'

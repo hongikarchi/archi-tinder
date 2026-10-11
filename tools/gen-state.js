@@ -10,9 +10,11 @@
  * Per-key source:
  *   meta.{updatedAt,head,branch}      git / clock
  *   meta.name                         prior (preserved)
- *   done / now / next                 Task.md parse (id/title/date/prs mechanical;
- *                                     note carried by id from prior, else seeded
- *                                     from the entry's first body line)
+ *   now / next                        GitHub Issues (label `now`; priority:* buckets)
+ *                                     — Task.md ## Now/## Next parsed instead if
+ *                                     those sections still exist
+ *   done                              last 8 merged PRs into develop — Task.md ## Done
+ *                                     parsed instead if the section still exists
  *   agents                            .claude/agents/<name>.md frontmatter
  *                                     (name/model/effort mechanical; role carried
  *                                     by name from prior, else first description
@@ -218,6 +220,58 @@ function parseTaskMd(text, prior) {
 }
 
 // ---------------------------------------------------------------------------
+// GitHub Issues (tracking moved from Task.md ## Now/## Next on 2026-10-07, S5)
+// ---------------------------------------------------------------------------
+// now[]   <- open issues labelled `now`
+// next{}  <- open issues bucketed by priority:x-high|high|medium|low
+// done[]  <- when Task.md has no ## Done section: last 8 merged PRs into develop
+// Issue title convention: "<ID> — <Korean title>"; note = first body line.
+function splitIssueTitle(title) {
+  const segs = decodeEntities(title).split(/\s—\s/);
+  if (segs.length > 1 && /^[A-Z][A-Z0-9-]+$/.test(segs[0].trim())) {
+    return { id: segs[0].trim(), title: segs.slice(1).join(' — ').trim() };
+  }
+  return { id: `#${title}`.slice(0, 40), title: title.trim() };
+}
+function issueNote(body) {
+  const first = (body || '').split('\n').map((l) => l.trim()).find((l) => l && !/^#{1,6} /.test(l));
+  return first ? firstBodyNote([first]) : '';
+}
+function buildFromIssues(prior) {
+  const raw = tryRun('gh', [
+    'issue', 'list', '--state', 'open', '--limit', '200',
+    '--json', 'number,title,body,labels',
+  ]);
+  if (!raw) {
+    process.stderr.write('[gen-state] gh unavailable/offline — keeping prior now[]/next{}\n');
+    return { now: prior.now || [], next: prior.next || { xhigh: [], high: [], medium: [], low: [] } };
+  }
+  let list;
+  try { list = JSON.parse(raw); } catch { return { now: prior.now || [], next: prior.next || { xhigh: [], high: [], medium: [], low: [] } }; }
+  const bucketOf = { 'priority:x-high': 'xhigh', 'priority:high': 'high', 'priority:medium': 'medium', 'priority:low': 'low' };
+  const next = { xhigh: [], high: [], medium: [], low: [] };
+  const now = [];
+  for (const is of list) {
+    const labels = (is.labels || []).map((l) => l.name);
+    const { id, title } = splitIssueTitle(is.title);
+    const item = { id, title, note: issueNote(is.body), issue: is.number };
+    if (labels.includes('now')) now.push(item);
+    const key = labels.map((l) => bucketOf[l]).find(Boolean);
+    if (key) next[key].push(item);
+  }
+  return { now, next };
+}
+function doneFromMergedPrs(prs) {
+  return (prs || []).slice(0, 8).map((pr) => ({
+    id: `PR #${pr.number}`,
+    title: pr.title,
+    completedAt: pr.mergedAtKST ? pr.mergedAtKST.slice(0, 10) : '',
+    prs: [pr.number],
+    note: '',
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // agents
 // ---------------------------------------------------------------------------
 function parseFrontmatter(md) {
@@ -368,7 +422,17 @@ const HEADER = `/*
 function build() {
   const prior = loadPrior();
   const taskText = fs.readFileSync(p('Task.md'), 'utf8');
-  const { done, now, next } = parseTaskMd(taskText, prior);
+  const parsed = parseTaskMd(taskText, prior);
+  const taskLines = taskText.split('\n');
+  const hasNowNext = sectionLines(taskLines, 'Now').length > 0 || sectionLines(taskLines, 'Next').length > 0;
+  const hasDone = sectionLines(taskLines, 'Done').length > 0;
+  const prs = buildPrs(prior);
+  // Tracking lives in GitHub Issues since 2026-10-07; Task.md sections are honoured
+  // only if they still exist (transition safety).
+  const fromIssues = hasNowNext ? { now: parsed.now, next: parsed.next } : buildFromIssues(prior);
+  const now = fromIssues.now;
+  const next = fromIssues.next;
+  const done = hasDone ? parsed.done : doneFromMergedPrs(prs);
 
   const head =
     tryRun('git', ['rev-parse', '--short', 'origin/develop']) ||
@@ -385,7 +449,7 @@ function build() {
     done,
     now,
     next,
-    prs: buildPrs(prior),
+    prs,
     agents: buildAgents(prior),
     fileTree: buildFileTree(),
     systemFlow: prior.systemFlow || { title: '', mermaid: '' },

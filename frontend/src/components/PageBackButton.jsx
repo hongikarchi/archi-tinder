@@ -3,7 +3,7 @@ import FloatingIconButton from './FloatingIconButton.jsx'
 /**
  * PageBackButton — shared floating circular back button, top-left.
  *
- * Design port (.claude/plans/canvas-design-port.md §6d item 6): every mock
+ * Design port (.claude/plans/archive/canvas-design-port.md §6d item 6): every mock
  * replaces the app's old sticky glassmorphic header bar (back button left ·
  * centered title · spacer right) with a plain in-flow left-aligned title and
  * relocates "back" to a floating circular button at the canvas top-left

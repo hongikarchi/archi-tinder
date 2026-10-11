@@ -1,12 +1,7 @@
-/* CompetitionListPage — 공모전 목록 (PROTOTYPE)
+/* CompetitionListPage — 공모전 목록
    레이아웃은 PeopleDiscoveryPage 와 같은 뷰포트 락 체인을 따른다:
    .page(height) > .content(flex:1, min-height:0, overflow-y:auto)
-
-   UI-CONSISTENCY-B Phase 3b-3: own sticky glass header bar dropped — top
-   structure is now PageTopControls + PageLogoHeader + SocialSegment, same as
-   the sibling PeopleDiscoveryPage (see .header below, now just a slot for
-   PageLogoHeader rather than a hand-rolled glass bar with its own "소셜"
-   title). */
+   상단 구조: PageTopControls + PageLogoHeader + SocialSegment (공유 chrome). */
 
 .page {
   height: var(--page-height);
@@ -40,15 +35,17 @@
   gap: 10px;
 }
 
+/* Text surface card (radius-md per DESIGN.md §3.1 — not a photo tile). */
 .card {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   padding: 14px 16px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
   outline: none;
   transition:
     border-color var(--motion-fast) var(--motion-ease),
@@ -65,120 +62,68 @@
   outline-offset: 2px;
 }
 
-.cardMain {
-  flex: 1;
-  min-width: 0;
-}
-
-.cardHead {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
 .cardTitle {
   font-size: var(--fs-emphasis);
   font-weight: var(--fw-bold);
   color: var(--color-text);
-  margin: 0;
+  margin: 6px 0 0;
   line-height: 1.35;
-  flex: 1;
-  min-width: 0;
-}
-
-/* 마감은 이 화면의 긴장을 만드는 정보라 숫자를 또렷하게 세운다. */
-.dday {
-  flex-shrink: 0;
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-bold);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-
-.ddayUrgent {
-  color: var(--color-destructive, #D73A49);
+  overflow-wrap: anywhere;
 }
 
 .organizer {
   font-size: var(--fs-caption);
   color: var(--color-text-muted);
-  margin: 3px 0 0;
+  margin: 0;
 }
 
 .theme {
   font-size: var(--fs-body);
   color: var(--color-text-dim);
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   line-height: 1.45;
-}
-
-.metaRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
 }
 
 .meta {
   font-size: var(--fs-caption);
   color: var(--color-text-muted);
+  margin: 6px 0 0;
   font-variant-numeric: tabular-nums;
 }
 
-.metaAccent {
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
-  color: var(--accent-1);
-}
-
-.dot {
-  color: var(--color-text-dim);
-  font-size: var(--fs-caption);
-}
-
-.interestBtn {
-  flex-shrink: 0;
-  align-self: center;
-  padding: 7px 14px;
-  min-height: 34px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
+/* Inline error (DESIGN.md §8.9 tier 2) */
+.inlineError {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  text-align: center;
   color: var(--color-text-muted);
+  font-size: var(--fs-body);
+}
+
+.inlineError p {
+  margin: 0 0 12px;
+}
+
+.retryBtn {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-family: inherit;
-  font-size: var(--fs-caption);
+  font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
   cursor: pointer;
-  white-space: nowrap;
-  transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    background var(--motion-fast) var(--motion-ease),
-    color var(--motion-fast) var(--motion-ease);
+  transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
-.interestBtn:hover {
+.retryBtn:hover {
   border-color: var(--accent-1);
-  color: var(--accent-1);
 }
 
-.interestBtn:focus-visible {
+.retryBtn:focus-visible {
   outline: 2px solid var(--accent-1);
   outline-offset: 2px;
-}
-
-.interestBtnOn {
-  border-color: var(--accent-1);
-  background: color-mix(in srgb, var(--accent-1) 12%, transparent);
-  color: var(--accent-1);
-}
-
-/* 프로토타입임을 숨기지 않는다 — 데모 중 오해를 막는다. */
-.protoNote {
-  max-width: 560px;
-  margin: 18px auto 0;
-  padding: 0 20px;
-  font-size: var(--fs-caption);
-  color: var(--color-text-dim);
-  text-align: center;
 }

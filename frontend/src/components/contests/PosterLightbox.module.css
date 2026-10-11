@@ -1,0 +1,84 @@
+/*
+ * PosterLightbox.module.css — enlarged contest poster (decision D11 in
+ * docs/decisions/2026-10-09-contest-real-data.md).
+ *
+ * The overlay background below is the ONE allowed hardcoded color in the
+ * contest screens: a dark, theme-independent backdrop. Everything drawn on top
+ * of it uses the theme-invariant white tokens (--tabbar-fg*, which are white in
+ * all 4 themes) so text stays readable in light and dark themes alike.
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(8, 12, 24, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+  margin: auto;
+}
+
+.poster {
+  display: block;
+  width: min(320px, 90vw);
+  max-width: 100%;
+  max-height: 62vh;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.credit {
+  margin: 0;
+  max-width: 100%;
+  font-size: var(--fs-caption);
+  color: var(--tabbar-fg-inactive);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 0;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--tabbar-glass-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--tabbar-fg);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--motion-ease);
+}
+
+.action:hover {
+  background: var(--tabbar-active-bg);
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}

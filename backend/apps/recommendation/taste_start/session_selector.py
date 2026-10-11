@@ -1,7 +1,7 @@
 """
 session_selector.py -- Pure-numpy next-card selector for the taste_v2 swipe flow.
 
-NO database access. Spec: docs/plans/2026-10-11-taste-start-redesign.md §5-3.
+NO database access. Spec: docs/decisions/2026-10-11-taste-start-redesign.md §5-3.
 Settings (`settings.RECOMMENDATION`) are read at call time so tests can override.
 
 Cards after the start cards alternate between two kinds by a stateless rule

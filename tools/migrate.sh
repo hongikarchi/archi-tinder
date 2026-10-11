@@ -23,12 +23,22 @@ APP="${1:-}"
 
 cd "${REPO_ROOT}/backend"
 
+# Interpreter: PYTHON env var wins; else the backend venv; else a REAL python3
+# (Windows ships a Store stub named python3 that runs nothing); else python.
+# Same resolution order as the Makefile and tools/back-validate.sh.
+if [ -z "${PYTHON:-}" ]; then
+    if [ -x .venv/Scripts/python.exe ]; then PYTHON=.venv/Scripts/python
+    elif [ -x .venv/bin/python ]; then PYTHON=.venv/bin/python
+    elif [ "$(python3 -c 'print(42)' 2>/dev/null)" = "42" ]; then PYTHON=python3
+    else PYTHON=python; fi
+fi
+
 if [ -n "$APP" ]; then
     echo "─── migrate (app=${APP}) ─────"
-    python3 manage.py migrate "$APP"
+    "$PYTHON" manage.py migrate "$APP"
 else
     echo "─── migrate (all apps) ─────"
-    python3 manage.py migrate
+    "$PYTHON" manage.py migrate
 fi
 
 echo ""

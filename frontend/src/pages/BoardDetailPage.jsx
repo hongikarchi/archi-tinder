@@ -22,7 +22,7 @@ import Skeleton from '../components/Skeleton.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// UI-CONSISTENCY-B Phase 3a, decision 7 (.claude/plans/ui-consistency-b.md):
+// UI-CONSISTENCY-B Phase 3a, decision 7 (.claude/plans/archive/ui-consistency-b.md):
 // option (a) shipped — cover photo as a contained card below the chrome, no
 // full-bleed hero. Flip this to `false` to switch to option (b) (drop the
 // cover entirely, text-only header) — the only line that needs to change.

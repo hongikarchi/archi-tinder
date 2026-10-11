@@ -11,7 +11,7 @@
 !.claude/hooks/
 !.claude/settings.json
 !.claude/WORKFLOW.md
-!.claude/reviews/
+!.claude/rules/
 
 # Python / Django (backend — future)
 __pycache__/

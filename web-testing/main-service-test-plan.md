@@ -112,7 +112,7 @@ Failure:
 
 ### 3. New Project And Taste Search
 
-Implemented (Taste-start redesign — `docs/plans/2026-10-11-taste-start-redesign.md`):
+Implemented (Taste-start redesign — `docs/decisions/2026-10-11-taste-start-redesign.md`):
 
 - `/new` project setup with name, area range, and visibility.
 - `/search`: type a query → send → JEV tag recognition (`/api/v1/taste/recognize/`) → tag chips + top-3 stacked cards with "N개 중 M개 일치".

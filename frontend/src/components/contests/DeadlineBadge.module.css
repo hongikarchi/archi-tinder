@@ -1,0 +1,28 @@
+/* DeadlineBadge — caption-size pill; red token while open, neutral once closed. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.open {
+  color: var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
+}
+
+.kind {
+  font-weight: var(--fw-semibold);
+  white-space: pre;
+}
+
+.closed {
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+}

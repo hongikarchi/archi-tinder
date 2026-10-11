@@ -20,7 +20,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}/frontend"
 
 # 1. lint
-echo "─── 1/2: npm run lint ─────"
+echo "─── 1/3: npm run lint ─────"
 npm run lint --silent 2>&1 | tail -20 || {
     echo "✗ ESLint failed"
     exit 1
@@ -28,8 +28,17 @@ npm run lint --silent 2>&1 | tail -20 || {
 echo "✓ lint clean"
 echo ""
 
-# 2. build
-echo "─── 2/2: npm run build ─────"
+# 2. unit tests (node --test; same step CI runs)
+echo "─── 2/3: npm test ─────"
+npm test --silent 2>&1 | tail -12 || {
+    echo "✗ Unit tests failed"
+    exit 3
+}
+echo "✓ unit tests pass"
+echo ""
+
+# 3. build
+echo "─── 3/3: npm run build ─────"
 npm run build --silent 2>&1 | tail -10 || {
     echo "✗ Vite build failed"
     exit 2

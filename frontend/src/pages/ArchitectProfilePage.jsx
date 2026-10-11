@@ -19,7 +19,7 @@ import Skeleton from '../components/Skeleton.jsx'
  * ArchitectProfilePage — UI-CONSISTENCY-B3b-2.
  *
  * Rebuilt onto the same shared-component system as UserProfilePage /
- * ProfileHero (DESIGN.md §2.2/§3.1/§3.3a, .claude/plans/ui-consistency-b.md
+ * ProfileHero (DESIGN.md §2.2/§3.1/§3.3a, .claude/plans/archive/ui-consistency-b.md
  * phase 3 item 3): the full-bleed accent-gradient hero band is retired for a
  * centered 1100-wide column with a 480-wide hero (avatar halo, title, meta,
  * stats) that mirrors ProfileHero's structure and sizes; Built/Unbuilt dark

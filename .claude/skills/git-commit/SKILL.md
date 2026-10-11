@@ -7,7 +7,7 @@ description: Stage + commit a single coherent change on a feature branch. Cavema
 
 Use this skill when a coherent change is ready to commit on a feature branch. The main session executes the steps below itself. (The `git-manager` agent was removed 2026-05-31 — this skill replaces it.)
 
-## Hard rules (mirror CLAUDE.md HARD RULE 4)
+## Hard rules (mirror AGENTS.md HARD RULE 4)
 
 1. **Never commit on `main` or `develop`.** Run `git status` first. If on a protected branch, abort and tell the user to switch to `feature/<role>-<topic>`.
 2. **Never push.** No `git push`, no `gh pr create`. That's `git-publish` skill's job.

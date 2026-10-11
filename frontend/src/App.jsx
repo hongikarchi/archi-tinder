@@ -821,7 +821,7 @@ export default function App() {
     }
   }
 
-  // Taste-start v2 (docs/plans/2026-10-11-taste-start-redesign.md): start a
+  // Taste-start v2 (docs/decisions/2026-10-11-taste-start-redesign.md): start a
   // session from the 3 chosen cards + recognized tags. new -> fresh local
   // project; update -> existing board id (force_new, same as handleUpdateWithImages).
   async function handleStartTaste({ mode, projectId, projectName, rawQuery, tags, startIds, excludeIds }) {

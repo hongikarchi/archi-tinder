@@ -1,7 +1,7 @@
 """
 swipe_rules.py -- DB-free rules for the taste_v2 swipe path.
 
-Spec: docs/plans/2026-10-11-taste-start-redesign.md §5-3/§5-4.
+Spec: docs/decisions/2026-10-11-taste-start-redesign.md §5-3/§5-4.
 Settings are read at call time. `session_selector` is imported as a MODULE so
 tests can patch `session_selector.select_next`.
 """
