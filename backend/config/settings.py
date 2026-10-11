@@ -219,6 +219,8 @@ REST_FRAMEWORK = {
         'image_load_telemetry': '120/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
+        # BACK-CONTEST-2: contest interest toggle.
+        'contest_interest': '60/min',
         # NOTE (BACK-THROTTLE-2): entries below whose throttle CLASS also sets a
         # `rate` attr are registry/documentation only — DRF's SimpleRateThrottle
         # reads DEFAULT_THROTTLE_RATES solely when the class omits `rate`, so the

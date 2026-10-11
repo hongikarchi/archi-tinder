@@ -4,16 +4,22 @@ serializers.py -- apps/contests
 Datetimes are stored tz-aware (UTC) and serialized as ISO 8601 with offset;
 the frontend converts to KST.
 """
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Contest
+from .validators import is_http_url, validate_poster_url
 
 
 class ContestSerializer(serializers.ModelSerializer):
     next_deadline_kind = serializers.SerializerMethodField()
     next_deadline = serializers.SerializerMethodField()
     is_closed = serializers.SerializerMethodField()
+    poster_url = serializers.SerializerMethodField()
+    source_url = serializers.SerializerMethodField()
+    listing_url = serializers.SerializerMethodField()
+    interested = serializers.SerializerMethodField()
 
     class Meta:
         model = Contest
@@ -23,7 +29,7 @@ class ContestSerializer(serializers.ModelSerializer):
             'theme', 'summary', 'eligibility', 'team_size',
             'source_url', 'listing_source', 'listing_url',
             'poster_url', 'poster_credit',
-            'interest_count',
+            'interest_count', 'interested',
             'next_deadline_kind', 'next_deadline', 'is_closed',
         ]
         read_only_fields = fields
@@ -41,3 +47,25 @@ class ContestSerializer(serializers.ModelSerializer):
 
     def get_is_closed(self, obj):
         return obj.submission_deadline < self._now()
+
+    def get_poster_url(self, obj):
+        # Hotlinked by default: show whenever a stored http(s) URL exists.
+        if not is_http_url(obj.poster_url):
+            return None
+        try:
+            validate_poster_url(obj.poster_url)
+        except ValidationError:
+            return None
+        return obj.poster_url
+
+    # Defense in depth: never emit a non-http(s) URL even if a bad row got in
+    # through queryset.update() / raw SQL (Contest.save() validates the normal path).
+    def get_source_url(self, obj):
+        return obj.source_url if is_http_url(obj.source_url) else ''
+
+    def get_listing_url(self, obj):
+        return obj.listing_url if is_http_url(obj.listing_url) else ''
+
+    def get_interested(self, obj):
+        # Views annotate `interested` (Exists subquery) -- no per-row query here.
+        return bool(getattr(obj, 'interested', False))

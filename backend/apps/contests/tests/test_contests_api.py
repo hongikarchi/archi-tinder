@@ -72,7 +72,7 @@ class TestList:
             'theme', 'summary', 'eligibility', 'team_size',
             'source_url', 'listing_source', 'listing_url',
             'poster_url', 'poster_credit',
-            'interest_count', 'next_deadline_kind', 'next_deadline', 'is_closed',
+            'interest_count', 'interested', 'next_deadline_kind', 'next_deadline', 'is_closed',
         }
         assert 'import_key' not in row
         assert row['is_closed'] is False
@@ -129,10 +129,27 @@ class TestPoster:
             row = resp.data['results'][0] if 'results' in resp.data else resp.data
             assert row['poster_url'] == url
             assert 'poster_status' not in row
+            assert 'takedown_email' not in row
 
     def test_poster_url_null_when_unset(self, auth_client_a):
         c = _make(poster_url=None)
         assert auth_client_a.get(_detail_url(c.id)).data['poster_url'] is None
+
+    @pytest.mark.parametrize('url,expected', [
+        ('http://example.com/p.png', 'http://example.com/p.png'),
+        ('https://example.com/p.png', 'https://example.com/p.png'),
+        ('javascript:alert(1)', None),
+        ('ftp://example.com/p.png', None),
+        ('', None),
+        (None, None),
+    ])
+    def test_serializer_poster_url_http_only(self, url, expected):
+        from apps.contests.serializers import ContestSerializer
+        c = Contest(
+            title='T', organizer='O', source_url='https://example.com/',
+            submission_deadline=timezone.now() + timedelta(days=5), poster_url=url,
+        )
+        assert ContestSerializer(c).data['poster_url'] == expected
 
 
 class TestNextDeadline:
