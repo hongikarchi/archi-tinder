@@ -1,6 +1,6 @@
 # 공모전 팀빌딩 — 찜 기반 설계
 
-**작성** 2026-09-17 · **상태** 프로토타입 구현 (FRONT-COMP-PROTO-1, PR #333, 2026-09-23; §7-3 팀 상세 화면 미구현, 출시 전 DEPLOY-BLOCKER-1 ①-③ 정리 필요) · **선행** `2026-08-20-personality-discovery-design.md` §10 (Defer 해제)
+**작성** 2026-09-17 · **상태** 프로토타입 구현 (FRONT-COMP-PROTO-1, PR #333, 2026-09-23; §7-3 팀 상세 화면 미구현, 출시 전 DEPLOY-BLOCKER-1 ①-③ 정리 필요) · **선행** `2026-08-20-personality-discovery-design.md` §10 (Defer 해제) · **후속** `2026-10-09-contest-real-data.md` (§6-1 `Competition`은 `Contest`로 대체, 운영자 등록 → 자동 수집)
 
 ---
 
