@@ -1,25 +1,19 @@
 /**
- * CompetitionDetailPage.jsx — 공모전 상세 (PROTOTYPE)
+ * CompetitionDetailPage.jsx — 공모전 상세
  * Route: /competitions/:competitionId
  *
- * 설계: docs/decisions/2026-09-17-competition-team-design.md §7-2
+ * 설계: docs/decisions/2026-10-09-contest-real-data.md §3 (D4 D5 D9 D10 D11), §4-4
  *
- * 이 설계의 핵심 화면. 찜 → 같은 의도를 가진 사람 발견 → 팀으로 이어지는
- * 전환이 이 한 화면에서 일어난다.
+ * 위에서 아래: 상단바 -> D-n 배지·제목·주최처 -> 정보 카드(포스터 썸네일 + 주제·마감·
+ * 요약, 포스터가 없으면 폴백 카드) -> 출처 줄 -> 관심 등록.
  *
- * 섹션 A(찜한 사람)는 teamFit 점수 순으로 정렬한다 — 발견 피드의 "가까운
- * 사람"과 달리 1·2축은 보완, 3·4축은 일치를 본다(§4).
- *
- * 백엔드 없음. 목 데이터 + localStorage 찜.
- *
- * UI-CONSISTENCY-B Phase 3b-3: onto the shared chrome system — PageShell
- * ('medium', 680, same precedent as BoardDetailPage) + PageBackButton +
- * PageTopControls + PageLogoHeader replace the hand-rolled 56px top-padding
- * spacer hack on .hero. h1 → PageTitle, section headers → SectionTitle,
- * not-found → EmptyState.
+ * 포스터는 hotlink 만 한다(D4): 내려받지도, 프록시·캐시·재호스팅하지도 않는다.
+ * API 가 준 모든 href/src 는 렌더 시점에 safeHttpUrl 를 다시 통과한다.
+ * 추천(관심 있는 사람)·모집 중인 팀 섹션은 가짜 유저 방지(D10)를 위해 이 화면에서
+ * 제거됐다 — 실제 데이터와 함께 후속 PR 에서 돌아온다.
  */
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from '../i18n/index.js'
 import PageShell from '../components/PageShell.jsx'
@@ -27,223 +21,311 @@ import PageBackButton from '../components/PageBackButton.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTitle from '../components/PageTitle.jsx'
-import SectionTitle from '../components/SectionTitle.jsx'
 import EmptyState from '../components/EmptyState.jsx'
-import PentagonChart from '../components/PentagonChart.jsx'
+import Skeleton from '../components/Skeleton.jsx'
+import DeadlineBadge from '../components/contests/DeadlineBadge.jsx'
+import PosterLightbox from '../components/contests/PosterLightbox.jsx'
 import {
-  competitionById,
-  daysLeft,
-  MOCK_INTERESTED,
-  MOCK_TEAMS,
-  MOCK_MY_VECTOR,
-} from '../constants/mockCompetitions.js'
-import { loadInterests, toggleInterest } from '../utils/competitionInterest.js'
-import { sortByFit, fitReason } from '../utils/teamFit.js'
+  getContest,
+  addContestInterest,
+  removeContestInterest,
+} from '../api/contests.js'
+import { VerifyRequiredError } from '../api/projects.js'
+import { useNow } from '../hooks/useNow.js'
+import { formatKstDateTime, formatKstDate } from '../utils/contestDeadline.js'
+import { safeHttpUrl } from '../utils/safeUrl.js'
 import styles from './CompetitionDetailPage.module.css'
+
+const TOAST_MS = 3000
 
 export default function CompetitionDetailPage({ onLogout }) {
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const { competitionId } = useParams()
-  const competition = competitionById(competitionId)
+  const now = useNow()
 
-  const [interests, setInterests] = useState(() => loadInterests())
+  const [status, setStatus] = useState('loading')   // 'loading' | 'notfound' | 'error' | 'ready'
+  const [contest, setContest] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [posterFailed, setPosterFailed] = useState(false)   // image failed to load
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [pending, setPending] = useState(false)             // interest request in flight
   const [toast, setToast] = useState(null)
+  const thumbRef = useRef(null)
+  const toastTimer = useRef(null)
+
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
+
+  const showToast = useCallback(msg => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS)
+  }, [])
+
+  // Load on id change / retry. The route element is reused across ids, so the
+  // effect resets per-contest state first; responses for a superseded id (or
+  // after unmount) are dropped via the `cancelled` flag in cleanup.
+  useEffect(() => {
+    let cancelled = false
+    setStatus('loading')
+    setContest(null)
+    setPosterFailed(false)
+    setLightboxOpen(false)
+    setPending(false)
+    setToast(null)
+    getContest(competitionId)
+      .then(data => {
+        if (cancelled) return
+        setContest(data)
+        setStatus('ready')
+      })
+      .catch(err => {
+        if (cancelled) return
+        setStatus(err?.status === 404 ? 'notfound' : 'error')
+      })
+    return () => { cancelled = true }
+  }, [competitionId, reloadKey])
+
+  function retry() {
+    setStatus('loading')
+    setReloadKey(k => k + 1)
+  }
 
   const chrome = (
     <>
-      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate('/competitions')} />} />
+      <PageTopControls
+        onLogout={onLogout}
+        leading={(
+          <PageBackButton
+            inline
+            label={t('contest.detail.backAria')}
+            onClick={() => navigate('/competitions')}
+          />
+        )}
+      />
       <PageLogoHeader />
     </>
   )
 
-  if (!competition) {
+  if (status === 'loading') {
     return (
-      <PageShell width="medium" chrome={chrome}>
-        <EmptyState title={t('competitionB3.detail.notFound')} />
+      <PageShell width="medium" contentStyle={{ padding: '20px 20px 0' }} chrome={chrome}>
+        <div className={styles.skeletons} aria-hidden="true">
+          <Skeleton width={120} height={24} radius="var(--radius-pill)" />
+          <Skeleton height={32} />
+          <Skeleton height={186} radius="var(--radius-lg)" />
+          <Skeleton height={56} radius="var(--radius-md)" />
+        </div>
       </PageShell>
     )
   }
 
-  const saved = interests.has(competition.id)
-  const d = daysLeft(competition)
-
-  // 찜한 사람은 적합도 순. 발견 피드의 유클리드 정렬과 의도적으로 다르다(§4).
-  const ranked = sortByFit(MOCK_INTERESTED[competition.id] || [], MOCK_MY_VECTOR)
-  // 상위 1명만 추천으로 올린다. 2~3명을 추천하면 "추천"이 희석되어 그냥
-  // 정렬된 목록과 다를 게 없어진다.
-  const recommended = ranked.length > 1 ? ranked[0] : null
-  const rest = recommended ? ranked.slice(1) : ranked
-  const teams = MOCK_TEAMS[competition.id] || []
-
-  function handleToggleInterest() {
-    setInterests(prev => toggleInterest(prev, competition.id))
-  }
-
-  function showToast(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2200)
-  }
-
-  /**
-   * 사람 카드. 추천/일반이 같은 카드를 쓰고 테두리만 달라진다 — 다른 레이아웃을
-   * 쓰면 "추천"이 별개 기능처럼 보여 목록과의 연결이 끊긴다.
-   *
-   * 실명 대신 아이디만 보여준다. 판단용 프로토타입이라 사람을 특정할 필요가
-   * 없고, 모르는 사람의 실명이 나열되면 발견보다 신상 목록처럼 읽힌다.
-   */
-  function renderPerson(p, isRecommended) {
+  if (status === 'notfound') {
     return (
-      <article className={`${styles.personCard} ${isRecommended ? styles.personCardRec : ''}`}>
-        <div className={styles.personChart}>
-          <PentagonChart myVector={MOCK_MY_VECTOR} theirVector={p.vector} mini size={104} />
-        </div>
-        <div className={styles.personBody}>
-          <div className={styles.personHead}>
-            {/* 아이디를 누르면 그 사람의 Created 탭으로 — 작품을 보고
-                판단할 수 있어야 "제안"에 근거가 생긴다. */}
-            <button
-              type="button"
-              className={styles.handleBtn}
-              onClick={() => navigate(`/user/${p.user_id}?tab=created`)}
-              aria-label={t('competitionB3.detail.viewProfileAria', { handle: p.handle })}
-            >
-              @{p.handle}
-            </button>
-            <span className={styles.typeBadge}>{p.type_code}</span>
-          </div>
-          <p className={styles.fitReason}>{fitReason(MOCK_MY_VECTOR, p.vector)}</p>
-        </div>
-        <button
-          type="button"
-          className={styles.proposeBtn}
-          onClick={() => showToast(t('competitionB3.detail.proposeSent', { handle: p.handle }))}
-        >
-          {t('competitionB3.detail.proposeBtn')}
-        </button>
-      </article>
+      <PageShell width="medium" chrome={chrome}>
+        <EmptyState
+          title={t('contest.detail.notFound')}
+          actionLabel={t('contest.detail.backToList')}
+          onAction={() => navigate('/competitions')}
+        />
+      </PageShell>
     )
   }
 
+  if (status === 'error' || !contest) {
+    return (
+      <PageShell width="medium" chrome={chrome}>
+        <div className={styles.inlineError} role="alert">
+          <p>{t('contest.detail.loadError')}</p>
+          <button type="button" className={styles.retryBtn} onClick={retry}>
+            {t('contest.detail.retry')}
+          </button>
+        </div>
+      </PageShell>
+    )
+  }
+
+  // ── Derived, render-time-safe values ─────────────────────────────────────
+  const title = contest.title
+  const posterUrl = safeHttpUrl(contest.poster_url)
+  const showPoster = Boolean(posterUrl) && !posterFailed
+  const sourceUrl = safeHttpUrl(contest.source_url) || safeHttpUrl(contest.listing_url)
+  const applyAt = contest.apply_deadline ? new Date(contest.apply_deadline) : null
+  const showApplyRow = Boolean(applyAt) && !Number.isNaN(applyAt.getTime()) && applyAt.getTime() > now.getTime()
+  const noticeText = contest.notice_date ? formatKstDate(contest.notice_date, language) : ''
+  const posterCredit = (contest.poster_credit || '').trim() || (contest.organizer || '').trim()
+  const interestCount = Number(contest.interest_count) || 0
+  const interested = Boolean(contest.interested)
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  async function handleToggleInterest() {
+    if (pending) return
+    const prev = contest
+    const next = !prev.interested
+    // Optimistic: flip now, roll back (and tell the user) if the call fails.
+    setContest({
+      ...prev,
+      interested: next,
+      interest_count: Math.max(0, (Number(prev.interest_count) || 0) + (next ? 1 : -1)),
+    })
+    setPending(true)
+    try {
+      const res = next ? await addContestInterest(prev.id) : await removeContestInterest(prev.id)
+      if (res && typeof res.interest_count === 'number') {
+        setContest(c => (c && c.id === prev.id ? { ...c, interest_count: res.interest_count, interested: next } : c))
+      }
+    } catch (err) {
+      setContest(c => (c && c.id === prev.id ? { ...c, interested: prev.interested, interest_count: prev.interest_count } : c))
+      // The global VerifyGateModal already explains a guest 403.
+      if (!(err instanceof VerifyRequiredError)) showToast(t('contest.detail.interestError'))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  function handlePosterError() {
+    setLightboxOpen(false)
+    setPosterFailed(true)
+  }
+
+  // ── Pieces ───────────────────────────────────────────────────────────────
+  const deadlineRow = (
+    <div className={styles.row}>
+      <dt className={styles.label}>{t('contest.detail.submissionDeadline')}</dt>
+      <dd className={`${styles.value} ${styles.deadline}`}>
+        {formatKstDateTime(contest.submission_deadline, language)}
+      </dd>
+    </div>
+  )
+  const applyRow = showApplyRow && (
+    <div className={styles.row}>
+      <dt className={styles.label}>{t('contest.detail.applyDeadline')}</dt>
+      <dd className={styles.value}>{formatKstDateTime(contest.apply_deadline, language)}</dd>
+    </div>
+  )
+  const noticeRow = noticeText && (
+    <div className={styles.row}>
+      <dt className={styles.label}>{t('contest.detail.noticeDate')}</dt>
+      <dd className={styles.value}>{noticeText}</dd>
+    </div>
+  )
+
+  const sourceText = showPoster
+    ? t('contest.detail.sourceLine', { organizer: contest.organizer })
+    : t('contest.detail.noPosterSourceLine', { organizer: contest.organizer })
+
   return (
     <PageShell width="medium" contentStyle={{ padding: '20px 20px 0' }} chrome={chrome}>
-      {/* ── 상단: 공모전 정보 ── */}
+      {/* ── 상단: D-n · 제목 · 주최처 ── */}
       <header className={styles.hero}>
-        <span className={`${styles.dday} ${d <= 7 ? styles.ddayUrgent : ''}`}>
-          {t('competitionB3.dday', { d })}
-        </span>
-        <PageTitle style={{ margin: '0 0 6px' }}>{competition.title}</PageTitle>
-        <p className={styles.organizer}>{competition.organizer}</p>
-        <p className={styles.theme}>{competition.theme}</p>
-        <p className={styles.sizeHint}>
-          {t('competitionB3.detail.teamSizeHint', {
-            min: competition.teamSizeMin,
-            max: competition.teamSizeMax,
-          })}
-        </p>
-
-        <button
-          type="button"
-          className={`${styles.interestCta} ${saved ? styles.interestCtaOn : ''}`}
-          onClick={handleToggleInterest}
-          aria-pressed={saved}
-        >
-          {t(saved ? 'competitionB3.detail.interestCtaOn' : 'competitionB3.detail.interestCtaOff')}
-        </button>
-        <p className={styles.interestCount}>
-          {t('competitionB3.detail.interestCount', {
-            count: competition.interestCount + (saved ? 1 : 0),
-          })}
+        <DeadlineBadge contest={contest} now={now} />
+        <PageTitle as="h2" style={{ margin: '10px 0 6px', overflowWrap: 'anywhere' }}>{title}</PageTitle>
+        <p className={styles.organizer}>
+          {contest.team_size
+            ? t('contest.detail.organizerTeam', { organizer: contest.organizer, teamSize: contest.team_size })
+            : contest.organizer}
         </p>
       </header>
 
-      {/* ── 섹션 A: 찜한 사람 — 추천 1명 + 전체 ── */}
-      <section className={styles.section}>
-        {recommended && (
-          <>
-            <SectionTitle>
-              {t('competitionB3.detail.recommendedTitle')}{' '}
-              <span className={styles.sectionHint}>{t('competitionB3.detail.recommendedHint')}</span>
-            </SectionTitle>
-            <div className={styles.recommendWrap}>
-              {renderPerson(recommended, true)}
-            </div>
-          </>
+      {/* ── 정보 카드: 포스터 썸네일 + 요약, 또는 폴백 ── */}
+      {showPoster ? (
+        <section className={styles.infoCard}>
+          <div className={styles.posterCol}>
+            <button
+              ref={thumbRef}
+              type="button"
+              className={styles.thumbBtn}
+              onClick={() => setLightboxOpen(true)}
+              aria-label={t('contest.poster.open')}
+              aria-haspopup="dialog"
+            >
+              <img
+                className={styles.thumb}
+                src={posterUrl}
+                alt={t('contest.poster.alt', { title })}
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={() => setPosterFailed(true)}
+              />
+            </button>
+            {posterCredit && (
+              <p className={styles.posterCredit}>
+                {t('contest.poster.credit', { credit: posterCredit })}
+              </p>
+            )}
+          </div>
+
+          <div className={styles.details}>
+            <dl className={styles.rows}>
+              {contest.theme && (
+                <div className={styles.row}>
+                  <dt className={styles.label}>{t('contest.detail.theme')}</dt>
+                  <dd className={`${styles.value} ${styles.strong}`}>{contest.theme}</dd>
+                </div>
+              )}
+              {deadlineRow}
+              {applyRow}
+              {noticeRow}
+            </dl>
+            {contest.summary && <p className={styles.summary}>{contest.summary}</p>}
+          </div>
+        </section>
+      ) : (
+        <section className={styles.fallbackCard}>
+          <span className={styles.chip}>
+            {t('contest.detail.submissionDeadline')} {formatKstDateTime(contest.submission_deadline, language)}
+          </span>
+          {contest.theme && <p className={styles.fallbackTheme}>{contest.theme}</p>}
+          {contest.summary && <p className={styles.fallbackSummary}>{contest.summary}</p>}
+          {(applyRow || noticeRow) && (
+            <dl className={`${styles.rows} ${styles.fallbackRows}`}>
+              {applyRow}
+              {noticeRow}
+            </dl>
+          )}
+        </section>
+      )}
+
+      {/* ── 출처 줄 ── */}
+      <p className={styles.sourceLine}>
+        <span>{sourceText}</span>
+        {sourceUrl && (
+          <a className={styles.sourceLink} href={sourceUrl} target="_blank" rel="noopener noreferrer">
+            {t('contest.detail.viewSource')}
+          </a>
         )}
+      </p>
 
-        <SectionTitle
-          className={recommended ? styles.sectionTitleGap : undefined}
-          count={ranked.length > 0 ? t('competitionB3.detail.interestedCount', { count: ranked.length }) : null}
-        >
-          {t('competitionB3.detail.interestedTitle')}
-        </SectionTitle>
-        {rest.length === 0 ? (
-          <p className={styles.sectionEmpty}>
-            {ranked.length === 0
-              ? t('competitionB3.detail.emptyAll')
-              : t('competitionB3.detail.emptyRest')}
-          </p>
-        ) : (
-          <ul className={styles.personList}>
-            {rest.map(p => <li key={p.user_id}>{renderPerson(p, false)}</li>)}
-          </ul>
-        )}
-      </section>
+      {/* ── 관심 등록 ── */}
+      <button
+        type="button"
+        className={`${styles.interestBtn} ${interested ? styles.interestBtnOn : ''}`}
+        onClick={handleToggleInterest}
+        aria-pressed={interested}
+        disabled={pending}
+      >
+        {t(interested ? 'contest.detail.interestOn' : 'contest.detail.interestOff')}
+      </button>
+      {interestCount > 0 && (
+        <p className={styles.interestCount}>
+          {t('contest.detail.interestCount', { count: interestCount })}
+        </p>
+      )}
 
-      {/* ── 섹션 B: 모집 중인 팀 ── */}
-      <section className={styles.section}>
-        <SectionTitle>{t('competitionB3.detail.teamsTitle')}</SectionTitle>
-        {teams.length === 0 ? (
-          <p className={styles.sectionEmpty}>{t('competitionB3.detail.noTeams')}</p>
-        ) : (
-          <ul className={styles.teamList}>
-            {teams.map(team => {
-              // 빈 자리는 저장하지 않고 파생한다(설계 §6-3).
-              const open = team.capacity - team.members.length
-              return (
-                <li key={team.id}>
-                  <article className={styles.teamCard}>
-                    <div className={styles.teamHead}>
-                      <span className={styles.teamName}>{team.name}</span>
-                      {open > 0 ? (
-                        <span className={styles.openSlot}>
-                          {t('competitionB3.detail.openSlots', { count: open })}
-                        </span>
-                      ) : (
-                        <span className={styles.fullSlot}>{t('competitionB3.detail.full')}</span>
-                      )}
-                    </div>
-                    <p className={styles.teamMembers}>
-                      {team.members.map(m => `@${m.handle}`).join(' · ')}
-                    </p>
-                    {open > 0 && (
-                      <button
-                        type="button"
-                        className={styles.joinBtn}
-                        onClick={() => showToast(t('competitionB3.detail.joinSent', { team: team.name }))}
-                      >
-                        {t('competitionB3.detail.joinBtn')}
-                      </button>
-                    )}
-                  </article>
-                </li>
-              )
-            })}
-          </ul>
-        )}
+      {lightboxOpen && showPoster && (
+        <PosterLightbox
+          posterUrl={posterUrl}
+          title={title}
+          credit={posterCredit}
+          sourceUrl={sourceUrl}
+          returnFocusRef={thumbRef}
+          onClose={() => setLightboxOpen(false)}
+          onImageError={handlePosterError}
+        />
+      )}
 
-        <button
-          type="button"
-          className={styles.createTeamBtn}
-          onClick={() => showToast(t('competitionB3.detail.createTeamComingSoon'))}
-        >
-          {t('competitionB3.detail.createTeamBtn')}
-        </button>
-      </section>
-
-      <p className={styles.protoNote}>{t('competitionB3.protoNote')}</p>
-
-      {toast && <div className={styles.toast} role="status">{toast}</div>}
+      {toast && <div className={styles.toast} role="status" aria-live="polite">{toast}</div>}
     </PageShell>
   )
 }
