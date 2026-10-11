@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'apps.recommendation',
     'apps.profiles',
     'apps.social',
+    'apps.contests',
     'apps.notifications',
     'apps.works',
     'apps.messaging',
