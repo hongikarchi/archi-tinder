@@ -17,6 +17,9 @@ def is_http_url(value):
     """True only for an absolute http(s) URL with a host."""
     if not isinstance(value, str) or not value or value != value.strip():
         return False
+    # urlsplit silently drops embedded tab/CR/LF; reject any control char.
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        return False
     try:
         parts = urlsplit(value)
         host = parts.hostname

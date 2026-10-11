@@ -18,6 +18,8 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from apps.accounts.permissions import IsVerifiedUser
+
 from .models import Contest, ContestInterest
 from .serializers import ContestSerializer
 
@@ -68,11 +70,12 @@ class ContestInterestView(APIView):
     """POST + DELETE /api/v1/contests/<id>/interest/ (published contests only).
 
     Allowed after the deadline has passed. Counter maintained by signals.
-    Like ReactionView, a user without a profile gets 403; guests are treated
-    like any other authenticated user (ReactionView has no guest rule).
+    A user without a profile gets 403. Guests (is_guest) get 403
+    verify_required: interest rows feed the planned interested-users list, and
+    the frontend already opens the verify modal on that response.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsVerifiedUser]
     throttle_classes = [ContestInterestThrottle]
 
     def post(self, request, pk):

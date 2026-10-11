@@ -159,3 +159,16 @@ class TestInterest:
         from apps.contests.views import ContestInterestThrottle
         assert ContestInterestThrottle.scope == 'contest_interest'
         assert settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['contest_interest'] == '60/min'
+
+    def test_guest_gets_verify_required(self, user_a, auth_client_a):
+        _, profile = user_a
+        profile.is_guest = True
+        profile.save(update_fields=['is_guest'])
+        c = _make()
+        for method in (auth_client_a.post, auth_client_a.delete):
+            r = method(_interest_url(c.id))
+            assert r.status_code == 403
+            assert r.data['detail'] == 'verify_required'
+        assert ContestInterest.objects.filter(contest=c).count() == 0
+        # Reading stays open to guests.
+        assert auth_client_a.get(_detail_url(c.id)).status_code == 200

@@ -294,3 +294,15 @@ class TestWevityPoster:
         c = Contest(**_kwargs(poster_url=self.BAD))
         c.interested = False
         assert ContestSerializer(c, context={'now': timezone.now()}).data['poster_url'] is None
+
+
+@pytest.mark.parametrize('bad', [
+    'http://exa\nmple.com/',
+    'ht\ttps://example.com/',
+    'https://example.com/a\rb',
+    'https://example.com/\x00',
+    'https://example.com/\x7f',
+])
+def test_is_http_url_rejects_control_chars(bad):
+    from apps.contests.validators import is_http_url
+    assert is_http_url(bad) is False
