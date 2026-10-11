@@ -57,3 +57,34 @@ export async function getAdminServices({ refresh = false } = {}) {
 export async function updateProviderNote(slug, loginNote) {
   return callApi('PATCH', `${BASE_PATH}/services/${encodeURIComponent(slug)}/note/`, { login_note: loginNote })
 }
+
+/**
+ * FULL-CONTEST-2 — contests (공모전) admin. Lists ALL contests (hidden / pending /
+ * past deadline included). status: 'published' | 'pending' | 'hidden' | undefined (all).
+ * @param {{ status?: string, page?: number, pageSize?: number }} opts
+ * @returns {Promise<{results: object[], count: number}>}
+ */
+export async function getAdminContests({ status, page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  if (status) params.set('status', status)
+  return callApi('GET', `${BASE_PATH}/contests/?${params.toString()}`)
+}
+
+/**
+ * Create a contest. 400 → err.data = { <field>: [msg, ...] } (publish rule → source_url).
+ * @param {object} payload
+ * @returns {Promise<object>} the created row
+ */
+export async function createAdminContest(payload) {
+  return callApi('POST', `${BASE_PATH}/contests/`, payload)
+}
+
+/**
+ * Partial update (status, poster_url: null clears the poster, any editable field).
+ * @param {number|string} id
+ * @param {object} patch
+ * @returns {Promise<object>} the updated row
+ */
+export async function updateAdminContest(id, patch) {
+  return callApi('PATCH', `${BASE_PATH}/contests/${encodeURIComponent(id)}/`, patch)
+}

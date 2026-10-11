@@ -16,8 +16,11 @@ def _client_ip(request):
         return None
 
 
-def log_admin_action(request, action, target_type='', target_id='', payload=None):
-    """Best-effort: an audit-write failure must never break the admin read itself."""
+def log_admin_action(request, action, target_type='', target_id='', payload=None, strict=False):
+    """Best-effort by default: an audit-write failure must never break the admin read.
+
+    strict=True re-raises so a caller inside transaction.atomic() rolls its mutation back.
+    """
     try:
         return AdminAuditLog.objects.create(
             actor=request.user,
@@ -28,5 +31,7 @@ def log_admin_action(request, action, target_type='', target_id='', payload=None
             ip=_client_ip(request),
         )
     except Exception:
+        if strict:
+            raise
         logger.exception('log_admin_action failed: action=%s', action)
         return None

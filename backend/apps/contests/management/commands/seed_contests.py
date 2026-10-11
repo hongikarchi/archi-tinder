@@ -64,7 +64,10 @@ SEED_CONTESTS = [
         'title': '제14회 한옥디자인 국제공모',
         'organizer': '한옥건축학회',
         'organizer_type': Contest.ORGANIZER_ASSOCIATION,
-        'status': Contest.STATUS_PUBLISHED,
+        # PENDING: no official source URL found yet, and a contest cannot be
+        # published without one (Contest publish rule). Publish from the admin
+        # dashboard once an official page is known.
+        'status': Contest.STATUS_PENDING,
         'submission_deadline': kst(2026, 12, 28, 18),
         'theme': '목구조의 확장: 전통과 현대 재료의 구조적 융합',
         'summary': '전통 목구조와 현대 재료의 구조적 융합을 다루는 한옥 디자인 국제공모.',

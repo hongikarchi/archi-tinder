@@ -79,12 +79,14 @@ class TestList:
         # ISO 8601 with offset.
         assert datetime.fromisoformat(row['submission_deadline'].replace('Z', '+00:00')).tzinfo
 
-    def test_blank_source_url_serializes_empty(self, auth_client_a):
-        c = _make(source_url='')
-        c.refresh_from_db()
-        assert c.source_url == ''
-        row = auth_client_a.get(LIST_URL).data['results'][0]
-        assert row['source_url'] == ''
+    def test_blank_source_url_serializes_empty(self):
+        # A published row can no longer be saved with a blank source (publish rule +
+        # DB CHECK); the serializer still emits '' defensively for an unsaved instance.
+        from apps.contests.serializers import ContestSerializer
+        c = Contest(title='C', organizer='Org', source_url='',
+                    submission_deadline=timezone.now(), status=Contest.STATUS_PUBLISHED)
+        c.interested = False
+        assert ContestSerializer(c, context={'now': timezone.now()}).data['source_url'] == ''
 
 
 @pytest.mark.django_db

@@ -11,6 +11,8 @@ import {
   isClosed,
   formatKstDateTime,
   formatKstDate,
+  isoToKstInputValue,
+  kstInputValueToIso,
 } from './contestDeadline.js'
 
 const d = s => new Date(s)
@@ -142,6 +144,54 @@ describe('device timezone independence', () => {
         return run()
       })
       for (const r of results) assert.equal(r, results[0])
+    } finally {
+      if (original === undefined) delete process.env.TZ
+      else process.env.TZ = original
+    }
+  })
+})
+
+describe('KST datetime-local conversion', () => {
+  test('isoToKstInputValue renders the KST wall clock', () => {
+    assert.equal(isoToKstInputValue('2026-10-28T09:00:00Z'), '2026-10-28T18:00')
+    assert.equal(isoToKstInputValue('2026-10-28T18:00:00+09:00'), '2026-10-28T18:00')
+    // UTC date differs from KST date
+    assert.equal(isoToKstInputValue('2026-10-27T16:30:00Z'), '2026-10-28T01:30')
+  })
+  test('isoToKstInputValue: empty / invalid -> empty string', () => {
+    assert.equal(isoToKstInputValue(null), '')
+    assert.equal(isoToKstInputValue(''), '')
+    assert.equal(isoToKstInputValue('nope'), '')
+  })
+  test('kstInputValueToIso attaches an explicit +09:00 offset', () => {
+    assert.equal(kstInputValueToIso('2026-10-28T18:00'), '2026-10-28T18:00:00+09:00')
+    assert.equal(kstInputValueToIso('2026-10-28T18:00:30'), '2026-10-28T18:00:30+09:00')
+    assert.equal(new Date(kstInputValueToIso('2026-10-28T18:00')).toISOString(), '2026-10-28T09:00:00.000Z')
+  })
+  test('kstInputValueToIso: empty / invalid -> null', () => {
+    assert.equal(kstInputValueToIso(''), null)
+    assert.equal(kstInputValueToIso(null), null)
+    assert.equal(kstInputValueToIso('2026-10-28'), null)
+    assert.equal(kstInputValueToIso('2026-02-30T10:00'), null)
+    assert.equal(kstInputValueToIso('2026-10-28T24:00'), null)
+  })
+  test('round trip is stable', () => {
+    const v = '2026-12-31T23:59'
+    assert.equal(isoToKstInputValue(kstInputValueToIso(v)), v)
+  })
+  test('identical under non-KST process timezones', () => {
+    const original = process.env.TZ
+    try {
+      const out = ['America/Los_Angeles', 'Asia/Seoul', 'UTC', 'Pacific/Kiritimati'].map(tz => {
+        process.env.TZ = tz
+        return JSON.stringify([
+          isoToKstInputValue('2026-10-27T16:30:00Z'),
+          kstInputValueToIso('2026-10-28T01:30'),
+          new Date(kstInputValueToIso('2026-10-28T01:30')).getTime(),
+        ])
+      })
+      for (const r of out) assert.equal(r, out[0])
+      assert.equal(JSON.parse(out[0])[0], '2026-10-28T01:30')
     } finally {
       if (original === undefined) delete process.env.TZ
       else process.env.TZ = original

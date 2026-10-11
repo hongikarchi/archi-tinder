@@ -114,3 +114,35 @@ export function formatKstDate(value, language = 'ko') {
   if (l === 'en') return `${wd}, ${MONTHS_EN[p.month - 1]} ${p.day}, ${p.year}`
   return `${p.year}.${pad2(p.month)}.${pad2(p.day)} (${wd})`
 }
+
+const KST_INPUT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+
+/**
+ * ISO instant -> 'YYYY-MM-DDTHH:mm' KST wall-clock string for an
+ * <input type="datetime-local">, via fixed +09:00 math (never the device
+ * zone). '' for empty / unparseable input.
+ */
+export function isoToKstInputValue(iso) {
+  const d = toDate(iso)
+  if (!d) return ''
+  const p = kstParts(d)
+  return `${p.year}-${pad2(p.month)}-${pad2(p.day)}T${pad2(p.hour)}:${pad2(p.minute)}`
+}
+
+/**
+ * datetime-local value ('YYYY-MM-DDTHH:mm[:ss]', read as a KST wall clock) ->
+ * ISO string with an explicit '+09:00' offset ('2026-10-28T18:00:00+09:00').
+ * null for empty or invalid input (including impossible calendar dates), so
+ * the value sent to the API is never offset-ambiguous.
+ */
+export function kstInputValueToIso(value) {
+  if (typeof value !== 'string') return null
+  const m = KST_INPUT_RE.exec(value.trim())
+  if (!m) return null
+  const [year, month, day, hour, minute] = [m[1], m[2], m[3], m[4], m[5]].map(Number)
+  const second = m[6] === undefined ? 0 : Number(m[6])
+  if (hour > 23 || minute > 59 || second > 59) return null
+  const check = new Date(Date.UTC(year, month - 1, day))
+  if (check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null
+  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${pad2(second)}+09:00`
+}
