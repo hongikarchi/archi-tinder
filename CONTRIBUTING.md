@@ -29,7 +29,7 @@ run `./tools/install-hooks.sh` directly instead.
 |---|---|---|
 | **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/{embeddings,rerank,generation,_gemini}.py`, `backend/config/settings.py` (RECOMMENDATION dict only), `backend/tests/` (algorithm tests: `test_topic*`, `test_hyde`, `test_hybrid_retrieval`, `test_imp*`, `test_confidence`, etc.) |
 | **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js`, `frontend/src/components/profile/` (BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard, InfoCol) |
-| **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, `DiscoveryPage.jsx`, `LikedProjectsPage.jsx` / `LikedOfficesPage.jsx`, `LoginPage.jsx`, `ResultsPage.jsx`, Django admin, deployment config |
+| **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `TasteStartPage.jsx`, `DiscoveryPage.jsx`, `LikedProjectsPage.jsx` / `LikedOfficesPage.jsx`, `LoginPage.jsx`, `ResultsPage.jsx`, Django admin, deployment config |
 
 ## Shared / coordinated edit files
 

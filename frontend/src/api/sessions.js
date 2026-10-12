@@ -11,10 +11,6 @@ const SESSION_CREATE_TIMEOUT_MS = 30000 // Cold pool path: execute_pool_sql ~14.
 
 /**
  * Start an analysis session.
- * params.filter_priority and params.seed_ids are forwarded to the backend
- * for weighted scoring pool creation.
- * params.visual_description -- Topic 03 HyDE V_initial seed (English text from parse_query);
- *   ignored by backend when hyde_vinitial_enabled flag is OFF.
  */
 export async function startSession(params) {
   try {

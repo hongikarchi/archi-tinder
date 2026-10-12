@@ -8,7 +8,6 @@ Tests for:
 - Failure cascade: SQL exception => emit failure event, fall back to Mode V/F
 - q_text length validation (>1000 => coerced to None in views.py)
 - original_q_text persistence on AnalysisSession
-- refresh_pool_if_low passes original_q_text through
 - Backward compatibility: all existing flag-off paths unchanged
 
 No real DB queries against architecture_vectors -- connection.cursor is mocked.
@@ -21,7 +20,6 @@ from django.conf import settings
 from apps.recommendation.engine import (
     create_bounded_pool,
     create_pool_with_relaxation,
-    refresh_pool_if_low,
 )
 
 _FAKE_VEC = [0.01] * 384
@@ -445,96 +443,6 @@ class TestQTextPassThrough:
 # (TestQTextValidation / TestOriginalQTextPersistence removed: session create no longer
 # runs the RRF pool -- every create goes through the taste_v2 path, which neither
 # forwards q_text to the engine nor stores original_q_text.)
-
-
-# ---------------------------------------------------------------------------
-# TestRefreshPoolIfLowPreservesQText
-# ---------------------------------------------------------------------------
-
-class TestRefreshPoolIfLowPreservesQText:
-    """refresh_pool_if_low passes session.original_q_text through to create_pool_with_relaxation."""
-
-    @pytest.mark.django_db
-    def test_original_q_text_forwarded_on_escalation(self, user_profile, monkeypatch):
-        """When pool is low, refresh_pool_if_low passes original_q_text from session."""
-        from apps.recommendation.models import AnalysisSession, Project
-
-        project = Project.objects.create(user=user_profile, name='Test')
-        pool = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        session = AnalysisSession.objects.create(
-            user=user_profile,
-            project=project,
-            phase='exploring',
-            pool_ids=pool,
-            pool_scores={},
-            current_round=0,
-            preference_vector=[],
-            exposed_ids=pool,  # all exposed => remaining=0 => escalation fires
-            initial_batch=pool[:1],
-            like_vectors=[],
-            convergence_history=[],
-            previous_pref_vector=[],
-            original_filters={'program': 'Museum'},
-            original_filter_priority=['program'],
-            original_seed_ids=[],
-            current_pool_tier=1,
-            v_initial=None,
-            original_q_text='brutalist concrete structures',
-        )
-
-        new_pool = ['B00010', 'B00011']
-        captured_kwargs = {}
-
-        def _mock_relaxation(*args, **kwargs):
-            captured_kwargs.update(kwargs)
-            return new_pool, {}, 2
-
-        with patch('apps.recommendation.engine.create_pool_with_relaxation',
-                   side_effect=_mock_relaxation):
-            refresh_pool_if_low(session, threshold=5)
-
-        assert 'q_text' in captured_kwargs
-        assert captured_kwargs['q_text'] == 'brutalist concrete structures'
-
-    @pytest.mark.django_db
-    def test_original_q_text_none_forwarded_gracefully(self, user_profile):
-        """Session with original_q_text=None escalates without crash."""
-        from apps.recommendation.models import AnalysisSession, Project
-
-        project = Project.objects.create(user=user_profile, name='Test')
-        pool = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        session = AnalysisSession.objects.create(
-            user=user_profile,
-            project=project,
-            phase='exploring',
-            pool_ids=pool,
-            pool_scores={},
-            current_round=0,
-            preference_vector=[],
-            exposed_ids=pool,
-            initial_batch=pool[:1],
-            like_vectors=[],
-            convergence_history=[],
-            previous_pref_vector=[],
-            original_filters={},
-            original_filter_priority=[],
-            original_seed_ids=[],
-            current_pool_tier=1,
-            v_initial=None,
-            original_q_text=None,
-        )
-
-        captured_kwargs = {}
-
-        def _mock_relaxation(*args, **kwargs):
-            captured_kwargs.update(kwargs)
-            return ['B00010'], {}, 2
-
-        with patch('apps.recommendation.engine.create_pool_with_relaxation',
-                   side_effect=_mock_relaxation):
-            refresh_pool_if_low(session, threshold=5)
-
-        assert captured_kwargs.get('q_text') is None
 
 
 # ---------------------------------------------------------------------------

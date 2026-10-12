@@ -147,11 +147,8 @@ def _base_engine_patches(pool_ids):
             [np.ones(384) / np.linalg.norm(np.ones(384))],
             np.ones(384) / np.linalg.norm(np.ones(384)),
         ),
-        f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
         f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
         f'{_ENGINE}.check_convergence': lambda *a: False,
-        f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
-        f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
         f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
             (b for b in pool_ids if b not in set(exposed)), None
         ),

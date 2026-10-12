@@ -104,8 +104,9 @@ cover with this fallback chain (highest preference first):
 
 1. `covers_by_type[image_focus]` — when `image_focus` is set on the request
    and the variant is non-null. `image_focus ∈ {exterior, interior, drawing,
-   aerial, detail}`. Set by the LLM intake (`parse_query`) when the user
-   signals a preferred view ("외관/실내/도면/조감/디테일").
+   aerial, detail}`. Only boards that stored it earlier carry it (the Gemini
+   search chat that set it was removed 2026-10); new sessions leave it unset,
+   so the default cover below is used.
 2. `display_cover_url` — Make DB's preferred display cover.
 3. `cover_image_url_default` — Make DB's canonical default.
 4. `covers_by_type.exterior` — last covers_by_type try.

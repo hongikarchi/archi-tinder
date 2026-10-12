@@ -53,12 +53,6 @@ RC = settings.RECOMMENDATION
 # Compared against `_raw_name.lower()`.
 _PLACEHOLDER_NAMES = frozenset({'', 'untitled', 'untitled project', '제목 없는 프로젝트'})
 
-
-# Known filter keys for filter_priority validation (canonical_v2 schema)
-_VALID_FILTER_KEYS = frozenset([
-    'program', 'location_country', 'location_city', 'style', 'material',
-    'year_min', 'year_max',
-])
 _VALID_IMAGE_FOCUS = frozenset(['exterior', 'interior', 'drawing', 'aerial', 'detail'])
 
 

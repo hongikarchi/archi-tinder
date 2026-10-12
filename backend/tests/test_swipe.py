@@ -81,14 +81,6 @@ def _mock_compute_centroids(like_vectors, round_num, multimodal_floor=None):
     return ([c], c)
 
 
-def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num, **kwargs):
-    exposed_set = set(exposed_ids)
-    for bid in pool_ids:
-        if bid not in exposed_set:
-            return bid
-    return None
-
-
 _ENGINE = 'apps.recommendation.views.engine'
 _SWIPE_VIEW = 'apps.recommendation.views.swipe'
 
@@ -145,10 +137,8 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.get_building_embedding': _mock_get_embedding,
     f'{_ENGINE}.update_preference_vector': _mock_update_pref,
     f'{_ENGINE}.compute_taste_centroids': _mock_compute_centroids,
-    f'{_ENGINE}.compute_mmr_next': _mock_mmr_next,
     f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
     f'{_ENGINE}.check_convergence': lambda *a: False,
-    f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
     f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,

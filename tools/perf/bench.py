@@ -1,4 +1,4 @@
-"""In-process perf baseline harness (parse-query -> session create -> swipes -> result).
+"""In-process perf baseline harness (taste recognize -> session create -> swipes -> result).
 
 Run (from repo):   cd backend && python ../tools/perf/bench.py [--seed N] [--swipes 20] [--out DIR]
 Also works with:   cd backend && python manage.py shell < <this file>   (uses defaults)
@@ -228,17 +228,18 @@ def main():
     run_id = datetime.datetime.utcnow().strftime('%H%M%S')
     parsed_all = []
 
-    # (a) parse-query, cold
+    # (a) taste recognize, cold
     for qi, q in enumerate(QUERIES):
-        resp, rec = do_request(f'parse#{qi}', 'parse_query', lambda: client.post('/api/v1/parse-query/', {'query': q}, format='json'))
+        resp, rec = do_request(f'recognize#{qi}', 'taste_recognize', lambda: client.post('/api/v1/taste/recognize/', {'text': q}, format='json'))
         rec['tag'] = f'q{qi}'
         if resp.status_code != 200:
-            notes.append(f'parse-query q{qi} -> HTTP {resp.status_code} {str(getattr(resp,"data",""))[:200]}'); parsed_all.append(None); continue
+            notes.append(f'taste recognize q{qi} -> HTTP {resp.status_code} {str(getattr(resp,"data",""))[:200]}'); parsed_all.append(None); continue
         d = resp.data
-        rec['n_results'] = len(d.get('results') or []); rec['probe_needed'] = d.get('probe_needed')
-        parsed_all.append({'raw_query': d.get('raw_query') or q, 'filters': d.get('structured_filters') or {},
-                           'filter_priority': d.get('filter_priority') or [], 'visual_description': d.get('visual_description'),
-                           'image_focus': d.get('image_focus'), 'seed_ids': []})
+        start_ids = [i for i in (cid(c.get('card')) for c in d.get('cards') or []) if i]
+        rec['n_cards'] = len(start_ids); rec['n_tags'] = len(d.get('tags') or [])
+        if not start_ids:
+            notes.append(f'taste recognize q{qi} -> no cards'); parsed_all.append(None); continue
+        parsed_all.append({'raw_query': q, 'taste_tags': d.get('tags') or [], 'start_ids': start_ids})
 
     # (b)(c)(d) sessions: pass 0 = cold caches, pass 1 = warm (same process, new sessions)
     for pas in (0, 1):
@@ -246,10 +247,9 @@ def main():
         for qi, p in enumerate(parsed_all):
             if not p: continue
             tag = f'{pname}_q{qi}'
-            body = {'name': f'bench-{run_id}-{pname}-{qi}', 'filters': p['filters'], 'filter_priority': p['filter_priority'],
-                    'seed_ids': p['seed_ids'], 'raw_query': p['raw_query'], 'force_new': True}
-            if p.get('visual_description'): body['visual_description'] = p['visual_description']
-            if p.get('image_focus'): body['image_focus'] = p['image_focus']
+            # Same body the app sends: tags exactly as returned + the 3 shown cards as start_ids.
+            body = {'name': f'bench-{run_id}-{pname}-{qi}', 'filters': {}, 'raw_query': p['raw_query'],
+                    'taste_tags': p['taste_tags'], 'start_ids': p['start_ids'], 'exclude_ids': [], 'force_new': True}
             resp, rec = do_request(f'{tag}#create', 'session_create', lambda: client.post('/api/v1/analysis/sessions/', body, format='json'))
             rec['tag'] = tag; rec['pass'] = pname
             if resp.status_code not in (200, 201):
@@ -264,7 +264,7 @@ def main():
             if resp.status_code != 200:
                 notes.append(f'{tag}: result -> HTTP {resp.status_code}')
     for r in S.reqs:
-        if r['kind'] == 'parse_query': r['pass'] = 'cold'
+        if r['kind'] == 'taste_recognize': r['pass'] = 'cold'
     time.sleep(1.0)  # let last bg threads flush
 
     # ── derive per-request metrics ──
@@ -285,7 +285,7 @@ def main():
               'caveats': ['DB queries/cache ops in background threads (telemetry, async prefetch) are NOT captured per request; bg perf_timing stages are listed in bg_stages.',
                           'Cache backend locally is LocMem (REDIS_URL unset): local cache RTT ~0 so the model ADDS 1.5ms per cache op to approximate prod Redis.',
                           'Commits are counted as extra DB round trips (not visible as queries).',
-                          'parse_query wall time includes real LLM latency, which is NOT reduced by the RTT model.'],
+                          'taste_recognize wall time may include real LLM latency (when the tag source is the LLM), which is NOT reduced by the RTT model; the endpoint is throttled (10/min), so a rerun within a minute can 429.'],
               'cache_bg_ops_total': cache_bg_ops['n'], 'requests': S.reqs, 'bg_stages': S.bg_stages,
               'duration_s': round(time.time() - t_start, 1)}
     with open(os.path.join(OUT, 'baseline.json'), 'w', encoding='utf-8') as f:
@@ -321,7 +321,7 @@ def write_md(res):
     groups = {}
     for r in R:
         groups.setdefault((r['kind'], r.get('pass', '-')), []).append(r)
-    order = ['parse_query', 'session_create', 'swipe_like', 'swipe_dislike', 'swipe_extend', 'session_result']
+    order = ['taste_recognize', 'session_create', 'swipe_like', 'swipe_dislike', 'swipe_extend', 'session_result']
     for kind in order:
         for pas in ('cold', 'warm', '-'):
             g = groups.get((kind, pas))

@@ -1,7 +1,7 @@
 export function normalizeFilters(filters) {
   if (!filters) return {}
   const out = {}
-  // Structured filters from LLM parse-query -- pass through
+  // Structured filters saved on older boards -- pass through
   if (filters.program) out.program = filters.program
   if (filters.location_country) out.location_country = filters.location_country
   if (filters.material) out.material = filters.material
