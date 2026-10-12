@@ -220,7 +220,7 @@ function UserBubble({ text }) {
   )
 }
 
-function Round({ round, language, t, busy, starting, onStep, onFindAgain, onStart }) {
+function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAgain, onStart }) {
   const front = round.cards[round.index] || round.cards[0]
   const chips = useMemo(() => buildChips(round.tags, front?.matched_keys), [round.tags, front])
   const n = round.cards.length
@@ -270,19 +270,21 @@ function Round({ round, language, t, busy, starting, onStep, onFindAgain, onStar
         </>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, width: '100%', alignSelf: 'center' }}>
-        <button type="button" className={ps.ctaPrimary} disabled={n === 0 || busy || starting} onClick={() => onStart(round)}>
-          {t('search.tasteStartSwiping')}
-        </button>
-        <button type="button" className={ps.ctaSecondary} disabled={busy || starting || round.exhausted} onClick={() => onFindAgain(round.id)}>
-          {t('search.tasteFindAgain')}
-        </button>
-        {round.exhausted && (
-          <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-dim)', textAlign: 'center' }}>
-            {t('search.tasteNoMoreCards')}
-          </div>
-        )}
-      </div>
+      {isLatest && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, width: '100%', alignSelf: 'center' }}>
+          <button type="button" className={ps.ctaPrimary} disabled={n === 0 || busy || starting} onClick={() => onStart(round)}>
+            {t('search.tasteStartSwiping')}
+          </button>
+          <button type="button" className={ps.ctaSecondary} disabled={busy || starting || round.exhausted} onClick={() => onFindAgain(round.id)}>
+            {t('search.tasteFindAgain')}
+          </button>
+          {round.exhausted && (
+            <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-dim)', textAlign: 'center' }}>
+              {t('search.tasteNoMoreCards')}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -326,7 +328,6 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
   }, [projectId])
 
   const latest = rounds[rounds.length - 1] || null
-  const prevTags = latest ? latest.tags : (board?.tags || [])
   const inRounds = rounds.length > 0 || pending !== null
 
   // Arrow keys act on the latest round, never while typing.
@@ -371,7 +372,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
     setError('')
     setPending({ text })
     try {
-      const res = await recognizeTaste({ text, prevTags })
+      const res = await recognizeTaste({ text, prevTags: mode === 'update' ? (board?.tags || []) : [] })
       const round = {
         id: `r${Date.now()}`,
         text,
@@ -520,7 +521,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
               <PageLogoHeader padding="60px 16px 6px" />
               {rounds.map(r => (
                 <Round
-                  key={r.id} round={r} language={language} t={t}
+                  key={r.id} round={r} isLatest={pending === null && r.id === latest?.id} language={language} t={t}
                   busy={busyRoundId === r.id} starting={starting}
                   onStep={stepRound} onFindAgain={handleFindAgain} onStart={handleStart}
                 />
