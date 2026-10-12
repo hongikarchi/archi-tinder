@@ -396,12 +396,11 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
     setStarting(true)
     const startIds = round.cards.map(c => c.card.image_id)
     const excludeIds = round.shown.filter(id => !startIds.includes(id)).slice(-MAX_EXCLUDE)
-    const firstText = rounds[0]?.text || round.text
     try { sessionStorage.removeItem(storageKey) } catch { /* ignore */ }
     try {
       await onStartTaste({
         projectName: '',
-        rawQuery: firstText,
+        rawQuery: round.text,
         tags: round.tags,
         startIds,
         excludeIds,
