@@ -17,10 +17,9 @@ function normalizeCards(list) {
 }
 
 /** POST /taste/recognize/ -> { source, tags, cards } (throttled 10/min -> status 429). */
-export async function recognizeTaste({ text, prevTags = [], excludeIds = [] }) {
+export async function recognizeTaste({ text, excludeIds = [] }) {
   const res = await callApi('POST', '/taste/recognize/', {
     text,
-    prev_tags: prevTags,
     exclude_ids: excludeIds.slice(0, 100),
   }, true, 20000)
   return { source: res.source, tags: res.tags || [], cards: normalizeCards(res.cards) }

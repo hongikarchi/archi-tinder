@@ -116,9 +116,8 @@ Implemented (Taste-start redesign — `docs/decisions/2026-10-11-taste-start-red
 
 - `/new` project setup with name, area range, and visibility.
 - `/search`: type a query → send → JEV tag recognition (`/api/v1/taste/recognize/`) → tag chips + top-3 stacked cards with "N개 중 M개 일치".
-- Card stack navigation (swipe / arrow keys, clamped at 1 and 3), "다시 찾기" (`/api/v1/taste/cards/`), rounds that carry tags over (drop / exclude by chat wording).
+- Card stack navigation (swipe / arrow keys, clamped at 1 and 3), "다시 찾기" (`/api/v1/taste/cards/`), each new message is a fresh search (no tag carry-over); only the latest round shows the action buttons.
 - "이 세 장으로 스와이프 시작" starts a session whose first 3 cards are that round's cards.
-- Update mode `/search/:projectId` seeds the board's stored tags.
 
 Primary scenario:
 

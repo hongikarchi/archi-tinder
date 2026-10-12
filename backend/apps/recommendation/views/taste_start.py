@@ -1,6 +1,7 @@
 """Taste-start endpoints: recognise tags from free text, then show the top-3 matches.
 
-POST /api/v1/taste/recognize/  text (+ prev_tags) -> tags + top-3 cards (one JEV call)
+POST /api/v1/taste/recognize/  text -> tags + top-3 cards (one JEV call; every message is a fresh search,
+                               any legacy `prev_tags` field is ignored)
 POST /api/v1/taste/cards/      tags -> top-3 cards ("다시 찾기", no JEV call)
 """
 import logging
@@ -82,14 +83,11 @@ class TasteRecognizeView(APIView):
             return _bad('text is required')
         if len(text) > MAX_TEXT_LEN:
             return _bad(f'text must be at most {MAX_TEXT_LEN} characters')
-        prev_tags, err = _parse_tags(request.data.get('prev_tags') or [], 'prev_tags')
-        if err is not None:
-            return err
         exclude_ids, err = _parse_exclude_ids(request.data.get('exclude_ids'))
         if err is not None:
             return err
 
-        result = recognize_tags(text.strip(), prev_tags)
+        result = recognize_tags(text.strip())
         logger.debug('taste recognize probabilities: %s', result.raw_probabilities)
         return Response({
             'source': result.source,

@@ -1,4 +1,4 @@
-"""Taste-start step 3-2: taste_v2 session create / resume + ProjectSerializer tags.
+"""Taste-start step 3-2: taste_v2 session create / resume.
 
 Postgres-backed (django_db): run with `make test-local`. The buildings DB is
 never touched -- matching.* and the engine lookups are mocked.
@@ -10,7 +10,6 @@ import pytest
 
 from apps.recommendation import engine
 from apps.recommendation.models import AnalysisSession, Project
-from apps.recommendation.serializers import ProjectSerializer
 from apps.recommendation.taste_start import matching, session_pool, session_selector
 from apps.recommendation.taste_start.recognizer import make_tag
 
@@ -286,37 +285,7 @@ class TestResumeV2:
 
 
 @pytest.mark.django_db
-class TestProjectSerializerTags:
-
-    def _ser(self, project):
-        return ProjectSerializer(project).data
-
-    def test_board_tags(self, user_profile):
-        p = Project.objects.create(user=user_profile, name='b', filters={
-            'taste_tags': TAG_DICTS + [{'axis': 'country', 'value': 'Atlantis'}]})
-        data = self._ser(p)
-        assert data['taste_tags_source'] == 'board'
-        assert [t['axis'] for t in data['taste_tags']] == ['country', 'material']   # invalid skipped
-
-    def test_legacy_filters_mapped(self, user_profile):
-        p = Project.objects.create(user=user_profile, name='b', filters={
-            'program': 'Housing', 'location_country': 'Japan', 'location_city': 'Tokyo'})
-        data = self._ser(p)
-        assert data['taste_tags_source'] == 'legacy'
-        assert {t['axis'] for t in data['taste_tags']} == {'use', 'country'}
-
-    def test_none(self, user_profile):
-        p = Project.objects.create(user=user_profile, name='b', filters={})
-        data = self._ser(p)
-        assert data['taste_tags'] == [] and data['taste_tags_source'] == 'none'
-
-    def test_read_only_and_no_extra_queries(self, user_profile, django_assert_num_queries):
-        fields = ProjectSerializer().fields
-        assert fields['taste_tags'].read_only and fields['taste_tags_source'].read_only
-        p = Project.objects.create(user=user_profile, name='b', filters={'taste_tags': TAG_DICTS})
-        with django_assert_num_queries(0):
-            ProjectSerializer(p).fields['taste_tags'].get_attribute(p)
-            ProjectSerializer(p).get_taste_tags(p)
+class TestProjectPatchTags:
 
     def test_patch_cannot_write_tags(self, auth_client, user_profile):
         p = Project.objects.create(user=user_profile, name='b', filters={})

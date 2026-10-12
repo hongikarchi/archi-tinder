@@ -17,7 +17,7 @@ from apps.recommendation.taste_start import jev_client, recognizer, vocab
 from apps.recommendation.taste_start.normalization import (
     MATERIAL_GROUP_MAP, raw_country_values, raw_material_values,
 )
-from apps.recommendation.taste_start.questions import build_questions, prev_question_id
+from apps.recommendation.taste_start.questions import build_questions
 from apps.recommendation.taste_start.year_rule import is_unbuilt
 
 CALL = 'apps.recommendation.taste_start.recognizer.call_jev'
@@ -32,8 +32,6 @@ def fake_jev(**picks):
                 choice = picks[qid]
             elif qid.startswith(('mat_', 'el_')) or qid == 'built':
                 choice = 'not_mentioned'
-            elif qid.startswith('prev_'):
-                choice = 'keep'
             else:
                 choice = 'none'
             answers[qid] = {'type': 'choice', 'choice': choice, 'confidence': 0.9,
@@ -42,9 +40,9 @@ def fake_jev(**picks):
     return _call
 
 
-def run(text, prev=None, **picks):
+def run(text, **picks):
     with mock.patch(CALL, side_effect=fake_jev(**picks)):
-        return recognize_tags(text, prev or [])
+        return recognize_tags(text)
 
 
 def by_axis(result):
@@ -86,7 +84,7 @@ def test_vocab_sizes():
 
 
 def test_choice_questions_stay_under_limit_and_have_strict():
-    q = build_questions([])
+    q = build_questions()
     for qid in ('program', 'typology', 'country'):
         assert len(q[qid]['criteria']) <= 255
         assert 'Judge ONLY the newest message' in q[qid]['instructions']
@@ -187,58 +185,21 @@ def test_country_match_uses_raw_spellings():
     assert t.prob == 0.9
 
 
-# -- carry-over ----------------------------------------------------------------
-def _prev(*specs):
-    out = []
-    for axis, value, *rest in specs:
-        out.append(recognizer.make_tag(axis, value, kind=rest[0] if rest else None))
-    return out
-
-
-def test_carry_over_keep():
-    prev = _prev(('country', 'Japan'), ('use', 'Museum', 'typology'))
-    res = run('좋아 그대로', prev)
-    assert {t.key for t in res.tags} == {t.key for t in prev}
-
-
-def test_carry_over_drop():
-    prev = _prev(('country', 'Japan'), ('use', 'Museum', 'typology'))
-    res = run('일본일 필요는 없어', prev, **{prev_question_id(prev[0]): 'drop'})
-    assert [t.axis for t in res.tags] == ['use']
-
-
-def test_carry_over_exclude_keeps_tag_with_exclude_polarity():
-    prev = _prev(('material', 'brick'), ('use', 'Housing', 'program'))
-    res = run('벽돌은 아니고', prev, **{prev_question_id(prev[0]): 'exclude'})
-    tags = by_axis(res)
-    assert tags[('material', 'brick')].polarity == 'exclude'
-    assert tags[('use', 'Housing')].polarity == 'want'
-
-
-def test_new_want_replaces_old_want_on_single_axis():
-    prev = _prev(('country', 'Japan'))
-    res = run('스페인으로', prev, country='Spain')
+# -- single message ------------------------------------------------------------
+def test_single_value_axis_keeps_one_want():
+    res = run('스페인과 일본', country='Spain')
     countries = [t for t in res.tags if t.axis == 'country']
     assert [t.value for t in countries] == ['Spain']
 
 
-def test_materials_accumulate():
-    prev = _prev(('material', 'wood'))
-    res = run('유리도', prev, mat_glass='wanted')
-    assert {t.value for t in res.tags} == {'wood', 'glass'}
-
-
-def test_prev_questions_generated_per_tag():
-    prev = _prev(('country', 'Japan'))
-    q = build_questions(prev)
-    assert prev_question_id(prev[0]) == 'prev_country_japan'
-    assert set(q['prev_country_japan']['criteria']) == {'keep', 'drop', 'exclude'}
+def test_no_prev_questions_generated():
+    assert not [qid for qid in build_questions() if qid.startswith('prev_')]
 
 
 # -- dictionary fallback --------------------------------------------------------
-def dict_run(text, prev=None):
+def dict_run(text):
     with mock.patch(CALL, side_effect=JevUnavailable('down')):
-        return recognize_tags(text, prev or [])
+        return recognize_tags(text)
 
 
 def test_dictionary_source_and_basic_tags():
@@ -255,24 +216,15 @@ def test_dictionary_brick_does_not_also_match_stone():
     assert mats == ['brick']
 
 
-def test_dictionary_drop_negation():
-    prev = _prev(('country', 'Japan'), ('use', 'Museum', 'typology'))
-    res = dict_run('일본일 필요는 없는 것 같아', prev)
-    assert [t.axis for t in res.tags] == ['use']
+def test_dictionary_drop_negation_yields_no_tag():
+    res = dict_run('일본일 필요는 없는 것 같아')
+    assert res.tags == []
 
 
 def test_dictionary_exclude_negation():
     res = dict_run('벽돌은 아니고')
     (t,) = res.tags
     assert (t.axis, t.value, t.polarity) == ('material', 'brick', 'exclude')
-
-
-def test_dictionary_exclude_of_previous_tag():
-    prev = _prev(('material', 'brick'))
-    res = dict_run('벽돌은 아니고 나무로', prev)
-    tags = by_axis(res)
-    assert tags[('material', 'brick')].polarity == 'exclude'
-    assert tags[('material', 'wood')].polarity == 'want'
 
 
 def test_dictionary_english_negation():
@@ -362,20 +314,20 @@ def test_client_success_sends_bearer_and_timeout():
 
 @override_settings(TYPESAFE_API_KEY='')
 def test_recognize_without_key_falls_back_to_dictionary():
-    res = recognize_tags('벽돌 주택', [])
+    res = recognize_tags('벽돌 주택')
     assert res.source == 'dictionary'
 
 
 # -- prompt-text guards ---------------------------------------------------------
 def test_era_instruction_separates_style_words():
-    q = build_questions([])['era']
+    q = build_questions()['era']
     assert 'STYLE' in q['instructions'] and '모던' in q['instructions']
     assert 'answer none' in q['instructions']
     assert 'NOT the style words' in q['criteria']['modern_20th']
 
 
 def test_element_and_material_questions_are_strict():
-    q = build_questions([])
+    q = build_questions()
     for qid in ('el_courtyard', 'el_garden', 'el_atrium', 'mat_wood'):
         ins = q[qid]['instructions']
         assert 'THIS exact item' in ins
@@ -383,14 +335,14 @@ def test_element_and_material_questions_are_strict():
 
 
 def test_typology_instruction_rejects_generic_words():
-    q = build_questions([])['typology']
+    q = build_questions()['typology']
     assert '주거' in q['instructions'] and 'answered none' in q['instructions']
     assert 'NOT generic' in q['criteria']['House']
     assert 'NOT plain' in q['criteria']['Housing']
 
 
 def test_question_ids_unchanged():
-    ids = set(build_questions([]))
+    ids = set(build_questions())
     assert {'program', 'typology', 'style', 'atmosphere', 'color_tone', 'country', 'era',
             'built', 'mat_wood', 'el_courtyard'} <= ids
 

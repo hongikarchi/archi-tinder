@@ -230,9 +230,6 @@ class TestViews:
 
     @pytest.mark.parametrize('body', [
         {}, {'text': ''}, {'text': 5}, {'text': 'x' * 501},
-        {'text': 'a', 'prev_tags': 'nope'}, {'text': 'a', 'prev_tags': [{'axis': 'use'}]},
-        {'text': 'a', 'prev_tags': [5]},
-        {'text': 'a', 'prev_tags': [{'axis': 'use', 'value': 'x', 'polarity': 'maybe'}]},
         {'text': 'a', 'exclude_ids': 'x'}, {'text': 'a', 'exclude_ids': [1]},
         {'text': 'a', 'exclude_ids': ['b'] * 101},
     ])

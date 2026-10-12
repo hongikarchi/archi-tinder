@@ -7,23 +7,23 @@ hints, used only when JEV is unavailable.
 
 Both paths produce the same intermediate `Mention` list, which then goes
 through one shared pipeline: merge (use / Warm / Industrial), year resolution,
-carry-over of previous-round tags, and single-value-axis replacement.
+and single-value-axis dedupe.
 """
 import functools
 import logging
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Optional
 
 from . import vocab
 from .jev_client import JevUnavailable, call_jev
 from .normalization import raw_country_values, raw_material_values
-from .questions import NONE, NOT_MENTIONED, build_questions, build_state, prev_question_id
+from .questions import NONE, NOT_MENTIONED, build_questions, build_state
 from .year_rule import current_year, parse_years
 
 logger = logging.getLogger('apps.recommendation')
 
-# Axes that hold a single wanted value: a new want-tag replaces the old one.
+# Axes that hold a single wanted value: the first want mention wins.
 SINGLE_AXES = ('use', 'style', 'atmosphere', 'color', 'country', 'year', 'built')
 # Axes that may hold several tags at once.
 MULTI_AXES = ('material', 'element')
@@ -204,35 +204,15 @@ def _year_mention(text, mentions):
     return mentions
 
 
-def _combine(prev_tags, decisions, mentions, text):
-    """Carry-over + new tags -> final tag list."""
+def _combine(mentions, text):
+    """Mentions from one message -> final tag list."""
     mentions = _year_mention(text, mentions)
     mentions = _merge_mentions(mentions)
 
-    prev_by_key = {t.key: t for t in prev_tags}
-    decisions = dict(decisions)
-    new_mentions = []
-    for m in mentions:
-        if m.polarity in ('drop', 'exclude'):
-            key = (m.axis, _hashable(m.value))
-            prev = prev_by_key.get(key)
-            if prev is not None:   # dictionary path: negation of an earlier tag
-                decisions[prev_question_id(prev)] = m.polarity
-                continue
-            if m.polarity == 'drop':
-                continue
-        new_mentions.append(m)
-
     result = []
-    for tag in prev_tags:
-        d = decisions.get(prev_question_id(tag), 'keep')
-        if d == 'drop':
+    for m in mentions:
+        if m.polarity == 'drop':   # dictionary path: "상관없어" with nothing to drop
             continue
-        if d == 'exclude':
-            tag = replace(tag, polarity='exclude')
-        result.append(tag)
-
-    for m in new_mentions:
         tag = _mention_to_tag(m)
         if tag.axis in SINGLE_AXES and tag.polarity == 'want':
             result = [t for t in result if not (t.axis == tag.axis and t.polarity == 'want')]
@@ -249,8 +229,8 @@ def _prob(answer, choice):
 
 
 def _parse_jev(answers):
-    """JEV answers -> (mentions, prev decisions, raw probabilities)."""
-    mentions, decisions, raw = [], {}, {}
+    """JEV answers -> (mentions, raw probabilities)."""
+    mentions, raw = [], {}
     axis_q = (
         ('program', 'use', vocab.PROGRAM, 'program'),
         ('typology', 'use', vocab.TYPOLOGY, 'typology'),
@@ -280,10 +260,7 @@ def _parse_jev(answers):
             if choice in ('wanted', 'excluded'):
                 mentions.append(Mention(axis, value, 'want' if choice == 'wanted' else 'exclude',
                                         _prob(ans, choice)))
-    for qid, ans in answers.items():
-        if qid.startswith('prev_') and isinstance(ans, dict):
-            decisions[qid] = ans.get('choice', 'keep')
-    return mentions, decisions, raw
+    return mentions, raw
 
 
 # -- dictionary fallback ------------------------------------------------------
@@ -368,14 +345,13 @@ def _dictionary_mentions(text):
 
 
 # -- public entry point -------------------------------------------------------
-def recognize_tags(text, prev_tags):
-    """Recognize tags in `text`, carrying over `prev_tags` from earlier rounds."""
-    prev_tags = list(prev_tags or [])
+def recognize_tags(text):
+    """Recognize tags in one message `text` (every message is a fresh search)."""
     try:
-        answers = call_jev(build_state(text, prev_tags), build_questions(prev_tags))
+        answers = call_jev(build_state(text), build_questions())
     except JevUnavailable as exc:
         logger.info('taste_start: JEV unavailable (%s), using dictionary fallback', exc)
         mentions = _dictionary_mentions(text)
-        return RecognitionResult(_combine(prev_tags, {}, mentions, text), 'dictionary', {})
-    mentions, decisions, raw = _parse_jev(answers)
-    return RecognitionResult(_combine(prev_tags, decisions, mentions, text), 'jev', raw)
+        return RecognitionResult(_combine(mentions, text), 'dictionary', {})
+    mentions, raw = _parse_jev(answers)
+    return RecognitionResult(_combine(mentions, text), 'jev', raw)

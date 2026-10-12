@@ -1,6 +1,4 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { useParams } from 'react-router-dom'
-import { getProject } from '../api/projects.js'
 import { recognizeTaste, findTasteCards } from '../api/taste.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
@@ -63,13 +61,11 @@ function Composer({ value, onChange, onSubmit, disabled, placeholder, rows, send
   )
 }
 
-// matched === undefined -> plain chip (no check mark), used for carried-over board tags.
 function TagChip({ tag, matched, language, t }) {
-  const showMark = matched !== undefined
-  const dim = showMark && !matched
+  const dim = !matched
   return (
     <span
-      title={showMark ? (matched ? t('search.tasteTagMatched') : t('search.tasteTagMissed')) : undefined}
+      title={matched ? t('search.tasteTagMatched') : t('search.tasteTagMissed')}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
         fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 999,
@@ -80,7 +76,7 @@ function TagChip({ tag, matched, language, t }) {
         textDecoration: dim ? 'line-through' : 'none',
       }}
     >
-      {showMark && <span aria-hidden="true">{matched ? '✓' : '✕'}</span>}
+      <span aria-hidden="true">{matched ? '✓' : '✕'}</span>
       {tagLabel(tag, language)}
     </span>
   )
@@ -291,10 +287,8 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
 
 export default function TasteStartPage({ onStartTaste, onLogout }) {
   const { t, language } = useTranslation()
-  const { projectId } = useParams()
-  const mode = projectId ? 'update' : 'new'
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
-  const storageKey = `archithon_taste_${userId}_${mode}_${projectId || 'new'}`
+  const storageKey = `archithon_taste_${userId}_new`
 
   const [rounds, setRounds] = useState(() => loadRounds(storageKey))
   const [pending, setPending] = useState(null) // { text } while recognize is in flight
@@ -302,7 +296,6 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
   const [error, setError] = useState('')
   const [busyRoundId, setBusyRoundId] = useState(null)
   const [starting, setStarting] = useState(false)
-  const [board, setBoard] = useState(null) // update mode: { name, tags }
   const scrollRef = useRef(null)
   const endRef = useRef(null)
   const roundsRef = useRef(rounds)
@@ -313,19 +306,6 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
   useEffect(() => {
     try { sessionStorage.setItem(storageKey, JSON.stringify(rounds)) } catch { /* quota: ignore */ }
   }, [storageKey, rounds])
-
-  // Update mode: load the board for its name + carried-over taste_tags.
-  // projectId from the route is the board's project_id (the same id
-  // handleResumeProject / handleUpdateWithImages use as the local project id).
-  useEffect(() => {
-    if (!projectId) return
-    let cancelled = false
-    getProject(projectId).then(p => {
-      if (cancelled || !p) return
-      setBoard({ name: p.name || '', tags: Array.isArray(p.taste_tags) ? p.taste_tags : [] })
-    })
-    return () => { cancelled = true }
-  }, [projectId])
 
   const latest = rounds[rounds.length - 1] || null
   const inRounds = rounds.length > 0 || pending !== null
@@ -372,7 +352,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
     setError('')
     setPending({ text })
     try {
-      const res = await recognizeTaste({ text, prevTags: mode === 'update' ? (board?.tags || []) : [] })
+      const res = await recognizeTaste({ text })
       const round = {
         id: `r${Date.now()}`,
         text,
@@ -420,9 +400,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
     try { sessionStorage.removeItem(storageKey) } catch { /* ignore */ }
     try {
       await onStartTaste({
-        mode,
-        projectId,
-        projectName: mode === 'update' ? board?.name : '',
+        projectName: '',
         rawQuery: firstText,
         tags: round.tags,
         startIds,
@@ -447,22 +425,6 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
 
   const errorEl = error ? (
     <div role="alert" style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-destructive)', marginTop: 8 }}>{error}</div>
-  ) : null
-
-  const carriedChips = mode === 'update' && rounds.length === 0
-    ? (board?.tags || []).filter(g => g.polarity !== 'exclude')
-    : []
-  const carried = carriedChips.length > 0 ? (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', marginBottom: 6 }}>
-        {t('search.tasteCurrentConditions')}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {carriedChips.map(tag => (
-          <TagChip key={`${tag.axis}:${tag.value}`} tag={tag} matched={undefined} language={language} t={t} />
-        ))}
-      </div>
-    </div>
   ) : null
 
   return (
@@ -502,7 +464,6 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
               {t('search.tasteHeadlineLine1')}<br />
               <span style={{ color: 'var(--accent-1)' }}>{t('search.tasteHeadlineLine2')}</span>
             </h2>
-            {carried}
             <Composer
               value={input} onChange={setInput} onSubmit={handleSend}
               disabled={false} rows={3}

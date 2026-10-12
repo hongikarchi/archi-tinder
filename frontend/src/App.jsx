@@ -822,30 +822,9 @@ export default function App() {
   }
 
   // Taste-start v2 (docs/decisions/2026-10-11-taste-start-redesign.md): start a
-  // session from the 3 chosen cards + recognized tags. new -> fresh local
-  // project; update -> existing board id (force_new, same as handleUpdateWithImages).
-  async function handleStartTaste({ mode, projectId, projectName, rawQuery, tags, startIds, excludeIds }) {
+  // session from the 3 chosen cards + recognized tags in a fresh local project.
+  async function handleStartTaste({ projectName, rawQuery, tags, startIds, excludeIds }) {
     const options = { tasteTags: tags, startIds, excludeIds }
-    if (mode === 'update' && projectId) {
-      const id = String(projectId)
-      let project = projects.find(p => p.id === id)
-      if (!project) {
-        // Board not in local state (e.g. opened by URL) — mirror handleResumeProject.
-        project = {
-          id, backendId: id, projectName: projectName || t('search.untitledProject'),
-          filters: {}, likedBuildings: [], swipedIds: [], predictedLikes: [],
-          sessionId: null, createdAt: new Date().toISOString(), deckImages: null,
-          visibility: 'private', isTemp: false,
-        }
-        const entry = project
-        setProjects(prev => prev.find(p => p.id === id) ? prev : [...prev, entry])
-      }
-      setActiveProjectId(id)
-      setProjects(prev => prev.map(p => p.id === id ? { ...p, filters: { taste_tags: tags }, deckImages: null, sessionId: null } : p))
-      navigate('/swipe')
-      await initSession(id, {}, [], [], null, null, null, project.projectName, rawQuery || '', null, true, options)
-      return
-    }
     const name = projectName || t('search.untitledProject')
     const localId = `proj_${Date.now()}`
     setProjects(prev => [...prev, {
@@ -1101,9 +1080,6 @@ export default function App() {
           <Route index element={<Navigate to="/discovery" replace />} />
           <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
-            <TasteStartPage onStartTaste={handleStartTaste} onLogout={handleLogout} />
-          } />
-          <Route path="search/:projectId" element={
             <TasteStartPage onStartTaste={handleStartTaste} onLogout={handleLogout} />
           } />
           <Route path="swipe" element={null} />

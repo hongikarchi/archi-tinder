@@ -2,7 +2,7 @@
 taste_start -- Tag recognition for the Taste-tab start flow.
 
 Public API:
-  recognize_tags(text, prev_tags) -> RecognitionResult   (JEV, dictionary fallback)
+  recognize_tags(text) -> RecognitionResult   (JEV, dictionary fallback)
   Tag                                                    (JSON-serialisable tag)
   JevUnavailable                                         (JEV failure signal)
   parse_years(text)                                      (numeric year range rule)

@@ -3,22 +3,19 @@ questions.py -- Build the JEV `questions` + `state` payload for one user message
 
 One choice question per tag axis (program, typology, style, atmosphere,
 color_tone, country, era, built), one per material group (`mat_<group>`), one
-per architectural element (`el_<element>`), and one `prev_<axis>_<slug>` per
-tag chosen in earlier rounds (keep / drop / exclude).
+per architectural element (`el_<element>`).
 
 Prompt text is the validated spike prompt. STRICT is load-bearing: without it
 accuracy collapsed (Korean text tagged country=South Korea, concrete tagged
 Brutalist).
 """
-import re
-
 from . import vocab
 
 STRICT = (
     ' Judge ONLY the newest message. Answer an option only if the newest message explicitly names it'
     ' (the word itself or a close synonym). Do not infer it from other words — e.g. concrete does NOT mean Brutalist,'
     ' earth/mud does NOT mean Vernacular, an architect name does NOT mean a country. The language the message is'
-    ' written in (Korean, English) says nothing about the country. Conditions from earlier messages do not count.'
+    ' written in (Korean, English) says nothing about the country.'
     ' If not explicitly named, answer none.'
 )
 
@@ -53,21 +50,8 @@ def _choice(instructions, options):
     return {'type': 'choice', 'instructions': instructions + STRICT, 'criteria': criteria}
 
 
-def prev_question_id(tag):
-    """Stable question id for a previous-round tag, e.g. 'prev_country_japan'."""
-    value = tag.value
-    if isinstance(value, (list, tuple)):
-        value = '_'.join('' if v is None else str(v) for v in value)
-    slug = re.sub(r'[^a-z0-9]+', '_', str(value).lower()).strip('_')
-    return f'prev_{tag.axis}_{slug}'
-
-
-def _tag_phrase(tag):
-    return f'{tag.axis}: {tag.label_en}'
-
-
-def build_questions(prev_tags):
-    """Return the JEV questions dict for the newest message + earlier-round tags."""
+def build_questions():
+    """Return the JEV questions dict for one message."""
     q = {
         'program': _choice('Which building use (program) does the user want to see?', vocab.PROGRAM),
         'style': _choice('Which architectural style does the user ask for?', vocab.STYLE),
@@ -109,26 +93,9 @@ def build_questions(prev_tags):
                 NOT_MENTIONED: 'The element is not mentioned in the newest message',
             },
         }
-    for tag in prev_tags:
-        q[prev_question_id(tag)] = {
-            'type': 'choice',
-            'instructions': f'The user earlier asked for "{_tag_phrase(tag)}". '
-                            'After the newest message, what is the status of that condition?',
-            'criteria': {
-                'keep': 'Still wanted, or not mentioned again',
-                'drop': 'No longer required — user says it does not have to be that '
-                        '(e.g. "일본일 필요는 없어", "상관없어")',
-                'exclude': 'User now rejects it and does not want it '
-                           '(e.g. "벽돌은 아니고", "말고")',
-            },
-        }
     return q
 
 
-def build_state(text, prev_tags):
+def build_state(text):
     """Context string sent as JEV `state`."""
-    if not prev_tags:
-        return f'Newest message from a user searching for architecture references:\n{text}'
-    return ('A user is searching for architecture references.\n'
-            f'Conditions chosen in earlier messages: {", ".join(_tag_phrase(t) for t in prev_tags)}\n'
-            f'Newest message: {text}')
+    return f'Newest message from a user searching for architecture references:\n{text}'

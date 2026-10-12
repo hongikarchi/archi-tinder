@@ -25,10 +25,6 @@ V = 'apps.recommendation.views.taste_start.'
 ])
 def test_invalid_tags_400_not_500(auth_client, tag):  # noqa: F811
     assert auth_client.post(CARDS, {'tags': [tag]}, format='json').status_code == 400
-    with mock.patch(V + 'recognize_tags') as rec:
-        r = auth_client.post(RECOGNIZE, {'text': 'a', 'prev_tags': [tag]}, format='json')
-    assert r.status_code == 400
-    rec.assert_not_called()
 
 
 def test_forged_match_is_rebuilt(auth_client):  # noqa: F811
@@ -53,20 +49,18 @@ def test_forged_match_is_rebuilt(auth_client):  # noqa: F811
     assert tag.label_ko != 'HACK' and tag.prob is None
 
 
-def test_forged_match_ignored_for_prev_tags(auth_client):  # noqa: F811
-    forged = {'axis': 'style', 'value': 'Minimalist',
-              'match': {'bad_col': ['z'], 'style': ['q'] * 5000}}
+def test_legacy_prev_tags_field_ignored(auth_client):  # noqa: F811
+    forged = {'axis': 'nope', 'value': 'x'}
     captured = {}
 
-    def fake_rec(text, prev):
-        captured['prev'] = prev
+    def fake_rec(text):
+        captured['text'] = text
         return RecognitionResult(tags=[], source='dictionary')
 
-    with mock.patch(V + 'recognize_tags', side_effect=fake_rec), \
-            mock.patch(V + 'engine.get_diverse_random', return_value=[]):
+    with mock.patch(V + 'recognize_tags', side_effect=fake_rec),             mock.patch(V + 'engine.get_diverse_random', return_value=[]):
         r = auth_client.post(RECOGNIZE, {'text': 'a', 'prev_tags': [forged]}, format='json')
     assert r.status_code == 200
-    assert captured['prev'][0].match == make_tag('style', 'Minimalist').match
+    assert captured['text'] == 'a'
 
 
 def test_typology_use_tag_kept_and_year_roundtrip(auth_client):  # noqa: F811
