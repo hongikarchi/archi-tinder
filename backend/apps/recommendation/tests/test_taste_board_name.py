@@ -286,9 +286,26 @@ class TestCreateSessionAutoName:
                                        return_value=[mock_card, mock_card, mock_card]):
                                 with patch('apps.recommendation.engine.get_building_card',
                                            return_value=mock_card):
-                                    with patch('apps.recommendation.event_log.emit_event_batch'):
+                                    with patch('apps.recommendation.event_log.emit_event_batch'), \
+                                            self._v2_create_stubs():
                                         resp = create_session(request, user_profile, recent_cutoff)
         return resp, mock_gemini
+
+    def _v2_create_stubs(self):
+        """Stub the taste_v2 create path's buildings-DB reads (filters-based create
+        now runs through it): start-card pick (tag match or diverse random) + tag pool."""
+        from contextlib import ExitStack
+        stack = ExitStack()
+        stack.enter_context(patch(
+            'apps.recommendation.taste_start.matching.top_matches',
+            return_value=[{'canonical_bld_id': b} for b in self._STUB_POOL]))
+        stack.enter_context(patch(
+            'apps.recommendation.engine.get_diverse_random',
+            return_value=[dict(self._STUB_CARD, canonical_bld_id=b) for b in self._STUB_POOL]))
+        stack.enter_context(patch(
+            'apps.recommendation.taste_start.session_pool.build_pool',
+            return_value=(list(self._STUB_POOL), dict(self._STUB_SCORES))))
+        return stack
 
     def test_placeholder_empty_gets_deterministic_fallback_no_gemini_call(self, user_profile):
         """Empty name -> deterministic-from-filters fallback; Gemini never called synchronously."""
