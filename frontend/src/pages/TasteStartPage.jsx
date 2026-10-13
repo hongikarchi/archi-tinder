@@ -11,7 +11,7 @@ import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
-import { stepIndex, buildChips, isTypingTarget, tagKey, keptCards, buildStartDeck } from '../utils/tasteStart.js'
+import { stepIndex, buildChips, isTypingTarget, tagKey, keptCards, cardZIndex, buildStartDeck } from '../utils/tasteStart.js'
 import ps from './TasteStartPage.module.css'
 
 const MAX_EXCLUDE = 100
@@ -201,7 +201,7 @@ function CardStack({ round, index, onStep, rankLabel, t, language, onSubmitRepor
                 width: '100%', height: '100%',
                 transform: `translateX(${tx}px) scale(${scale})`,
                 opacity: hidden ? 0 : 1,
-                zIndex: 10 - j,
+                zIndex: cardZIndex(rel),
                 pointerEvents: isFront ? 'auto' : 'none',
               }}
             >
@@ -213,7 +213,7 @@ function CardStack({ round, index, onStep, rankLabel, t, language, onSubmitRepor
                 <div style={{
                   position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-lg)',
                   backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
-                  pointerEvents: galOpen ? 'none' : 'auto',
+                  pointerEvents: isFront && !galOpen ? 'auto' : 'none',
                 }}>
                   <CardImage card={c} priority={isFront} />
                   <span style={{

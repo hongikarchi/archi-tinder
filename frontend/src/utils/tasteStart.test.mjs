@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   clampIndex, stepIndex, tagMatches, buildChips, isTypingTarget,
-  tagKey, keptCards, buildStartDeck,
+  tagKey, keptCards, buildStartDeck, cardZIndex,
 } from './tasteStart.js'
 
 const mkCards = ids => ids.map(id => ({ card: { image_id: id } }))
@@ -34,6 +34,13 @@ test('start deck: reported ids survive the exclude cap', () => {
   })
   assert.equal(excludeIds.length, 100)
   assert.equal(excludeIds[excludeIds.length - 1], 'b')
+})
+
+test('front card is always on top of departed and behind cards', () => {
+  assert.ok(cardZIndex(0) > cardZIndex(1))
+  assert.ok(cardZIndex(1) > cardZIndex(2))
+  assert.ok(cardZIndex(2) > cardZIndex(-1))
+  assert.ok(cardZIndex(0) > cardZIndex(-2))
 })
 
 test('tagKey is stable for list-valued year tags', () => {

@@ -24,6 +24,11 @@ export function buildChips(tags, matchedKeys) {
     .map(t => ({ tag: t, matched: tagMatches(t, matchedKeys) }))
 }
 
+/** Stack order: front on top, cards behind descending, departed cards lowest. */
+export function cardZIndex(rel) {
+  return rel < 0 ? 1 : 20 - rel
+}
+
 /** Stable identity of a tag (value may be a list for year tags). */
 export function tagKey(tag) {
   return `${tag.axis}:${JSON.stringify(tag.value)}`
