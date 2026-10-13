@@ -43,8 +43,3 @@ def parse_years(text):
 def current_year():
     """Current calendar year (evaluated per call, never cached at import)."""
     return timezone.now().year
-
-
-def is_unbuilt(project_year):
-    """True when `project_year` lies in the future (an unbuilt / planned project)."""
-    return project_year is not None and project_year > current_year()

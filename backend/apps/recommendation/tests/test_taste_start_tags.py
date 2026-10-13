@@ -18,7 +18,6 @@ from apps.recommendation.taste_start.normalization import (
     MATERIAL_GROUP_MAP, raw_country_values, raw_material_values,
 )
 from apps.recommendation.taste_start.questions import build_questions
-from apps.recommendation.taste_start.year_rule import is_unbuilt
 
 CALL = 'apps.recommendation.taste_start.recognizer.call_jev'
 
@@ -66,13 +65,6 @@ def test_parse_years(text, want):
 
 def test_parse_years_two_digit_2000s():
     assert parse_years('10년대') == (2010, 2019)
-
-
-def test_is_unbuilt():
-    with mock.patch('apps.recommendation.taste_start.year_rule.current_year', return_value=2026):
-        assert is_unbuilt(2027) is True
-        assert is_unbuilt(2026) is False
-        assert is_unbuilt(None) is False
 
 
 # -- vocab sanity -------------------------------------------------------------

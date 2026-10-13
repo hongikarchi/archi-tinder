@@ -295,7 +295,7 @@ export default function App() {
         // exact card the user was looking at, not the backend's last selection.
         const hintKey = `archithon_currentCard_${userId}_${activeProjectId}`
         const currentHint = localStorage.getItem(hintKey) || null
-        initSession(activeProjectId, project.filters, [], [], project.sessionId || null, currentHint)
+        initSession(activeProjectId, project.filters, project.sessionId || null, currentHint)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -362,7 +362,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false, options = {}) {
+  async function initSession(projectId, filters, existingSessionId = null, currentHint = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false, options = {}) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     setKeepExploringChosen(false)
@@ -382,9 +382,6 @@ export default function App() {
         project_id: projectId,
         name: projectName,
         filters: normalizeFilters(filters),
-        filter_priority: filterPriority,
-        seed_ids: seedIds,
-        visual_description: visualDescription || undefined,
         raw_query: rawQuery || '',
         image_focus: imageFocus,
         force_new: forceNew,
@@ -836,7 +833,7 @@ export default function App() {
     }])
     setActiveProjectId(localId)
     navigate('/swipe')
-    await initSession(localId, {}, [], [], null, null, null, name, rawQuery || '', null, false, options)
+    await initSession(localId, {}, null, null, name, rawQuery || '', null, false, options)
   }
 
   async function handleLogin(user) {
@@ -960,7 +957,7 @@ export default function App() {
     }
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
+    await initSession(id, project.filters, project.sessionId || null, null, project.projectName)
   }
 
   // Start a fresh swipe session for an existing project, discarding the old session.
@@ -972,7 +969,7 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, [], [], null, null, null, project.projectName, '', null, true)
+    await initSession(id, project.filters, null, null, project.projectName, '', null, true)
   }
 
   // ── SaveBoardModal callbacks ────────────────────────────────────────────────

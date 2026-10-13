@@ -18,10 +18,7 @@ export async function startSession(params) {
       project_id:      params.project_id,
       name:            params.name || 'Untitled',
       filters:         params.filters || {},
-      filter_priority: params.filter_priority || [],
-      seed_ids:        params.seed_ids || [],
       raw_query:       params.raw_query || '',
-      ...(params.visual_description ? { visual_description: params.visual_description } : {}),
       ...(params.image_focus ? { image_focus: params.image_focus } : {}),
       ...(params.force_new ? { force_new: true } : {}),
       // Taste-start v2 body: tags are sent back exactly as the server returned them.
