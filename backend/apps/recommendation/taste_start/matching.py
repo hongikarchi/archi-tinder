@@ -84,6 +84,65 @@ def _tag_expr(tag, year_now):
     return '(' + ' OR '.join(parts) + ')', params
 
 
+def _kw_pattern(kw):
+    """Python twin of the SQL word-boundary regex (word start + word end), case-insensitive."""
+    return re.compile(r'(?<!\w)(?=\w)' + re.escape(kw) + r'(?<=\w)(?!\w)', re.IGNORECASE)
+
+
+def explain_tag(tag, row, year_now=None, excerpt_chars=60):
+    """Pure-Python twin of `_tag_expr` for ONE building row (a dict of column -> value).
+
+    Returns (matched, matched_via). `matched` equals the boolean `_tag_expr` would
+    produce in SQL; `matched_via` lists what satisfied it, e.g.
+    {'column': 'architectural_elements', 'value': 'Garden'} or
+    {'column': 'visual_description', 'excerpt': '...'}. Keep in lock-step with
+    `_tag_expr` (a parity test compares them).
+    """
+    if year_now is None:
+        year_now = current_year()
+    m = tag.match or {}
+    via = []
+
+    for col in _ANY_COLUMNS:
+        if m.get(col) and row.get(col) is not None and row[col] in list(m[col]):
+            via.append({'column': col, 'value': row[col]})
+
+    if m.get('material_visual'):
+        wanted = {str(v).lower() for v in m['material_visual']}
+        hits = [x for x in (row.get('material_visual') or []) if str(x).lower() in wanted]
+        if hits:
+            via.append({'column': 'material_visual', 'value': hits})
+
+    if m.get('architectural_elements') or m.get('visual_description_contains'):
+        elements = row.get('architectural_elements') or []
+        for el in m.get('architectural_elements') or []:
+            if el in elements:
+                via.append({'column': 'architectural_elements', 'value': el})
+        desc = row.get('visual_description')
+        if desc:
+            for kw in m.get('visual_description_contains') or []:
+                hit = _kw_pattern(kw).search(desc)
+                if hit:
+                    lo = max(0, hit.start() - excerpt_chars)
+                    hi = min(len(desc), hit.end() + excerpt_chars)
+                    via.append({'column': 'visual_description',
+                                'excerpt': desc[lo:hi].replace('\n', ' ')})
+
+    year = row.get('project_year')
+    if tag.axis == 'year':
+        lo, hi = m.get('year_min'), m.get('year_max')
+        if ((lo is not None or hi is not None) and year is not None
+                and (lo is None or year >= int(lo)) and (hi is None or year <= int(hi))):
+            via.append({'column': 'project_year', 'value': year})
+
+    if tag.axis == 'built' and year is not None:
+        if ((m.get('built') == 'built_only' and year <= year_now)
+                or (m.get('built') == 'unbuilt_only' and year > year_now)):
+            via.append({'column': 'project_year', 'value': year})
+
+    return bool(via), via
+
+
 def score_sql(tags):
     """Build the parameterised pieces of the scoring query.
 

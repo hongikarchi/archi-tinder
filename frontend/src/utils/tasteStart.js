@@ -24,6 +24,35 @@ export function buildChips(tags, matchedKeys) {
     .map(t => ({ tag: t, matched: tagMatches(t, matchedKeys) }))
 }
 
+/** Stable identity of a tag (value may be a list for year tags). */
+export function tagKey(tag) {
+  return `${tag.axis}:${JSON.stringify(tag.value)}`
+}
+
+/** Cards of a round that are not reported (the deck the user starts swiping with). */
+export function keptCards(cards, reports) {
+  const r = reports || {}
+  return (cards || []).filter(c => !r[c.card.image_id])
+}
+
+/**
+ * Start-swiping payload. startIds = non-reported round cards in order;
+ * excludeIds = shown minus startIds, capped to the last `max`, with reported
+ * ids placed last so they always survive the cap.
+ */
+export function buildStartDeck({ cards, shown, reports, max = 100 }) {
+  const r = reports || {}
+  const startIds = keptCards(cards, r).map(c => c.card.image_id)
+  const startSet = new Set(startIds)
+  const reportedSet = new Set(Object.keys(r))
+  const rest = (shown || []).filter(id => !startSet.has(id) && !reportedSet.has(id))
+  const reported = [...new Set([
+    ...(shown || []).filter(id => reportedSet.has(id) && !startSet.has(id)),
+    ...[...reportedSet].filter(id => !startSet.has(id)),
+  ])]
+  return { startIds, excludeIds: [...rest, ...reported].slice(-max) }
+}
+
 /** Ignore arrow keys while typing. */
 export function isTypingTarget(el) {
   if (!el) return false

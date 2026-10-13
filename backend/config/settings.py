@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'apps.works',
     'apps.messaging',
     'apps.admin_dashboard',
+    'apps.feedback',
 ]
 
 MIDDLEWARE = [
@@ -251,6 +252,9 @@ REST_FRAMEWORK = {
         # ADMIN-DASH-1: admitted admin-dashboard calls (registry; effective value = class attr
         # in apps/admin_dashboard/throttling.py).
         'admin': '120/min',
+        # TASTE-FEEDBACK-1: card/query report writes (registry; effective value = class attr
+        # in apps/feedback/throttling.py).
+        'feedback': '30/min',
         # Global fallback rates (applied to views that reference these scopes directly).
         'anon': '60/min',
         'user': '300/min',

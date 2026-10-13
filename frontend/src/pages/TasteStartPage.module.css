@@ -96,6 +96,7 @@
   border: 1px solid var(--color-border-soft);
   transition: transform var(--motion-normal) var(--motion-ease-out), opacity var(--motion-normal) var(--motion-ease-out);
   will-change: transform;
+  perspective: 1200px; /* gallery flip (rotateY) */
 }
 .cardDragging { transition: none; }
 

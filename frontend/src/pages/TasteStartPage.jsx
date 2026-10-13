@@ -1,10 +1,17 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { recognizeTaste, findTasteCards } from '../api/taste.js'
+import { submitCardReport, cancelCardReport, submitQueryReport, cancelQueryReport } from '../api/feedback.js'
+import { useImageTelemetry } from '../hooks/useImageTelemetry.js'
+import Modal from '../components/Modal.jsx'
+import TasteCardDetail from '../components/TasteCardDetail.jsx'
+import TasteCardGallery from '../components/TasteCardGallery.jsx'
+import TasteCardReport, { ReportIcon } from '../components/TasteCardReport.jsx'
+import fb from '../components/TasteFeedback.module.css'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
-import { stepIndex, buildChips, isTypingTarget } from '../utils/tasteStart.js'
+import { stepIndex, buildChips, isTypingTarget, tagKey, keptCards, buildStartDeck } from '../utils/tasteStart.js'
 import ps from './TasteStartPage.module.css'
 
 const MAX_EXCLUDE = 100
@@ -86,6 +93,7 @@ function CardImage({ card, priority }) {
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const showImg = card.image_url && !failed
+  const { onLoad, onError } = useImageTelemetry({ buildingId: card.image_id, context: 'taste_start_card' })
   return (
     <>
       {!loaded && <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />}
@@ -94,8 +102,8 @@ function CardImage({ card, priority }) {
           src={card.image_url} srcSet={card.image_srcset || undefined}
           alt={card.image_title || ''} draggable={false}
           loading="eager" fetchpriority={priority ? 'high' : 'auto'}
-          onLoad={() => setLoaded(true)}
-          onError={() => { setFailed(true); setLoaded(true) }}
+          onLoad={e => { setLoaded(true); onLoad(e) }}
+          onError={e => { setFailed(true); setLoaded(true); onError(e) }}
           style={{
             width: '100%', height: '100%', objectFit: 'cover', display: 'block',
             opacity: loaded ? 1 : 0, transition: 'opacity 0.3s',
@@ -106,13 +114,40 @@ function CardImage({ card, priority }) {
   )
 }
 
-function CardStack({ cards, index, onStep, rankLabel }) {
+const blankUi = id => ({ id, exp: false, gal: false, galSeen: false, panel: false })
+
+function CardStack({ round, index, onStep, rankLabel, t, language, onSubmitReport, onCancelReport, sheetOpen }) {
+  const cards = round.cards
+  const reports = round.reports || {}
   const [dragX, setDragX] = useState(0)
+  const [uiState, setUiState] = useState(() => blankUi(null))
   const startX = useRef(null)
+  const startT = useRef(0)
   const moved = useRef(false)
 
+  // Detail / gallery / report-panel state belongs to the front card; moving to
+  // another card (or a new deck) implicitly resets it.
+  const frontItem = cards[index]
+  const frontId = frontItem?.card.image_id ?? null
+  // Reset when the front card changes (A->B->A must not resurrect A's state)
+  // or while the round-report sheet is open (one Escape closes one thing).
+  if (uiState.id !== frontId || (sheetOpen && (uiState.exp || uiState.gal || uiState.galSeen || uiState.panel))) {
+    setUiState(blankUi(frontId))
+  }
+  const ui = uiState.id === frontId ? uiState : blankUi(frontId)
+  function patch(p) {
+    setUiState(prev => ({ ...(prev.id === frontId ? prev : blankUi(frontId)), ...p }))
+  }
+  const chips = useMemo(
+    () => buildChips(round.tags, frontItem?.matched_keys),
+    [round.tags, frontItem],
+  )
+
   function onPointerDown(e) {
+    // Buttons, the report panel and the gallery close button never start a drag/tap.
+    if (e.target.closest?.('[data-nodrag]')) return
     startX.current = e.clientX
+    startT.current = Date.now()
     moved.current = false
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }
@@ -130,7 +165,11 @@ function CardStack({ cards, index, onStep, rankLabel }) {
     if (cancelled) return
     if (dx <= -40) onStep(1)
     else if (dx >= 40) onStep(-1)
-    else if (!moved.current) onStep(1) // tap = next
+    else if (!moved.current && Date.now() - startT.current < 300) {
+      // tap: close the gallery, else toggle the detail (ignored while reporting)
+      if (ui.gal) patch({ gal: false })
+      else if (!ui.panel) patch({ exp: !ui.exp })
+    }
   }
 
   return (
@@ -152,8 +191,8 @@ function CardStack({ cards, index, onStep, rankLabel }) {
           const isFront = rel === 0
           const tx = hidden ? -50 : rel * 14 + (isFront ? dragX : 0)
           const scale = hidden ? 0.95 : 1 - 0.05 * rel
-          const country = c.metadata?.axis_country
-          const use = c.metadata?.axis_typology
+          const reported = !!reports[c.image_id]
+          const galOpen = isFront && ui.gal
           return (
             <div
               key={c.image_id}
@@ -163,27 +202,76 @@ function CardStack({ cards, index, onStep, rankLabel }) {
                 transform: `translateX(${tx}px) scale(${scale})`,
                 opacity: hidden ? 0 : 1,
                 zIndex: 10 - j,
-                pointerEvents: 'none',
+                pointerEvents: isFront ? 'auto' : 'none',
               }}
             >
-              <CardImage card={c} priority={isFront} />
-              <span style={{
-                position: 'absolute', top: 12, left: 12,
-                fontSize: 'var(--fs-caption)', fontWeight: 600, color: '#fff',
-                background: 'var(--color-scrim)', borderRadius: 999, padding: '3px 10px',
-              }}>{rankLabel(j + 1)}</span>
               <div style={{
-                position: 'absolute', left: 0, right: 0, bottom: 0, padding: '40px 14px 14px',
-                background: 'linear-gradient(to top, var(--color-scrim-strong), transparent)',
-                color: '#fff',
+                position: 'absolute', inset: 0, transformStyle: 'preserve-3d',
+                transform: galOpen ? 'rotateY(180deg)' : 'none',
+                transition: 'transform var(--motion-flip) var(--motion-ease)',
               }}>
                 <div style={{
-                  fontSize: 'var(--fs-emphasis)', fontWeight: 600, lineHeight: 1.3,
-                  overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                }}>{c.image_title}</div>
-                {(country || use) && (
-                  <div style={{ fontSize: 'var(--fs-caption)', opacity: 0.85, marginTop: 4 }}>
-                    {[country, use].filter(Boolean).map(String).join(' · ')}
+                  position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-lg)',
+                  backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+                  pointerEvents: galOpen ? 'none' : 'auto',
+                }}>
+                  <CardImage card={c} priority={isFront} />
+                  <span style={{
+                    position: 'absolute', top: 12, left: 12, zIndex: 4,
+                    fontSize: 'var(--fs-caption)', fontWeight: 600, color: '#fff',
+                    background: 'var(--color-scrim)', borderRadius: 999, padding: '3px 10px',
+                  }}>{rankLabel(j + 1)}</span>
+                  <TasteCardDetail
+                    card={c} t={t}
+                    expanded={isFront && ui.exp}
+                    captionHidden={isFront && ui.panel}
+                    interactive={isFront}
+                    onOpenGallery={() => patch({ gal: true, galSeen: true, exp: true })}
+                  />
+                  {isFront && (
+                    <>
+                      <div className={`${fb.veil} ${ui.panel ? fb.veilOn : ''}`}>
+                        {ui.panel && (
+                          <TasteCardReport
+                            key={c.image_id}
+                            chips={chips}
+                            prev={reports[c.image_id] || null}
+                            t={t}
+                            tagLabel={tag => tagLabel(tag, language)}
+                            onClose={() => patch({ panel: false })}
+                            onSubmit={async form => {
+                              const ok = await onSubmitReport(j, form)
+                              if (ok) patch({ panel: false })
+                            }}
+                            onCancelReport={async () => {
+                              const ok = await onCancelReport(j)
+                              if (ok) patch({ panel: false })
+                            }}
+                          />
+                        )}
+                      </div>
+                      <button
+                        type="button" data-nodrag=""
+                        className={`${fb.reportBtn} ${reported ? fb.reportBtnOn : ''}`}
+                        aria-label={t('search.tasteReportAria')} title={t('search.tasteReportAria')}
+                        aria-pressed={reported}
+                        onClick={() => patch({ panel: !ui.panel, exp: false })}
+                      ><ReportIcon /></button>
+                    </>
+                  )}
+                </div>
+                {isFront && ui.galSeen && (
+                  <div style={{
+                    position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-lg)',
+                    backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+                    transform: 'rotateY(180deg)', background: '#000',
+                    pointerEvents: ui.gal ? 'auto' : 'none',
+                  }}>
+                    <TasteCardGallery
+                      card={c} active={ui.gal}
+                      closeLabel={t('search.tasteReportClose')}
+                      onClose={() => patch({ gal: false })}
+                    />
                   </div>
                 )}
               </div>
@@ -216,21 +304,90 @@ function UserBubble({ text }) {
   )
 }
 
-function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAgain, onStart }) {
+function QueryReportSheet({ round, language, t, onClose, onSubmit, onCancel }) {
+  const prev = round.queryReport || null
+  const [picked, setPicked] = useState(() => (prev?.tags || []).map(tagKey))
+  const [text, setText] = useState(prev?.text || '')
+  const [sending, setSending] = useState(false)
+  const allTags = round.tags
+  const canSend = (picked.length > 0 || text.trim().length > 0) && !sending
+
+  async function run(fn) {
+    setSending(true)
+    try { await fn() } finally { setSending(false) }
+  }
+  function send() {
+    return run(() => onSubmit({
+      tags: allTags.filter(tg => picked.includes(tagKey(tg))).map(tg => ({ axis: tg.axis, value: tg.value })),
+      text: text.trim(),
+    }))
+  }
+
+  return (
+    <Modal open onClose={onClose} title={t('search.tasteQueryLink')} closeLabel={t('search.tasteReportClose')} zIndex={400} portal>
+      <p className={fb.sheetSub}>{prev ? t('search.tasteQuerySubPrev') : t('search.tasteQuerySub')}</p>
+      <div className={fb.sheetLabel}>{t('search.tasteQueryWrongTags')}</div>
+      <div className={fb.pick}>
+        {allTags.map(tg => {
+          const k = tagKey(tg)
+          const on = picked.includes(k)
+          return (
+            <button
+              key={k} type="button" aria-pressed={on}
+              className={`${fb.spk} ${on ? fb.spkSel : ''}`}
+              onClick={() => setPicked(on ? picked.filter(x => x !== k) : [...picked, k])}
+            >{tg.polarity === 'exclude' ? '− ' : ''}{tagLabel(tg, language)}</button>
+          )
+        })}
+      </div>
+      <div className={fb.sheetLabel}>{t('search.tasteQueryMissing')}</div>
+      <textarea
+        className={fb.sheetTextarea} value={text} maxLength={500}
+        placeholder={t('search.tasteQueryPlaceholder')}
+        onChange={e => setText(e.target.value)}
+      />
+      <div className={fb.sheetRow}>
+        {prev ? (
+          <button type="button" className={ps.ctaSecondary} disabled={sending} onClick={() => run(onCancel)}>
+            {t('search.tasteReportCancel')}
+          </button>
+        ) : (
+          <button type="button" className={ps.ctaSecondary} onClick={onClose}>
+            {t('search.tasteReportClose')}
+          </button>
+        )}
+        <button type="button" className={ps.ctaPrimary} disabled={!canSend} onClick={send}>
+          {prev ? t('search.tasteReportEdit') : t('search.tasteQuerySend')}
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAgain, onStart, onCardReport, onCardCancel, onQuerySheet, sheetOpen }) {
   const front = round.cards[round.index] || round.cards[0]
   const chips = useMemo(() => buildChips(round.tags, front?.matched_keys), [round.tags, front])
   const n = round.cards.length
+  const reports = round.reports || {}
+  const kept = keptCards(round.cards, reports).length
   return (
     <div id={`taste-round-${round.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <UserBubble text={round.text} />
 
-      {chips.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {chips.map(({ tag, matched }) => (
-            <TagChip key={`${tag.axis}:${tag.value}`} tag={tag} matched={matched} language={language} t={t} />
-          ))}
-        </div>
-      )}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+        {chips.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {chips.map(({ tag, matched }) => (
+              <TagChip key={tagKey(tag)} tag={tag} matched={matched} language={language} t={t} />
+            ))}
+          </div>
+        )}
+        {round.tags.length > 0 && (
+          <button type="button" className={fb.queryLink} onClick={() => onQuerySheet(round.id)}>
+            {round.queryReport ? t('search.tasteQueryLinkSent') : t('search.tasteQueryLink')}
+          </button>
+        )}
+      </div>
 
       {n === 0 ? (
         <div style={{ fontSize: 'var(--fs-body)', color: 'var(--color-text-muted)', textAlign: 'center', padding: '16px 0' }}>
@@ -241,9 +398,12 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
       ) : (
         <>
           <CardStack
-            cards={round.cards} index={round.index}
+            round={round} index={round.index}
             onStep={dir => onStep(round.id, dir)}
             rankLabel={k => t('search.tasteRankLabel', { n: k })}
+            t={t} language={language} sheetOpen={sheetOpen}
+            onSubmitReport={(j, form) => onCardReport(round.id, j, form)}
+            onCancelReport={j => onCardCancel(round.id, j)}
           />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             {front && front.total > 0 && (
@@ -258,6 +418,7 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
                   <span key={j} style={{
                     width: 6, height: 6, borderRadius: '50%',
                     background: j === round.index ? 'var(--color-text)' : 'var(--color-surface-3)',
+                    boxShadow: reports[round.cards[j].card.image_id] ? '0 0 0 2px var(--color-destructive)' : 'none',
                   }} />
                 ))}
               </span>
@@ -268,8 +429,8 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
 
       {isLatest && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, width: '100%', alignSelf: 'center' }}>
-          <button type="button" className={ps.ctaPrimary} disabled={n === 0 || busy || starting} onClick={() => onStart(round)}>
-            {t('search.tasteStartSwiping')}
+          <button type="button" className={ps.ctaPrimary} disabled={kept === 0 || busy || starting} onClick={() => onStart(round)}>
+            {kept === n ? t('search.tasteStartSwiping') : t('search.tasteStartSwipingN', { n: kept })}
           </button>
           <button type="button" className={ps.ctaSecondary} disabled={busy || starting || round.exhausted} onClick={() => onFindAgain(round.id)}>
             {t('search.tasteFindAgain')}
@@ -285,7 +446,7 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
   )
 }
 
-export default function TasteStartPage({ onStartTaste, onLogout }) {
+export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
   const { t, language } = useTranslation()
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
   const storageKey = `archithon_taste_${userId}_new`
@@ -299,8 +460,11 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
   const scrollRef = useRef(null)
   const endRef = useRef(null)
   const roundsRef = useRef(rounds)
+  const [sheetRoundId, setSheetRoundId] = useState(null) // round whose query-report sheet is open
+  const sheetOpenRef = useRef(false)
 
   useEffect(() => { roundsRef.current = rounds }, [rounds])
+  useEffect(() => { sheetOpenRef.current = sheetRoundId !== null }, [sheetRoundId])
 
   // Persist rounds (refresh keeps them).
   useEffect(() => {
@@ -308,6 +472,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
   }, [storageKey, rounds])
 
   const latest = rounds[rounds.length - 1] || null
+  const sheetRound = rounds.find(r => r.id === sheetRoundId) || null
   const inRounds = rounds.length > 0 || pending !== null
 
   // Arrow keys act on the latest round, never while typing.
@@ -315,7 +480,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
     function onKey(e) {
       if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (isTypingTarget(document.activeElement)) return
+      if (isTypingTarget(document.activeElement) || sheetOpenRef.current) return
       const last = roundsRef.current[roundsRef.current.length - 1]
       if (!last || last.cards.length === 0) return
       e.preventDefault()
@@ -356,8 +521,11 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
       const round = {
         id: `r${Date.now()}`,
         text,
+        source: res.source,
         tags: res.tags,
         cards: res.cards,
+        reports: {},
+        queryReport: null,
         shown: res.cards.map(c => c.card.image_id),
         index: 0,
         exhausted: false,
@@ -393,9 +561,11 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
 
   async function handleStart(round) {
     if (starting || round.cards.length === 0) return
+    const { startIds, excludeIds } = buildStartDeck({
+      cards: round.cards, shown: round.shown, reports: round.reports, max: MAX_EXCLUDE,
+    })
+    if (startIds.length === 0) return
     setStarting(true)
-    const startIds = round.cards.map(c => c.card.image_id)
-    const excludeIds = round.shown.filter(id => !startIds.includes(id)).slice(-MAX_EXCLUDE)
     try { sessionStorage.removeItem(storageKey) } catch { /* ignore */ }
     try {
       await onStartTaste({
@@ -411,6 +581,94 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
     } finally {
       setStarting(false)
     }
+  }
+
+  function notify(message, type = 'info') { showToast?.({ message, type }) }
+  function patchRound(id, fn) { setRounds(prev => prev.map(r => (r.id === id ? fn(r) : r))) }
+
+  async function handleCardReport(roundId, j, form) {
+    const round = roundsRef.current.find(r => r.id === roundId)
+    const item = round?.cards[j]
+    if (!item) return false
+    const id = item.card.image_id
+    const again = !!round.reports?.[id]
+    try {
+      await submitCardReport({
+        round_key: round.id,
+        query_text: round.text,
+        tags: round.tags,
+        source: round.source || 'dictionary',
+        language: language === 'en' ? 'en' : 'ko',
+        canonical_bld_id: id,
+        card_rank: j + 1,
+        hit: item.hit,
+        total: item.total,
+        reason: form.reason || null,
+        sub_reasons: form.sub,
+        wrong_tags: form.reason === 'tag' ? form.tags : [],
+        comment: form.text,
+      })
+    } catch {
+      notify(t('search.tasteReportFailed'), 'error')
+      return false
+    }
+    patchRound(roundId, r => ({ ...r, reports: { ...(r.reports || {}), [id]: form } }))
+    notify(again ? t('search.tasteToastEdited') : t('search.tasteToastReported'), 'success')
+    return true
+  }
+
+  async function handleCardCancel(roundId, j) {
+    const round = roundsRef.current.find(r => r.id === roundId)
+    const id = round?.cards[j]?.card.image_id
+    if (!id) return false
+    try {
+      await cancelCardReport({ round_key: round.id, canonical_bld_id: id })
+    } catch {
+      notify(t('search.tasteReportFailed'), 'error')
+      return false
+    }
+    patchRound(roundId, r => {
+      const reports = { ...(r.reports || {}) }
+      delete reports[id]
+      return { ...r, reports }
+    })
+    notify(t('search.tasteToastCanceled'), 'info')
+    return true
+  }
+
+  async function handleQuerySubmit(roundId, form) {
+    const round = roundsRef.current.find(r => r.id === roundId)
+    if (!round) return
+    const again = !!round.queryReport
+    try {
+      await submitQueryReport({
+        round_key: round.id,
+        query_text: round.text,
+        tags: round.tags,
+        source: round.source || 'dictionary',
+        language: language === 'en' ? 'en' : 'ko',
+        wrong_tags: form.tags,
+        comment: form.text,
+      })
+    } catch {
+      notify(t('search.tasteReportFailed'), 'error')
+      return
+    }
+    patchRound(roundId, r => ({ ...r, queryReport: form }))
+    setSheetRoundId(null)
+    notify(again ? t('search.tasteToastEdited') : t('search.tasteToastQuerySent'), 'success')
+  }
+
+  async function handleQueryCancel(roundId) {
+    try {
+      await cancelQueryReport({ round_key: roundId })
+    } catch {
+      notify(t('search.tasteReportFailed'), 'error')
+      return
+    }
+    patchRound(roundId, r => ({ ...r, queryReport: null }))
+    setSheetRoundId(null)
+    notify(t('search.tasteToastCanceled'), 'info')
   }
 
   function handleNewConversation() {
@@ -484,6 +742,7 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
                   key={r.id} round={r} isLatest={pending === null && r.id === latest?.id} language={language} t={t}
                   busy={busyRoundId === r.id} starting={starting}
                   onStep={stepRound} onFindAgain={handleFindAgain} onStart={handleStart}
+                  onCardReport={handleCardReport} onCardCancel={handleCardCancel} onQuerySheet={setSheetRoundId} sheetOpen={sheetRoundId !== null}
                 />
               ))}
               {pending && (
@@ -511,6 +770,15 @@ export default function TasteStartPage({ onStartTaste, onLogout }) {
             </div>
           </div>
         </>
+      )}
+
+      {sheetRound && (
+        <QueryReportSheet
+          key={sheetRound.id} round={sheetRound} language={language} t={t}
+          onClose={() => setSheetRoundId(null)}
+          onSubmit={form => handleQuerySubmit(sheetRound.id, form)}
+          onCancel={() => handleQueryCancel(sheetRound.id)}
+        />
       )}
     </div>
   )
