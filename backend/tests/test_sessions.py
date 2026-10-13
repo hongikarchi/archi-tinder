@@ -60,7 +60,7 @@ def _mock_farthest_point(pool_ids, exposed_ids, pool_embeddings):
     return None
 
 
-def _mock_get_card(bid, image_focus=None):
+def _mock_get_card(bid):
     """Return fake card or None."""
     if bid is None:
         return None
@@ -134,7 +134,7 @@ _SESSION_PATCHES = {
     # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
     f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
     f'{_ENGINE}.get_diverse_random': (
-        lambda n=10, filters=None, image_focus=None: [
+        lambda n=10, filters=None: [
             {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
     ),
     f'{_ENGINE}.get_pool_embeddings': lambda pool_ids: {bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids},
@@ -1509,7 +1509,7 @@ class TestSessionResultLikedImagesFromProject:
 
         captured_ids = []
 
-        def _fake_get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+        def _fake_get_buildings_by_ids(canonical_bld_ids):
             captured_ids.append(list(canonical_bld_ids))
             return [_make_card(bid) for bid in canonical_bld_ids]
 
@@ -1553,7 +1553,7 @@ class TestSessionResultLikedImagesFromProject:
             current_pool_tier=1,
         )
 
-        def _fake_get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+        def _fake_get_buildings_by_ids(canonical_bld_ids):
             return [_make_card(bid) for bid in canonical_bld_ids]
 
         with patch(f'{_ENGINE}.get_buildings_by_ids', side_effect=_fake_get_buildings_by_ids):

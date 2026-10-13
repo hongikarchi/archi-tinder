@@ -205,7 +205,7 @@ export default function SwipeCard({ card, onGalleryClose }) {
         target.src = url
         // B2 — track whether the chain landed on the drawing cover so the
         // main img keeps contain+white background even when isDrawingKind
-        // (from image_focus/image_kind) is false for this card.
+        // (from image_kind) is false for this card.
         if (cbt.drawing && url === cbt.drawing) setLandedOnDrawing(true)
         return true
       }
@@ -480,11 +480,10 @@ export default function SwipeCard({ card, onGalleryClose }) {
   const material     = materialList.length ? materialList.join(', ') : null
   const gallery         = card.gallery || []
   const drawingStart    = card.gallery_drawing_start ?? gallery.length
-  // B1-2 fix: image_focus/image_kind now actually passed through by
-  // normalizeCard. B2-4: OR in landedOnDrawing — the fallback chain may have
-  // moved the main <img> onto covers_by_type.drawing even when the card's own
-  // focus/kind fields say otherwise.
-  const isDrawingKind = card.image_focus === 'drawing' || card.image_kind === 'drawing' || landedOnDrawing
+  // image_kind is passed through by normalizeCard. B2-4: OR in landedOnDrawing —
+  // the fallback chain may have moved the main <img> onto covers_by_type.drawing
+  // even when the card's own kind field says otherwise.
+  const isDrawingKind = card.image_kind === 'drawing' || landedOnDrawing
   // B2-3: adaptive object-fit — cover only when crop loss is small and it's not a drawing.
   const imgFit = computeFit(imgRatio, isDrawingKind, cardRatio)
 

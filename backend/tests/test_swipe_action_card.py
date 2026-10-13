@@ -124,14 +124,14 @@ _SESSION_PATCHES = {
     # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
     f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
     f'{_ENGINE}.get_diverse_random': (
-        lambda n=10, filters=None, image_focus=None: [
+        lambda n=10, filters=None: [
             {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
     ),
     f'{_ENGINE}.get_pool_embeddings': (
         lambda pool_ids: {bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids}
     ),
     f'{_ENGINE}.farthest_point_from_pool': _mock_farthest_point,
-    f'{_ENGINE}.get_building_card': lambda bid, image_focus=None: {
+    f'{_ENGINE}.get_building_card': lambda bid: {
         'canonical_bld_id': bid, 'name': f'Bld {bid}',
         'image_url': '', 'covers_by_type': {}, 'url': None,
         'gallery': [], 'gallery_drawing_start': 0, 'metadata': {},

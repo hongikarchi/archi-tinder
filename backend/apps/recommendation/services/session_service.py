@@ -53,8 +53,6 @@ RC = settings.RECOMMENDATION
 # Compared against `_raw_name.lower()`.
 _PLACEHOLDER_NAMES = frozenset({'', 'untitled', 'untitled project', '제목 없는 프로젝트'})
 
-_VALID_IMAGE_FOCUS = frozenset(['exterior', 'interior', 'drawing', 'aerial', 'detail'])
-
 
 # ---------------------------------------------------------------------------
 # SessionCreateView orchestration
@@ -173,11 +171,7 @@ def _create_session_from_filters(request, profile, recent_cutoff, project, force
         } == (filters or {}):
             with stage('dedupe_return_existing', session_id=str(existing_session.session_id)):
                 initial_batch = list(existing_session.initial_batch or [])
-                image_focus = (existing_session.original_filters or {}).get('image_focus')
-                first_card = (
-                    engine.get_building_card(initial_batch[0], image_focus=image_focus)
-                    if initial_batch else None
-                )
+                first_card = engine.get_building_card(initial_batch[0]) if initial_batch else None
                 logger.info(
                     'Session create dedupe hit: returning existing session %s for user %s '
                     '(name=%r raw_query=%r)',
@@ -207,15 +201,7 @@ def _create_session_from_filters(request, profile, recent_cutoff, project, force
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # image_focus rider: explicit request param, else filters['image_focus'].
     active_filters = dict(filters or (project.filters if project else None) or {})
-    req_focus = request.data.get('image_focus')
-    if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS:
-        image_focus = req_focus
-    elif active_filters.get('image_focus') in _VALID_IMAGE_FOCUS:
-        image_focus = active_filters['image_focus']
-    else:
-        image_focus = None
 
     # Tags: the board's own v2 tags win; else convert the (request or board) filters.
     tags = session_pool.stored_tags(project) if project is not None else []
@@ -243,10 +229,10 @@ def _create_session_from_filters(request, profile, recent_cutoff, project, force
     if not start_ids:
         return Response({'detail': 'No buildings match your criteria'}, status=404)
 
-    saved_filters = {k: v for k, v in active_filters.items() if k != 'image_focus'}
+    saved_filters = {k: v for k, v in active_filters.items() if k != 'image_focus'}  # legacy key
     return _create_v2_core(
         profile, recent_cutoff, project, raw_name, is_placeholder_name, raw_query,
-        tags, start_ids, exclude_ids, image_focus,
+        tags, start_ids, exclude_ids,
         seed_ids=seed_ids, name_filters=saved_filters, board_filters=filters,
         dedupe=False, guest_gate=False,
     )
@@ -303,17 +289,14 @@ def _create_session_v2(request, profile, recent_cutoff, project, force_new,
             or not all(isinstance(s, str) and len(s) <= 20 for s in raw_excl)):
         return _bad_request('exclude_ids must be a list of at most 100 building id strings')
 
-    req_focus = request.data.get('image_focus')
-    image_focus = req_focus if isinstance(req_focus, str) and req_focus in _VALID_IMAGE_FOCUS else None
-
     return _create_v2_core(
         profile, recent_cutoff, project, raw_name, is_placeholder_name, raw_query,
-        tags, raw_start, raw_excl, image_focus,
+        tags, raw_start, raw_excl,
     )
 
 
 def _create_v2_core(profile, recent_cutoff, project, raw_name, is_placeholder_name, raw_query,
-                    tags, raw_start, raw_excl, image_focus, *, seed_ids=(),
+                    tags, raw_start, raw_excl, *, seed_ids=(),
                     name_filters=None, board_filters=None, dedupe=True, guest_gate=True):
     """Shared taste_v2 create: tags + 1..3 start cards (in order) -> session.
 
@@ -338,9 +321,8 @@ def _create_v2_core(profile, recent_cutoff, project, raw_name, is_placeholder_na
             and (existing.project.filters or {}).get('taste_tags') == tag_dicts
             and list(existing.initial_batch or []) == list(raw_start)):
         with stage('dedupe_return_existing', session_id=str(existing.session_id)):
-            first = (existing.original_filters or {}).get('image_focus')
             ib = list(existing.initial_batch or [])
-            first_card = engine.get_building_card(ib[0], image_focus=first) if ib else None
+            first_card = engine.get_building_card(ib[0]) if ib else None
             evict_projects_list(profile.id)
             evict_user_profile_detail(profile.user.id)
             return Response({
@@ -365,7 +347,7 @@ def _create_v2_core(profile, recent_cutoff, project, raw_name, is_placeholder_na
 
     # -- start cards: publishable only, given order kept ---------------------
     with stage('fetch_initial_cards', n=len(raw_start)):
-        cards = [c for c in engine.get_buildings_by_ids(raw_start, image_focus=image_focus) if c]
+        cards = [c for c in engine.get_buildings_by_ids(raw_start) if c]
     by_id = {c['canonical_bld_id']: c for c in cards}
     start_ids = [s for s in raw_start if s in by_id]
     if not start_ids:
@@ -385,8 +367,6 @@ def _create_v2_core(profile, recent_cutoff, project, raw_name, is_placeholder_na
         session_pool.SELECTOR_KEY: session_pool.SELECTOR_V2,
         'taste_tags': tag_dicts,
     }
-    if image_focus:
-        original_filters['image_focus'] = image_focus
 
     with stage('session_insert'):
         with transaction.atomic():
@@ -481,12 +461,12 @@ def _create_v2_core(profile, recent_cutoff, project, raw_name, is_placeholder_na
 # SessionStateView orchestration
 # ---------------------------------------------------------------------------
 
-def _v2_next_card(session, ctx, pool_ids, exposed_ids, emb, initial_batch, image_focus):
+def _v2_next_card(session, ctx, pool_ids, exposed_ids, emb, initial_batch):
     """(card | None, building_id | None) via the taste_v2 selector."""
     bid, _kind = session_selector.select_next(pool_ids, exposed_ids, emb, initial_batch, ctx)
     if not bid:
         return None, None
-    return engine.get_building_card(bid, image_focus=image_focus), bid
+    return engine.get_building_card(bid), bid
 
 
 def get_session_state(request, session):
@@ -517,7 +497,6 @@ def get_session_state(request, session):
     initial_batch = list(session.initial_batch or [])
     like_vectors = hydrate_like_vectors(session) if session.like_vectors else []
     phase = session.phase
-    image_focus = (session.original_filters or {}).get('image_focus')
 
     if phase == 'converged':
         residual = len([pid for pid in pool_ids if pid not in set(exposed_ids)]) if pool_ids else 0
@@ -555,7 +534,7 @@ def get_session_state(request, session):
             _v2_ctx = session_pool.build_session_ctx(session, like_vectors)
             next_card, next_bid = _v2_next_card(
                 session, _v2_ctx, pool_ids, exposed_ids, pool_embeddings,
-                initial_batch, image_focus)
+                initial_batch)
 
             # Add served card to exposed_ids (sentinel is never added).
             if next_bid and next_bid not in set(exposed_ids):
@@ -568,7 +547,7 @@ def get_session_state(request, session):
                 if next_bid:
                     prefetch_card, _ = _v2_next_card(
                         session, _v2_ctx, pool_ids, exposed_ids, pool_embeddings,
-                        initial_batch, image_focus)
+                        initial_batch)
             except Exception:
                 prefetch_card = None
 
@@ -602,7 +581,7 @@ def get_session_state(request, session):
         current_bid = exposed_ids[-1]
     elif initial_batch:
         current_bid = initial_batch[0]
-    current_card = engine.get_building_card(current_bid, image_focus=image_focus) if current_bid else None
+    current_card = engine.get_building_card(current_bid) if current_bid else None
 
     # Compute prefetch + prefetch_2 using current exposed_ids (already includes current_bid)
     pool_embeddings = engine.get_pool_embeddings(pool_ids) if pool_ids else {}
@@ -613,11 +592,11 @@ def get_session_state(request, session):
     try:
         ctx = session_pool.build_session_ctx(session, like_vectors)
         prefetch_card, pf1 = _v2_next_card(
-            session, ctx, pool_ids, exposed_ids, pool_embeddings, initial_batch, image_focus)
+            session, ctx, pool_ids, exposed_ids, pool_embeddings, initial_batch)
         if pf1:
             prefetch_card_2, _ = _v2_next_card(
                 session, ctx, pool_ids, exposed_ids + [pf1], pool_embeddings,
-                initial_batch, image_focus)
+                initial_batch)
     except Exception:
         logger.exception('taste_v2 prefetch failed for session %s', session.session_id)
     return Response({

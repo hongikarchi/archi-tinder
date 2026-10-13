@@ -200,7 +200,6 @@ class InspectSearchView(APIView):
         filters = {}
         filter_priority = []
         raw_query = query
-        image_focus = None
         visual_description = None
 
         has_signal = bool(filters) or bool(raw_query and raw_query.strip())
@@ -211,13 +210,12 @@ class InspectSearchView(APIView):
                 raw_query=raw_query,
                 filter_priority=filter_priority,
                 limit=limit,
-                image_focus=image_focus,
             )
 
         is_fallback = False
         if not results:
             results = engine.get_diverse_random(
-                n=min(_SEARCH_FALLBACK_N, limit), image_focus=image_focus,
+                n=min(_SEARCH_FALLBACK_N, limit),
             )
             is_fallback = True
 

@@ -240,7 +240,6 @@ class TestCreateSessionAutoName:
             'seed_ids': [],
             'force_new': False,
             'visual_description': None,
-            'image_focus': None,
         }
         if extra:
             data.update(extra)

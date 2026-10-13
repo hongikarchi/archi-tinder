@@ -38,7 +38,6 @@ from ..caches import (
     evict_project_detail,
 )
 from ..services.hydration import cache_embedding
-from ..services.session_service import _VALID_IMAGE_FOCUS
 from ..taste_start import session_pool, session_selector, swipe_rules
 from ..discovery_feed import (
     DISCOVERY_DRAFT_PREFIX,
@@ -486,8 +485,6 @@ class DiscoveryPromoteView(APIView):
         # by like-embedding relevance + dislike penalty, with check cards mixed in.
         # pool_scores from the seeded pool are on another scale -> reset to zeros.
         pool_scores = {bid: 0.0 for bid in pool_ids}
-        _focus = (draft.filters or {}).get('image_focus') if draft else None
-        image_focus = _focus if _focus in _VALID_IMAGE_FOCUS else None
 
         _dis_window = int(RC['taste_v2_dislike_window'])
         _dis_ids = [d for d in (_draft_liked_id_only(list(draft.disliked_ids or [])) if draft else [])
@@ -512,7 +509,7 @@ class DiscoveryPromoteView(APIView):
             served = non_exposed[:1] if non_exposed else pool_ids[:1]
 
         # ── 5. Fetch first 3 cards for next_image + prefetch ──────────────
-        _initial_cards = engine.get_buildings_by_ids(served[:3], image_focus=image_focus)
+        _initial_cards = engine.get_buildings_by_ids(served[:3])
         first_card = _initial_cards[0] if len(_initial_cards) > 0 else None
         prefetch_card = _initial_cards[1] if len(_initial_cards) > 1 else None
         prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
@@ -537,8 +534,6 @@ class DiscoveryPromoteView(APIView):
             'taste_tags': [],
             'round_offset': seeded_count,
         }
-        if image_focus:
-            original_filters['image_focus'] = image_focus
 
         with transaction.atomic():
             if draft is not None:

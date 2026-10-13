@@ -5,7 +5,7 @@ Spec: docs/decisions/2026-10-11-taste-start-redesign.md §5-1, §6.
 
 Storage (no DB migration):
   session.original_filters = {'selector': 'taste_v2', 'taste_tags': [...],
-                              'image_focus'?: ..., 'off_tag'?: True}
+                              'off_tag'?: True}
   project.filters['taste_tags'] = [...]
 Every stored tag is re-read through tag_io.rebuild_tag (never trusted).
 

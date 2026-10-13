@@ -336,7 +336,7 @@ def _gemini_board_name_raw(filters, raw_query):
     this returns.
 
     Args:
-        filters:   dict — active_filters with image_focus already removed.
+        filters:   dict — active_filters (legacy image_focus key ignored).
         raw_query: str  — verbatim user search text.
 
     Returns:

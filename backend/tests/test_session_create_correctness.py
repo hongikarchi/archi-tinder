@@ -38,7 +38,7 @@ def _mock_farthest_point(pool_ids, exposed_ids, pool_embeddings):
     return None
 
 
-def _mock_get_card(bid, image_focus=None):
+def _mock_get_card(bid):
     if bid is None:
         return None
     return {
@@ -125,7 +125,7 @@ _BASE_PATCHES = {
     # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
     f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
     f'{_ENGINE}.get_diverse_random': (
-        lambda n=10, filters=None, image_focus=None: [
+        lambda n=10, filters=None: [
             {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
     ),
     f'{_ENGINE}.get_pool_embeddings': (

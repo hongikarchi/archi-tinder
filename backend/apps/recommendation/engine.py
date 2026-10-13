@@ -41,8 +41,7 @@ from .engine_filters import (  # noqa: F401
     _build_idf_score_cases, _REQUIRED_SLATE_FIELDS_SET,
 )
 from .engine_cards import (  # noqa: F401
-    _row_to_card, _card_cache_key, _with_image_focus,
-    _VALID_IMAGE_FOCUS, _CARD_CACHE_SCHEMA, _CARD_SELECT_COLS,
+    _row_to_card, _card_cache_key, _CARD_CACHE_SCHEMA, _CARD_SELECT_COLS,
 )
 
 
@@ -155,18 +154,12 @@ def _dictfetchall(cursor):
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def get_diverse_random(n=10, filters=None, image_focus=None):
+def get_diverse_random(n=10, filters=None):
     """
     Select n maximally diverse buildings from candidates.
     Uses greedy farthest-point sampling on cosine distance.
     Returns list of ImageCard dicts.
-
-    image_focus: optional value in {'exterior','interior','drawing','aerial',
-    'detail'} forwarded to _row_to_card so the cover is picked from
-    covers_by_type[image_focus] when available.
     """
-    if image_focus is None and filters:
-        image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -231,7 +224,7 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
                 best_idx, best_dist = i, dist
         selected.append(remaining.pop(best_idx))
 
-    return [_row_to_card(r, image_focus=image_focus) for r in selected]
+    return [_row_to_card(r) for r in selected]
 
 
 def get_building_embedding(canonical_bld_id):
@@ -267,18 +260,12 @@ def _card_cache_ttl():
     return _CARD_CACHE_TTL
 
 
-def get_building_card(canonical_bld_id, image_focus=None):
-    """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id.
-
-    image_focus, when set, picks the cover from covers_by_type[image_focus].
-    Cache key is per-canonical_bld_id (not per-focus) — focus only re-routes the
-    cover field at row-to-card time; the cached card holds full covers_by_type +
-    all_images so a different focus can be selected without re-fetching.
-    """
+def get_building_card(canonical_bld_id):
+    """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id."""
     key = _card_cache_key(canonical_bld_id)
     cached = cache.get(key)
     if cached is not None:
-        return _with_image_focus(cached, image_focus)
+        return cached
 
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -289,7 +276,7 @@ def get_building_card(canonical_bld_id, image_focus=None):
             [canonical_bld_id],
         )
         rows = _dictfetchall(cur)
-    card = _row_to_card(rows[0], image_focus=image_focus) if rows else None
+    card = _row_to_card(rows[0]) if rows else None
     if card is not None:
         cache.set(key, _row_to_card(rows[0]), _card_cache_ttl())
     return card
@@ -313,11 +300,10 @@ def update_preference_vector(pref_vector, embedding, action):
     return _normalize(updated)
 
 
-def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
+def get_top_k_results(pref_vector, exposed_ids, k=None):
     """
     Query top-k buildings by cosine similarity to preference vector.
     Excludes exposed_ids. Returns list of ImageCard dicts.
-    image_focus: forwarded to _row_to_card for per-focus cover selection.
     """
     if k is None:
         k = RC['top_k_results']
@@ -370,10 +356,10 @@ def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
             )
             rows = _dictfetchall(cur)
 
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]
 
 
-def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+def get_buildings_by_ids(canonical_bld_ids):
     """Fetch multiple buildings by ID list. Returns list of ImageCard dicts.
 
     Cache-aware: checks per-building cache first, DB-fetches only uncached IDs,
@@ -389,7 +375,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
     for bid in canonical_bld_ids:
         cached = cache.get(_card_cache_key(bid))
         if cached is not None:
-            card_map[bid] = _with_image_focus(cached, image_focus)
+            card_map[bid] = cached
         else:
             miss_ids.append(bid)
 
@@ -408,7 +394,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
 
         ttl = _card_cache_ttl()
         for row in rows:
-            card = _row_to_card(row, image_focus=image_focus)
+            card = _row_to_card(row)
             card_map[row['canonical_bld_id']] = card
             cache.set(_card_cache_key(row['canonical_bld_id']), _row_to_card(row), ttl)
 
@@ -475,14 +461,11 @@ def get_building_thumbnails(canonical_bld_ids):
     return [out[bid] for bid in canonical_bld_ids if bid in out]
 
 
-def search_by_filters(filters, limit=20, image_focus=None):
+def search_by_filters(filters, limit=20):
     """
     Return buildings matching the given filters dict.
     Used by /inspect/search/ and the QC tooling.
-    image_focus: forwarded to _row_to_card; falls back to filters.get('image_focus').
     """
-    if image_focus is None and filters:
-        image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -497,12 +480,12 @@ def search_by_filters(filters, limit=20, image_focus=None):
             params + [limit],
         )
         rows = _dictfetchall(cur)
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]
 
 
 def search_by_filters_scored(
     filters, raw_query, filter_priority=None, limit=20,
-    image_focus=None, topk=None,
+    topk=None,
 ):
     """LLM-SEARCH-RANK-1: 2-stage bounded CTE ranking (tag-score topK + BM25 rerank).
 
@@ -528,16 +511,12 @@ def search_by_filters_scored(
         raw_query:       first user text verbatim (used for BM25).
         filter_priority: ordered list of axis names (highest priority first).
         limit:           number of cards to return (default 20).
-        image_focus:     forwarded to _row_to_card.
         topk:            K for tag-score narrowing before BM25 (default from RC).
 
     Returns:
         list of ImageCard dicts (may be shorter than limit if corpus is small).
     """
     from .caches import get_corpus_tag_df  # local import avoids circular at module load
-
-    if image_focus is None and filters:
-        image_focus = filters.get('image_focus')
 
     # Read tuneable hyperparams from RC (with safe defaults)
     _topk = topk if topk is not None else RC.get('llm_search_topk', 200)
@@ -635,7 +614,7 @@ def search_by_filters_scored(
         )
         return []
 
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]
 
 
 # ── Phase-Aware Algorithm (PRD v4.0) ──────────────────────────────────────────────
@@ -1674,7 +1653,7 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
 
 
 def get_top_k_mmr(
-    like_vectors, exposed_ids, k=None, round_num=None, image_focus=None,
+    like_vectors, exposed_ids, k=None, round_num=None,
     multimodal_floor=None,
 ):
     """
@@ -1773,7 +1752,7 @@ def get_top_k_mmr(
     selected = [rows[i] for i in selected_idx]
 
     # Convert to ImageCard format
-    return [_row_to_card(row, image_focus=image_focus) for row in selected]
+    return [_row_to_card(row) for row in selected]
 
 
 def rerank_pool_with_v_initial(*, pool_ids, exposed_ids, initial_batch_ids, v_initial_vector):
@@ -2062,11 +2041,10 @@ def compute_user_taste_vector(profile):
     return np.array(normalized, dtype=np.float64)
 
 
-def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
+def taste_ranked_page(v_taste, exclude_ids, limit, offset):
     """
     Cosine-rank all buildings against v_taste, skipping exclude_ids,
     and return one page.
-    image_focus: forwarded to _row_to_card for per-focus cover selection.
     """
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -2090,4 +2068,4 @@ def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
         logger.warning('taste_ranked_page: pgvector query failed (%s)', exc)
         return []
 
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]

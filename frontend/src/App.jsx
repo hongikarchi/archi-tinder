@@ -362,7 +362,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, existingSessionId = null, currentHint = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false, options = {}) {
+  async function initSession(projectId, filters, existingSessionId = null, currentHint = null, projectName = 'Untitled', rawQuery = '', forceNew = false, options = {}) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     setKeepExploringChosen(false)
@@ -383,7 +383,6 @@ export default function App() {
         name: projectName,
         filters: normalizeFilters(filters),
         raw_query: rawQuery || '',
-        image_focus: imageFocus,
         force_new: forceNew,
         // Taste-start v2 (optional): tags + the 3 chosen start cards, in order.
         ...(options.tasteTags ? {
@@ -833,7 +832,7 @@ export default function App() {
     }])
     setActiveProjectId(localId)
     navigate('/swipe')
-    await initSession(localId, {}, null, null, name, rawQuery || '', null, false, options)
+    await initSession(localId, {}, null, null, name, rawQuery || '', false, options)
   }
 
   async function handleLogin(user) {
@@ -969,7 +968,7 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, null, null, project.projectName, '', null, true)
+    await initSession(id, project.filters, null, null, project.projectName, '', true)
   }
 
   // ── SaveBoardModal callbacks ────────────────────────────────────────────────

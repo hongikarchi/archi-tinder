@@ -33,7 +33,7 @@ def _random_emb():
     return out
 
 
-def card(bid, image_focus=None):
+def card(bid):
     return {'canonical_bld_id': bid, 'name': f'Building {bid}', 'image_url': 'x',
             'metadata': {}} if bid else None
 
@@ -67,7 +67,7 @@ def world():
     rc = {'taste_v2_pool_refresh_threshold': 1, 'async_prefetch_enabled': False}
     with mock.patch.dict(settings.RECOMMENDATION, rc), \
             mock.patch.object(engine, 'get_buildings_by_ids',
-                              side_effect=lambda ids, image_focus=None: [
+                              side_effect=lambda ids: [
                                   card(i) for i in ids if i in w['emb']]), \
             mock.patch.object(engine, 'get_building_card', side_effect=card), \
             mock.patch.object(engine, 'get_pool_embeddings', side_effect=pool_emb), \

@@ -24,12 +24,12 @@ TAG_PAYLOAD = [{'axis': 'country', 'value': 'Japan', 'polarity': 'want'},
 TAG_DICTS = [t.to_dict() for t in TAGS]
 
 
-def card(bid, image_focus=None):
+def card(bid):
     return {'canonical_bld_id': bid, 'name': f'Building {bid}', 'image_url': 'x',
             'metadata': {}} if bid else None
 
 
-def _by_ids(ids, image_focus=None):
+def _by_ids(ids):
     return [card(i) for i in ids if i in VALID]
 
 

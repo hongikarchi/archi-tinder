@@ -239,7 +239,6 @@ def run_search_battery(queries: list[dict], limit: int) -> dict:
             raw_query=q['query'],
             filter_priority=[],
             limit=limit,
-            image_focus=None,
         )
         is_fallback = not results
         elapsed = round(time.time() - t0, 2)
