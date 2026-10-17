@@ -33,11 +33,8 @@ _REGISTRY = [
     ('DB_POOL_ENABLED', 'DB 커넥션 풀',
      '데이터베이스 연결을 재사용해 응답을 빠르게 합니다. 문제가 생기면 끄고 이전 방식으로 되돌립니다.',
      _attr_bool('DB_POOL_ENABLED')),
-    ('STAGE_DECOUPLE_ENABLED', '검색 2단계 분리',
-     '켜면 검색어 해석을 필터 단계와 시각 묘사 단계로 나눠 첫 카드가 더 빨리 나옵니다.',
-     _rec('stage_decouple_enabled')),
     ('LLM_PROVIDER', '텍스트 AI 제공자',
-     '검색어 해석과 보드 이름 생성에 쓰는 AI 회사입니다 (gemini 또는 openai).',
+     '보드 이름·취향 리포트 생성에 쓰는 AI 회사입니다 (gemini 또는 openai).',
      _attr_str('LLM_PROVIDER')),
     ('LLM_IMAGE_PROVIDER', '이미지 AI 제공자',
      '취향 이미지 생성에 쓰는 AI 회사입니다 (gemini 또는 openai).',
@@ -48,9 +45,6 @@ _REGISTRY = [
     ('dpp_topk_enabled', '다양성 보정(DPP)',
      '켜면 비슷한 건물만 몰리지 않도록 최종 추천 목록의 다양성을 수학적으로 맞춥니다.',
      _rec('dpp_topk_enabled')),
-    ('context_caching_enabled', 'Gemini 컨텍스트 캐싱(IMP-5)',
-     '켜면 긴 고정 프롬프트를 Gemini 서버에 캐시해 비용과 지연을 줄입니다. Gemini 제공자일 때만 동작합니다.',
-     _rec('context_caching_enabled')),
 ]
 
 

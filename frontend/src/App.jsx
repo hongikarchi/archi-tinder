@@ -9,7 +9,7 @@ import AdminGate from './pages/admin/AdminGate.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
-  LoginPage, LLMSearchPage, LLMSearchUpdateWrapper, UserProfilePage, ResultsPage,
+  LoginPage, TasteStartPage, UserProfilePage, ResultsPage,
   BuildingDetailPage, BoardDetailPage, BoardReportPage, LikedProjectsPage, UploadWorkPage,
   ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, CompetitionListPage,
   CompetitionDetailPage, SettingsPage, AccountScreen, NotificationsScreen,
@@ -295,7 +295,7 @@ export default function App() {
         // exact card the user was looking at, not the backend's last selection.
         const hintKey = `archithon_currentCard_${userId}_${activeProjectId}`
         const currentHint = localStorage.getItem(hintKey) || null
-        initSession(activeProjectId, project.filters, [], [], project.sessionId || null, currentHint)
+        initSession(activeProjectId, project.filters, project.sessionId || null, currentHint)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -362,7 +362,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false) {
+  async function initSession(projectId, filters, existingSessionId = null, currentHint = null, projectName = 'Untitled', rawQuery = '', forceNew = false, options = {}) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     setKeepExploringChosen(false)
@@ -382,12 +382,14 @@ export default function App() {
         project_id: projectId,
         name: projectName,
         filters: normalizeFilters(filters),
-        filter_priority: filterPriority,
-        seed_ids: seedIds,
-        visual_description: visualDescription || undefined,
         raw_query: rawQuery || '',
-        image_focus: imageFocus,
         force_new: forceNew,
+        // Taste-start v2 (optional): tags + the 3 chosen start cards, in order.
+        ...(options.tasteTags ? {
+          taste_tags: options.tasteTags,
+          start_ids: options.startIds || [],
+          exclude_ids: options.excludeIds || [],
+        } : {}),
       })
       applySessionResponse(projectId, result)
       return result
@@ -403,29 +405,6 @@ export default function App() {
       }
     } finally {
       setIsSwipeLoading(false)
-    }
-  }
-
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '', imageFocus = null) {
-    const projectId = `proj_${Date.now()}`
-    const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
-    const newProject = {
-      id: projectId, projectName, filters: llmFilters || {},
-      likedBuildings: [], swipedIds: [],
-      predictedLikes: [],
-      sessionId: null, createdAt: new Date().toISOString(),
-      deckImages: preloadedImages || null,
-      visibility,
-      isTemp: true, // backend creates project with is_temp=True; saved on board save
-    }
-    setProjects(prev => [...prev, newProject])
-    setActiveProjectId(projectId)
-    navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '', imageFocus)
-    if (visibility !== 'private' && result?.project_id) {
-      api.updateProject(result.project_id, { visibility }).catch(err =>
-        console.error('[App] updateProject visibility sync failed:', err)
-      )
     }
   }
 
@@ -838,16 +817,22 @@ export default function App() {
     }
   }
 
-  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
-    const project = projects.find(p => p.id === id)
-    if (!project) return
-    const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
-    setActiveProjectId(id)
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
+  // Taste-start v2 (docs/decisions/2026-10-11-taste-start-redesign.md): start a
+  // session from the 3 chosen cards + recognized tags in a fresh local project.
+  async function handleStartTaste({ projectName, rawQuery, tags, startIds, excludeIds }) {
+    const options = { tasteTags: tags, startIds, excludeIds }
+    const name = projectName || t('search.untitledProject')
+    const localId = `proj_${Date.now()}`
+    setProjects(prev => [...prev, {
+      id: localId, projectName: name, filters: { taste_tags: tags },
+      likedBuildings: [], swipedIds: [], predictedLikes: [],
+      sessionId: null, createdAt: new Date().toISOString(),
+      deckImages: null, visibility: 'private',
+      isTemp: true, // backend creates project with is_temp=True; saved on board save
+    }])
+    setActiveProjectId(localId)
     navigate('/swipe')
-    // Update-with-new-images intends a FRESH session reflecting the new seeds/filters,
-    // not a resume — force_new bypasses #212's server-side resume guard.
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus, true)
+    await initSession(localId, {}, null, null, name, rawQuery || '', false, options)
   }
 
   async function handleLogin(user) {
@@ -971,7 +956,7 @@ export default function App() {
     }
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
+    await initSession(id, project.filters, project.sessionId || null, null, project.projectName)
   }
 
   // Start a fresh swipe session for an existing project, discarding the old session.
@@ -983,7 +968,7 @@ export default function App() {
     setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, [], [], null, null, null, project.projectName, '', null, true)
+    await initSession(id, project.filters, null, null, project.projectName, '', true)
   }
 
   // ── SaveBoardModal callbacks ────────────────────────────────────────────────
@@ -1091,21 +1076,7 @@ export default function App() {
           <Route index element={<Navigate to="/discovery" replace />} />
           <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
-            <LLMSearchPage
-              mode="new"
-              onBack={() => navigate('/discovery')}
-              onStart={handleStart}
-              onUpdate={handleUpdateWithImages}
-              onLogout={handleLogout}
-            />
-          } />
-          <Route path="search/:projectId" element={
-            <LLMSearchUpdateWrapper
-              onBack={() => navigate('/')}
-              onStart={handleStart}
-              onUpdate={handleUpdateWithImages}
-              onLogout={handleLogout}
-            />
+            <TasteStartPage onStartTaste={handleStartTaste} onLogout={handleLogout} />
           } />
           <Route path="swipe" element={null} />
           <Route path="library" element={<Navigate to="/user/me" replace />} />

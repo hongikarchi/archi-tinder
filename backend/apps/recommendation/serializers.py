@@ -5,8 +5,7 @@ from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
 from .models import Project
 
-# ── Conversation-history validation limits (mirrors search.py ParseQueryView) ──
-# Mirrored here (not imported) because they are local vars inside ParseQueryView.post.
+# ── Conversation-history blob validation limits (persisted on Project) ──
 _MAX_CHAT_MESSAGES = 60   # max items in conversation_history['messages'] list
 _MAX_HISTORY_LEN = 10     # max items in conversation_history['history'] list
 _MAX_TEXT_LEN = 2000      # max chars per text string in either sub-list

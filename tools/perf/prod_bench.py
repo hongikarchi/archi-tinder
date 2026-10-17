@@ -1,7 +1,7 @@
 """Client-side perf bench against a DEPLOYED backend over HTTP (what a Korean user feels).
 
 Flow per run: guest login (1 guest = max 3 boards) -> for each of 3 fixed Korean queries:
-parse-query -> session create -> N swipes (seeded like/dislike) -> result.
+taste recognize -> session create -> N swipes (seeded like/dislike) -> result.
 Reuses one keep-alive HTTP session like a browser. Writes JSON + markdown summary.
 
 WRITES REAL ROWS on the target (1 guest user, 3 sessions/boards, swipes, LLM calls per run).
@@ -22,9 +22,6 @@ ap.add_argument('--seed', type=int, default=1234)
 ap.add_argument('--warmup', type=int, default=1,
                 help='untimed warm-up runs first (Neon scale-to-zero leaves storage pages cold); '
                      'their numbers are reported separately as "cold", not in the main table')
-ap.add_argument('--stream', action='store_true',
-                help='search via /parse-query/stream/ (what the app uses): records search_filters / '
-                     'search_results / search_final arrival times instead of blocking parse_query')
 ap.add_argument('--out', default=os.path.join(os.path.expanduser('~'), 'perf-bench-out'))
 A = ap.parse_args()
 API = A.base.rstrip('/') + '/api/v1'
@@ -58,29 +55,6 @@ def call(s, kind, method, path, **kw):
     return r
 
 
-def stream_search(s, q):
-    """POST /parse-query/stream/, record event arrival times; return the final payload."""
-    t0 = time.perf_counter(); final = None; seen = set(); buf = ''
-    with s.post(API + '/parse-query/stream/', json={'query': q}, stream=True, timeout=120) as resp:
-        if resp.status_code != 200:
-            return None
-        for chunk in resp.iter_content(chunk_size=None, decode_unicode=True):
-            buf += chunk
-            while '\n\n' in buf:
-                frame, buf = buf.split('\n\n', 1)
-                ev = [ln[7:] for ln in frame.split('\n') if ln.startswith('event: ')]
-                if not ev or ev[0] in seen:
-                    continue
-                seen.add(ev[0])
-                if ev[0] in ('filters', 'results', 'final'):
-                    recs.append({'kind': 'search_' + ev[0], 'ms': round((time.perf_counter() - t0) * 1000, 1),
-                                 'status': 200, 'label': A.label, 'phase': PHASE['name']})
-                if ev[0] == 'final':
-                    data = [ln[6:] for ln in frame.split('\n') if ln.startswith('data: ')]
-                    final = json.loads(data[0]) if data else None
-    return final
-
-
 def cid(card):
     return (card or {}).get('canonical_bld_id') or (card or {}).get('building_id')
 
@@ -93,21 +67,18 @@ def one_run(ri, rng):
         notes.append(f'run{ri}: guest login HTTP {r.status_code} {r.text[:150]}'); return
     s.headers['Authorization'] = 'Bearer ' + r.json()['access']
     for qi, q in enumerate(QUERIES):
-        if A.stream:
-            d = stream_search(s, q)
-            if d is None:
-                notes.append(f'run{ri} q{qi}: stream search failed'); continue
-        else:
-            r = call(s, 'parse_query', 'POST', '/parse-query/', json={'query': q})
-            if r.status_code != 200:
-                notes.append(f'run{ri} q{qi}: parse HTTP {r.status_code}'); continue
-            d = r.json()
-        body = {'name': f'perfbench-{A.label}-{ri}-{qi}', 'filters': d.get('structured_filters') or {},
-                'filter_priority': d.get('filter_priority') or [], 'seed_ids': [],
-                'raw_query': d.get('raw_query') or q, 'force_new': True}
-        for k in ('visual_description', 'image_focus'):
-            if d.get(k):
-                body[k] = d[k]
+        r = call(s, 'taste_recognize', 'POST', '/taste/recognize/', json={'text': q})
+        if r.status_code != 200:
+            notes.append(f'run{ri} q{qi}: taste recognize HTTP {r.status_code}'); continue
+        d = r.json()
+        start_ids = [cid(c.get('card')) for c in d.get('cards') or []]
+        start_ids = [i for i in start_ids if i]
+        if not start_ids:
+            notes.append(f'run{ri} q{qi}: taste recognize returned no cards'); continue
+        # Same body the app sends: tags exactly as returned + the 3 shown cards as start_ids.
+        body = {'name': f'perfbench-{A.label}-{ri}-{qi}', 'filters': {}, 'raw_query': q,
+                'taste_tags': d.get('tags') or [], 'start_ids': start_ids, 'exclude_ids': [],
+                'force_new': True}
         r = call(s, 'session_create', 'POST', '/analysis/sessions/', json=body)
         if r.status_code not in (200, 201):
             notes.append(f'run{ri} q{qi}: create HTTP {r.status_code} {r.text[:150]}'); continue
@@ -151,8 +122,7 @@ for ri in range(total):
         time.sleep(21)  # guest_login throttle 3/min
 os.makedirs(A.out, exist_ok=True)
 stamp = datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-KINDS = ['guest_login', 'parse_query', 'search_filters', 'search_results', 'search_final',
-         'session_create', 'swipe', 'swipe_extend', 'session_result']
+KINDS = ['guest_login', 'taste_recognize', 'session_create', 'swipe', 'swipe_extend', 'session_result']
 lines = [f'# prod bench {A.label} {stamp} base={A.base} (warm-up runs: {A.warmup}, measured runs: {A.runs})', '',
          '## measured (warm)', '',
          '| endpoint | n | p50 ms | p95 ms | max ms | non-2xx | srv total p50 | srv db p50 |', '|---|---|---|---|---|---|---|---|']

@@ -18,7 +18,6 @@ import logging
 import re
 import time
 
-from collections import defaultdict
 
 from django.conf import settings
 from django.core.cache import cache
@@ -39,6 +38,7 @@ from ..caches import (
     evict_project_detail,
 )
 from ..services.hydration import cache_embedding
+from ..taste_start import session_pool, session_selector, swipe_rules
 from ..discovery_feed import (
     DISCOVERY_DRAFT_PREFIX,
     create_discovery_draft,
@@ -333,13 +333,16 @@ class DiscoveryPromoteView(APIView):
       - like_vectors pre-seeded from ALL draft likes, each injected at round=0
         (equal recency weight — no decay gradient across the Discovery batch)
       - preference_vector folded from each seed embedding
-      - phase = 'analyzing' when seed count >= min_likes_for_clustering, else 'exploring'
+      - phase = 'analyzing' when seed count >= taste_v2_analyzing_min_likes, else 'exploring'
+      - taste_v2 session: original_filters = {selector, taste_tags: [], round_offset: seeded_count},
+        initial_batch = [] (the selector goes straight to match/check; no tags => pure
+        like-embedding relevance + dislike penalty + check cards)
       - multimodal_floor = RC['k_clusters'] so K-Means multi-centroid runs immediately
       - pool built via engine.create_taste_seeded_pool: HNSW neighbours of the
         preference vector (excluding the draft's passes), MMR-diversified; liked
         seeds injected at score 1.1. Fallback = create_pool_with_relaxation.
       - exposed_ids = seed liked ids (already seen in Discovery)
-      - first cards selected via centroid MMR (not farthest-point) when analyzing
+      - first cards selected via session_selector.select_next (exposed = seed ids)
 
     Response shape matches POST /api/v1/analysis/sessions/ so the frontend's
     existing applySessionResponse works unchanged:
@@ -379,7 +382,6 @@ class DiscoveryPromoteView(APIView):
             )
 
         promote_threshold = RC.get('discovery_promote_threshold', 10)
-        min_likes = RC.get('min_likes_for_clustering', 4)
         multimodal_floor = RC.get('k_clusters', 2)   # need >= k points to form k centroids
 
         # Take ALL draft likes (promote_threshold is now a minimum gate, not a cap).
@@ -439,7 +441,7 @@ class DiscoveryPromoteView(APIView):
         # Determine phase based on how many seeds were successfully embedded.
         # session_floor activates multi-centroid K-Means immediately for analyzing sessions.
         seeded_count = len(like_vectors)
-        phase = 'analyzing' if seeded_count >= min_likes else 'exploring'
+        phase = 'analyzing' if swipe_rules.should_enter_analyzing(seeded_count) else 'exploring'
         session_floor = multimodal_floor if phase == 'analyzing' else None
 
         # ── 3. Build the pool ──────────────────────────────────────────────
@@ -473,53 +475,41 @@ class DiscoveryPromoteView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # ── 4. Get pool embeddings for initial-batch selection ─────────────
+        # ── 4. Pool embeddings + first cards via the taste_v2 selector ─────
         pool_embeddings = engine.get_pool_embeddings(pool_ids)
 
         # Seed likes count as already-exposed; exclude them from pool serving
         exposed_ids = [bid for bid in seed_ids if bid in set(pool_ids)]
 
-        # Build served (first 3 cards): centroid MMR for analyzing, farthest-point fallback
-        current_round = seeded_count   # for MMR round_num / recency
+        # No tags -> every tag score is 0 (w_want = 0 => w_tag = 0): the selector ranks
+        # by like-embedding relevance + dislike penalty, with check cards mixed in.
+        # pool_scores from the seeded pool are on another scale -> reset to zeros.
+        pool_scores = {bid: 0.0 for bid in pool_ids}
+
+        _dis_window = int(RC['taste_v2_dislike_window'])
+        _dis_ids = [d for d in (_draft_liked_id_only(list(draft.disliked_ids or [])) if draft else [])
+                    if isinstance(d, str)][-_dis_window:] if _dis_window > 0 else []
+        _dis_map = engine.get_pool_embeddings(_dis_ids) if _dis_ids else {}
+        _ctx = session_selector.build_ctx(
+            pool_scores, [], like_vectors, [_dis_map[d] for d in _dis_ids if d in _dis_map],
+            [], session_floor, seeded_count,
+        )
+        # 3 cards for the response (next + 2 prefetch) + 2 for the first swipe's cache.
         served = []
-        if phase == 'analyzing' and like_vectors:
-            temp_exposed = list(exposed_ids)
-            for _ in range(3):   # next_image + 2 prefetch
-                bid = engine.compute_mmr_next(
-                    pool_ids, temp_exposed, pool_embeddings,
-                    like_vectors, current_round,
-                    multimodal_floor=session_floor,
-                )
-                if not bid:
-                    break
-                served.append(bid)
-                temp_exposed.append(bid)
-        if not served:
-            # exploring-edge fallback (rare: <min_likes embeddings resolved) — farthest-point
-            tiers_map = defaultdict(list)
-            for bid in pool_ids:
-                tiers_map[pool_scores.get(bid, 0)].append(bid)
-            exposed_temp = list(exposed_ids)
-            for score in sorted(tiers_map.keys(), reverse=True):
-                tier_ids = list(tiers_map[score])
-                while len(served) < 3 and tier_ids:
-                    nb = engine.farthest_point_from_pool(tier_ids, exposed_temp, pool_embeddings)
-                    if nb:
-                        served.append(nb)
-                        exposed_temp.append(nb)
-                        tier_ids.remove(nb)
-                    else:
-                        break
-                if len(served) >= 3:
-                    break
+        temp_exposed = list(exposed_ids)
+        for _ in range(5):
+            bid, _kind = session_selector.select_next(
+                pool_ids, temp_exposed, pool_embeddings, [], _ctx)
+            if not bid:
+                break
+            served.append(bid)
+            temp_exposed.append(bid)
         if not served:
             non_exposed = [bid for bid in pool_ids if bid not in set(exposed_ids)]
             served = non_exposed[:1] if non_exposed else pool_ids[:1]
 
-        initial_batch = served   # analyzing won't consume it, but keep state consistent
-
         # ── 5. Fetch first 3 cards for next_image + prefetch ──────────────
-        _initial_cards = engine.get_buildings_by_ids(initial_batch[:3])
+        _initial_cards = engine.get_buildings_by_ids(served[:3])
         first_card = _initial_cards[0] if len(_initial_cards) > 0 else None
         prefetch_card = _initial_cards[1] if len(_initial_cards) > 1 else None
         prefetch_card_2 = _initial_cards[2] if len(_initial_cards) > 2 else None
@@ -537,6 +527,13 @@ class DiscoveryPromoteView(APIView):
         # ever loosened.  Shape matches swipe_service.py's canonical write:
         # {id: str, intensity: float}.
         seed_liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seed_ids]
+        # taste_v2 marker. round_offset = seeded likes: convergence's minimum-swipe
+        # floor counts only swipes made in THIS session (current_round starts at seeded_count).
+        original_filters = {
+            session_pool.SELECTOR_KEY: session_pool.SELECTOR_V2,
+            'taste_tags': [],
+            'round_offset': seeded_count,
+        }
 
         with transaction.atomic():
             if draft is not None:
@@ -557,12 +554,12 @@ class DiscoveryPromoteView(APIView):
                 pool_scores=pool_scores,
                 current_round=seeded_count,
                 preference_vector=pref_vector if pref_vector else [],
-                exposed_ids=exposed_ids + ([initial_batch[0]] if initial_batch else []),
-                initial_batch=initial_batch,
+                exposed_ids=exposed_ids + served[:1],
+                initial_batch=[],   # no fixed start cards: the selector goes straight to match/check
                 like_vectors=session_like_vectors,
                 convergence_history=[],
                 previous_pref_vector=[],
-                original_filters={},
+                original_filters=original_filters,
                 original_filter_priority=[],
                 original_seed_ids=list(seed_ids),
                 current_pool_tier=current_pool_tier,
@@ -582,8 +579,8 @@ class DiscoveryPromoteView(APIView):
         # = current_round AFTER the first-swipe increment). Seed that exact key —
         # not :1 — or the first Taste swipe always misses the seeded cache.
         _pf_seed = {
-            'prefetch_card_id': initial_batch[1] if len(initial_batch) > 1 else None,
-            'prefetch_card_2_id': initial_batch[2] if len(initial_batch) > 2 else None,
+            'prefetch_card_id': served[2] if len(served) > 2 else None,
+            'prefetch_card_2_id': served[3] if len(served) > 3 else None,
         }
         cache.set(
             f'prefetch:{session.session_id}:{seeded_count + 1}',

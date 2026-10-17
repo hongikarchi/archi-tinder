@@ -97,8 +97,7 @@ class ApiGZipMiddleware(GZipMiddleware):
     compresses a response ONLY when ALL of these hold (otherwise it is returned
     untouched):
 
-    - not a streaming response -- SSE (``text/event-stream``, the parse-query
-      stream) must be delivered incrementally; gzip would buffer it.
+    - not a streaming response -- SSE (``text/event-stream``) must be delivered incrementally; gzip would buffer it.
       ``response.streaming`` is the primary guard, the content-type check is a
       belt-and-braces for any non-streaming event-stream response.
     - ``Content-Type`` is ``application/json`` (never HTML/static/images).

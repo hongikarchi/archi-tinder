@@ -23,7 +23,7 @@ Use FULL-SWIPE when changes touch:
 - `backend/apps/recommendation/`
 - `backend/config/settings.py` `RECOMMENDATION`
 - session lifecycle, swipe APIs, card hydration, results flow
-- `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, or shared swipe state
+- `frontend/src/pages/SwipePage.jsx`, `TasteStartPage.jsx`, or shared swipe state
 
 ## Preflight
 

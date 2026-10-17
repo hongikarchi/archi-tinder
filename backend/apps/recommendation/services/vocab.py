@@ -1,12 +1,10 @@
 """
 vocab.py -- Live DB vocabulary provider for the 5 grounded filter axes.
 
-BACK-PARSER-VOCAB-1: grounds the Gemini query parser prompt + validation in
-the ACTUAL values present in canonical_v2_buildings (is_publishable=true),
+BACK-PARSER-VOCAB-1: provides the ACTUAL values present in canonical_v2_buildings (is_publishable=true),
 rather than free-form LLM guesses. Covers style, atmosphere, color_tone,
 typology_primary, architectural_elements. `program` is intentionally excluded
--- PROGRAM_VALUES in _prompts.py is already the correct hand-curated bucket
-list and is not a live-DB vocabulary axis.
+-- program is a hand-curated bucket list, not a live-DB vocabulary axis.
 
 Self-contained: no sibling-module imports beyond Django cache/db, so it can
 be imported early without circular-import risk. Cross-module callers reach

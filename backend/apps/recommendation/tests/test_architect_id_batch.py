@@ -89,7 +89,6 @@ MOCK_CARD_WITH_ARCHITECT = {
     'canonical_bld_id': 'bld_000001',
     'name': 'Test Building',
     'image_url': 'https://example.com/img.jpg',
-    'image_focus': None,
     'image_kind': None,
     'covers_by_type': {},
     'url': None,

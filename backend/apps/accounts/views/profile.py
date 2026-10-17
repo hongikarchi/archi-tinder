@@ -44,8 +44,7 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
 
     Cover derivation: first liked_ids building → first saved_ids building → ''.
     Image batch lookup is performed only for the paged slice to avoid N+1 at
-    scale. The image_focus echo in card payloads enables frontend objectFit
-    decisions.
+    scale.
     """
     from apps.recommendation.models import Project
     from apps.recommendation import engine

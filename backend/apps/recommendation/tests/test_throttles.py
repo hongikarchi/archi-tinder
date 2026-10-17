@@ -10,15 +10,15 @@ import pytest
 class TestRecommendationThrottles:
 
     def test_llm_search_throttle_configured(self):
-        """ParseQueryView has LLMSearchThrottle; scope registered in settings."""
+        """TasteRecognizeView has LLMSearchThrottle; scope registered in settings."""
         from django.conf import settings
-        from apps.recommendation.views.search import ParseQueryView
+        from apps.recommendation.views.taste_start import TasteRecognizeView
         from apps.recommendation.throttles import LLMSearchThrottle
         from rest_framework.throttling import UserRateThrottle
 
         assert issubclass(LLMSearchThrottle, UserRateThrottle)
         assert LLMSearchThrottle.scope == 'llm_search'
-        assert LLMSearchThrottle in ParseQueryView.throttle_classes
+        assert LLMSearchThrottle in TasteRecognizeView.throttle_classes
 
         rates = settings.REST_FRAMEWORK.get('DEFAULT_THROTTLE_RATES', {})
         assert 'llm_search' in rates, "'llm_search' scope missing from DEFAULT_THROTTLE_RATES"

@@ -2,7 +2,7 @@
 Unit tests for _row_to_card() — regression guard against the canonical_v2
 schema. Original tests covered the v1 (architecture_vectors / R2-composed)
 shape; this version targets the v2 (canonical_v2_buildings / source-CDN URL /
-covers_by_type JSONB / image_focus) shape produced by S2.
+covers_by_type JSONB) shape produced by S2.
 
 Runs in isolation (no DB required):
     pytest apps/recommendation/tests/test_row_to_card.py -v
@@ -73,55 +73,11 @@ class TestRowToCardVisualDescription:
 
 
 class TestRowToCardCoverResolution:
-    """Cover-image resolution: image_focus then fallback chain."""
+    """Cover-image resolution: default fallback chain."""
 
-    def test_image_focus_echoed_in_card(self):
-        """image_focus passed to _row_to_card must appear verbatim in the returned dict."""
-        row = _minimal_row(
-            covers_by_type={'interior': 'https://int/cover.jpg', 'exterior': None,
-                            'drawing': None, 'aerial': None, 'detail': None},
-        )
-        card = _row_to_card(row, image_focus='interior')
-        assert card['image_focus'] == 'interior'
-
-    def test_image_focus_none_when_not_specified(self):
-        """When no focus is passed, image_focus in the card must be None."""
+    def test_card_has_no_image_focus_key(self):
         row = _minimal_row(display_cover_url='https://default/cover.jpg')
-        card = _row_to_card(row)
-        assert card['image_focus'] is None
-
-    def test_image_focus_none_for_invalid_focus(self):
-        """An invalid focus value is not applied to cover but IS echoed as-is."""
-        row = _minimal_row(display_cover_url='https://default/cover.jpg')
-        card = _row_to_card(row, image_focus='bogus')
-        # Invalid focus: cover falls back to display_cover_url
-        assert card['image_url'] == 'https://default/cover.jpg'
-        # But the literal value is still echoed (caller knows what it sent)
-        assert card['image_focus'] == 'bogus'
-
-    def test_image_focus_uses_covers_by_type(self):
-        row = _minimal_row(
-            display_cover_url='https://default/cover.jpg',
-            covers_by_type={
-                'exterior': 'https://ext/cover.jpg',
-                'interior': 'https://int/cover.jpg',
-                'drawing': None, 'aerial': None, 'detail': None,
-            },
-        )
-        card = _row_to_card(row, image_focus='interior')
-        assert card['image_url'] == 'https://int/cover.jpg'
-
-    def test_image_focus_null_falls_through(self):
-        """When covers_by_type[focus] is null, fall back to display_cover_url."""
-        row = _minimal_row(
-            display_cover_url='https://default/cover.jpg',
-            covers_by_type={
-                'exterior': 'https://ext/cover.jpg',
-                'interior': None, 'drawing': None, 'aerial': None, 'detail': None,
-            },
-        )
-        card = _row_to_card(row, image_focus='interior')
-        assert card['image_url'] == 'https://default/cover.jpg'
+        assert 'image_focus' not in _row_to_card(row)
 
     def test_no_focus_uses_display_cover_url(self):
         row = _minimal_row(display_cover_url='https://default/cover.jpg')
@@ -165,15 +121,6 @@ class TestRowToCardCoverResolution:
         row = _minimal_row()
         card = _row_to_card(row)
         assert card['image_url'] == ''
-
-    def test_invalid_image_focus_ignored(self):
-        row = _minimal_row(
-            display_cover_url='https://default/cover.jpg',
-            covers_by_type={'exterior': 'https://ext/cover.jpg', 'interior': None,
-                            'drawing': None, 'aerial': None, 'detail': None},
-        )
-        card = _row_to_card(row, image_focus='bogus')
-        assert card['image_url'] == 'https://default/cover.jpg'
 
 
 class TestRowToCardGallery:

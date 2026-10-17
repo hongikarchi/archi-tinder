@@ -24,7 +24,7 @@ from rest_framework.views import APIView
 
 from apps.admin_dashboard.permissions import IsAdminOperator
 
-from .. import engine, services
+from .. import engine
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -164,9 +164,9 @@ class InspectBuildingDetailView(APIView):
 class InspectSearchView(APIView):
     """POST /api/v1/inspect/search/ -- natural-language search, larger limit.
 
-    Wraps the existing services.parse_query + engine.search_by_filters_scored
-    internals (same call shape as ParseQueryView's single-turn path) without
-    the probe/priors machinery -- a single-shot search for DB inspection.
+    Single-shot search for DB inspection: the raw query text goes straight to
+    engine.search_by_filters_scored with NO LLM filter extraction (the old Gemini
+    chat parser was removed) -- ranking is the hybrid text path over the query.
 
     Body: {"query": str (required, max 2000 chars), "limit": int (optional, default
     100, cap 100)}
@@ -196,16 +196,11 @@ class InspectSearchView(APIView):
             limit = _DEFAULT_SEARCH_LIMIT
         limit = min(limit, _MAX_SEARCH_LIMIT)
 
-        # Mirror ParseQueryView's single-turn call: conversation_history is a
-        # single user turn, no prior_filters/language (skip probe/priors machinery).
-        conversation_history = [{'role': 'user', 'text': query}]
-        parsed = services.parse_query(conversation_history)
-
-        filters = parsed.get('filters') or {}
-        filter_priority = parsed.get('filter_priority') or []
-        raw_query = parsed.get('raw_query') or query
-        image_focus = parsed.get('image_focus')
-        visual_description = parsed.get('visual_description')
+        # No LLM parsing: empty filters, the query text itself drives ranking.
+        filters = {}
+        filter_priority = []
+        raw_query = query
+        visual_description = None
 
         has_signal = bool(filters) or bool(raw_query and raw_query.strip())
         results = []
@@ -215,13 +210,12 @@ class InspectSearchView(APIView):
                 raw_query=raw_query,
                 filter_priority=filter_priority,
                 limit=limit,
-                image_focus=image_focus,
             )
 
         is_fallback = False
         if not results:
             results = engine.get_diverse_random(
-                n=min(_SEARCH_FALLBACK_N, limit), image_focus=image_focus,
+                n=min(_SEARCH_FALLBACK_N, limit),
             )
             is_fallback = True
 

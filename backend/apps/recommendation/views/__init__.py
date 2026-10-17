@@ -36,12 +36,6 @@ from .swipe import (
     _merge_buffer_into_exposed,
     _async_prefetch_thread,
 )
-from .search import (
-    ParseQueryView,
-    ParseQueryStreamView,
-    # Private helper accessed by tests
-    _spawn_stage2,
-)
 from .discovery import (
     DiscoveryFeedView,
     DiscoveryFeedbackView,
@@ -67,6 +61,7 @@ from .inspect import (
     InspectBuildingDetailView,
     InspectSearchView,
 )
+from .taste_start import TasteRecognizeView, TasteCardsView
 from ._shared import (
     # Private helpers accessed by tests
     _liked_id_only,
@@ -86,8 +81,8 @@ __all__ = [
     'ProjectBookmarkView',
     'BuildingBatchView',
     'DiverseRandomView',
-    'ParseQueryView',
-    'ParseQueryStreamView',
+    'TasteRecognizeView',
+    'TasteCardsView',
     'DiscoveryFeedView',
     'DiscoveryFeedbackView',
     'DiscoveryPromoteView',
@@ -109,5 +104,4 @@ __all__ = [
     '_progress',
     '_merge_buffer_into_exposed',
     '_async_prefetch_thread',
-    '_spawn_stage2',
 ]

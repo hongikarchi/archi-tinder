@@ -395,8 +395,30 @@ AVATAR_OUTPUT_EDGE    = 512                 # square output side in pixels
 
 # -- Recommendation algorithm constants ------------------------------------
 RECOMMENDATION = {
-    'bounded_pool_target': 150,      # N: session card pool = top-N by cosine sim to V_initial after hard filters (Phase 0)
-    'min_likes_for_clustering': 4,  # Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love)
+    'bounded_pool_target': 150,      # N: session card pool size (taste_v2: tag-ranked pool page size)
+    # Taste-start tag matching: fixed per-axis weights for ranking buildings by recognised tags.
+    # score = sum(weight of matched want tags) - factor * sum(weight of matched exclude tags).
+    'taste_tag_weights': {
+        'use': 3, 'country': 3, 'material': 2, 'style': 2, 'year': 2, 'built': 2,
+        'element': 2, 'atmosphere': 1, 'color': 1,
+    },
+    'taste_exclude_penalty_factor': 1.0,  # exclude tag = penalty (factor x axis weight), never a hard filter
+    # taste_v2 -- Taste-start redesign (docs/decisions/2026-10-11-taste-start-redesign.md §5/§8)
+    'taste_v2_check_share_one_like': 0.5,       # check-card share with exactly 1 like
+    'taste_v2_check_share_consistent': 0.25,    # >=2 likes, mutually similar (3:1 match:check)
+    'taste_v2_check_share_inconsistent': 0.5,   # >=2 likes, dissimilar (1:1)
+    'taste_v2_consistency_window': 4,           # last N likes used for the consistency test
+    'taste_v2_consistent_min_cos': 0.6,         # mean pairwise cosine >= this = consistent
+    'taste_v2_skip_streak': 3,                  # trailing skips -> check share >= 0.5
+    'taste_v2_skip_streak_hard': 5,             # trailing skips -> all check cards
+    'taste_v2_like_saturation': 6,              # likes at which the tag weight bottoms out
+    'taste_v2_tag_weight_end': 0.3,             # tag weight at saturation (never 0)
+    'taste_v2_dislike_penalty': 0.3,            # penalty x max cosine to recent skips
+    'taste_v2_dislike_window': 10,              # recent skips considered
+    'taste_v2_check_min_tag_ratio': 0.5,        # check-card band: tag score >= ratio x best remaining
+    'taste_v2_analyzing_min_likes': 1,
+    'taste_v2_convergence_min_swipes': 8,       # "taste found" needs at least this many swipes
+    'taste_v2_pool_refresh_threshold': 20,      # refill the pool when unexposed candidates drop below
     'decay_rate': 0.05,              # gamma -- recency weight decay
     'mmr_penalty': 0.3,              # lambda -- diversity penalty
     'taste_pool_overfetch': 3,       # promote-to-taste pool: HNSW neighbours fetched = overfetch * pool target, MMR-downsampled to target
@@ -408,11 +430,9 @@ RECOMMENDATION = {
     'convergence_min_recent_likes': 2,  # recent positive evidence required before backend declares convergence
     'k_clusters': 2,                 # K-Means clusters in the multi-modal phase (Phase 2)
     'min_likes_for_multimodal': 11,  # keep the <=10-swipe loop single-centroid; KMeans only after the target window
-    'max_consecutive_dislikes': 5,   # dislike streak that triggers the escape fallback (farthest from dislike centroid)
     'top_k_results': 20,             # buildings returned at session end (Completed: Top-K)
     'like_weight': 0.5,              # kept for pref vector update
     'dislike_weight': -1.0,          # pref-vector update weight for a dislike (like_weight is the positive counterpart)
-    'initial_explore_rounds': 10,    # kept for initial batch size
     'adaptive_k_clustering_enabled': False,  # Topic 06: silhouette-based k selection {1, 2}
     'soft_relevance_enabled':        False,  # Topic 06: softmax over centroid distances vs max
     'gemini_rerank_enabled':         False,  # Topic 02: Gemini setwise rerank at session end
@@ -444,25 +464,6 @@ RECOMMENDATION = {
     # 3600s default keeps building-card payloads warm across requests without
     # going stale relative to Make DB updates.
     'card_cache_ttl': 3600,
-    # IMP-5 (Spec v1.5 §11.1): Gemini explicit context caching for _CHAT_PHASE_SYSTEM_PROMPT
-    'context_caching_enabled': False,                  # default OFF; flip True only after Redis cache backend is wired
-    'context_caching_ttl_seconds': 3600,               # Gemini cache TTL; also used as Django cache TTL for resource name
-    # IMP-6 (Spec v1.10 §11.1): 2-stage decouple — late-binding V_initial plumbing.
-    # Commit 1 (2d): scaffolding only. With flag OFF (default) all paths are byte-identical
-    # to pre-IMP-6. With flag ON (Commit 2): parse_query returns Stage 1 output
-    # (filters + reply, ~150-220 tokens) immediately; Stage 2 (visual_description,
-    # ~140-180 tokens) fires async. SessionCreateView reads V_initial from Django cache
-    # (key: v_initial:{user_id}:{sha256(raw_query)[:16]}); on cache miss, creates pool
-    # with filters only (BM25-only RRF per spec v1.5 Topic 01 graceful-degrade).
-    # Expected TTFC improvement (M1-grounded): ~45-55% Gemini wall-time drop.
-    #
-    # Production canary (Sprint D Commit 4): set STAGE_DECOUPLE_ENABLED=true in
-    # Railway dashboard env vars to flip flag ON for production traffic. Default
-    # 'false' preserves byte-identical pre-IMP-6 behavior. Roll back instantly by
-    # unsetting the env var or changing to 'false'. No code redeploy needed for
-    # rollback. Monitor parse_query_timing.stage='1' rate + stage2_timing.outcome
-    # distribution + Brutalist sys_p50 trend post-flip.
-    'stage_decouple_enabled': os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true',  # default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip
     # Discovery tab v3.1 hyperparameters (10-card chunk + 3-Tier + Draft Board)
     'discovery_chunk_size': 10,
     'discovery_tier2_min_likes': 10,      # tier 2 unlocks once the user has this many Discovery likes
@@ -477,7 +478,7 @@ RECOMMENDATION = {
     'discovery_local_sim_radius': 0.55,          # cosine SIM to nearest centroid to count as local/취향
     'discovery_centroid_cache_ttl': 21600,       # 6h — app-session fixed
     'discovery_promote_threshold': 10,    # Discovery likes that unlock the promote-to-taste (analysis) CTA
-    # LLM search (get_corpus_tag_df / engine.llm_search_by_filters) TF-IDF corpus DF cache TTL (24h)
+    # Search (get_corpus_tag_df / engine.search_by_filters_scored) TF-IDF corpus DF cache TTL (24h)
     'corpus_df_cache_ttl_seconds': 86400,
     'discovery_like_hard_cap': 50,  # Discovery draft hard stop: block likes beyond 50; client redirects to Taste
     # DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable).
@@ -487,7 +488,7 @@ RECOMMENDATION = {
     # sample that avoids a full seq scan of the large canonical_v2_buildings table
     # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
     'discovery_tablesample_pct': 2.0,
-    # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for ParseQueryView.
+    # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for engine.search_by_filters_scored.
     # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
     # All axes are soft (no hard gate except is_publishable=true).
     'llm_search_topk': 200,               # K: tag-score candidate set before BM25 rerank
@@ -567,29 +568,24 @@ GEMINI_TEXT_MODEL_FALLBACK  = os.getenv('GEMINI_TEXT_MODEL_FALLBACK', 'gemini-2.
 GEMINI_IMAGE_MODEL          = os.getenv('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-image')
 GEMINI_IMAGE_MODEL_FALLBACK = os.getenv('GEMINI_IMAGE_MODEL_FALLBACK', 'gemini-2.5-flash-image')
 GEMINI_IMAGE_FORMAT         = os.getenv('GEMINI_IMAGE_FORMAT', 'webp')   # webp|native
-# LLM-AB-KNOB-2: thinking-budget override for the two Gemini PARSE paths only
-# (parse_query.py parse_query() + parse_query_stage1()). 0 = thinking off
-# (current/default, byte-identical to the pre-knob literal 0), -1 = dynamic
-# budget, >0 = fixed token budget. generation.py (stage2/persona/board) stays
-# hardcoded at 0 -- this knob does NOT touch it.
-GEMINI_THINKING_BUDGET      = int(os.getenv('GEMINI_THINKING_BUDGET', '0'))
 # BACK-LLM-PROVIDER-1: A/B provider switch for the TEXT-PARSE path only
 # (apps.recommendation.services._gemini). Image generation always uses Gemini
 # regardless of this flag (see _get_gemini_client() in _gemini.py).
 LLM_PROVIDER      = os.getenv('LLM_PROVIDER', 'gemini')  # gemini|openai
 OPENAI_API_KEY    = os.getenv('OPENAI_API_KEY', '')
 OPENAI_TEXT_MODEL = os.getenv('OPENAI_TEXT_MODEL', 'gpt-5.6-luna')
+# Taste-start tag recognition (TypeSafe "System One" / JEV). Missing key or any
+# failure -> apps.recommendation.taste_start falls back to a local dictionary.
+TYPESAFE_API_KEY    = os.getenv('TYPESAFE_API_KEY', '')
+JEV_API_URL         = 'https://api.typesafe.ai/v1/systemone'
+JEV_MODEL           = os.getenv('JEV_MODEL', 'jev-latest')
+JEV_TIMEOUT_SECONDS = float(os.getenv('JEV_TIMEOUT_SECONDS', '2.0'))
 # Optional reasoning-effort knob; allowlist-validated here so a typo'd env var
 # degrades to "not sent" instead of a per-request 400 on the parse path.
 _OPENAI_EFFORT_ALLOWED = ('', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 OPENAI_REASONING_EFFORT = os.getenv('OPENAI_REASONING_EFFORT', '')
 if OPENAI_REASONING_EFFORT not in _OPENAI_EFFORT_ALLOWED:
     OPENAI_REASONING_EFFORT = ''
-# LLM-AB-KNOB-1: opt-in OpenAI strict structured-output mode (json_schema,
-# strict=True) for the LEGACY parse path only -- see _dispatch_generate's
-# openai json branch in _gemini.py. Default off (non-strict json_object,
-# unchanged behaviour) so this is byte-identical when unset.
-OPENAI_STRICT_SCHEMA = os.getenv('OPENAI_STRICT_SCHEMA', '') == 'true'
 # BACK-LLM-PROVIDER-2: separate A/B provider switch for the IMAGE-GEN path
 # (generation.py _gen_native), independent of LLM_PROVIDER above so text/image
 # providers mix freely (e.g. LLM_PROVIDER=openai + LLM_IMAGE_PROVIDER=gemini).

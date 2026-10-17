@@ -16,15 +16,6 @@ from ..services import session_service
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
 
-# Known filter keys kept here for backwards-compat symbol access (any code
-# that does `from apps.recommendation.views.sessions import _VALID_FILTER_KEYS`
-# will still find them).
-_VALID_FILTER_KEYS = frozenset([
-    'program', 'location_country', 'location_city', 'style', 'material',
-    'year_min', 'year_max',
-])
-_VALID_IMAGE_FOCUS = frozenset(['exterior', 'interior', 'drawing', 'aerial', 'detail'])
-
 
 # ── Analysis Sessions ─────────────────────────────────────────────────────────
 

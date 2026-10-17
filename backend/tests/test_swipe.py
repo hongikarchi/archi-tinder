@@ -39,7 +39,7 @@ def _mock_farthest_point(pool_ids, exposed_ids, pool_embeddings):
     return None
 
 
-def _mock_get_card(bid, image_focus=None):
+def _mock_get_card(bid):
     if bid is None:
         return None
     return {
@@ -81,14 +81,6 @@ def _mock_compute_centroids(like_vectors, round_num, multimodal_floor=None):
     return ([c], c)
 
 
-def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num, **kwargs):
-    exposed_set = set(exposed_ids)
-    for bid in pool_ids:
-        if bid not in exposed_set:
-            return bid
-    return None
-
-
 _ENGINE = 'apps.recommendation.views.engine'
 _SWIPE_VIEW = 'apps.recommendation.views.swipe'
 
@@ -116,6 +108,27 @@ def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
 
 _SESSION_PATCHES = {
     f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
+    # Taste-start v2 create path (legacy-filters create now goes through it): the
+    # buildings-DB boundary (tag matching + diverse start cards) is mocked.
+    'apps.recommendation.taste_start.matching.top_matches': (
+        lambda tags, exclude_ids=(), limit=3: [
+            {'canonical_bld_id': b, 'score': 1.0, 'matched_keys': [], 'hit': 1, 'total': 1}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.ranked_pool': (
+        lambda tags, limit=None, exclude_ids=(): [
+            {'canonical_bld_id': b, 'score': 1.0}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.score_ids': (
+        lambda tags, ids: {i: 1.0 for i in ids}
+    ),
+    # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
+    f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+    f'{_ENGINE}.get_diverse_random': (
+        lambda n=10, filters=None: [
+            {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
+    ),
     f'{_ENGINE}.get_pool_embeddings': (
         lambda pool_ids: {bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids}
     ),
@@ -124,10 +137,8 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.get_building_embedding': _mock_get_embedding,
     f'{_ENGINE}.update_preference_vector': _mock_update_pref,
     f'{_ENGINE}.compute_taste_centroids': _mock_compute_centroids,
-    f'{_ENGINE}.compute_mmr_next': _mock_mmr_next,
     f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
     f'{_ENGINE}.check_convergence': lambda *a: False,
-    f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
     f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,

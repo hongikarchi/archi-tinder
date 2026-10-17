@@ -109,8 +109,8 @@ class TestFlags:
         body = admin_client.get(BASE + 'flags/').json()
         items = {f['key']: f for f in body['flags']}
         for key in ('MESSAGING_ENABLED', 'PERF_TIMING_ENABLED', 'PREWARM_ENABLED', 'DB_POOL_ENABLED',
-                    'STAGE_DECOUPLE_ENABLED', 'LLM_PROVIDER', 'LLM_IMAGE_PROVIDER',
-                    'gemini_rerank_enabled', 'dpp_topk_enabled', 'context_caching_enabled'):
+                    'LLM_PROVIDER', 'LLM_IMAGE_PROVIDER',
+                    'gemini_rerank_enabled', 'dpp_topk_enabled'):
             assert key in items
         hangul = re.compile('[가-힣]')
         for f in items.values():

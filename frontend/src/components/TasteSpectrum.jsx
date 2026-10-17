@@ -90,7 +90,7 @@ export default function TasteSpectrum({ axisScores }) {
           </defs>
 
           {/* confidence blob — behind the dots, blurred + alpha-boosted into a goo shape */}
-          <g opacity={0.18}>
+          <g opacity={0.12}>
             <g filter={`url(#${filterId})`}>
               {pts.map((p, i) => (
                 <circle key={`blob-${i}`} cx={p.x} cy={p.y} r={12 + p.c * 22} fill="var(--accent-1)" />
@@ -143,7 +143,7 @@ export default function TasteSpectrum({ axisScores }) {
               {p.dots.map((d, di) => (
                 <circle key={di} cx={x(d)} cy={p.y} r={3.5} fill="var(--color-text)" />
               ))}
-              <circle cx={p.x} cy={p.y} r={9} fill="var(--color-text)" />
+              <circle cx={p.x} cy={p.y} r={8} fill="var(--color-text)" />
             </g>
           ))}
         </svg>

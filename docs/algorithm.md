@@ -20,6 +20,8 @@ OpenAI `gpt-5.4-mini` (strict schema) via `LLM_PROVIDER=openai`; the code defaul
 rollback is Gemini; persona text and images are Gemini, pinned in code. Where the
 notes below say "Gemini call" for parsing, read "LLM call".
 
+> **취향 시작 개편 진행 중 (2026-10-11~):** 새 흐름(JEV 태그 → 세 장 → 새 스와이프 규칙)의 결정은 `docs/decisions/2026-10-11-taste-start-redesign.md`를 볼 것. 이 문서는 현재 운영 코드를 설명함. 개편이 끝나면 그 결정이 이 문서의 Phase 0–2를 대체함.
+
 ---
 
 ## Recommendation Pipeline Theory

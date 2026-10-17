@@ -1,7 +1,7 @@
 """Per-worker pre-warm (PERF-MISC-1 item c).
 
 First-request spikes measured locally: corpus tag stats ~2 s cold, axis vocab
-load made the first parse-query 8.4 s. Each gunicorn worker is a fresh process
+load made the first search request 8.4 s. Each gunicorn worker is a fresh process
 (no --preload), so every worker pays those once. ``run_prewarm`` pays them at
 boot instead, off the request path.
 
@@ -32,7 +32,7 @@ logger = logging.getLogger('apps.recommendation')
 
 def _step_imports():
     """Import the heavy modules request handlers import lazily: the whole URLconf
-    (views -> engine -> sklearn/numpy, services, parse_query)."""
+    (views -> engine -> sklearn/numpy, services)."""
     import importlib
     importlib.import_module(settings.ROOT_URLCONF)
     importlib.import_module('apps.recommendation.engine')   # sklearn.cluster / silhouette
@@ -41,7 +41,7 @@ def _step_imports():
 
 def _step_axis_vocab():
     from apps.recommendation import services
-    services.get_axis_vocab()  # parse_query's vocab prompt block + snap-to-vocab
+    services.get_axis_vocab()  # live axis vocabulary (cached 24h)
 
 
 def _step_corpus_tag_df():

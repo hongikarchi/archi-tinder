@@ -16,23 +16,24 @@ Tests:
       NOT the action card again.  (FLIPPED from old re-offer test.)
   (7) action_card_shown flag is set to True after first convergence swipe.
 
-Root-cause note: check_convergence is gated on session.phase == 'analyzing'.
-Sessions start in 'exploring'; transition requires >=4 likes
-(min_likes_for_clustering=4, Spec v1.8 Topic 06). Tests that need a converged
-session must first pump 4 real likes to reach 'analyzing', then override
-check_convergence=True on the triggering swipe.  _reach_analyzing() does this.
+Root-cause note: check_convergence is gated on session.phase == 'analyzing' AND
+(taste_v2) on a minimum number of swipes made in the session
+(taste_v2_convergence_min_swipes, lowered to 1 by _apply_patches below).
+Sessions start in 'exploring'; the first like moves them to 'analyzing'
+(taste_v2_analyzing_min_likes=1). Tests that need a converged session first pump
+_MIN_LIKES real likes, then override check_convergence=True on the triggering swipe.
+_reach_analyzing() does this.
 """
 import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
+from django.conf import settings
 
 from apps.recommendation.models import Project
 
 _ACTION_CARD_ID = '__action_card__'
 
-# ── min_likes threshold (mirrors config/settings.py) ─────────────────────────
-# Using 4 because Spec v1.8 Topic 06 raised it from 3 to 4.
-# If this constant ever changes, update _reach_analyzing accordingly.
+# ── likes pumped by _reach_analyzing (any value >= taste_v2_analyzing_min_likes) ──
 _MIN_LIKES = 4
 
 
@@ -54,14 +55,6 @@ for _bid in _FAKE_EMBEDDINGS:
 
 
 def _mock_farthest_point(pool_ids, exposed_ids, pool_embeddings):
-    exposed_set = set(exposed_ids)
-    for bid in pool_ids:
-        if bid not in exposed_set:
-            return bid
-    return None
-
-
-def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num, **kwargs):
     exposed_set = set(exposed_ids)
     for bid in pool_ids:
         if bid not in exposed_set:
@@ -113,11 +106,32 @@ def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
 # Base engine patches — convergence never fires unless overridden.
 _SESSION_PATCHES = {
     f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
+    # Taste-start v2 create path (legacy-filters create now goes through it): the
+    # buildings-DB boundary (tag matching + diverse start cards) is mocked.
+    'apps.recommendation.taste_start.matching.top_matches': (
+        lambda tags, exclude_ids=(), limit=3: [
+            {'canonical_bld_id': b, 'score': 1.0, 'matched_keys': [], 'hit': 1, 'total': 1}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.ranked_pool': (
+        lambda tags, limit=None, exclude_ids=(): [
+            {'canonical_bld_id': b, 'score': 1.0}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.score_ids': (
+        lambda tags, ids: {i: 1.0 for i in ids}
+    ),
+    # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
+    f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+    f'{_ENGINE}.get_diverse_random': (
+        lambda n=10, filters=None: [
+            {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
+    ),
     f'{_ENGINE}.get_pool_embeddings': (
         lambda pool_ids: {bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids}
     ),
     f'{_ENGINE}.farthest_point_from_pool': _mock_farthest_point,
-    f'{_ENGINE}.get_building_card': lambda bid, image_focus=None: {
+    f'{_ENGINE}.get_building_card': lambda bid: {
         'canonical_bld_id': bid, 'name': f'Bld {bid}',
         'image_url': '', 'covers_by_type': {}, 'url': None,
         'gallery': [], 'gallery_drawing_start': 0, 'metadata': {},
@@ -125,10 +139,8 @@ _SESSION_PATCHES = {
     f'{_ENGINE}.get_building_embedding': _mock_get_embedding,
     f'{_ENGINE}.update_preference_vector': _mock_update_pref,
     f'{_ENGINE}.compute_taste_centroids': _mock_compute_centroids,
-    f'{_ENGINE}.compute_mmr_next': _mock_mmr_next,
     f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
     f'{_ENGINE}.check_convergence': lambda *a, **kw: False,
-    f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
     f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
@@ -141,6 +153,11 @@ def _apply_patches():
         p = patch(target, side_effect=side_effect)
         p.start()
         patchers.append(p)
+    # taste_v2 only declares convergence after N swipes made in the session; these
+    # tests drive convergence with a handful of swipes.
+    floor = patch.dict(settings.RECOMMENDATION, {'taste_v2_convergence_min_swipes': 1})
+    floor.start()
+    patchers.append(floor)
     return patchers
 
 

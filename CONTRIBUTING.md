@@ -27,9 +27,9 @@ run `./tools/install-hooks.sh` directly instead.
 
 | Role | Owner | Primary territory |
 |---|---|---|
-| **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/{embeddings,rerank,generation,parse_query,_caches,_gemini}.py`, `backend/config/settings.py` (RECOMMENDATION dict only), `backend/tests/` (algorithm tests: `test_topic*`, `test_hyde`, `test_hybrid_retrieval`, `test_imp*`, `test_chat_phase`, `test_confidence`, etc.) |
+| **A** | Algorithm | `backend/apps/recommendation/engine.py`, `backend/apps/recommendation/services/{embeddings,rerank,generation,_gemini}.py`, `backend/config/settings.py` (RECOMMENDATION dict only), `backend/tests/` (algorithm tests: `test_topic*`, `test_hyde`, `test_hybrid_retrieval`, `test_imp*`, `test_confidence`, etc.) |
 | **B** | Post-swipe SNS | `backend/apps/social/`, `backend/apps/profiles/`, `frontend/src/pages/FirmProfilePage.jsx`, `UserProfilePage.jsx`, `BoardDetailPage.jsx`, `frontend/src/api/social.js`, `frontend/src/api/profiles.js`, `frontend/src/components/profile/` (BoardCard, BioPersonaFlipCard, DescriptionAboutFlipCard, ProjectCard, ArticleCard, InfoCol) |
-| **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/search.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `LLMSearchPage.jsx`, `DiscoveryPage.jsx`, `LikedProjectsPage.jsx` / `LikedOfficesPage.jsx`, `LoginPage.jsx`, `ResultsPage.jsx`, Django admin, deployment config |
+| **C** (admin) | Everything else | `backend/apps/accounts/`, `backend/apps/recommendation/views/sessions.py`, `views/projects.py`, `views/swipe.py`, `views/reports.py`, `views/telemetry.py`, `frontend/src/pages/SwipePage.jsx`, `TasteStartPage.jsx`, `DiscoveryPage.jsx`, `LikedProjectsPage.jsx` / `LikedOfficesPage.jsx`, `LoginPage.jsx`, `ResultsPage.jsx`, Django admin, deployment config |
 
 ## Shared / coordinated edit files
 
@@ -222,8 +222,7 @@ with **Django's built-in psycopg pool** (`OPTIONS['pool']`).
   are handled by Django (`CONN_MAX_AGE = 0` returns the connection at request
   end). Audited entry points (all covered by
   `backend/tests/test_conn_hygiene.py`): swipe telemetry + async prefetch
-  (`views/swipe.py`), search Stage 2 + parse-query stream worker
-  (`views/search.py`), board-name update (`services/session_service.py`), works
+  (`views/swipe.py`), board-name update (`services/session_service.py`), works
   upload validation (`works/services.py`). DB-free threads (Gemini timeout
   runners in `services/_gemini.py`, works `head_object` executor) are exempt.
 - **psycopg 3 raw-SQL rules:** use `= ANY(%s)` with a Python list (or explicit

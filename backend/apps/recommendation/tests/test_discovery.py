@@ -1481,6 +1481,14 @@ def test_promote_builds_pool_from_taste_seeded_pool(auth_client, user_profile):
     assert session.current_pool_tier == 1
     # seeds are in the pool and marked exposed -> never re-served
     assert set(seeds) <= set(session.exposed_ids)
+    # taste_v2: marker, no fixed start cards, no tags, swipes counted from the seeded likes
+    assert session.original_filters['selector'] == 'taste_v2'
+    assert session.original_filters['taste_tags'] == []
+    assert session.original_filters['round_offset'] == len(seeds)
+    assert session.initial_batch == []
+    assert session.current_round == len(seeds)
+    assert session.phase == 'analyzing'              # taste_v2_analyzing_min_likes = 1
+    assert set(session.pool_scores) == set(pool) and set(session.pool_scores.values()) == {0.0}
 
 
 @pytest.mark.django_db
@@ -1497,3 +1505,40 @@ def test_promote_falls_back_to_relaxation_when_taste_pool_fails(auth_client, use
     assert resp.status_code == 201
     taste.assert_called_once()
     relax.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_promote_first_cards_come_from_v2_selector(auth_client, user_profile):
+    """Promoted sessions pick next/prefetch cards with session_selector.select_next
+    (exposed = the seed ids), not centroid MMR / farthest-point, and seed the
+    first swipe's prefetch cache (key arithmetic unchanged: seeded_count + 1)."""
+    from django.core.cache import cache
+    from apps.recommendation.models import AnalysisSession
+    seeds = [f'bld_{i:06d}' for i in range(10)]
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seeds]
+    draft.save(update_fields=['liked_ids'])
+
+    pool = seeds + [f'bld_{i:06d}' for i in range(10, 16)]
+    picks = iter([(f'bld_{i:06d}', 'match') for i in range(10, 16)])
+    centroid = np.array([1.0] + [0.0] * 383)
+    with (
+        patch('apps.recommendation.views.discovery.session_selector.select_next',
+              side_effect=lambda *a, **k: next(picks)) as sel,
+        patch('apps.recommendation.views.discovery.engine.compute_taste_centroids',
+              return_value=([centroid], centroid)),
+    ):
+        resp, taste, relax = _promote_post(
+            auth_client, draft,
+            taste_pool={'return_value': (pool, {})},
+        )
+
+    assert resp.status_code == 201
+    assert sel.call_count == 5                      # 3 response cards + 2 for the first swipe's cache
+    first_call = sel.call_args_list[0]
+    assert set(seeds) <= set(first_call.args[1])    # exposed = seeds
+    assert first_call.args[3] == []                 # no initial_batch
+    session = AnalysisSession.objects.get(session_id=resp.json()['session_id'])
+    assert session.exposed_ids[-1] == 'bld_000010'
+    cached = cache.get(f'prefetch:{session.session_id}:{len(seeds) + 1}')
+    assert cached == {'prefetch_card_id': 'bld_000012', 'prefetch_card_2_id': 'bld_000013'}

@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — DO NOT EDIT. Source: backend/config/settings.py RECOMMENDATION dict. -->
 <!-- Regenerate: python tools/gen-hyperparams.py   (CI fails if this file is stale) -->
 
-Generated from `backend/config/settings.py` `RECOMMENDATION` — **77 parameters**.
+Generated from `backend/config/settings.py` `RECOMMENDATION` — **88 parameters**.
 Values here are what production runs with (environment overrides are marked `env`).
 The *meaning* column is the inline comment on each key in `settings.py`; to document a
 parameter, comment it there. Design intent and phase semantics: `docs/algorithm.md`.
@@ -12,8 +12,24 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 
 | Key | Value | Type | Meaning (from code comment) |
 |---|---|---|---|
-| `bounded_pool_target` | 150 | int | N: session card pool = top-N by cosine sim to V_initial after hard filters (Phase 0) |
-| `min_likes_for_clustering` | 4 | int | Spec v1.8 Topic 06 N>=4 activation-cliff mitigation per Investigation 21 §closure -- defer K-Means until N>=4 to avoid the Investigation 09 worst-case window (1 Love + 2 Likes, k=2 forces centroid collapse onto Love) |
+| `bounded_pool_target` | 150 | int | N: session card pool size (taste_v2: tag-ranked pool page size) |
+| `taste_tag_weights` | `{use: 3, country: 3, material: 2, style: 2, year: 2, built: 2, element: 2, atmosphere: 1, color: 1}` | dict | Taste-start tag matching: fixed per-axis weights for ranking buildings by recognised tags. score = sum(weight of matched want tags) - factor * sum(weight of matched exclude tags). |
+| `taste_exclude_penalty_factor` | 1.0 | float | exclude tag = penalty (factor x axis weight), never a hard filter |
+| `taste_v2_check_share_one_like` | 0.5 | float | check-card share with exactly 1 like |
+| `taste_v2_check_share_consistent` | 0.25 | float | >=2 likes, mutually similar (3:1 match:check) |
+| `taste_v2_check_share_inconsistent` | 0.5 | float | >=2 likes, dissimilar (1:1) |
+| `taste_v2_consistency_window` | 4 | int | last N likes used for the consistency test |
+| `taste_v2_consistent_min_cos` | 0.6 | float | mean pairwise cosine >= this = consistent |
+| `taste_v2_skip_streak` | 3 | int | trailing skips -> check share >= 0.5 |
+| `taste_v2_skip_streak_hard` | 5 | int | trailing skips -> all check cards |
+| `taste_v2_like_saturation` | 6 | int | likes at which the tag weight bottoms out |
+| `taste_v2_tag_weight_end` | 0.3 | float | tag weight at saturation (never 0) |
+| `taste_v2_dislike_penalty` | 0.3 | float | penalty x max cosine to recent skips |
+| `taste_v2_dislike_window` | 10 | int | recent skips considered |
+| `taste_v2_check_min_tag_ratio` | 0.5 | float | check-card band: tag score >= ratio x best remaining |
+| `taste_v2_analyzing_min_likes` | 1 | int |  |
+| `taste_v2_convergence_min_swipes` | 8 | int | "taste found" needs at least this many swipes |
+| `taste_v2_pool_refresh_threshold` | 20 | int | refill the pool when unexposed candidates drop below |
 | `decay_rate` | 0.05 | float | gamma -- recency weight decay |
 | `mmr_penalty` | 0.3 | float | lambda -- diversity penalty |
 | `convergence_threshold` | 0.13 | float | epsilon -- tuned for convergence inside the 10-swipe target window |
@@ -22,11 +38,9 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 | `convergence_min_recent_likes` | 2 | int | recent positive evidence required before backend declares convergence |
 | `k_clusters` | 2 | int | K-Means clusters in the multi-modal phase (Phase 2) |
 | `min_likes_for_multimodal` | 11 | int | keep the <=10-swipe loop single-centroid; KMeans only after the target window |
-| `max_consecutive_dislikes` | 5 | int | dislike streak that triggers the escape fallback (farthest from dislike centroid) |
 | `top_k_results` | 20 | int | buildings returned at session end (Completed: Top-K) |
 | `like_weight` | 0.5 | float | kept for pref vector update |
 | `dislike_weight` | -1.0 | float | pref-vector update weight for a dislike (like_weight is the positive counterpart) |
-| `initial_explore_rounds` | 10 | int | kept for initial batch size |
 
 ## Promote-to-taste pool (Discovery → Taste)
 
@@ -103,19 +117,6 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 |---|---|---|---|
 | `card_cache_ttl` | 3600 | int | Per-card LRU TTL (PR #22 absorb): cache.get/set under 'bcard:<id>' keys. 3600s default keeps building-card payloads warm across requests without going stale relative to Make DB updates. |
 
-## Gemini context caching (IMP-5)
-
-| Key | Value | Type | Meaning (from code comment) |
-|---|---|---|---|
-| `context_caching_enabled` | False | bool | default OFF; flip True only after Redis cache backend is wired |
-| `context_caching_ttl_seconds` | 3600 | int | Gemini cache TTL; also used as Django cache TTL for resource name |
-
-## Parse 2-stage decouple (IMP-6)
-
-| Key | Value | Type | Meaning (from code comment) |
-|---|---|---|---|
-| `stage_decouple_enabled` | `os.getenv('STAGE_DECOUPLE_ENABLED', 'false').lower() == 'true'` | env | default OFF; set STAGE_DECOUPLE_ENABLED=true in env to flip |
-
 ## Discovery feed (v3.x)
 
 | Key | Value | Type | Meaning (from code comment) |
@@ -141,7 +142,7 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 
 | Key | Value | Type | Meaning (from code comment) |
 |---|---|---|---|
-| `corpus_df_cache_ttl_seconds` | 86400 | int | LLM search (get_corpus_tag_df / engine.llm_search_by_filters) TF-IDF corpus DF cache TTL (24h) |
+| `corpus_df_cache_ttl_seconds` | 86400 | int | Search (get_corpus_tag_df / engine.search_by_filters_scored) TF-IDF corpus DF cache TTL (24h) |
 | `llm_search_topk` | 200 | int | K: tag-score candidate set before BM25 rerank |
 | `llm_search_w_bm25` | 8.0 | float | w_bm25: BM25 contribution weight in final score |
 | `llm_search_priority_boost` | 0.25 | float | boost factor for filter_priority ordering |
@@ -172,5 +173,7 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 
 ## Undocumented keys
 
-None — every key carries a comment in `settings.py`.
+These keys have no comment in `settings.py` — add one next to the key:
+
+- `taste_v2_analyzing_min_likes`
 

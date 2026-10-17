@@ -1,16 +1,17 @@
 """
 runner.py -- Playwright E2E test orchestration.
-Runs a full user scenario: dev-login -> create project -> search -> swipe -> results -> report.
+Runs a full user scenario: dev-login -> taste start (one sentence -> 3 cards) -> swipe -> results -> report.
 
-Matches the actual frontend UI flow as of 2026-04-06:
-  SetupPage (/) -> ProjectSetupPage (/new) -> LLMSearchPage (/search) ->
-  SwipePage (/swipe) -> FavoritesPage (/library/{id})
+Matches the frontend UI flow (taste start, 2026-10):
+  TasteStartPage (/search) -> POST /taste/recognize/ -> "Start swiping" ->
+  SwipePage (/swipe) -> ResultsPage (/result/{id})
 
 Swipe mechanism: keyboard ArrowRight (like) / ArrowLeft (dislike).
 The UX4 Gemini overhaul removed Like/Dislike buttons; only keyboard and touch gestures remain.
 """
 import logging
 import os
+import re
 import time
 from typing import List, Optional
 
@@ -37,7 +38,7 @@ def _read_dev_login_secret() -> Optional[str]:
     if not os.path.exists(env_path):
         logger.warning('backend/.env not found at %s', env_path)
         return None
-    with open(env_path) as f:
+    with open(env_path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line.startswith('DEV_LOGIN_SECRET='):
@@ -201,124 +202,45 @@ def _wait_for_card_image(page: Page, timeout_ms: int = 3000):
         pass  # Image may not load in time -- take screenshot anyway
 
 
-def _canned_reply_for(query: str, turn_idx: int) -> str:
-    """Return a persona-appropriate canned reply for a clarification turn.
+def _setup_recognize_listener(page: Page) -> dict:
+    """Register a response listener for POST /taste/recognize/ BEFORE submitting the text.
 
-    Per spec v1.9 + Investigation 22 mitigation M1 + .claude/commands/review.md
-    Step B4 multi-turn loop. Picks reply based on initial query class +
-    turn index (turn 2 specific, turn 3+ fallback "either both").
-
-    Args:
-        query: The original NL search query.
-        turn_idx: Which clarification turn we're on (1-indexed; 1 = first
-            clarification reply, 2 = second, etc.).
-
-    Returns:
-        Canned reply string suitable for the chat textarea.
+    Must be called before the submit action so a fast response cannot be missed.
+    The dict is populated when the response arrives: 'status', 'tags', 'cards'
+    (the raw response body lists; 'cards' items are {card, matched_keys, hit, total}).
     """
-    q_lower = query.lower()
-    if turn_idx >= 2:
-        return 'either is fine, both options'
-    if 'brutalist' in q_lower or 'concrete' in q_lower:
-        return 'yes concrete brutalist museums'
-    if 'sustainable' in q_lower or 'timber' in q_lower or '한국' in query:
-        return 'yes sustainable timber school in Korea'
-    return 'either is fine, surprise me'
-
-
-def _setup_parse_query_listener(page: Page) -> dict:
-    """Set up a response listener for POST /parse-query/ BEFORE submitting the query.
-
-    Per Tier 4 fix (DOM heuristic → network signal): the authoritative
-    clarification signal is `probe_needed` in the parse-query response body.
-    This mirrors how LLMSearchPage.jsx itself decides — `if (parsed.probe_needed)`.
-
-    Must be called BEFORE the submit action so no race can drop a fast response.
-    Returns a dict populated when the response arrives.
-    """
-    parse_data = {'probe_needed': None, '_handler': None}
+    data = {'status': None, 'tags': None, 'cards': None, '_handler': None}
 
     def capture(response):
-        if '/parse-query/' in response.url and response.request.method == 'POST':
+        if '/taste/recognize/' in response.url and response.request.method == 'POST':
+            data['status'] = response.status
             try:
                 body = response.json()
-                parse_data['probe_needed'] = bool(body.get('probe_needed', False))
+                data['tags'] = body.get('tags') or []
+                data['cards'] = body.get('cards') or []
             except Exception:
-                # JSON parse failed — treat as terminal to avoid hanging
-                parse_data['probe_needed'] = False
+                data['tags'] = []
+                data['cards'] = []
 
-    parse_data['_handler'] = capture
+    data['_handler'] = capture
     page.on('response', capture)
-    return parse_data
+    return data
 
 
-def _detect_clarification_or_results(
-    page: Page,
-    timeout_ms: int = 8000,
-    pre_listener: Optional[dict] = None,
-) -> str:
-    """Wait for the parse-query network response to determine turn outcome.
-
-    Per Tier 4 fix (DOM heuristic → network signal): clarification vs terminal
-    is determined by `probe_needed` in the POST /api/v1/parse-query/ response
-    body. This is the same flag LLMSearchPage.jsx uses to branch its UI logic
-    (`if (parsed.probe_needed)` at line 168), so it cannot produce false
-    positives from rhetorical "?" phrases in terminal replies.
-
-    Args:
-        page:         Playwright Page object.
-        timeout_ms:   Maximum wait in milliseconds.
-        pre_listener: Dict from _setup_parse_query_listener() registered
-                      BEFORE the submit action (race-free). When provided, the
-                      listener is already capturing; no new listener is attached.
-                      When None (backward-compat), a fresh listener is attached
-                      here — may miss a very-fast response in theory, but Gemini
-                      RTT is typically 800ms+ so the window is negligible.
-
-    Returns:
-        'results'       — probe_needed=False → terminal turn; "Start swiping" will appear
-        'clarification' — probe_needed=True  → clarification turn; AI asked a question
-        'timeout'       — no parse-query response observed within timeout
-    """
-    if pre_listener is not None:
-        # Use pre-registered listener (race-free path)
-        parse_data = pre_listener
-        own_listener = False
-    else:
-        # Attach a fresh listener (backward-compat / late-registration path)
-        parse_data = {'probe_needed': None, '_handler': None}
-
-        def capture(response):
-            if '/parse-query/' in response.url and response.request.method == 'POST':
-                try:
-                    body = response.json()
-                    parse_data['probe_needed'] = bool(body.get('probe_needed', False))
-                except Exception:
-                    parse_data['probe_needed'] = False
-
-        parse_data['_handler'] = capture
-        page.on('response', capture)
-        own_listener = True
-
+def _wait_for_recognize(page: Page, listener: dict, timeout_ms: int = 20000) -> bool:
+    """Wait for the recognize listener to capture a response. True if one arrived."""
     try:
         deadline = time.time() + (timeout_ms / 1000)
         while time.time() < deadline:
-            if parse_data['probe_needed'] is not None:
-                return 'clarification' if parse_data['probe_needed'] else 'results'
+            if listener['status'] is not None:
+                return True
             page.wait_for_timeout(200)
-        return 'timeout'
+        return False
     finally:
-        if own_listener and parse_data.get('_handler'):
-            try:
-                page.remove_listener('response', parse_data['_handler'])
-            except Exception:
-                pass
-        elif not own_listener and parse_data.get('_handler'):
-            # Clean up the pre-registered listener too — it's consumed
-            try:
-                page.remove_listener('response', parse_data['_handler'])
-            except Exception:
-                pass
+        try:
+            page.remove_listener('response', listener['_handler'])
+        except Exception:
+            pass
 
 
 def _wait_for_card_ready(page: Page, timeout_ms: int = 10000) -> bool:
@@ -429,9 +351,9 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
 
     Follows the actual frontend flow:
     1. Dev-login (inject JWT tokens)
-    2. Home page -- click "Create new folder"
-    3. Project setup -- fill name, click "Go to AI Search"
-    4. LLM Search -- type query or click preset, wait for results, click "Start swiping"
+    2. Taste start page (/search) -- wait for the textarea
+    3. Type the query, press Enter, wait for POST /taste/recognize/ (tags + 3 cards)
+    4. Click "Start swiping with these 3" (creates the session, navigates to /swipe)
     5. Swipe page -- use ArrowRight/ArrowLeft keyboard keys (no buttons since UX4)
     6. View results -- navigate to library
     7. Generate persona report
@@ -496,272 +418,106 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             return steps
 
         # ================================================================
-        # Step 2: Home Page -- Click "Create new folder"
-        # ================================================================
-        t0 = time.time()
-        logger.info('Step 2: Home page -- looking for "Create new folder"')
-
-        # Wait for the SetupPage to render with the "Create new folder" button
-        create_found = False
-        try:
-            page.get_by_text('Create new folder').wait_for(state='visible', timeout=10000)
-            create_found = True
-        except PlaywrightTimeout:
-            logger.error('Home page: "Create new folder" button not found within 10s')
-
-        step = collector.collect_step(page, '02_home', t0, {
-            'create_new_folder_visible': create_found,
-            'url': page.url,
-        })
-        steps.append(step)
-
-        if not create_found:
-            logger.error('Cannot proceed without "Create new folder" button -- aborting')
-            step.errors.append(ErrorRecord(
-                message='Home page missing "Create new folder" button',
-                source='assertion',
-            ))
-            browser.close()
-            return steps
-
-        # Click "Create new folder"
-        page.get_by_text('Create new folder').click()
-        logger.info('Clicked "Create new folder"')
-
-        # Wait for navigation to /new
-        try:
-            page.wait_for_url('**/new', timeout=5000)
-            logger.info('Navigated to /new')
-        except PlaywrightTimeout:
-            logger.error('Navigation to /new failed after clicking "Create new folder"')
-
-        # ================================================================
-        # Step 3: Project Setup -- Fill name, click "Go to AI Search"
-        # ================================================================
-        t0 = time.time()
-        logger.info('Step 3: Project setup page')
-
-        project_name = f"Test - {scenario.persona.name}"
-
-        # Fill the project name input (the only text input on this page)
-        name_filled = _safe_fill(
-            page, 'input[type="text"]', project_name,
-            'project name input', timeout_ms=5000,
-        )
-
-        if not name_filled:
-            step = collector.collect_step(page, '03_project_setup', t0, {
-                'error': 'Could not find or fill project name input',
-                'url': page.url,
-            })
-            step.errors.append(ErrorRecord(
-                message='Project name input not found on /new page',
-                source='assertion',
-            ))
-            steps.append(step)
-            browser.close()
-            return steps
-
-        page.wait_for_timeout(300)
-
-        # Click "Go to AI Search" button
-        go_to_search = _safe_click(
-            page, 'text=Go to AI Search', '"Go to AI Search" button', timeout_ms=5000,
-        )
-
-        step = collector.collect_step(page, '03_project_setup', t0, {
-            'project_name': project_name,
-            'name_filled': name_filled,
-            'go_to_search_clicked': go_to_search,
-            'url': page.url,
-        })
-        steps.append(step)
-
-        if not go_to_search:
-            step.errors.append(ErrorRecord(
-                message='"Go to AI Search" button not found or not clickable',
-                source='assertion',
-            ))
-            browser.close()
-            return steps
-
-        # Wait for navigation to /search
-        try:
-            page.wait_for_url('**/search**', timeout=5000)
-            logger.info('Navigated to /search')
-        except PlaywrightTimeout:
-            logger.error('Navigation to /search failed')
-
-        # ================================================================
-        # Step 4: LLM Search -- Submit query (initial NL turn)
+        # Step 2: Taste start page (/search)
         #
-        # v1.9 measurement: track t_initial_submit (observability) +
-        # t_last_user_submit (rewritten on each clarification turn; this is
-        # the system-attributable TTFC anchor per spec §4).
+        # The old home / project-setup / LLM-chat pages are gone; the Taste
+        # tab at /search is the entry point (one sentence -> 3 cards).
         # ================================================================
         t0 = time.time()
-        t_initial_submit = None       # first submit (observability total user-felt latency)
-        t_last_user_submit = None     # rewritten per clarification turn (v1.9 GATE anchor)
-        user_submit_count = 0
-        logger.info('Step 4: LLM search page -- query: "%s"', scenario.search_query)
-
+        logger.info('Step 2: Taste start page (/search)')
+        page.goto(f'{FRONTEND_URL}/search', wait_until='domcontentloaded')
         page.wait_for_timeout(1000)
 
-        # The search page has:
-        #   - Preset buttons (shown before first user message)
-        #   - Input with placeholder "Find a modern museum in Japan..."
-        #   - Submit button (pink circle with SVG arrow)
-        search_submitted = False
-        _pending_parse_listener = None  # pre-registered before each submit (race-free detection)
-
-        # Try using the text input first
-        search_input = page.locator('input[placeholder*="Find a modern"]')
+        textarea = page.locator('textarea')
+        textarea_found = False
         try:
-            search_input.wait_for(state='visible', timeout=3000)
-            search_input.fill(scenario.search_query)
-            page.wait_for_timeout(200)
-
-            # Click the submit button (type="submit" inside the form).
-            # Register parse-query listener BEFORE click to avoid race on fast responses.
-            submit_btn = page.locator('button[type="submit"]')
-            if submit_btn.first.is_visible(timeout=1000):
-                _pending_parse_listener = _setup_parse_query_listener(page)
-                t_initial_submit = time.time()
-                t_last_user_submit = t_initial_submit
-                user_submit_count = 1
-                submit_btn.first.click()
-                search_submitted = True
-                logger.info('Submitted search query via input + submit button')
+            textarea.first.wait_for(state='visible', timeout=10000)
+            textarea_found = True
         except PlaywrightTimeout:
-            logger.warning('Search input not found, trying preset buttons')
+            logger.error('Taste start page: textarea not found within 10s')
 
-        # Fallback: click a preset button
-        if not search_submitted:
-            presets = [
-                'Japanese modern museum', 'Minimalist housing',
-                'Landscape architecture', 'Brutalist office',
-                'Religious architecture', 'Boutique hospitality',
-            ]
-            for preset_text in presets:
-                try:
-                    preset_btn = page.get_by_text(preset_text, exact=True)
-                    if preset_btn.is_visible(timeout=1000):
-                        _pending_parse_listener = _setup_parse_query_listener(page)
-                        t_initial_submit = time.time()
-                        t_last_user_submit = t_initial_submit
-                        user_submit_count = 1
-                        preset_btn.click()
-                        search_submitted = True
-                        logger.info('Clicked preset button: "%s"', preset_text)
-                        break
-                except Exception:
-                    continue
-
-        if not search_submitted:
-            logger.error('Could not submit search query or click any preset')
-
-        step = collector.collect_step(page, '04_search_submitted', t0, {
-            'query': scenario.search_query,
-            'search_submitted': search_submitted,
-            't_initial_submit': t_initial_submit,
+        step = collector.collect_step(page, '02_taste_page', t0, {
+            'textarea_visible': textarea_found,
             'url': page.url,
         })
-        if not search_submitted:
+        if not textarea_found:
             step.errors.append(ErrorRecord(
-                message='Failed to submit search query or click preset',
+                message='Taste start textarea not found on /search',
                 source='assertion',
             ))
         steps.append(step)
-
-        if not search_submitted:
+        if not textarea_found:
             browser.close()
             return steps
 
         # ================================================================
-        # Step 5: Multi-turn clarification loop + 'Start swiping' button
-        #
-        # v1.9 §4 + Investigation 22 M1: max 3 clarification turns. Each
-        # canned reply rewrites t_last_user_submit so the GATE measurement
-        # excludes user-paced reading time per spec.
+        # Step 3: Type the persona query, press Enter, wait for
+        # POST /taste/recognize/ (tags + 3 cards).
         # ================================================================
         t0 = time.time()
-        logger.info('Step 5: Multi-turn loop (max 3 clarifications) → "Start swiping" button')
+        logger.info('Step 3: Taste recognize -- query: "%s"', scenario.search_query)
 
+        textarea.first.fill(scenario.search_query)
+        page.wait_for_timeout(200)
+        listener = _setup_recognize_listener(page)  # BEFORE submit (race-free)
+        t_submit = time.time()
+        textarea.first.press('Enter')
+        recognized = _wait_for_recognize(page, listener, timeout_ms=20000)
+        recognize_ms = int((time.time() - t_submit) * 1000) if recognized else None
+
+        tags = listener['tags'] or []
+        cards = listener['cards'] or []
+        recognize_ok = recognized and listener['status'] == 200 and len(cards) > 0
+        logger.info('Recognize: status=%s tags=%d cards=%d (%s ms)',
+                    listener['status'], len(tags), len(cards), recognize_ms)
+
+        step = collector.collect_step(page, '03_taste_recognized', t0, {
+            'query': scenario.search_query,
+            'recognize_status': listener['status'],
+            'recognize_ms': recognize_ms,
+            'tags': [
+                {k: t.get(k) for k in ('axis', 'value', 'polarity', 'label_ko', 'label_en')}
+                for t in tags if isinstance(t, dict)
+            ],
+            'card_ids': [(c.get('card') or {}).get('canonical_bld_id') for c in cards],
+            'url': page.url,
+        })
+        if not recognize_ok:
+            step.errors.append(ErrorRecord(
+                message=f'POST /taste/recognize/ failed or returned no cards '
+                        f'(status={listener["status"]}, cards={len(cards)})',
+                source='assertion',
+            ))
+        steps.append(step)
+        if not recognize_ok:
+            browser.close()
+            return steps
+
+        # ================================================================
+        # Step 4: "Start swiping with these 3" button
+        #
+        # Matches both locales: ko "이 세 장으로 스와이프 시작" /
+        # en "Start swiping with these 3".
+        # ================================================================
+        t0 = time.time()
+        logger.info('Step 4: Start swiping button')
+
+        start_btn = page.locator('button').filter(has_text=re.compile(r'스와이프 시작|Start swiping'))
         start_swiping_found = False
-        clarification_turns = 0
-        MAX_CLARIFICATION_TURNS = 3
+        try:
+            start_btn.first.wait_for(state='visible', timeout=10000)
+            start_swiping_found = True
+        except PlaywrightTimeout:
+            logger.error('"Start swiping" button not visible after recognize')
 
-        while clarification_turns < MAX_CLARIFICATION_TURNS:
-            # Use the pre-registered listener from the preceding submit (race-free).
-            # _pending_parse_listener is set before every submit so response capture
-            # is guaranteed regardless of Gemini response speed.
-            outcome = _detect_clarification_or_results(
-                page,
-                timeout_ms=8000,
-                pre_listener=_pending_parse_listener,
-            )
-            _pending_parse_listener = None  # consumed; reset for next turn
-
-            if outcome == 'results':
-                start_swiping_found = True
-                logger.info('"Start swiping" button appeared (after %d clarification turn(s))',
-                            clarification_turns)
-                break
-
-            if outcome == 'timeout':
-                logger.error('Step 5 timeout: no parse-query response observed')
-                # Check if there's an error message
-                try:
-                    error_text = page.locator('text=Something went wrong').first
-                    if error_text.is_visible(timeout=500):
-                        logger.error('Search returned error: "Something went wrong"')
-                except Exception:
-                    pass
-                break
-
-            # outcome == 'clarification' — send canned reply
-            clarification_turns += 1
-            reply_text = _canned_reply_for(scenario.search_query, clarification_turns)
-            logger.info('Clarification turn %d: sending canned reply "%s"',
-                        clarification_turns, reply_text)
-            try:
-                clarif_input = page.locator('input[placeholder*="Find a modern"]')
-                clarif_input.fill(reply_text)
-                page.wait_for_timeout(150)
-                clarif_submit = page.locator('button[type="submit"]')
-                if clarif_submit.first.is_visible(timeout=1000):
-                    # Register listener BEFORE click (race-free for next iteration)
-                    _pending_parse_listener = _setup_parse_query_listener(page)
-                    t_last_user_submit = time.time()  # v1.9: rewrite per turn
-                    user_submit_count += 1
-                    clarif_submit.first.click()
-                else:
-                    logger.warning('Clarification submit button not visible — aborting loop')
-                    break
-            except Exception as e:
-                logger.warning('Clarification reply failed: %s — aborting loop', e)
-                break
-
-        if clarification_turns >= MAX_CLARIFICATION_TURNS and not start_swiping_found:
-            logger.error('Max clarification turns (%d) exhausted without results', MAX_CLARIFICATION_TURNS)
-
-        # v1.9 system-attributable TTFC: from last user submit to first card.
-        # Recorded for downstream reporting. Aspirational total user-felt
-        # latency (t_initial_submit → first card) preserved as observability.
-        ttfc_anchor_ms = int((time.time() - t_last_user_submit) * 1000) if t_last_user_submit else None
-        ttfc_total_user_felt_ms = int((time.time() - t_initial_submit) * 1000) if t_initial_submit else None
-
-        step = collector.collect_step(page, '05_search_results', t0, {
+        step = collector.collect_step(page, '04_start_swiping', t0, {
             'start_swiping_visible': start_swiping_found,
-            'clarification_turns': clarification_turns,
-            'user_submit_count': user_submit_count,
-            'ttfc_pre_swipe_anchor_ms': ttfc_anchor_ms,
-            'ttfc_pre_swipe_total_user_felt_ms': ttfc_total_user_felt_ms,
+            'recognize_ms': recognize_ms,
             'url': page.url,
         })
         if not start_swiping_found:
             step.errors.append(ErrorRecord(
-                message='"Start swiping" button not found after search',
+                message='"Start swiping" button not found after taste recognize',
                 source='assertion',
             ))
         steps.append(step)
@@ -770,8 +526,6 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             browser.close()
             return steps
 
-        # Click "Start swiping"
-        start_btn = page.locator('button').filter(has_text='swiping')
         start_btn.first.click()
         logger.info('Clicked "Start swiping"')
 
@@ -825,11 +579,18 @@ def run_test(scenario, run_id: str, reports_dir: str) -> List[StepRecord]:
             for i in range(scenario.max_swipes):
                 t0 = time.time()
 
-                # Check for action card (convergence): "Your Taste is Found!"
+                # Already on the results page (e.g. the action card was accepted) -> stop swiping.
+                if '/result/' in page.url:
+                    logger.info('Results page reached after %d swipes -- ending swipe loop', swipe_count)
+                    session_completed = True
+                    break
+
+                # Check for action card (convergence). The "TASTE FOUND" stamp is the
+                # same in both locales (ko/en message text differs).
                 try:
-                    action_card = page.locator('text=Your Taste is Found')
+                    action_card = page.locator('text=TASTE FOUND')
                     if action_card.first.is_visible(timeout=800):
-                        logger.info('Action card detected: "Your Taste is Found!" after %d swipes', swipe_count)
+                        logger.info('Action card detected ("TASTE FOUND") after %d swipes', swipe_count)
                         session_completed = True
 
                         step = collector.collect_step(page, f'07_swipe_{i+1:02d}_action_card', t0, {

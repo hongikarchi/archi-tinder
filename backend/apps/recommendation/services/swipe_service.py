@@ -38,6 +38,7 @@ from ..caches import (
 )
 from ..views._shared import _progress, _liked_id_only
 from .hydration import hydrate_like_vectors, cache_embedding
+from ..taste_start import session_pool, session_selector, swipe_rules
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
@@ -108,6 +109,42 @@ def _recent_actions(session, window):
             )
         )
     )
+
+
+_V2_FORCED_REFRESH_ATTEMPTS = 3
+
+
+def _v2_select_card(session, hydrated_lv, project, recent_actions):
+    """taste_v2 card pick (replaces the phase-based legacy selection).
+
+    Builds the SelectorCtx from the already-fetched `recent_actions` (no extra
+    query), picks via session_selector.select_next, and if nothing is selectable
+    while the pool may still hold unusable ids (e.g. no embeddings) force-tops-up
+    the pool and retries (up to _V2_FORCED_REFRESH_ATTEMPTS times, while each
+    top-up still grows the pool).
+
+    Returns (next_bid | None, kind, ctx, pool_embeddings, embedding_stats,
+    pool_refreshed). The ctx is built BEFORE the pool-embedding fetch so the
+    dislike-embedding lookup does not clobber the swipe-selection cache stats.
+    """
+    ctx = session_pool.build_session_ctx(
+        session, hydrated_lv, project=project, recent_actions=recent_actions)
+    pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+    stats = engine.get_last_embedding_call_stats() or {}
+    initial_batch = list(session.initial_batch or [])
+    bid, kind = session_selector.select_next(
+        session.pool_ids, session.exposed_ids, pool_embeddings, initial_batch, ctx)
+    refreshed = False
+    for _ in range(_V2_FORCED_REFRESH_ATTEMPTS):
+        if bid is not None or not session_pool.refresh_if_low(
+                session, hydrated_lv, force=True):
+            break
+        refreshed = True
+        ctx.pool_scores = dict(session.pool_scores or {})
+        pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+        bid, kind = session_selector.select_next(
+            session.pool_ids, session.exposed_ids, pool_embeddings, initial_batch, ctx)
+    return bid, kind, ctx, pool_embeddings, stats, refreshed
 
 
 # ── View body orchestration ───────────────────────────────────────────────────
@@ -276,6 +313,7 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
                 'confidence': None,
             })
 
+        _upgraded = session_pool.ensure_v2(session)
         session.phase = 'analyzing'
         session.convergence_history = []
         # Seed previous_pref_vector from the current centroid so delta_v tracking
@@ -295,22 +333,24 @@ def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids
         if client_buffer_ids:
             session.exposed_ids = _merge_buffer_into_exposed(session.exposed_ids, client_buffer_ids)
 
-        engine.refresh_pool_if_low(session, threshold=5)
-
-        pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
-        next_card_id = engine.compute_mmr_next(
-            session.pool_ids, session.exposed_ids, pool_embeddings,
-            _hydrated_lv_extend, session.current_round,
-            multimodal_floor=session.multimodal_floor,
-        )
+        _extend_fields = [
+            'phase', 'convergence_history', 'previous_pref_vector',
+            'exposed_ids', 'pool_ids', 'pool_scores', 'current_pool_tier',
+            'original_filters',
+        ]
+        if _upgraded:
+            _extend_fields.append('initial_batch')
+        # Pool top-up + card pick via the v2 selector.
+        session_pool.refresh_if_low(session, _hydrated_lv_extend)
+        next_card_id = _v2_select_card(
+            session, _hydrated_lv_extend, session.project,
+            _recent_actions(session, session_pool.recent_actions_window()),
+        )[0]
         next_card = engine.get_building_card(next_card_id) if next_card_id else None
         if next_card:
             session.exposed_ids = session.exposed_ids + [next_card['canonical_bld_id']]
 
-        session.save(update_fields=[
-            'phase', 'convergence_history', 'previous_pref_vector',
-            'exposed_ids', 'pool_ids', 'pool_scores', 'current_pool_tier',
-        ])
+        session.save(update_fields=_extend_fields)
 
     residual_after = len([
         pid for pid in session.pool_ids if pid not in set(session.exposed_ids)
@@ -371,6 +411,9 @@ def handle_swipe_normal(
             session_id=session_id, user=profile
         )
         _mark('lock_acquired')
+        # Every session runs on the taste_v2 rule: upgrade marker-less (pre-deploy)
+        # sessions lazily, under this row lock.
+        _v2_upgraded = session_pool.ensure_v2(session)
         # Keep Project JSON lists synchronized per existing API contract.
         # Lock order: Session -> Project (bookmark POST takes only Project).
         project = Project.objects.select_for_update().get(pk=session.project_id)
@@ -502,7 +545,7 @@ def handle_swipe_normal(
         if not _is_action_card:
             like_count = len(_hydrated_lv) if _hydrated_lv is not None else len(session.like_vectors)
 
-            if session.phase == 'exploring' and like_count >= RC.get('min_likes_for_clustering', 3):
+            if session.phase == 'exploring' and swipe_rules.should_enter_analyzing(like_count):
                 session.phase = 'analyzing'
                 # Reset convergence state: the analyzing phase tracks Delta-V between K-Means
                 # centroids, but `previous_pref_vector` currently holds the exploring-phase
@@ -515,13 +558,12 @@ def handle_swipe_normal(
                 logger.info('Session %s: exploring -> analyzing (likes=%d)', session.session_id, like_count)
 
         _convergence_window = RC.get('convergence_window', 3)
-        _recent_action_window = max(
-            _convergence_window,
-            RC.get('max_consecutive_dislikes', 5),
-        )
+        _recent_action_window = max(_convergence_window, session_pool.recent_actions_window())
         _recent_actions_window = _recent_actions(session, _recent_action_window)
         _recent_convergence_actions = _recent_actions_window[-_convergence_window:]
-        if not _is_action_card and session.phase == 'analyzing' and engine.check_convergence(
+        if not _is_action_card and session.phase == 'analyzing' and (
+            swipe_rules.convergence_floor_met(session_pool.swipes_in_session(session))
+        ) and engine.check_convergence(
             session.convergence_history,
             RC.get('convergence_threshold', 0.13),
             _convergence_window,
@@ -537,8 +579,9 @@ def handle_swipe_normal(
         # refresh_pool_if_low mutates session.pool_ids/pool_scores/current_pool_tier
         # in-place when escalation fires.
         _tier_before_refresh = session.current_pool_tier
+        _pool_refreshed_v2 = False
         if session.phase not in ('converged', 'completed'):
-            engine.refresh_pool_if_low(session, threshold=5)
+            _pool_refreshed_v2 = session_pool.refresh_if_low(session, _hydrated_lv)
         _pool_escalation_fired = session.current_pool_tier != _tier_before_refresh
 
         # 7. Check pool exhaustion (hard-empty fallback after refresh attempt)
@@ -547,12 +590,27 @@ def handle_swipe_normal(
             session.phase = 'converged'
             logger.info('Session %s: pool exhausted -> converged', session.session_id)
 
-        # 8. Card selection by phase
-        pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
-        # Capture IMP-7 cache stats immediately after the primary get_pool_embeddings call.
-        # The dislike-fallback branch below may call get_pool_embeddings again (for dislike_ids),
-        # which would overwrite _last_embedding_call_stats. Reading here preserves swipe-selection stats.
-        _embedding_stats = engine.get_last_embedding_call_stats() or {}
+        # 8. Card selection (taste_v2 selector for every session)
+        _selector_ctx = None
+        _card_kind = '-'
+        _v2_bid = None
+        # Does this swipe pick a real card? (mirrors the branch chain below)
+        if _is_action_card:
+            _v2_wants_card = action != 'like'
+        elif session.phase == 'converged':
+            _v2_wants_card = bool(session.action_card_shown)
+        else:
+            _v2_wants_card = session.phase in ('exploring', 'analyzing')
+        if _v2_wants_card:
+            (_v2_bid, _card_kind, _selector_ctx, pool_embeddings,
+             _embedding_stats, _v2_refreshed) = _v2_select_card(
+                session, _hydrated_lv, project, _recent_actions_window)
+            _pool_refreshed_v2 = _pool_refreshed_v2 or _v2_refreshed
+            _pool_escalation_fired = session.current_pool_tier != _tier_before_refresh
+        else:
+            pool_embeddings = engine.get_pool_embeddings(session.pool_ids)
+            # Capture IMP-7 cache stats right after the primary get_pool_embeddings call.
+            _embedding_stats = engine.get_last_embedding_call_stats() or {}
 
         # ID selection only — DB fetch deferred to post-transaction batch call.
         #
@@ -563,7 +621,7 @@ def handle_swipe_normal(
         #
         # Action-card 'pass' (LEFT = keep exploring): select the next real card
         # from the pool, as if convergence hadn't happened.  If pool is empty,
-        # re-offer the action card so the user can still opt in later.
+        # the view sets is_analysis_completed.
         #
         # Action-card 'like' (RIGHT = go to report): the view returns
         # is_analysis_completed=True so the frontend navigates to the report.
@@ -573,93 +631,27 @@ def handle_swipe_normal(
             next_bid = None
             _action_card_accepted = True
         elif _is_action_card and action == 'dislike':
-            # User wants to keep exploring (LEFT swipe = pass / dislike on action card):
-            # pick the next real card.  action_card_shown is already True (was set when
-            # the action card was first emitted), so we never re-offer the prompt.
-            next_bid = engine.compute_mmr_next(
-                session.pool_ids, session.exposed_ids, pool_embeddings,
-                _hydrated_lv, session.current_round,
-                multimodal_floor=session.multimodal_floor,
-            ) if _hydrated_lv else engine.farthest_point_from_pool(
-                session.pool_ids, session.exposed_ids, pool_embeddings
-            )
-            # Pool exhausted — leave next_bid as None; view will set is_analysis_completed.
-            # Do NOT re-offer the action card: the user already dismissed it once.
+            # LEFT swipe on the action card = keep exploring: pick the next real card.
+            # action_card_shown is already True, so the prompt is never re-offered.
+            next_bid = _v2_bid
             _action_card_accepted = False
         elif session.phase == 'converged':
             # TASTE-FLOW emit-once: show the action card only the FIRST time
-            # convergence is reached.  Once action_card_shown is True (whether the
-            # user passed or accepted it) serve real cards via the normal converged-
-            # continue path so the prompt never re-appears.
+            # convergence is reached.  Afterwards serve real cards (converged-continue).
             if not session.action_card_shown:
                 next_bid = _ACTION_CARD_ID
                 session.action_card_shown = True
                 _action_card_accepted = False
             else:
-                # Already shown once — select the next real card.
                 _action_card_accepted = False
-                next_bid = engine.compute_mmr_next(
-                    session.pool_ids, session.exposed_ids, pool_embeddings,
-                    _hydrated_lv, session.current_round,
-                    multimodal_floor=session.multimodal_floor,
-                ) if _hydrated_lv else engine.farthest_point_from_pool(
-                    session.pool_ids, session.exposed_ids, pool_embeddings
-                )
-        elif session.phase == 'exploring':
+                next_bid = _v2_bid
+        elif session.phase in ('exploring', 'analyzing'):
             _action_card_accepted = False
-            exposed_set = set(session.exposed_ids)
-            next_bid = None
-            if session.current_round < len(session.initial_batch):
-                _candidate = session.initial_batch[session.current_round]
-                if _candidate and _candidate not in exposed_set:
-                    next_bid = _candidate
-                else:
-                    # initial_batch slot already exposed — fall through to farthest-point
-                    next_bid = engine.farthest_point_from_pool(
-                        session.pool_ids, session.exposed_ids, pool_embeddings
-                    )
-            else:
-                recent_swipes = list(
-                    reversed(
-                        _recent_actions_window[-RC.get('max_consecutive_dislikes', 5):]
-                    )
-                )
-                consecutive_dislikes = 0
-                for s in recent_swipes:
-                    if s == 'dislike':
-                        consecutive_dislikes += 1
-                    else:
-                        break
-
-                if consecutive_dislikes >= RC.get('max_consecutive_dislikes', 5):
-                    # Batch-fetch dislike embeddings (single query instead of N individual calls)
-                    dislike_ids = list(
-                        session.swipes
-                        .filter(action='dislike')
-                        .order_by('-created_at')
-                        .values_list('canonical_bld_id', flat=True)[:10]
-                    )
-                    dislike_embeds = []
-                    if dislike_ids:
-                        dislike_emb_map = engine.get_pool_embeddings(dislike_ids)
-                        dislike_embeds = [dislike_emb_map[did] for did in dislike_ids if did in dislike_emb_map]
-                    next_bid = engine.get_dislike_fallback(
-                        session.pool_ids, session.exposed_ids, pool_embeddings, dislike_embeds
-                    )
-                else:
-                    next_bid = engine.farthest_point_from_pool(
-                        session.pool_ids, session.exposed_ids, pool_embeddings
-                    )
-        elif session.phase == 'analyzing':
-            _action_card_accepted = False
-            next_bid = engine.compute_mmr_next(
-                session.pool_ids, session.exposed_ids, pool_embeddings,
-                _hydrated_lv, session.current_round,
-                multimodal_floor=session.multimodal_floor,
-            )
+            next_bid = _v2_bid
             if not next_bid:
-                # Pool exhausted during analyzing
+                # Nothing selectable even after a forced top-up: the DB is truly spent.
                 session.phase = 'converged'
+                logger.info('Session %s: taste_v2 pool exhausted -> converged', session.session_id)
         else:
             _action_card_accepted = False
             next_bid = None
@@ -673,12 +665,17 @@ def handle_swipe_normal(
         # Save session BEFORE prefetch so concurrent requests see updated exposed_ids.
         # pool_ids/pool_scores/current_pool_tier included unconditionally to persist
         # any in-place mutations from refresh_pool_if_low (A4 pool exhaustion guard).
-        session.save(update_fields=[
+        _save_fields = [
             'preference_vector', 'current_round', 'exposed_ids',
             'phase', 'like_vectors', 'convergence_history', 'previous_pref_vector',
             'pool_ids', 'pool_scores', 'current_pool_tier',
             'action_card_shown',
-        ])
+        ]
+        if _pool_refreshed_v2 or _v2_upgraded:
+            _save_fields.append('original_filters')   # off_tag flag / v2 marker
+        if _v2_upgraded:
+            _save_fields.append('initial_batch')      # cleared by the lazy upgrade
+        session.save(update_fields=_save_fields)
 
         # Save copies for prefetch calculation outside transaction.
         # saved_like_vectors is already hydrated (via _hydrated_lv computed above)
@@ -693,6 +690,8 @@ def handle_swipe_normal(
         # Cache pool_embeddings -- same pool_ids, no need to re-fetch outside transaction
         saved_pool_embeddings = pool_embeddings
         saved_recent_actions = list(_recent_actions_window)
+        # taste_v2 only: plain-data selector snapshot for the prefetch lookahead
+        saved_selector_ctx = _selector_ctx
 
     # Return the data needed by the view for the post-transaction prefetch + response
     return {
@@ -708,6 +707,8 @@ def handle_swipe_normal(
         'saved_multimodal_floor': saved_multimodal_floor,
         'saved_pool_embeddings': saved_pool_embeddings,
         'saved_recent_actions': saved_recent_actions,
+        'saved_selector_ctx': saved_selector_ctx,
+        '_card_kind': _card_kind,
         'pool_embeddings': pool_embeddings,
         '_embedding_stats': _embedding_stats,
         '_pool_escalation_fired': _pool_escalation_fired,
@@ -803,65 +804,23 @@ def build_swipe_telemetry(
 
 
 def compute_sync_prefetch(
-    saved_phase, saved_exposed_ids, saved_initial_batch, saved_current_round,
-    saved_pool_ids, saved_pool_embeddings, saved_like_vectors,
-    saved_multimodal_floor=None,
+    saved_phase=None, saved_exposed_ids=None, saved_initial_batch=None,
+    saved_current_round=None, saved_pool_ids=None, saved_pool_embeddings=None,
+    saved_like_vectors=None, saved_multimodal_floor=None,
+    *, selector_ctx=None,
 ):
     """Compute prefetch IDs on the sync path (CPU-only, no DB).
 
-    Returns (pf_bid, pf2_bid).  Verbatim from the sync else-branch in SwipeView.post.
+    Returns (pf_bid, pf2_bid) from the taste_v2 selector lookahead. The legacy
+    phase/round/like-vector positionals are accepted (and ignored) so older
+    callers keep working; `selector_ctx` is what drives the pick.
     """
-    pf_bid = None
-    pf2_bid = None
+    if selector_ctx is None:
+        return None, None
     try:
-        if saved_phase == 'exploring':
-            exposed_set = set(saved_exposed_ids)
-            if saved_current_round + 1 < len(saved_initial_batch):
-                _candidate = saved_initial_batch[saved_current_round + 1]
-                if _candidate and _candidate not in exposed_set:
-                    pf_bid = _candidate
-                else:
-                    pf_bid = engine.farthest_point_from_pool(
-                        saved_pool_ids, saved_exposed_ids, saved_pool_embeddings
-                    )
-            else:
-                pf_bid = engine.farthest_point_from_pool(
-                    saved_pool_ids, saved_exposed_ids, saved_pool_embeddings
-                )
-        elif saved_phase == 'analyzing':
-            pf_bid = engine.compute_mmr_next(
-                saved_pool_ids, saved_exposed_ids, saved_pool_embeddings,
-                saved_like_vectors, saved_current_round + 1,
-                multimodal_floor=saved_multimodal_floor,
-            )
+        return swipe_rules.lookahead(
+            saved_pool_ids or [], saved_exposed_ids or [], saved_pool_embeddings or {},
+            saved_initial_batch or [], selector_ctx,
+        )
     except Exception:
-        pf_bid = None
-
-    if pf_bid:
-        try:
-            # Use pf_bid string directly — card data not needed for ID selection.
-            temp_exposed = saved_exposed_ids + [pf_bid]
-            if saved_phase == 'exploring':
-                exposed_set = set(temp_exposed)
-                if saved_current_round + 2 < len(saved_initial_batch):
-                    _candidate = saved_initial_batch[saved_current_round + 2]
-                    if _candidate and _candidate not in exposed_set:
-                        pf2_bid = _candidate
-                    else:
-                        pf2_bid = engine.farthest_point_from_pool(
-                            saved_pool_ids, temp_exposed, saved_pool_embeddings
-                        )
-                else:
-                    pf2_bid = engine.farthest_point_from_pool(
-                        saved_pool_ids, temp_exposed, saved_pool_embeddings
-                    )
-            elif saved_phase == 'analyzing':
-                pf2_bid = engine.compute_mmr_next(
-                    saved_pool_ids, temp_exposed, saved_pool_embeddings,
-                    saved_like_vectors, saved_current_round + 2,
-                    multimodal_floor=saved_multimodal_floor,
-                )
-        except Exception:
-            pf2_bid = None
-
-    return pf_bid, pf2_bid
+        return None, None

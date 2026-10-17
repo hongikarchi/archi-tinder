@@ -3,9 +3,7 @@
 
 Measures the three legs of "search returns the right buildings":
   A. vocab    — per-axis value dictionaries from the buildings DB (+ drift diff)
-  B. parser   — live Gemini parse_query battery: mapping validity, concept drop,
-                null-fallback rate (N repeat runs per query, nondeterminism-aware)
-  C. search   — full parse->search_by_filters_scored run: tag match@10,
+  C. search   — raw-query search_by_filters_scored run (no LLM parse): tag match@10,
                 positive placement of ground-truth-tagged buildings, vd gap
   D. images   — cover URL health for top-10 results (magic-byte sniff, thumb detect)
 
@@ -14,8 +12,6 @@ Exit 1 when a FAIL-grade issue or a >5pt metric regression is found (CI-able).
 
 Usage (from backend/, venv python; needs .env with buildings DB + Gemini key):
     .venv/Scripts/python tools/db_qc.py                     # full battery
-    .venv/Scripts/python tools/db_qc.py --parser-runs 1     # cheap parser pass
-    .venv/Scripts/python tools/db_qc.py --skip-parser       # no Gemini parse phase
     .venv/Scripts/python tools/db_qc.py --only courtyard-brick,piloti-house
 Judgment layer (image verdicts) is NOT here — the run JSON carries top-10
 building ids + cover/gallery URLs per query for a separate visual-judge pass.
@@ -27,7 +23,6 @@ import concurrent.futures
 import json
 import os
 import re
-import statistics
 import sys
 import time
 import urllib.request
@@ -45,7 +40,7 @@ django.setup()
 from django.conf import settings  # noqa: E402
 from django.db import connections  # noqa: E402
 
-from apps.recommendation import engine, services  # noqa: E402
+from apps.recommendation import engine  # noqa: E402
 
 RUNS_DIR = BACKEND_DIR / 'tools' / 'qc_runs'
 DEFAULT_QUERIES = BACKEND_DIR / 'tools' / 'db_qc_queries.json'
@@ -123,9 +118,6 @@ def dump_vocab() -> dict:
 # fallback in apps.recommendation.services.vocab. Mirrors _VOCAB_SNAPSHOT's axis set.
 _SNAPSHOT_AXES = ('style', 'atmosphere', 'color_tone', 'typology_primary', 'architectural_elements')
 
-# ASSISTANT example JSON objects in _CHAT_PHASE_SYSTEM_PROMPT start with this marker.
-_ASSISTANT_LINE_RE = re.compile(r'^ASSISTANT:\s*(\{.*\})\s*$', re.MULTILINE)
-
 
 def diff_vocab_vs_snapshot(vocab_dump: dict) -> list[str]:
     """Compare live per-axis VALUES (vocab_dump, from dump_vocab()) against
@@ -149,65 +141,6 @@ def diff_vocab_vs_snapshot(vocab_dump: dict) -> list[str]:
             warnings.append(f'vocab drift: {axis} has NEW live values not in snapshot: {sorted(added)}')
         if removed:
             warnings.append(f'vocab drift: {axis} snapshot values missing from live DB: {sorted(removed)}')
-    return warnings
-
-
-def check_few_shot_conformance() -> list[str]:
-    """Parse every 'ASSISTANT: {...}' example JSON object embedded in
-    _CHAT_PHASE_SYSTEM_PROMPT, collect axis values from filters/filter_delta.set
-    for the 5 grounded axes + program, and WARN for any value not present in the
-    live vocab (or PROGRAM_VALUES for program). Case-sensitive compare; case
-    mismatches are reported separately from genuinely-missing values.
-
-    Non-fatal, no Gemini calls -- runs entirely against static prompt text +
-    get_axis_vocab()/PROGRAM_VALUES. Returns a list of WARN strings (empty = clean).
-    """
-    from apps.recommendation.services._prompts import _CHAT_PHASE_SYSTEM_PROMPT, PROGRAM_VALUES
-    from apps.recommendation import services
-
-    live_vocab = services.get_axis_vocab()
-    axes = _SNAPSHOT_AXES + ('program',)
-    allowed = {axis: live_vocab.get(axis, []) for axis in _SNAPSHOT_AXES}
-    allowed['program'] = PROGRAM_VALUES
-
-    warnings = []
-    for i, m in enumerate(_ASSISTANT_LINE_RE.finditer(_CHAT_PHASE_SYSTEM_PROMPT)):
-        raw = m.group(1)
-        try:
-            obj = json.loads(raw)
-        except Exception as e:  # noqa: BLE001 — one bad example must not kill the scan
-            warnings.append(f'few-shot #{i}: JSON parse failed ({e})')
-            continue
-
-        candidates = []
-        f = obj.get('filters')
-        if isinstance(f, dict):
-            candidates.append(f)
-        fd = obj.get('filter_delta')
-        if isinstance(fd, dict) and isinstance(fd.get('set'), dict):
-            candidates.append(fd['set'])
-
-        for axis in axes:
-            for src in candidates:
-                value = src.get(axis)
-                if not isinstance(value, str) or not value.strip():
-                    continue
-                axis_allowed = allowed.get(axis, [])
-                if value in axis_allowed:
-                    continue
-                case_hit = next(
-                    (v for v in axis_allowed if isinstance(v, str) and v.lower() == value.lower()),
-                    None,
-                )
-                if case_hit:
-                    warnings.append(
-                        f"few-shot #{i}: {axis}={value!r} case mismatch "
-                        f"(live vocab has {case_hit!r})"
-                    )
-                else:
-                    warnings.append(
-                        f"few-shot #{i}: {axis}={value!r} not in live vocab/PROGRAM_VALUES"
-                    )
     return warnings
 
 
@@ -244,86 +177,6 @@ def matchable_count(axis: str, value: str) -> int | None:
         n = cur.fetchone()[0]
     _match_cache[key] = n
     return n
-
-
-def _is_null_fallback(filters: dict) -> bool:
-    return not any(v is not None and v != '' for v in (filters or {}).values())
-
-
-def _concept_present(concept: dict, filters: dict) -> bool:
-    accepts = [a.lower() for a in concept.get('accept', [])]
-    for v in (filters or {}).values():
-        if isinstance(v, str) and any(a in v.lower() for a in accepts):
-            return True
-    return False
-
-
-def run_parser_battery(queries: list[dict], runs: int) -> dict:
-    per_query = {}
-    for q in queries:
-        rows = []
-        for _ in range(runs):
-            t0 = time.time()
-            try:
-                parsed = services.parse_query([{'role': 'user', 'text': q['query']}])
-                filters = {k: v for k, v in (parsed.get('filters') or {}).items()
-                           if v is not None}
-                rows.append({
-                    'filters': filters,
-                    'elapsed_s': round(time.time() - t0, 2),
-                    'null_fallback': _is_null_fallback(filters),
-                    'error': None,
-                })
-            except Exception as e:  # noqa: BLE001 — battery must survive one bad run
-                rows.append({'filters': {}, 'elapsed_s': round(time.time() - t0, 2),
-                             'null_fallback': True, 'error': str(e)[:200]})
-        ok_rows = [r for r in rows if not r['null_fallback']]
-
-        unmatchable = []
-        for r in ok_rows:
-            for axis, value in r['filters'].items():
-                n = matchable_count(axis, value) if isinstance(value, str) else None
-                if n == 0:
-                    sev = 'HARD-EMPTY' if axis in HARD_AXES else 'SOFT-SILENT'
-                    unmatchable.append({'axis': axis, 'value': value, 'severity': sev})
-        # dedupe
-        seen = set()
-        unmatchable = [u for u in unmatchable
-                       if (k := (u['axis'], u['value'].lower())) not in seen
-                       and not seen.add(k)]
-
-        concept_drop = {}
-        for c in q.get('concepts', []):
-            present = sum(1 for r in ok_rows if _concept_present(c, r['filters']))
-            concept_drop[c['name']] = {
-                'present_runs': present, 'ok_runs': len(ok_rows),
-                'drop_rate': round(1 - present / len(ok_rows), 2) if ok_rows else None,
-            }
-
-        per_query[q['id']] = {
-            'runs': rows,
-            'null_fallback_rate': round(
-                sum(r['null_fallback'] for r in rows) / len(rows), 2),
-            'unmatchable_values': unmatchable,
-            'concept_drop': concept_drop,
-            'elapsed_p50': round(statistics.median(r['elapsed_s'] for r in rows), 2),
-        }
-
-    all_rows = [r for pq in per_query.values() for r in pq['runs']]
-    return {
-        'per_query': per_query,
-        'summary': {
-            'total_runs': len(all_rows),
-            'null_fallback_rate': round(
-                sum(r['null_fallback'] for r in all_rows) / len(all_rows), 3)
-            if all_rows else None,
-            'queries_with_unmatchable': sum(
-                1 for pq in per_query.values() if pq['unmatchable_values']),
-            'queries_with_hard_empty': sum(
-                1 for pq in per_query.values()
-                if any(u['severity'] == 'HARD-EMPTY' for u in pq['unmatchable_values'])),
-        },
-    }
 
 
 # ---------------------------------------------------------------- phase C
@@ -376,25 +229,17 @@ def _truth_matches(concept: dict, metadata: dict) -> bool:
 
 
 def run_search_battery(queries: list[dict], limit: int) -> dict:
-    # Phase B (parser battery) can run long enough for Neon to idle-close the
-    # buildings connection (hit 2026-08-04 with slower OpenAI parses:
-    # InterfaceError 'connection already closed'). Force a fresh connection.
-    from django.db import connections
-    connections['buildings'].close()
     per_query = {}
     for q in queries:
         t0 = time.time()
-        parsed = services.parse_query([{'role': 'user', 'text': q['query']}])
-        filters = {k: v for k, v in (parsed.get('filters') or {}).items() if v is not None}
-        results = []
-        if filters or (parsed.get('raw_query') or '').strip():
-            results = engine.search_by_filters_scored(
-                filters,
-                raw_query=parsed.get('raw_query') or q['query'],
-                filter_priority=parsed.get('filter_priority') or [],
-                limit=limit,
-                image_focus=parsed.get('image_focus'),
-            )
+        # No LLM parsing (old Gemini chat parser removed): raw query text only.
+        filters = {}
+        results = engine.search_by_filters_scored(
+            filters,
+            raw_query=q['query'],
+            filter_priority=[],
+            limit=limit,
+        )
         is_fallback = not results
         elapsed = round(time.time() - t0, 2)
 
@@ -478,9 +323,6 @@ def run_image_health(search_out: dict) -> dict:
 # ---------------------------------------------------------------- diff + report
 def _flatten_metrics(run: dict) -> dict[str, float]:
     m = {}
-    ps = run.get('parser', {}).get('summary', {})
-    if ps.get('null_fallback_rate') is not None:
-        m['parser.null_fallback_rate'] = ps['null_fallback_rate'] * 100
     for qid, pq in run.get('search', {}).get('per_query', {}).items():
         for cname, c in pq.get('concepts', {}).items():
             m[f'search.{qid}.{cname}.tag_match_at_10'] = c['tag_match_at_10'] * 100
@@ -510,19 +352,6 @@ def diff_vs_previous(current: dict) -> dict | None:
 
 def print_summary(run: dict) -> None:
     print('\n== DB QC scorecard ==')
-    ps = run.get('parser', {}).get('summary')
-    if ps:
-        print(f"parser: {ps['total_runs']} runs | null-fallback "
-              f"{ps['null_fallback_rate']:.0%} | unmatchable-value queries "
-              f"{ps['queries_with_unmatchable']} (HARD-EMPTY {ps['queries_with_hard_empty']})")
-        for qid, pq in run['parser']['per_query'].items():
-            for u in pq['unmatchable_values']:
-                print(f"  !! {qid}: {u['axis']}={u['value']!r} matches 0 buildings "
-                      f"[{u['severity']}]")
-            for cname, c in pq['concept_drop'].items():
-                if c['drop_rate']:
-                    print(f"  -- {qid}: concept '{cname}' dropped in "
-                          f"{c['drop_rate']:.0%} of runs")
     for qid, pq in run.get('search', {}).get('per_query', {}).items():
         parts = [f"{c}:{v['tag_match_at_10']:.0%}@10"
                  + (f" pos_top10={v['positives_in_top10']}/{v['truth_total_in_db']}"
@@ -544,9 +373,7 @@ def print_summary(run: dict) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--queries', default=str(DEFAULT_QUERIES))
-    ap.add_argument('--parser-runs', type=int, default=5)
     ap.add_argument('--limit', type=int, default=100)
-    ap.add_argument('--skip-parser', action='store_true')
     ap.add_argument('--skip-images', action='store_true')
     ap.add_argument('--only', default='', help='comma-separated query ids')
     args = ap.parse_args()
@@ -562,7 +389,6 @@ def main() -> int:
     # BACK-LLM-PROVIDER-1: stamp provider/model so A/B matrix runs are self-describing.
     _is_openai = settings.LLM_PROVIDER == 'openai'
     run: dict = {'ts': _now_stamp(), 'n_queries': len(queries),
-                 'parser_runs': 0 if args.skip_parser else args.parser_runs,
                  'llm_provider': settings.LLM_PROVIDER,
                  'llm_model': settings.OPENAI_TEXT_MODEL if _is_openai else settings.GEMINI_TEXT_MODEL}
     t0 = time.time()
@@ -579,15 +405,6 @@ def main() -> int:
     run['vocab_snapshot_drift'] = diff_vocab_vs_snapshot(_vocab_dump)
     for w in run['vocab_snapshot_drift']:
         print(f'  WARN {w}')
-    run['few_shot_conformance'] = check_few_shot_conformance()
-    for w in run['few_shot_conformance']:
-        print(f'  WARN {w}')
-
-    if not args.skip_parser:
-        print(f'[B] parser battery ({len(queries)} x {args.parser_runs} Gemini calls)...',
-              flush=True)
-        run['parser'] = run_parser_battery(queries, args.parser_runs)
-
     print(f'[C] search battery ({len(queries)} queries)...', flush=True)
     run['search'] = run_search_battery(queries, args.limit)
 
@@ -605,10 +422,7 @@ def main() -> int:
     print_summary(run)
     print(f"\nrun saved: {out_path}  ({run['elapsed_s']}s)")
 
-    hard_fail = (
-        run.get('parser', {}).get('summary', {}).get('queries_with_hard_empty', 0) > 0
-        or bool(run.get('diff') and run['diff']['regressions'])
-    )
+    hard_fail = bool(run.get('diff') and run['diff']['regressions'])
     return 1 if hard_fail else 0
 
 

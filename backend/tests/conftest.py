@@ -55,7 +55,7 @@ def _clear_cache():
 def _patch_get_buildings_by_ids():
     with patch(
         'apps.recommendation.engine.get_buildings_by_ids',
-        side_effect=lambda ids, image_focus=None: [_fake_card(bid) for bid in ids if bid],
+        side_effect=lambda ids: [_fake_card(bid) for bid in ids if bid],
     ):
         yield
 
