@@ -158,6 +158,26 @@ def test_card_cancel_keeps_row(client):
     assert CardReport.objects.get().status == 'user_canceled'
 
 
+@pytest.mark.parametrize('verdict', ['fixed', 'not_fixed', 'user_canceled'])
+def test_card_cancel_keeps_owner_verdict(client, verdict):
+    with mock.patch(FETCH, return_value=dict(ROW)):
+        client.post(CARD, card_body(), format='json')
+    CardReport.objects.update(status=verdict)
+    r = client.post(CARD_CANCEL, {'round_key': 'r1760340000000', 'canonical_bld_id': 'bld_000344'},
+                    format='json')
+    assert r.status_code == 204
+    assert CardReport.objects.get().status == verdict
+
+
+@pytest.mark.parametrize('verdict', ['fixed', 'not_fixed', 'user_canceled'])
+def test_query_cancel_keeps_owner_verdict(client, verdict):
+    client.post(QUERY, query_body(), format='json')
+    QueryReport.objects.update(status=verdict)
+    r = client.post(QUERY_CANCEL, {'round_key': 'r1760340000001'}, format='json')
+    assert r.status_code == 204
+    assert QueryReport.objects.get().status == verdict
+
+
 def test_card_cancel_404(client):
     r = client.post(CARD_CANCEL, {'round_key': 'r1760340000099', 'canonical_bld_id': 'x'}, format='json')
     assert r.status_code == 404

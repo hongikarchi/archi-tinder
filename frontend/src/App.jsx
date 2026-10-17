@@ -403,6 +403,8 @@ export default function App() {
       if (!(err instanceof VerifyRequiredError)) {
         setSwipeError(err.message || 'Failed to start session')
       }
+      // Callers that need to know (handleStartTaste) read this; others ignore it.
+      return { failed: true, verify: err instanceof VerifyRequiredError }
     } finally {
       setIsSwipeLoading(false)
     }
@@ -652,7 +654,7 @@ export default function App() {
           } : p))
           // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
           // a temp project, but leave the sheet closed — the ResultsPage CTA
-          // opens it. project.isTemp was set in handleStart (snapshot above).
+          // opens it. project.isTemp was set in handleStartTaste (snapshot above).
           if (reportData?.final_report && backendId && project?.isTemp) {
             setSaveModalProject({
               backendId,
@@ -831,8 +833,17 @@ export default function App() {
       isTemp: true, // backend creates project with is_temp=True; saved on board save
     }])
     setActiveProjectId(localId)
+    // Stay on the start page until the POST succeeds so a failure never leaves
+    // an orphan local project (sessionId null) on /swipe.
+    const r = await initSession(localId, {}, null, null, name, rawQuery || '', false, options)
+    if (r?.failed) {
+      setProjects(prev => prev.filter(p => p.id !== localId))
+      setActiveProjectId(prev => (prev === localId ? null : prev))
+      setSwipeError(null)
+      return r.verify ? 'verify' : 'error'
+    }
     navigate('/swipe')
-    await initSession(localId, {}, null, null, name, rawQuery || '', false, options)
+    return 'ok'
   }
 
   async function handleLogin(user) {

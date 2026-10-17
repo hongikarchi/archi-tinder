@@ -85,6 +85,10 @@ function TagChip({ tag, matched, language, t }) {
     >
       <span aria-hidden="true">{matched ? '✓' : '✕'}</span>
       {tagLabel(tag, language)}
+      <span style={{
+        position: 'absolute', width: 1, height: 1, margin: -1, padding: 0,
+        overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0,
+      }}>{` (${matched ? t('search.tasteTagMatched') : t('search.tasteTagMissed')})`}</span>
     </span>
   )
 }
@@ -177,6 +181,7 @@ function CardStack({ round, index, onStep, rankLabel, t, language, onSubmitRepor
       className={ps.stack}
       tabIndex={0}
       role="group"
+      aria-label={t('search.tasteCardStackAria')}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={e => finish(e, false)}
@@ -429,8 +434,8 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
 
       {isLatest && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, width: '100%', alignSelf: 'center' }}>
-          <button type="button" className={ps.ctaPrimary} disabled={kept === 0 || busy || starting} onClick={() => onStart(round)}>
-            {kept === n ? t('search.tasteStartSwiping') : t('search.tasteStartSwipingN', { n: kept })}
+          <button type="button" className={ps.ctaPrimary} disabled={kept === 0 || busy || starting} onClick={() => onStart(round)} aria-busy={starting}>
+            {starting ? t('search.tasteStarting') : kept === n ? t('search.tasteStartSwiping') : t('search.tasteStartSwipingN', { n: kept })}
           </button>
           <button type="button" className={ps.ctaSecondary} disabled={busy || starting || round.exhausted} onClick={() => onFindAgain(round.id)}>
             {t('search.tasteFindAgain')}
@@ -462,6 +467,7 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
   const roundsRef = useRef(rounds)
   const [sheetRoundId, setSheetRoundId] = useState(null) // round whose query-report sheet is open
   const sheetOpenRef = useRef(false)
+  const recognizeReq = useRef(0) // request-id: stale recognize responses are ignored
 
   useEffect(() => { roundsRef.current = rounds }, [rounds])
   useEffect(() => { sheetOpenRef.current = sheetRoundId !== null }, [sheetRoundId])
@@ -508,6 +514,11 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
   }
 
   function errorMessage(err) {
+    if (err?.status === 403 && err?.data?.detail === 'verify_required') {
+      const reason = err?.data?.reason || 'board_limit_reached'
+      window.dispatchEvent(new CustomEvent('archithon:verify-required', { detail: { reason } }))
+      return ''
+    }
     return err?.status === 429 ? t('search.tasteRateLimited') : t('search.tasteError')
   }
 
@@ -516,8 +527,10 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
     if (!text || pending) return
     setError('')
     setPending({ text })
+    const reqId = ++recognizeReq.current
     try {
       const res = await recognizeTaste({ text })
+      if (reqId !== recognizeReq.current) return
       const round = {
         id: `r${Date.now()}`,
         text,
@@ -533,9 +546,10 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
       setRounds(prev => [...prev, round])
       setInput('')
     } catch (err) {
+      if (reqId !== recognizeReq.current) return
       setError(errorMessage(err)) // typed text stays in the composer
     } finally {
-      setPending(null)
+      if (reqId === recognizeReq.current) setPending(null)
     }
   }
 
@@ -566,21 +580,24 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
     })
     if (startIds.length === 0) return
     setStarting(true)
-    try { sessionStorage.removeItem(storageKey) } catch { /* ignore */ }
+    setError('')
+    let status = 'error'
     try {
-      await onStartTaste({
+      status = await onStartTaste({
         projectName: '',
         rawQuery: round.text,
         tags: round.tags,
         startIds,
         excludeIds,
       })
-    } catch {
-      setError(t('search.tasteStartFailed'))
-      try { sessionStorage.setItem(storageKey, JSON.stringify(roundsRef.current)) } catch { /* ignore */ }
-    } finally {
-      setStarting(false)
+    } catch { status = 'error' }
+    // Keep the conversation in sessionStorage until the session really started.
+    if (status === 'ok') {
+      try { sessionStorage.removeItem(storageKey) } catch { /* ignore */ }
+    } else if (status !== 'verify') {
+      setError(t('search.tasteStartFailed')) // the verify modal is the only UI for 403
     }
+    setStarting(false)
   }
 
   function notify(message, type = 'info') { showToast?.({ message, type }) }
@@ -673,6 +690,7 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
 
   function handleNewConversation() {
     if (rounds.length > 0 && !window.confirm(t('search.newConversationConfirm'))) return
+    recognizeReq.current++ // invalidate any in-flight recognize
     setRounds([])
     setPending(null)
     setInput('')

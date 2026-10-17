@@ -93,6 +93,23 @@ class TestEnsureV2:
         assert (s.original_filters, s.pool_scores, s.initial_batch) == snapshot
         assert score_ids.call_count == calls
 
+    def test_promoted_legacy_session_gets_seed_round_offset(self, score_ids):
+        # promote path: seeds stored with round 0, current_round starts at their count;
+        # later real swipes carry round = current_round >= 1.
+        likes = [{'id': f'S{i}', 'round': 0} for i in range(10)] + [{'id': 'L1', 'round': 12}]
+        s = legacy_session(current_round=13)
+        s.like_vectors = likes
+        assert sp.ensure_v2(s) is True
+        assert s.original_filters['round_offset'] == 10
+        assert sp.swipes_in_session(s) == 3
+        assert not swipe_rules.convergence_floor_met(sp.swipes_in_session(s))
+
+    def test_normal_legacy_session_offset_stays_zero(self, score_ids):
+        s = legacy_session(current_round=6)
+        s.like_vectors = [{'id': 'L1', 'round': 2}, {'id': 'L2', 'round': 5}]
+        sp.ensure_v2(s)
+        assert s.original_filters['round_offset'] == 0
+
     def test_existing_v2_session_untouched(self, score_ids):
         s = legacy_session(original_filters={'selector': 'taste_v2', 'taste_tags': [],
                                              'round_offset': 4},

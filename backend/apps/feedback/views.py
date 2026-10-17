@@ -1,9 +1,9 @@
 """Taste-start feedback endpoints (TASTE-FEEDBACK-1). All IsAuthenticated + throttled.
 
 POST feedback/card-reports/           upsert a report on one card (user, round_key, building)
-POST feedback/card-reports/cancel/    mark it user_canceled (row kept)
+POST feedback/card-reports/cancel/    mark it user_canceled if still unreviewed (row kept)
 POST feedback/query-reports/          upsert a report on a recognised sentence (user, round_key)
-POST feedback/query-reports/cancel/   mark it user_canceled (row kept)
+POST feedback/query-reports/cancel/   mark it user_canceled if still unreviewed (row kept)
 """
 import logging
 
@@ -72,6 +72,13 @@ def _upsert(model, lookup, defaults, compare):
         except IntegrityError:
             if attempt:
                 raise
+
+
+def _cancel(qs):
+    """Cancel own report: only `unreviewed` -> `user_canceled`; an owner verdict
+    (fixed / not_fixed) or an earlier cancel is left as is. True when a row exists."""
+    qs.filter(status='unreviewed').update(status='user_canceled')
+    return qs.exists()
 
 
 def _profile(request):
@@ -149,10 +156,9 @@ class CardReportCancelView(APIView):
         bld_id = request.data.get('canonical_bld_id')
         if not isinstance(round_key, str) or not round_key or not isinstance(bld_id, str) or not bld_id:
             return _bad('round_key and canonical_bld_id are required')
-        n = CardReport.objects.filter(
-            user=profile, round_key=round_key, canonical_bld_id=bld_id,
-        ).update(status='user_canceled')
-        if not n:
+        qs = CardReport.objects.filter(
+            user=profile, round_key=round_key, canonical_bld_id=bld_id)
+        if not _cancel(qs):
             return Response({'detail': 'not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -202,9 +208,7 @@ class QueryReportCancelView(APIView):
         round_key = request.data.get('round_key')
         if not isinstance(round_key, str) or not round_key:
             return _bad('round_key is required')
-        n = QueryReport.objects.filter(
-            user=profile, round_key=round_key,
-        ).update(status='user_canceled')
-        if not n:
+        qs = QueryReport.objects.filter(user=profile, round_key=round_key)
+        if not _cancel(qs):
             return Response({'detail': 'not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)

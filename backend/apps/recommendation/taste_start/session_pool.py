@@ -107,13 +107,25 @@ def build_pool(tags, start_ids, exclude_ids, head_ids=None):
 UPGRADE_FIELDS = ['original_filters', 'pool_scores', 'initial_batch']
 
 
+def _seeded_like_count(session):
+    """Likes injected at promote time. The promote path stores them in like_vectors
+    with round 0 (and starts current_round at their count); real swipes are stored
+    with round = current_round >= 1, so normal sessions yield 0."""
+    n = 0
+    for lv in getattr(session, 'like_vectors', None) or []:
+        if isinstance(lv, dict) and lv.get('round') == 0:
+            n += 1
+    return min(n, max(0, int(session.current_round or 0)))
+
+
 def ensure_v2(session):
     """Lazily upgrade a pre-v2 (marker-less) session in memory. Returns True if changed.
 
     Tags come from the board's stored v2 tags if present, else from the session's
     old filters. pool_scores are recomputed (legacy scores use another scale),
     initial_batch is cleared (unexposed legacy start cards are not re-served) and
-    the selector marker + round_offset=0 are set. The CALLER saves UPGRADE_FIELDS
+    the selector marker + round_offset (= seeded likes of a promote session, else 0,
+    mirroring discovery promote) are set. The CALLER saves UPGRADE_FIELDS
     inside the transaction / row lock it already holds (see ensure_v2_locked).
     """
     if is_v2(session):
@@ -126,7 +138,7 @@ def ensure_v2(session):
     session.pool_scores = _scores_for(tags, list(session.pool_ids or []))
     session.original_filters = {
         **old, SELECTOR_KEY: SELECTOR_V2,
-        'taste_tags': [t.to_dict() for t in tags], 'round_offset': 0,
+        'taste_tags': [t.to_dict() for t in tags], 'round_offset': _seeded_like_count(session),
     }
     session.initial_batch = []
     return True

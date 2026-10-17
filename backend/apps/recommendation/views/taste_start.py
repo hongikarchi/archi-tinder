@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from .. import engine
 from ..taste_start import matching, recognize_tags, tag_io
-from ..throttles import LLMSearchThrottle
+from ..throttles import LLMSearchThrottle, TasteRecognizeDailyThrottle
 
 logger = logging.getLogger('apps.recommendation')
 
@@ -75,7 +75,7 @@ def _build_cards(tags, exclude_ids):
 
 class TasteRecognizeView(APIView):
     permission_classes = [IsAuthenticated]
-    throttle_classes = [LLMSearchThrottle]
+    throttle_classes = [LLMSearchThrottle, TasteRecognizeDailyThrottle]
 
     def post(self, request):
         text = request.data.get('text')
