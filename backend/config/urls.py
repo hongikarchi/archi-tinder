@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/v1/', include('apps.contests.urls')),
     path('api/v1/', include('apps.notifications.urls')),
     path('api/v1/', include('apps.messaging.urls')),
+    path('api/v1/', include('apps.feedback.urls')),
     path('api/v1/admin/dashboard/', include('apps.admin_dashboard.urls')),
     path('api/v1/works/', include('apps.works.urls')),
 ]

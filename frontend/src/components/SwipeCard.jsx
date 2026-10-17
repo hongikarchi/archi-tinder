@@ -53,7 +53,7 @@ function easeInOutCubic(t) {
 // two different downloads, decode collision still there. Keyed by url only
 // (matches the mounted image's identity); srcset rides along when present.
 const galleryPreloaded = new Set()
-function preloadImg(url, srcset) {
+export function preloadImg(url, srcset) {
   if (!url || galleryPreloaded.has(url)) return
   galleryPreloaded.add(url)
   const i = new Image()
@@ -78,7 +78,7 @@ export function computeFit(imgRatio, isDrawing, cardRatio) {
 }
 
 /* ── InfoRow ─────────────────────────────────────────────────────────────── */
-function InfoRow({ label, value }) {
+export function InfoRow({ label, value }) {
   if (!value) return null
   return (
     <div>

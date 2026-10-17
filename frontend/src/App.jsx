@@ -1076,7 +1076,7 @@ export default function App() {
           <Route index element={<Navigate to="/discovery" replace />} />
           <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
-            <TasteStartPage onStartTaste={handleStartTaste} onLogout={handleLogout} />
+            <TasteStartPage onStartTaste={handleStartTaste} onLogout={handleLogout} showToast={setGlobalToast} />
           } />
           <Route path="swipe" element={null} />
           <Route path="library" element={<Navigate to="/user/me" replace />} />
@@ -1129,7 +1129,7 @@ export default function App() {
       {globalToast && (
         <div style={{
           position: 'fixed',
-          bottom: 'var(--tabbar-clearance)',
+          bottom: location.pathname === '/search' ? 'calc(var(--tabbar-clearance) + 76px)' : 'var(--tabbar-clearance)',
           left: '50%',
           transform: 'translateX(-50%)',
           background: 'color-mix(in srgb, var(--color-surface, #F6F8FA) 72%, transparent)',

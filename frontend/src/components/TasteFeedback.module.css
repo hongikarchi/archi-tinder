@@ -1,0 +1,213 @@
+/* Taste-start card feedback — interactive states only; layout inline (DESIGN.md §4).
+   The card overlays sit on photos, so white-on-dark values mirror SwipeCard's
+   detail overlay rather than themed surfaces. */
+
+.reportBtn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--color-scrim);
+  color: #fff;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
+}
+.reportBtn:active { transform: scale(0.92); }
+.reportBtn:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.reportBtn svg { width: 13px; height: 13px; }
+/* Reported: amber (no warning token exists in tokens.css yet) with dark icon. */
+.reportBtnOn {
+  background: #d29922;
+  border-color: #d29922;
+  color: #1f2328;
+}
+
+.veil {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(to top, rgba(10, 12, 16, 0.92) 0%, rgba(10, 12, 16, 0.7) 45%, rgba(10, 12, 16, 0.45) 100%);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--motion-ease);
+}
+.veilOn { opacity: 1; pointer-events: auto; }
+
+.panelIn {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px;
+  color: #fff;
+  max-height: calc(100% - 48px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  cursor: default;
+}
+.panelIn::-webkit-scrollbar { display: none; }
+.panelTitle { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+
+.rtg { display: flex; flex-wrap: wrap; gap: 5px; }
+.tgc {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+}
+.tgc:hover { background: rgba(255, 255, 255, 0.14); }
+.tgc:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 1px; }
+.tgcSel, .tgcSel:hover { border-color: #fff; background: #fff; color: #1f2328; }
+.tgcBad, .tgcBad:hover {
+  border-color: var(--color-destructive);
+  background: color-mix(in srgb, var(--color-destructive) 45%, transparent);
+  color: #fff;
+}
+
+.sub2 { margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.subHint { font-size: 10px; line-height: 1.4; color: rgba(255, 255, 255, 0.55); margin-bottom: 6px; }
+
+.pr2 { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+.pr2Input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  outline: none;
+}
+.pr2Input::placeholder { color: rgba(255, 255, 255, 0.4); }
+.pr2Input:focus { border-color: rgba(255, 255, 255, 0.6); }
+.pr2Btn {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.pr2Btn:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 1px; }
+.btnNo { background: transparent; border: 1px solid rgba(255, 255, 255, 0.25); color: rgba(255, 255, 255, 0.8); }
+.btnDel { background: transparent; border: none; color: rgba(255, 255, 255, 0.6); text-decoration: underline; padding: 6px 4px; }
+.btnYes { background: #fff; border: 1px solid #fff; color: #1f2328; }
+.btnYes:disabled { opacity: 0.4; cursor: default; }
+.btnNo:disabled, .btnDel:disabled { opacity: 0.4; cursor: default; }
+
+.galBtn {
+  margin-top: 12px;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+.galBtn:hover { background: rgba(255, 255, 255, 0.16); }
+.galBtn:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+
+.galClose {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.galClose:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+
+.galScroll { scrollbar-width: none; }
+.galScroll::-webkit-scrollbar { display: none; }
+
+/* round-level (query) report */
+.queryLink {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--color-text-dim);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-align: left;
+}
+.queryLink:hover { color: var(--color-text-muted); }
+.queryLink:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; border-radius: 4px; }
+
+.sheetSub { font-size: 12px; color: var(--color-text-muted); margin: 0 0 12px; line-height: 1.5; }
+.sheetLabel { font-size: 11px; color: var(--color-text-muted); margin-bottom: 6px; }
+.pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.spk {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-soft);
+  background: var(--color-bg);
+  color: var(--color-text-2);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+}
+.spk:hover { border-color: var(--color-text-dim); }
+.spk:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.spkSel, .spkSel:hover { border-color: var(--color-destructive); color: var(--color-destructive); }
+.sheetTextarea {
+  width: 100%;
+  min-height: 64px;
+  box-sizing: border-box;
+  resize: none;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--color-input-bg);
+  color: var(--color-text-2);
+  outline: none;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+.sheetTextarea:focus { border-color: var(--accent-1); }
+.sheetRow { display: flex; gap: 8px; margin-top: 12px; }
+.sheetRow > button { flex: 1; width: auto; }
