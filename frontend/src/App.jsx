@@ -24,12 +24,15 @@ import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagin
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
+import { ONBOARDING_FLAG_KEY } from './utils/onboardingFlag.js'
 
 // ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
 // stay out of the eager import graph. Gated by AdminGate (UX only; the backend
 // IsAdminOperator permission is the real gate).
 const AdminPage = lazy(() => import('./pages/admin/AdminPage.jsx'))
 const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage.jsx'))
+const KakaoCallbackPage = lazy(() => import('./pages/KakaoCallbackPage.jsx'))
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
@@ -853,6 +856,9 @@ export default function App() {
       api.setTokens(user.access, user.refresh)
     }
     sessionStorage.setItem('archithon_user', id)
+    const needsOnboarding = typeof user === 'object' && user.onboarding_required === true
+    if (needsOnboarding) sessionStorage.setItem(ONBOARDING_FLAG_KEY, '1')
+    else sessionStorage.removeItem(ONBOARDING_FLAG_KEY)
     // Clear Discovery draft session so a re-login always starts a brand-new collection.
     // Same four keys as handleLogout — prevents a stale draftLikeCount >= 10 from
     // triggering a premature Taste card on the next Discovery visit.
@@ -868,7 +874,7 @@ export default function App() {
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
-    navigate('/')
+    navigate(needsOnboarding ? '/onboarding' : '/')
 
     // Sync projects from backend (if JWT available)
     try {
@@ -917,6 +923,7 @@ export default function App() {
     purgeChatCache()
     reportImageJobs.reset()
     sessionStorage.removeItem('archithon_user')
+    sessionStorage.removeItem(ONBOARDING_FLAG_KEY)
     // Clear Discovery session so a re-login starts a brand-new collection
     sessionStorage.removeItem('discovery_draft_id')
     sessionStorage.removeItem('discovery_draft_likes')
@@ -1077,6 +1084,20 @@ export default function App() {
               <LoginPage onLogin={handleLogin} />
             </Suspense>
           )
+        } />
+
+        <Route path="/auth/kakao/callback" element={
+          <Suspense fallback={<RouteFallback />}>
+            <KakaoCallbackPage onLogin={handleLogin} />
+          </Suspense>
+        } />
+
+        <Route path="/onboarding" element={
+          userId ? (
+            <Suspense fallback={<RouteFallback />}>
+              <OnboardingPage />
+            </Suspense>
+          ) : <Navigate to="/login" replace />
         } />
 
         <Route element={

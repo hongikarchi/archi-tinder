@@ -10,6 +10,7 @@ from .views import (
     RegisterView, PasswordLoginView, SetPasswordView, LinkEmailView,
     # LOGIN-ONBOARD-1: unified ID check
     CheckHandleView,
+    OnboardingView,
     # SETTINGS-POLISH-1: public role-list metadata
     RolesView,
     # Personality assessment + discovery opt-in
@@ -32,6 +33,7 @@ urlpatterns = [
     path('auth/social/kakao/',       KakaoLoginView.as_view()),
     path('auth/social/naver/',       NaverLoginView.as_view()),
     path('auth/token/refresh/',      TokenRefreshView.as_view()),
+    path('auth/onboarding/',         OnboardingView.as_view(), name='auth-onboarding'),
     path('auth/me/',                 MeView.as_view()),
     path('auth/logout/',             LogoutView.as_view()),
     # Phase 13 PROF2 — UserProfile endpoints

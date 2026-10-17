@@ -35,6 +35,7 @@ from .auth import (  # noqa: F401
     GuestPromoteView,
     GoogleLoginView,
     KakaoLoginView,
+    OnboardingView,
     NaverLoginView,
     DevLoginView,
     TokenRefreshView,
