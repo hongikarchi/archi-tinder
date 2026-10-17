@@ -32,16 +32,21 @@ class UserSerializer(serializers.ModelSerializer):
     email        = serializers.SerializerMethodField()
     has_password = serializers.SerializerMethodField()
     is_admin     = serializers.SerializerMethodField()
+    onboarding_required = serializers.SerializerMethodField()
 
     class Meta:
         model  = UserProfile
         fields = [
+            'onboarding_required',
             'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
             'language', 'is_guest', 'onboarding_role', 'consent_accepted_at', 'handle',
             'notifications', 'role', 'affiliation',
             # AUTH-LOGIN-1 self-only fields
             'email', 'email_verified_at', 'has_password', 'is_admin',
         ]
+
+    def get_onboarding_required(self, obj):
+        return obj.consent_accepted_at is None
 
     def get_providers(self, obj):
         return list(obj.social_accounts.values_list('provider', flat=True))

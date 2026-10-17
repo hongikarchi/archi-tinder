@@ -606,6 +606,11 @@ GOOGLE_CLIENT_ID  = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 KAKAO_CLIENT_ID   = os.getenv('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.getenv('KAKAO_CLIENT_SECRET', '')
+KAKAO_REDIRECT_URIS = [
+    u.strip() for u in os.getenv(
+        'KAKAO_REDIRECT_URIS', 'http://localhost:5174/auth/kakao/callback',
+    ).split(',') if u.strip()
+]
 NAVER_CLIENT_ID   = os.getenv('NAVER_CLIENT_ID', '')
 NAVER_CLIENT_SECRET = os.getenv('NAVER_CLIENT_SECRET', '')
 

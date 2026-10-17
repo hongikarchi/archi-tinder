@@ -60,11 +60,11 @@ def test_google_login_existing_user(api_client):
 
 
 @pytest.mark.django_db
-def test_google_login_no_account_returns_signup_required(api_client):
-    """Unregistered Google identity returns 404 signup_required.
+def test_google_login_no_account_creates_account(api_client):
+    """Unregistered Google identity creates an account needing onboarding.
 
-    LOGIN-ONBOARD-1 (PR #248): social login no longer creates new accounts.
-    A Google sub with no matching SocialAccount or email record returns 404.
+    FULL-AUTH-2: social-only signup — first social login creates the account;
+    the user then completes /auth/onboarding/ (consent_accepted_at is None).
     """
     mock_token_resp = MagicMock()
     mock_token_resp.status_code = 200
@@ -88,10 +88,10 @@ def test_google_login_no_account_returns_signup_required(api_client):
             format='json',
         )
 
-    assert response.status_code == 404
+    assert response.status_code == 200
     data = response.json()
-    assert data['detail'] == 'signup_required'
-    assert data['reason'] == 'no_account'
+    assert data['access'] and data['refresh']
+    assert data['user']['onboarding_required'] is True
 
 
 @pytest.mark.django_db

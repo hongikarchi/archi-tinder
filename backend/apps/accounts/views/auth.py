@@ -1,10 +1,11 @@
 import logging
 import os
+import secrets
 import unicodedata
 import uuid as _uuid
 import requests
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -22,7 +23,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 from ..authentication import invalidate_user_cache
 from ..models import UserProfile, SocialAccount
-from ..serializers import UserSerializer, validate_handle_value
+from ..serializers import (
+    UserSerializer, validate_handle_value, _HANDLE_RE, _HANDLE_RESERVED,
+)
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from ..throttling import (
     GuestLoginThrottle, GuestPromoteThrottle,
     RegisterThrottle, PasswordLoginThrottle, LinkEmailThrottle,
@@ -150,41 +154,73 @@ class DevLoginThrottle(AnonRateThrottle):
     rate = '5/minute'
 
 
+def _suggest_handle(nickname):
+    """Build a valid, unused unified ID (handle) from a provider nickname."""
+    base = unicodedata.normalize('NFC', nickname or '')
+    base = ''.join(c for c in base if _HANDLE_RE.fullmatch(c))[:16]
+    if len(base) < 2 or base.lower() in _HANDLE_RESERVED:
+        base = 'user'
+    candidate = base
+    for _ in range(20):
+        if not UserProfile.objects.filter(handle__iexact=candidate).exists():
+            return candidate
+        candidate = f'{base}{secrets.randbelow(10 ** (2 + secrets.randbelow(3)))}'
+    return f'{base[:10]}{secrets.randbelow(10 ** 8):08d}'
+
+
+def _create_social_user(provider, provider_id, email, display_name, avatar_url,
+                        email_verified):
+    handle = _suggest_handle(display_name)
+    with transaction.atomic():
+        user = User(
+            username=f'social_{_uuid.uuid4().hex[:20]}',
+            email=email if (email and email_verified) else '',
+        )
+        user.set_unusable_password()
+        user.save()
+        profile = UserProfile.objects.create(
+            user=user,
+            handle=handle,
+            display_name=handle,
+            is_guest=False,
+            avatar_url=avatar_url or '',
+            consent_accepted_at=None,
+        )
+        SocialAccount.objects.create(
+            provider=provider, provider_id=provider_id, user=profile,
+        )
+    return profile
+
+
 def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
                         email_verified=False):
-    """Find an existing UserProfile for a social login; return None if not found.
+    """Find, link, or CREATE the UserProfile for a social login (never None).
 
-    LOGIN-ONBOARD-1: Branch (iii) create-new has been REMOVED. Social login
-    no longer creates new accounts. The frontend must guide users to register
-    first via id+password, then link their Google account.
+    Social-only signup: the first social login creates the account
+    (consent_accepted_at=None -> frontend must call POST /auth/onboarding/).
 
     SECURITY (account-takeover mitigation):
       email_verified must be True before we allow an email-address match to
-      link a new social credential into an existing account.  An attacker who
-      registers a provider account with an UNVERIFIED email equal to a victim's
-      address would otherwise gain full access to the victim's account.
+      link a new social credential into an existing account, and before the
+      email is stored on a newly created account.
 
-    Branch (i)  — existing SocialAccount: always safe, unchanged.
-    Branch (ii) — email match: runs ONLY when email AND email_verified=True.
-    Branch (iii)— [REMOVED] create new: callers handle None return with 404/400.
+    Branch (i)  - existing SocialAccount: always safe.
+    Branch (ii) - email match: runs ONLY when email AND email_verified=True.
+    Branch (iii)- create new user + profile + SocialAccount (atomic; one retry
+                  with a fresh handle suggestion on IntegrityError).
     """
-    # (i) pre-check: existing social credential → return immediately (safe)
+    # (i) pre-check: existing social credential -> return immediately (safe)
     social = SocialAccount.objects.filter(provider=provider, provider_id=provider_id).first()
     if social:
         profile = social.user
-        # LOGIN-ONBOARD-1: display_name is now the user-owned unified ID (== handle).
-        # Do NOT overwrite it from the provider's free-form name on every re-login —
-        # that would silently clobber the user's chosen unified ID with e.g. 'John Smith'.
+        # display_name is the user-owned unified ID (== handle): never overwrite.
         # avatar_url is provider-managed and safe to sync.
-        update_fields = []
         if avatar_url:
             profile.avatar_url = avatar_url
-            update_fields.append('avatar_url')
-        if update_fields:
-            profile.save(update_fields=update_fields)
+            profile.save(update_fields=['avatar_url'])
         return profile
 
-    # (ii) email-match account linking — ONLY when provider confirms email ownership
+    # (ii) email-match account linking - ONLY when provider confirms email ownership
     profile = None
     if email and email_verified:
         existing_user = User.objects.filter(email=email).first()
@@ -192,16 +228,9 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
             profile = getattr(existing_user, 'profile', None)
 
     if profile is not None:
-        # LOGIN-ONBOARD-1: display_name is now the user-owned unified ID (== handle).
-        # Do NOT overwrite it from the provider's free-form name — see branch (i) comment.
-        # avatar_url is provider-managed and safe to sync.
-        update_fields = []
         if avatar_url:
             profile.avatar_url = avatar_url
-            update_fields.append('avatar_url')
-        if update_fields:
-            profile.save(update_fields=update_fields)
-
+            profile.save(update_fields=['avatar_url'])
         SocialAccount.objects.get_or_create(
             provider=provider,
             provider_id=provider_id,
@@ -209,8 +238,21 @@ def _get_or_create_user(provider, provider_id, email, display_name, avatar_url,
         )
         return profile
 
-    # No existing account found — return None; caller returns signup_required.
-    return None
+    # (iii) create
+    try:
+        return _create_social_user(
+            provider, provider_id, email, display_name, avatar_url, email_verified,
+        )
+    except IntegrityError:
+        # Handle race (or concurrent same-provider signup): retry once.
+        social = SocialAccount.objects.filter(
+            provider=provider, provider_id=provider_id,
+        ).first()
+        if social:
+            return social.user
+        return _create_social_user(
+            provider, provider_id, email, display_name, avatar_url, email_verified,
+        )
 
 
 def _make_token_response(profile):
@@ -463,83 +505,57 @@ class GoogleLoginView(APIView):
         access_token = request.data.get('access_token')
         code = request.data.get('code')
 
-        # Auth-code flow: exchange code for access_token
         if code and not access_token:
             try:
-                token_resp = requests.post(
-                    'https://oauth2.googleapis.com/token',
-                    data={
-                        'code': code,
-                        'client_id': settings.GOOGLE_CLIENT_ID,
-                        'client_secret': settings.GOOGLE_CLIENT_SECRET,
-                        'redirect_uri': 'postmessage',
-                        'grant_type': 'authorization_code',
-                    },
+                info = _exchange_google_code(code)
+            except ValueError as exc:
+                logger.warning('Google code exchange failed: %s', exc)
+                return Response(
+                    {'detail': 'Google token exchange failed'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        elif access_token:
+            try:
+                resp = requests.get(
+                    'https://www.googleapis.com/oauth2/v3/userinfo',
+                    headers={'Authorization': f'Bearer {access_token}'},
                     timeout=10,
                 )
-                if token_resp.status_code != 200:
-                    logger.warning(
-                        'Google token exchange failed: status=%d body=%s',
-                        token_resp.status_code, token_resp.text[:300],
-                    )
-                    detail = 'Google token exchange failed'
-                    if settings.DEBUG:
-                        detail += f' (status={token_resp.status_code})'
-                    return Response({'detail': detail}, status=status.HTTP_401_UNAUTHORIZED)
-                token_data = token_resp.json()
-                access_token = token_data.get('access_token')
-                if not access_token:
-                    logger.warning('Google token exchange returned no access_token: %s', token_data)
-                    return Response(
-                        {'detail': 'Google token exchange returned no access_token'},
-                        status=status.HTTP_401_UNAUTHORIZED,
-                    )
-            except requests.RequestException as e:
-                logger.error('Google token exchange network error: %s', e)
+            except requests.RequestException as exc:
+                logger.error('Google userinfo network error: %s', exc)
                 return Response(
-                    {'detail': 'Google token exchange network error'},
+                    {'detail': 'Google network error'},
                     status=status.HTTP_502_BAD_GATEWAY,
                 )
-
-        if not access_token:
+            if resp.status_code != 200:
+                logger.warning('Google userinfo failed: status=%d', resp.status_code)
+                return Response(
+                    {'detail': 'Failed to validate Google token'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            raw = resp.json()
+            info = {
+                'provider_id':    raw['sub'],
+                'email':          raw.get('email', ''),
+                'display_name':   raw.get('name', ''),
+                'avatar_url':     raw.get('picture', ''),
+                'email_verified': bool(raw.get('email_verified', False)),
+            }
+        else:
             return Response(
                 {'detail': 'access_token or code required'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        resp = requests.get(
-            'https://www.googleapis.com/oauth2/v3/userinfo',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            logger.warning(
-                'Google userinfo failed: status=%d body=%s',
-                resp.status_code, resp.text[:300],
-            )
-            detail = 'Failed to validate Google token'
-            if settings.DEBUG:
-                detail += f' (userinfo returned {resp.status_code})'
-            return Response({'detail': detail}, status=status.HTTP_401_UNAUTHORIZED)
-
-        info = resp.json()
-        # SECURITY: pass email_verified so _get_or_create_user only links by
-        # email when Google confirms the address belongs to this account.
+        # SECURITY: email_verified gates email linking / storage.
         profile = _get_or_create_user(
             provider='google',
-            provider_id=info['sub'],
+            provider_id=info['provider_id'],
             email=info.get('email'),
-            display_name=info.get('name'),
-            avatar_url=info.get('picture'),
+            display_name=info.get('display_name'),
+            avatar_url=info.get('avatar_url'),
             email_verified=bool(info.get('email_verified', False)),
         )
-        # LOGIN-ONBOARD-1: social login no longer creates accounts.
-        # Brand-new Google login (no matching account) → require id+password signup first.
-        if profile is None:
-            return Response(
-                {'detail': 'signup_required', 'reason': 'no_account'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
         logger.info('Google login: user=%s', profile.pk)
 
         # NOTIF-INAPP-1: new-device login detection (mirrors PasswordLoginView).
@@ -553,47 +569,153 @@ class GoogleLoginView(APIView):
 
 # -- Kakao -----------------------------------------------------------------
 
+def _exchange_kakao_code(code, redirect_uri):
+    """Exchange a Kakao auth code for user info dict (module-level for monkeypatching).
+
+    Returns {provider_id, email, email_verified, display_name, avatar_url}.
+    Raises ValueError on any failure. Never logs tokens/secrets.
+    """
+    data = {
+        'grant_type': 'authorization_code',
+        'client_id': settings.KAKAO_CLIENT_ID,
+        'redirect_uri': redirect_uri,
+        'code': code,
+    }
+    if settings.KAKAO_CLIENT_SECRET:
+        data['client_secret'] = settings.KAKAO_CLIENT_SECRET
+    try:
+        token_resp = requests.post(
+            'https://kauth.kakao.com/oauth/token', data=data, timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise ValueError('Kakao token exchange network error') from exc
+    if token_resp.status_code != 200:
+        raise ValueError(f'Kakao token exchange failed: status={token_resp.status_code}')
+    try:
+        access_token = token_resp.json().get('access_token')
+    except ValueError as exc:
+        raise ValueError('Kakao token exchange returned invalid JSON') from exc
+    if not access_token:
+        raise ValueError('Kakao token exchange returned no access_token')
+
+    try:
+        me_resp = requests.get(
+            'https://kapi.kakao.com/v2/user/me',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise ValueError('Kakao user/me network error') from exc
+    if me_resp.status_code != 200:
+        raise ValueError(f'Kakao user/me failed: status={me_resp.status_code}')
+    try:
+        info = me_resp.json()
+    except ValueError as exc:
+        raise ValueError('Kakao user/me returned invalid JSON') from exc
+    if not info.get('id'):
+        raise ValueError('Kakao user/me returned no id')
+    account = info.get('kakao_account') or {}
+    profile = account.get('profile') or {}
+    props = info.get('properties') or {}
+    return {
+        'provider_id':    str(info['id']),
+        'email':          account.get('email') or '',
+        # SECURITY: default False so unverified addresses never link/store.
+        'email_verified': bool(account.get('is_email_verified', False)),
+        'display_name':   profile.get('nickname') or props.get('nickname') or '',
+        'avatar_url':     profile.get('profile_image_url') or '',
+    }
+
+
 class KakaoLoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []  # Don't validate existing tokens on login endpoints
 
     def post(self, request):
-        access_token = request.data.get('access_token')
-        if not access_token:
-            return Response({'detail': 'access_token required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        resp = requests.get(
-            'https://kapi.kakao.com/v2/user/me',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return Response({'detail': 'Invalid Kakao token'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        info   = resp.json()
-        if not info.get('id'):
-            return Response({'detail': 'Invalid Kakao response'}, status=status.HTTP_401_UNAUTHORIZED)
-        kakao_id = str(info['id'])
-        kakao_account = info.get('kakao_account', {})
-        # SECURITY: read Kakao's email-verified flag; default False so unverified
-        # addresses never link into existing accounts.
-        kakao_email_verified = bool(kakao_account.get('is_email_verified', False))
+        code = request.data.get('code')
+        redirect_uri = request.data.get('redirect_uri')
+        if not code or not isinstance(code, str):
+            return Response({'detail': 'code required'}, status=status.HTTP_400_BAD_REQUEST)
+        if redirect_uri not in settings.KAKAO_REDIRECT_URIS:
+            return Response(
+                {'detail': 'invalid_redirect_uri'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            info = _exchange_kakao_code(code, redirect_uri)
+        except ValueError as exc:
+            logger.warning('Kakao login failed: %s', exc)
+            return Response(
+                {'detail': 'kakao_auth_failed'}, status=status.HTTP_401_UNAUTHORIZED,
+            )
         profile = _get_or_create_user(
             provider='kakao',
-            provider_id=kakao_id,
-            email=kakao_account.get('email'),
-            display_name=kakao_account.get('profile', {}).get('nickname'),
-            avatar_url=kakao_account.get('profile', {}).get('profile_image_url'),
-            email_verified=kakao_email_verified,
+            provider_id=info['provider_id'],
+            email=info.get('email'),
+            display_name=info.get('display_name'),
+            avatar_url=info.get('avatar_url'),
+            email_verified=bool(info.get('email_verified', False)),
         )
-        # LOGIN-ONBOARD-1: social login no longer creates accounts.
-        if profile is None:
-            return Response(
-                {'detail': 'signup_required', 'reason': 'no_account'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
         logger.info('Kakao login: user=%s', profile.pk)
+        try:
+            record_device_and_maybe_notify(profile, request.META.get('HTTP_USER_AGENT', ''))
+        except Exception:
+            logger.exception('record_device_and_maybe_notify failed profile=%s', profile.pk)
         return Response(_make_token_response(profile))
+
+
+# -- Onboarding (post social signup) ---------------------------------------
+
+class OnboardingView(APIView):
+    """POST /api/v1/auth/onboarding/ - complete profile after first social login."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if profile is None:
+            return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+        if profile.consent_accepted_at is not None:
+            return Response({'detail': 'already_onboarded'}, status=status.HTTP_409_CONFLICT)
+        data = request.data
+        if data.get('consent_accepted') is not True:
+            return Response({'detail': 'consent_required'}, status=status.HTTP_400_BAD_REQUEST)
+        role = data.get('onboarding_role')
+        if role not in VALID_ONBOARDING_ROLES:
+            return Response({'detail': 'role_invalid'}, status=status.HTTP_400_BAD_REQUEST)
+        handle = data.get('handle')
+        if not isinstance(handle, str):
+            return Response(
+                {'detail': 'handle_invalid', 'message': 'ID is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validated = validate_handle_value(handle.strip(), instance=profile)
+        except DRFValidationError as exc:
+            detail = exc.detail
+            msg = ' '.join(str(m) for m in detail) if isinstance(detail, list) else str(detail)
+            return Response(
+                {'detail': 'handle_invalid', 'message': msg},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        policy_version = data.get('consent_policy_version', '1.0')
+        if not isinstance(policy_version, str) or not policy_version or len(policy_version) > 10:
+            policy_version = '1.0'
+
+        profile.handle = validated
+        profile.display_name = validated
+        profile.affiliation = _clean_guest_optional_text(data.get('affiliation'), 100)
+        profile.onboarding_role = role
+        profile.consent_accepted_at = timezone.now()
+        profile.consent_policy_version = policy_version
+        try:
+            with transaction.atomic():
+                profile.save()
+        except IntegrityError:
+            return Response(
+                {'detail': 'handle_invalid', 'message': 'ID already taken.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invalidate_user_cache(request.user.id)
+        return Response(UserSerializer(profile).data)
 
 
 # -- Naver -----------------------------------------------------------------
