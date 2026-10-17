@@ -25,6 +25,7 @@ export default defineConfig({
   },
   server: {
     port: 5174,
+    strictPort: true, // OAuth origins (Google, Kakao) are registered for 5174 only
     proxy: {
       '/api': {
         target: 'http://localhost:8001',
