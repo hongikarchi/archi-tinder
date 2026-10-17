@@ -30,6 +30,7 @@
 .textarea::placeholder { color: var(--color-text-dim); }
 
 .sendBtn {
+  position: relative;
   width: 34px;
   height: 34px;
   flex-shrink: 0;
@@ -43,6 +44,8 @@
   cursor: pointer;
   transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
+/* 44x44 touch target without changing the 34px visual size */
+.sendBtn::after { content: ''; position: absolute; inset: -5px; }
 .sendBtn:hover:not(:disabled) { opacity: 0.88; }
 .sendBtn:active:not(:disabled) { transform: scale(0.95); }
 .sendBtn:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }

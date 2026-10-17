@@ -134,7 +134,7 @@ railway variable delete KEY --service archi-tinder                       # no --
 railway redeploy --service archi-tinder
 ```
 
-Known variables (values live on Railway, never in the repo): `DB_*`, `BUILDINGS_DB_*`, `REDIS_URL`, `LLM_PROVIDER=openai` + `OPENAI_TEXT_MODEL=gpt-5.4-mini` + `OPENAI_STRICT_SCHEMA=true` (B pick 2026-08-05), `GEMINI_*`, `HF_TOKEN`, `R2_*`, `ADMIN_EMAILS`, `OPENAI_ADMIN_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, feature flags (`MESSAGING_ENABLED`, `STAGE_DECOUPLE_ENABLED`, `DB_POOL_ENABLED`, `PREWARM_ENABLED`). Rollback levers that need no deploy: `DB_POOL_ENABLED=false`, `PREWARM_ENABLED=false`, delete `LLM_PROVIDER` (falls back to Gemini).
+Known variables (values live on Railway, never in the repo): `DB_*`, `BUILDINGS_DB_*`, `REDIS_URL`, `LLM_PROVIDER=openai` + `OPENAI_TEXT_MODEL=gpt-5.4-mini` (B pick 2026-08-05), `GEMINI_*`, `HF_TOKEN`, `R2_*`, `ADMIN_EMAILS`, `TYPESAFE_API_KEY` (taste-start JEV; unset = dictionary fallback), `OPENAI_ADMIN_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, feature flags (`MESSAGING_ENABLED`, `DB_POOL_ENABLED`, `PREWARM_ENABLED`). Rollback levers that need no deploy: `DB_POOL_ENABLED=false`, `PREWARM_ENABLED=false`, delete `LLM_PROVIDER` (falls back to Gemini).
 
 Run a management command on the production container:
 

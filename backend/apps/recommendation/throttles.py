@@ -28,6 +28,15 @@ class LLMSearchThrottle(UserRateThrottle):
     rate  = '10/min'
 
 
+class TasteRecognizeDailyThrottle(UserRateThrottle):
+    """200 taste recognitions per day per authenticated user (paid JEV call cost cap).
+
+    Stacked with LLMSearchThrottle (10/min) on TasteRecognizeView.
+    """
+    scope = 'taste_recognize_day'
+    rate  = '200/day'
+
+
 class ReportGenerateThrottle(UserRateThrottle):
     """10 persona report generations per hour per authenticated user.
 
