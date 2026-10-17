@@ -32,6 +32,9 @@ export default function KakaoLoginButton({ disabled = false }) {
       client_id: restKey,
       redirect_uri: window.location.origin + '/auth/kakao/callback',
       response_type: 'code',
+      // Always show Kakao's account chooser (like Google's), instead of silently
+      // reusing the browser's logged-in Kakao session.
+      prompt: 'select_account',
       state,
     })
     window.location.assign('https://kauth.kakao.com/oauth/authorize?' + params.toString())
