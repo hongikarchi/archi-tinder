@@ -4,6 +4,7 @@ import uuid
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +13,8 @@ from rest_framework.views import APIView
 from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail, evict_user_profile_detail
+from ..report_name import followed_board_name
+from ..report_signature import liked_signature
 from ..services.axis_scores import compute_axis_scores
 from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
@@ -68,11 +71,46 @@ class ProjectReportGenerateView(APIView):
 
         axis_scores = compute_axis_scores(liked_id_strings)
 
-        project.final_report = report
-        project.axis_scores = axis_scores
-        project.save(update_fields=['final_report', 'axis_scores'])
+        # FULL-REPORT-UI-1: stamp which liked set this report was built from so
+        # ProjectSerializer.report_stale can detect later liked-building changes.
+        if isinstance(report, dict):
+            report['source_signature'] = liked_signature(liked_id_strings)
+
+        # Board name follows the new persona name unless the user renamed it
+        # (current name != OLD report's persona name). Computed BEFORE overwrite.
+        old_name = project.name
+        new_name = followed_board_name(old_name, project.final_report, report, language)
+
+        # Final writes are mutually exclusive with ProjectDetailView.patch (which
+        # also row-locks and may re-save final_report): take the same row lock so
+        # a PATCH cannot overwrite this fresh report with its stamped older copy.
+        with transaction.atomic():
+            locked = (
+                Project.objects.select_for_update()
+                .filter(pk=project.pk, user=profile)
+                .first()
+            )
+            if locked is None:
+                return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Write ONLY the report columns (never a stale copy of liked_ids /
+            # saved_ids / name loaded before the slow LLM call).
+            locked.final_report = report
+            locked.axis_scores = axis_scores
+            locked.save(update_fields=['final_report', 'axis_scores'])
+
+            # Conditional write keyed on the name the follow decision was based
+            # on: a concurrent rename makes this a no-op instead of being
+            # overwritten.
+            if new_name is not None:
+                Project.objects.filter(pk=locked.pk, name=old_name).update(name=new_name)
+
+        # Evictions run after commit so readers never re-cache pre-commit state.
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
+        # final_report / report_stale appear in the profile boards serializers, so
+        # always drop the cached profile card (not only when the name followed).
+        evict_user_profile_detail(profile.user.id)
         logger.info('Persona report generated for project %s', pk)
         return Response({'final_report': report, 'axis_scores': axis_scores})
 

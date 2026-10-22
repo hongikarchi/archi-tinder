@@ -110,13 +110,6 @@ function IconLock() {
     </svg>
   )
 }
-function IconBookmark({ filled }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" {...ICON_PROPS} fill={filled ? 'currentColor' : 'none'} aria-hidden="true">
-      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-    </svg>
-  )
-}
 function IconDownload() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" {...ICON_PROPS} strokeWidth="2.5" aria-hidden="true">
@@ -217,7 +210,7 @@ export function ImageSlot({ role, boardId, personaName, imageData, imageMime, jo
   )
 }
 
-function BuildingCard({ card, rank, big, saved, onOpen }) {
+function BuildingCard({ card, rank, big, onOpen }) {
   const title = card.image_title || card.name_en || ''
   const architects = card.metadata?.axis_architects || card.architect
   const year = card.metadata?.axis_year || card.year
@@ -235,7 +228,6 @@ function BuildingCard({ card, rank, big, saved, onOpen }) {
       {card.image_url && <img className={s.cardImg} src={card.image_url} alt={title} loading={big ? 'eager' : 'lazy'} />}
       <div className={s.cardScrim} />
       {rec && <span className={s.pill}>#{rank}</span>}
-      {rec && <span className={`${s.bm} ${saved ? s.bmSaved : ''}`} aria-hidden="true"><IconBookmark filled={saved} /></span>}
       <div className={s.cardCap}>
         <h3 className={s.cardTitle}>{title}</h3>
         {big && sub && <p className={s.recSub}>{sub}</p>}
@@ -255,7 +247,6 @@ function BuildingCard({ card, rank, big, saved, onOpen }) {
  *   meta              { visibility, buildingCount, reactionCount, user }
  *   likedBuildings    ImageCard[]  - liked-buildings row (hidden when empty)
  *   recommendations   ImageCard[]  - recommendation rows (hidden when empty)
- *   savedIds          string[]     - ids shown with a filled bookmark (static)
  *   onOpenBuilding    (card, rank?) => void
  *   onRegenerateReport  () => void - owner footer link (WP2); link hidden when absent
  *   regenerating      bool         - footer link busy state
@@ -265,7 +256,7 @@ function BuildingCard({ card, rank, big, saved, onOpen }) {
  */
 export function PersonaReportBody({
   role = 'viewer', boardId = null, finalReport, axisScores, reportImage, reportImageMime,
-  meta, likedBuildings = [], recommendations = [], savedIds = [], onOpenBuilding,
+  meta, likedBuildings = [], recommendations = [], onOpenBuilding,
   onRegenerateReport, regenerating = false, regenMessage = '',
   onRegenerateImage, imageRegenerating = false, imageRegenFailed = false,
 }) {
@@ -411,7 +402,7 @@ export function PersonaReportBody({
             <p className={s.rowTitle}>{t('results.rankRange', { n: recommendations.length })}</p>
           </div>
           <div data-rv className={`${s.rv} ${s.recBigWrap}`}>
-            <BuildingCard card={bigRec} rank={1} big saved={savedIds.includes(cardId(bigRec))} onOpen={onOpenBuilding} />
+            <BuildingCard card={bigRec} rank={1} big onOpen={onOpenBuilding} />
           </div>
           {restRecs.length > 0 && (
             <div data-rv className={`${s.rv} ${s.row}`} style={delay(0.1)}>
@@ -420,7 +411,6 @@ export function PersonaReportBody({
                   key={cardId(card) || i}
                   card={card}
                   rank={i + 2}
-                  saved={savedIds.includes(cardId(card))}
                   onOpen={onOpenBuilding}
                 />
               ))}
@@ -480,13 +470,14 @@ function ReportSkeleton({ label }) {
  *   backLabel string|undefined - label for the back button on the ready page
  *   onRetry   () => void   - generation-failure "다시 시도"
  *   onProfile () => void   - unavailable-board "프로필로 가기"
+ *   makingLabelKey string  - i18n key for the 'making' status line (default persona.loadingMake)
  */
-export default function PersonaReportPage({ state = 'ready', onLogout, onBack, backLabel, onRetry, onProfile, ...bodyProps }) {
+export default function PersonaReportPage({ state = 'ready', onLogout, onBack, backLabel, onRetry, onProfile, makingLabelKey, ...bodyProps }) {
   const { t } = useTranslation()
 
   let content
   if (state === 'fetching' || state === 'making') {
-    content = <ReportSkeleton label={t(state === 'making' ? 'persona.loadingMake' : 'persona.loadingFetch')} />
+    content = <ReportSkeleton label={t(state === 'making' ? (makingLabelKey || 'persona.loadingMake') : 'persona.loadingFetch')} />
   } else if (state === 'genFail' || state === 'loadFail') {
     content = (
       <div className={s.stateSlot}>

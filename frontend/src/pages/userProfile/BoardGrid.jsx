@@ -5,36 +5,27 @@ export default function BoardGrid({
   isMe,
   selectMode,
   selectedBoards,
-  onVisibilityChange,
-  onDelete,
   onSelectToggle,
   boardsHasMore,
   boardsLoading,
-  onResumeProject,
-  onNewProjectSession,
 }) {
   return (
     <>
-      {/* Boards grid — same unified container, responsive auto-fill */}
+      {/* Boards grid — exactly 2 columns at every width */}
       {boards.length > 0 ? (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 20,
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 12,
         }}>
           {boards.map(board => (
             <BoardCard
               key={board.board_id}
               board={board}
               isOwner={isMe}
-              onVisibilityChange={(next) => onVisibilityChange(board.board_id, next)}
-              onDelete={() => onDelete(board.board_id)}
               selectMode={selectMode}
               isSelected={selectedBoards.has(board.board_id)}
               onSelectToggle={onSelectToggle}
-              directNavigate={!board.latest_session_meta}
-              onResume={onResumeProject ? () => onResumeProject(board.board_id) : undefined}
-              onStartNew={onNewProjectSession ? () => onNewProjectSession(board.board_id) : undefined}
             />
           ))}
         </div>

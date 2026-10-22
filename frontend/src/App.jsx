@@ -979,18 +979,6 @@ export default function App() {
     await initSession(id, project.filters, project.sessionId || null, null, project.projectName)
   }
 
-  // Start a fresh swipe session for an existing project, discarding the old session.
-  async function handleNewProjectSession(boardId) {
-    const id = String(boardId)
-    const project = projects.find(p => p.id === id)
-    if (!project) return
-    // Clear stored sessionId so initSession creates a brand-new session
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
-    setActiveProjectId(id)
-    navigate('/swipe')
-    await initSession(id, project.filters, null, null, project.projectName, '', true)
-  }
-
   // ── SaveBoardModal callbacks ────────────────────────────────────────────────
   function handleBoardSaved({ name, visibility }) {
     if (saveModalProject?.localId) {
@@ -1085,8 +1073,6 @@ export default function App() {
       setActiveProjectId(null)
       navigate('/discovery')
     },
-    onResumeProject: handleResumeProject,
-    onNewProjectSession: handleNewProjectSession,
     nextCard: prefetchCard,
   }
 

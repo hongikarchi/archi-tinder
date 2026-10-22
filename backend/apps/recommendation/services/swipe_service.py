@@ -221,8 +221,8 @@ def handle_bookmark(request, profile, project_id):
 
     evict_projects_list(profile.id)
     evict_discovery_feed(profile.id)
-    # Profile detail boards payload uses saved_ids for cover/thumbnails;
-    # bookmark mutation must invalidate. Missed in initial PR — code-review catch.
+    # Boards payload no longer reads saved_ids (liked only), but the profile
+    # detail cache is still evicted on bookmark change — harmless and conservative.
     evict_user_profile_detail(profile.user_id)
     evict_project_detail(str(project_id))
 

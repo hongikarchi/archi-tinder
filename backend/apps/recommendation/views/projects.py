@@ -29,6 +29,7 @@ from ..caches import (
     PROJECT_RECOMMENDATIONS_TTL,
     get_project_recommendations_cache_key,
 )
+from ..report_signature import liked_signature
 from ..services import session_service
 from ..throttles import ProjectRecommendationsThrottle
 from ..perf_timing import endpoint, stage
@@ -254,9 +255,23 @@ class ProjectDetailView(APIView):
 
             if remove_ids is not None:
                 remove_set = set(remove_ids)
+                update_fields = ['liked_ids', 'saved_ids', 'updated_at']
+                # FULL-REPORT-UI-1: a legacy report has no source_signature, so
+                # it could never be flagged stale. Stamp it with the liked set
+                # as it is BEFORE this removal so the removal makes it stale.
+                if (
+                    isinstance(project.final_report, dict)
+                    and project.final_report
+                    and not project.final_report.get('source_signature')
+                ):
+                    project.final_report = {
+                        **project.final_report,
+                        'source_signature': liked_signature(project.liked_ids),
+                    }
+                    update_fields.append('final_report')
                 project.liked_ids = [item for item in project.liked_ids if _entry_id(item) not in remove_set]
                 project.saved_ids = [item for item in project.saved_ids if _entry_id(item) not in remove_set]
-                project.save(update_fields=['liked_ids', 'saved_ids', 'updated_at'])
+                project.save(update_fields=update_fields)
                 evict_taste(profile.id)
                 evict_discovery_feed(profile.id)
             if serializer is not None:

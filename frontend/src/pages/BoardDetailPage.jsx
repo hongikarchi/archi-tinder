@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
-import { updateProject, getProjectReportImage, generateReport } from '../api/projects.js'
+import { updateProject, deleteProject, getProjectReportImage } from '../api/projects.js'
 import { useRegeneration } from '../hooks/useRegeneration.jsx'
-import { useReportImageJob, reportImageJobs } from '../hooks/useReportImageJob.js'
+import { useReportImageJob } from '../hooks/useReportImageJob.js'
 import { canSelectForDelete, isLastLikedError } from '../utils/boardDeleteRules.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
@@ -12,6 +12,8 @@ import ArchitectSection from './boardDetail/ArchitectSection'
 import BoardCover from './boardDetail/BoardCover'
 import { useTranslation } from '../i18n/index.js'
 import { localizeReport } from '../utils/reportText.js'
+import { resolveCoverTitle, isNameDirty } from '../utils/boardCoverTitle.js'
+import { purgeChatCache } from '../utils/appHelpers.js'
 import { safeImageMime } from '../utils/imageMime.js'
 import s from './BoardDetailPage.module.css'
 import PageShell from '../components/PageShell.jsx'
@@ -25,6 +27,14 @@ import EmptyState from '../components/EmptyState.jsx'
 import Skeleton from '../components/Skeleton.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Glass circle buttons on the cover (mock `boardDetail` -> `mini`).
+const coverBtnStyle = {
+  flex: '0 0 32px', width: 32, height: 32, borderRadius: '50%', padding: 0,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  cursor: 'pointer', color: '#fff', backdropFilter: 'blur(8px)',
+  WebkitBackdropFilter: 'blur(8px)',
+}
 
 export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
@@ -40,25 +50,20 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const [reactionError, setReactionError] = useState(null)
   const [localSavedIds, setLocalSavedIds] = useState([])
   const [localName, setLocalName] = useState('')
-  const [isEditingName, setIsEditingName] = useState(false)
-  const [editName, setEditName] = useState('')
+  const [nameDraft, setNameDraft] = useState('')
   const [nameSaving, setNameSaving] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
-  const nameInputRef = useRef(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [localBuildings, setLocalBuildings] = useState(null)
   const [deleteInProgress, setDeleteInProgress] = useState(false)
   // Capture bookmark signal once at mount so board-load effect can apply it
   const bookmarkSignalRef = useRef(location.state?.bookmarkChanged || null)
-  // Report regenerated after deleting liked buildings (null -> use board.final_report)
-  const [localFinalReport, setLocalFinalReport] = useState(null)
   const [deletedLikedIds, setDeletedLikedIds] = useState([])
   const [lastMsgOn, setLastMsgOn] = useState(false)
+  const [visibilityOverride, setVisibilityOverride] = useState(null)
   const lastMsgTimerRef = useRef(null)
   const aliveRef = useRef(true)
-  const regenBusyRef = useRef(false)
-  const regenAgainRef = useRef(false)
   useEffect(() => {
     aliveRef.current = true
     return () => { aliveRef.current = false; clearTimeout(lastMsgTimerRef.current) }
@@ -66,12 +71,13 @@ export default function BoardDetailPage({ onResume, onLogout }) {
 
   useEffect(() => {
     if (!board) return
-    setLocalFinalReport(null)
     setDeletedLikedIds([])
+    setVisibilityOverride(null)
     setIsReacted(!!board.is_reacted)
     setReactionCount(board.reaction_count ?? 0)
     setReactionError(null)
     setLocalName(board.name || '')
+    setNameDraft(board.name || '')
     setLocalBuildings(board.buildings || [])
     // Seed from board data, then apply any pending bookmark signal
     const base = (board.saved_ids || []).map(item => item?.id || item).filter(Boolean)
@@ -162,33 +168,31 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     }
   }
 
-  function startEditingName() {
-    setEditName(localName)
-    setIsEditingName(true)
-    setTimeout(() => nameInputRef.current?.select(), 0)
+  function toggleEditMode() {
+    // Entering or leaving edit mode always resets selection and the name draft.
+    setIsEditMode(prev => !prev)
+    setSelectedIds(new Set())
+    setNameDraft(localName || coverTitle)
   }
 
   async function commitNameEdit() {
-    const trimmed = editName.trim()
-    if (!trimmed || trimmed === localName) {
-      setIsEditingName(false)
+    const trimmed = nameDraft.trim()
+    if (nameSaving || !trimmed || trimmed === localName || (!localName && trimmed === coverTitle)) {
+      if (!nameSaving) setNameDraft(localName)
       return
     }
     setNameSaving(true)
     try {
       await updateProject(boardId, { name: trimmed })
       setLocalName(trimmed)
+      setNameDraft(trimmed)
+      regen.showToast(t('board.nameSaved'))
     } catch {
       // revert on error — keep original name
+      if (aliveRef.current) setNameDraft(localName)
     } finally {
-      setNameSaving(false)
-      setIsEditingName(false)
+      if (aliveRef.current) setNameSaving(false)
     }
-  }
-
-  function handleNameKeyDown(e) {
-    if (e.key === 'Enter') { e.preventDefault(); commitNameEdit() }
-    if (e.key === 'Escape') { setIsEditingName(false) }
   }
 
   const likedIdList = (board?.liked_ids || []).map(item => String(item?.id ?? item))
@@ -213,39 +217,12 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     })
   }
 
-  // Sequential, fire-and-forget after a successful delete: report first, then
-  // the image through the shared store (previous image kept on failure).
-  // Serialized: a delete during a running regeneration queues exactly one
-  // follow-up run so the final run reflects the final board state.
-  async function regenerateAfterDelete() {
-    if (regenBusyRef.current) { regenAgainRef.current = true; return }
-    regenBusyRef.current = true
-    try {
-      regen.showToast(t('board.regeneratingToast'))
-      const data = await generateReport(boardId, { regenerate: true })
-      if (!data?.final_report) throw new Error('empty report')
-      if (aliveRef.current) setLocalFinalReport(data.final_report)
-      const img = await reportImageJobs.regenerate(boardId)
-      if (!img && aliveRef.current) regen.showToast(t('persona.regenFail'))
-    } catch (err) {
-      console.error('[BoardDetailPage] regenerate after delete failed:', err?.status, err?.message)
-      if (aliveRef.current) regen.showToast(t('persona.regenFail'))
-    } finally {
-      regenBusyRef.current = false
-      if (regenAgainRef.current) {
-        regenAgainRef.current = false
-        if (aliveRef.current) regenerateAfterDelete()
-      }
-    }
-  }
-
   async function handleDeleteSelected() {
     if (!isOwner || selectedIds.size === 0 || deleteInProgress) return
     setDeleteInProgress(true)
     const ids = [...selectedIds]
     const likedSet = new Set(likedIdList)
     const deletedLiked = ids.filter(id => likedSet.has(String(id)))
-    const hadReport = !!board?.final_report
     try {
       await updateProject(boardId, { remove_building_ids: ids })
       setLocalBuildings(prev => (prev || []).filter(b => {
@@ -255,11 +232,9 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
       setSelectedIds(new Set())
       setIsEditMode(false)
-      // Policy (2026-10-23): every board building is treated as liked, so any
-      // successful deletion regenerates the persona report and image.
-      // Skip when the board has no liked ids at all (saved-only board): nothing
-      // to regenerate from and the server would 400.
-      if (ids.length > 0 && hadReport && likedIdList.length > 0) regenerateAfterDelete()
+      setNameDraft(localName)
+      // No regeneration here: the server flags the report stale and the owner's
+      // next open of the report page regenerates it.
     } catch (err) {
       // keep edit mode + selection on error
       if (aliveRef.current) {
@@ -271,12 +246,37 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     }
   }
 
+  // Owner chips on the cover: optimistic visibility toggle (revert on failure).
+  async function handleToggleVisibility(next) {
+    const prev = visibility
+    setVisibilityOverride(next)
+    try {
+      await updateProject(boardId, { visibility: next })
+    } catch {
+      if (aliveRef.current) {
+        setVisibilityOverride(prev ?? null)
+        regen.showToast(t('board.visibilityFailed'))
+      }
+    }
+  }
+
+  async function handleDeleteBoard() {
+    try {
+      await deleteProject(boardId)
+      purgeChatCache(String(boardId))
+      navigate('/user/me', { replace: true })
+    } catch {
+      if (aliveRef.current) regen.showToast(t('board.deleteFailed'))
+    }
+  }
+
   function handleNavigateToOwner() {
     if (!board?.user?.user_id) return
     navigate(`/user/${board.user.user_id}`)
   }
 
-  const isPublic = !board || board.visibility === 'public'
+  const visibility = visibilityOverride ?? board?.visibility
+  const isPublic = !board || visibility === 'public'
   const buildings = localBuildings ?? board?.buildings ?? []
   const recommended = hookRecommended
   const viewerId = sessionStorage.getItem('archithon_user')
@@ -284,8 +284,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
   // Toast host + owner gate (image/report regeneration is owner-only).
   const regen = useRegeneration({ projectId: boardId, enabled: isOwner, withReport: false })
-  const finalReport = localFinalReport || board?.final_report || null
-  // All board buildings are treated as liked: any selection triggers regeneration.
+  const finalReport = board?.final_report || null
+  // Notice: deleting buildings makes the persona report need regeneration.
   const showRegenNotice = selectedIds.size > 0 && !!board?.final_report
   // Recompute cover from local state first so deleting the first card doesn't
   // leave a stale cover. Fall back to board.cover_image_url only when buildings
@@ -301,7 +301,11 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   // briefly before `board` arrives.
   const headerLoading = loading && !board
   const report = finalReport ? localizeReport(finalReport, language) : null
-  const coverTitle = report?.persona_type || boardName
+  const coverTitle = resolveCoverTitle({
+    boardName,
+    personaType: report?.persona_type,
+    defaultName: t('board.defaultName'),
+  })
   const countLabel = t(buildings.length === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: buildings.length })
   const ownerHandle = board?.user?.username
     ? `@${board.user.username}`
@@ -362,56 +366,42 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           imageUrl={personaImage || coverImage}
           alt={coverTitle || t('board.coverAlt')}
           title={coverTitle}
+          titleEditable={isOwner && isEditMode}
+          titleDraft={nameDraft}
+          onTitleDraftChange={setNameDraft}
+          onTitleCommit={commitNameEdit}
+          onTitleCancel={() => setNameDraft(localName)}
+          titleSaving={nameSaving}
+          titleDirty={isNameDirty(nameDraft, localName || coverTitle)}
+          titleLabel={t('board.nameLabel')}
+          saveLabel={t('board.save')}
           meta={coverMeta}
-        />
-      )}
-
-      {headerLoading ? (
-        <div style={{ marginTop: 18 }}>
-          <Skeleton width="80%" height={20} radius="var(--radius-sm)" />
-          <div className={s.topActions}>
-            <Skeleton height={44} radius="var(--radius-pill)" style={{ flex: 1 }} />
-          </div>
-        </div>
-      ) : (
-      <div style={{ marginTop: 18 }}>
-        {/* One-liner — only when a report exists. */}
-        {report?.one_liner && (
-          <p style={{
-            margin: '0 8px',
-            color: 'var(--color-text)',
-            fontSize: 'var(--fs-body)',
-            fontWeight: 'var(--fw-semibold)',
-            lineHeight: 1.6,
-            wordBreak: 'keep-all',
-          }}>
-            {report.one_liner}
-          </p>
-        )}
-
-        {/* Action row — primary pill (report only), owner: edit + share
-            circles, viewer: reaction pill. */}
-        <div className={s.topActions}>
-          {board?.final_report && (
-            <button
-              onClick={() => navigate(`/board/${board.board_id}/report`)}
-              className={`${s.pill} ${s.pillPrimary}`}
-            >
-              {t('board.viewReport')}
-            </button>
-          )}
-          {isOwner ? (
+          ownerChips={isOwner ? {
+            isPrivate: !isPublic,
+            onToggleVisibility: handleToggleVisibility,
+            onDelete: handleDeleteBoard,
+            labels: {
+              makePublic: t('board.makePublic'),
+              makePrivate: t('board.makePrivate'),
+              deleteBoard: t('board.deleteBoard'),
+              deleteConfirm: t('board.deleteConfirm'),
+              deleteConfirmAria: t('board.deleteConfirmAria'),
+            },
+          } : null}
+          rightSlot={isOwner ? (
             <>
               <button
-                onClick={() => {
-                  if (isEditMode) { setIsEditMode(false); setSelectedIds(new Set()) }
-                  else { setIsEditMode(true); setSelectedIds(new Set()) }
-                }}
+                type="button"
+                onClick={toggleEditMode}
                 disabled={!isEditMode && (!board || buildings.length === 0)}
                 aria-label={isEditMode ? t('board.cancel') : t('board.editBoard')}
                 aria-pressed={isEditMode}
-                className={`${s.circ}${isEditMode ? ` ${s.active}` : ''}`}
-                style={board?.final_report ? undefined : { marginLeft: 'auto' }}
+                style={{
+                  ...coverBtnStyle,
+                  background: isEditMode ? 'color-mix(in srgb, var(--accent-1) 70%, transparent)' : 'var(--color-scrim-soft)',
+                  border: `1px solid ${isEditMode ? 'var(--accent-1)' : 'rgba(255,255,255,.18)'}`,
+                  opacity: !isEditMode && (!board || buildings.length === 0) ? 0.4 : 1,
+                }}
               >
                 {isEditMode ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -425,10 +415,14 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                 )}
               </button>
               <button
+                type="button"
                 onClick={handleShare}
                 aria-label={t('board.share')}
-                className={s.circ}
-                style={shareCopied ? { color: 'var(--accent-2)', borderColor: 'var(--accent-2)' } : undefined}
+                style={{
+                  ...coverBtnStyle,
+                  background: 'var(--color-scrim-soft)',
+                  border: '1px solid rgba(255,255,255,.18)',
+                }}
               >
                 {shareCopied ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -443,6 +437,50 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                 )}
               </button>
             </>
+          ) : null}
+        />
+      )}
+
+      {headerLoading ? (
+        <div style={{ marginTop: 18 }}>
+          <Skeleton width="80%" height={20} radius="var(--radius-sm)" />
+          <div className={s.topActions}>
+            <Skeleton height={44} radius="var(--radius-pill)" style={{ flex: 1 }} />
+          </div>
+        </div>
+      ) : (
+      <div>
+        {/* Action row — owner: [report pill | continue exploring] (no report:
+            continue only); viewer: [report pill | reaction pill]. Owner edit +
+            share live on the cover. */}
+        <div className={s.topActions}>
+          {board?.final_report && (
+            <button
+              onClick={() => navigate(`/board/${board.board_id}/report`)}
+              className={`${s.pill} ${s.pillPrimary}`}
+              style={isOwner ? {
+                flex: onResume ? '3 1 0' : '1 1 0', minWidth: 0, padding: '0 12px',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              } : undefined}
+            >
+              {t('board.viewReport')}
+            </button>
+          )}
+          {isOwner ? (
+            onResume && (
+              <button
+                onClick={() => onResume(board?.board_id)}
+                disabled={!board}
+                className={`${s.pill} ${s.pillSecondary}`}
+                style={{
+                  flex: board?.final_report ? '2 1 0' : '1 1 0', minWidth: 0, padding: '0 12px',
+                  fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                {t('board.continueExploring')}
+              </button>
+            )
           ) : (
             <button
               onClick={handleToggleReaction}
@@ -465,6 +503,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
             </button>
           )}
         </div>
+
         {!isOwner && reactionError && (
           <div style={{
             color: 'var(--color-text-muted)',
@@ -508,80 +547,6 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           </button>
         )}
 
-        {/* Owner-only secondary controls kept from the previous layout: board
-            rename (the cover now shows the persona name) and resume. */}
-        {isOwner && (
-          <div style={{ margin: '16px 8px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {isEditingName ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  ref={nameInputRef}
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  onKeyDown={handleNameKeyDown}
-                  onBlur={commitNameEdit}
-                  disabled={nameSaving}
-                  maxLength={100}
-                  style={{
-                    flex: 1,
-                    fontSize: 'var(--fs-body)',
-                    fontWeight: 'var(--fw-semibold)',
-                    color: 'var(--color-text)',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '6px 12px',
-                    fontFamily: 'inherit',
-                    outline: 'none',
-                  }}
-                />
-                <FloatingIconButton
-                  onMouseDown={e => { e.preventDefault(); commitNameEdit() }}
-                  ariaLabel={t('board.save')}
-                  disabled={nameSaving}
-                  style={{ background: 'var(--accent-1)', borderColor: 'var(--accent-1)', color: '#fff' }}
-                >
-                  <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)', lineHeight: 1 }}>{nameSaving ? '…' : '✓'}</span>
-                </FloatingIconButton>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{
-                  minWidth: 0,
-                  color: 'var(--color-text-dim)',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 'var(--fw-medium)',
-                  wordBreak: 'keep-all',
-                }}>
-                  {boardName}
-                </span>
-                <FloatingIconButton onClick={startEditingName} ariaLabel={t('board.editName')}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </FloatingIconButton>
-              </div>
-            )}
-            {onResume && (
-              <button
-                onClick={() => onResume(board?.board_id)}
-                disabled={!board}
-                className={s.ctaSecondary}
-                style={{
-                  minHeight: 44,
-                  padding: '0 16px',
-                  fontSize: 'var(--fs-body)',
-                  fontWeight: 'var(--fw-semibold)',
-                  cursor: !board ? 'default' : 'pointer',
-                  opacity: !board ? 0.4 : 1,
-                }}
-              >
-                {t('board.continueExploring')}
-              </button>
-            )}
-          </div>
-        )}
       </div>
       )}
 
@@ -742,7 +707,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           </div>
           <div style={{ display: 'flex', gap: 10, width: '100%' }}>
             <button
-              onClick={() => { setIsEditMode(false); setSelectedIds(new Set()) }}
+              onClick={() => { setIsEditMode(false); setSelectedIds(new Set()); setNameDraft(localName) }}
               style={{
                 flex: 1, minHeight: 44, borderRadius: 'var(--radius-md)',
                 background: 'var(--color-surface)', color: 'var(--color-text)',

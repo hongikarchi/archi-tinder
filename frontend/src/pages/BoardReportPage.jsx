@@ -5,6 +5,8 @@ import PersonaReportPage from '../components/PersonaReportPage.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport, getProjectRecommendations } from '../api/projects.js'
 import { useRegeneration } from '../hooks/useRegeneration.jsx'
+import { reportImageJobs } from '../hooks/useReportImageJob.js'
+import { shouldRegenerateOnOpen } from '../utils/reportStale.js'
 
 /* ── BoardReportPage ────────────────────────────────────────────────────── */
 // Data + ownership for /board/:boardId/report; all rendering (report body and
@@ -34,6 +36,15 @@ export default function BoardReportPage({ onLogout }) {
   const [genError, setGenError] = useState(false)
   const [recommendations, setRecommendations] = useState([])
   const genRef = useRef(false)
+  // Stale-report regeneration on open (owner only, once per mount).
+  const staleRef = useRef(false)
+  const aliveRef = useRef(true)
+  const [staleBusy, setStaleBusy] = useState(false)
+  const [staleHandled, setStaleHandled] = useState(false)
+  useEffect(() => {
+    aliveRef.current = true
+    return () => { aliveRef.current = false }
+  }, [])
 
   // Ownership. Same derivation as BoardDetailPage (viewer id from sessionStorage
   // vs the board's owner id) so both pages agree on who owns a board.
@@ -55,6 +66,13 @@ export default function BoardReportPage({ onLogout }) {
   const shouldAutoGenerate = !!(
     isOwner && board && !report && !genError && board.liked_ids?.length > 0
   )
+
+  // Owner opens a board whose liked buildings changed after the report was made:
+  // regenerate the report (server resets staleness), then the image through the
+  // shared store without blocking the report. Handled flag avoids a flash of the
+  // stale flow after success.
+  const shouldRegenerateStale = !staleHandled
+    && shouldRegenerateOnOpen({ isOwner, board })
 
   useEffect(() => {
     if (!shouldAutoGenerate) return
@@ -101,11 +119,36 @@ export default function BoardReportPage({ onLogout }) {
     },
   })
 
+  const { showToast } = regen
+  useEffect(() => {
+    if (!shouldRegenerateStale || staleRef.current) return
+    staleRef.current = true
+    setStaleBusy(true)
+    showToast(t('persona.staleRegenerating'))
+    generateReport(boardId, { regenerate: true })
+      .then(data => {
+        if (!data?.final_report) throw new Error('empty report')
+        if (!aliveRef.current) return
+        setLocalReport(data.final_report)
+        setLocalAxisScores(data.axis_scores || null)
+        reportImageJobs.regenerate(boardId)   // not awaited; previous image kept on failure
+      })
+      .catch(err => {
+        console.error('[BoardReportPage] stale regenerate failed:', err)
+        if (aliveRef.current) showToast(t('persona.regenFail'))
+      })
+      .finally(() => {
+        if (!aliveRef.current) return
+        setStaleHandled(true)
+        setStaleBusy(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRegenerateStale, boardId])
+
   // Post-save landing (App.handleBoardSaved navigates with state.saved): toast once,
   // then drop the flag so back/forward doesn't replay it. Waits for ownership
   // because the toast host lives in the owner-only regeneration overlay.
   const savedRef = useRef(!!locationState?.saved)
-  const { showToast } = regen
   useEffect(() => {
     if (!savedRef.current || !isOwner) return
     savedRef.current = false
@@ -138,7 +181,7 @@ export default function BoardReportPage({ onLogout }) {
   let state = 'ready'
   if (!boardId) state = 'unavailable'
   else if (loading) state = 'fetching'
-  else if (shouldAutoGenerate) state = 'making'
+  else if (shouldAutoGenerate || shouldRegenerateStale || staleBusy) state = 'making'
   else if (!board) state = loadFailed ? 'loadFail' : 'unavailable'
   else if (genError) state = 'genFail'
   else if (!report) state = 'noReport'
@@ -147,7 +190,6 @@ export default function BoardReportPage({ onLogout }) {
   const buildings = board?.buildings || []
   const likedIdSet = new Set((board?.liked_ids || []).map(item => String(item?.id ?? item)))
   const likedBuildings = board?.liked_ids ? buildings.filter(b => likedIdSet.has(String(cardId(b)))) : buildings
-  const savedIds = (board?.saved_ids || []).map(item => String(item?.id ?? item))
 
   return (
     <>
@@ -172,7 +214,7 @@ export default function BoardReportPage({ onLogout }) {
       }}
       likedBuildings={likedBuildings}
       recommendations={recommendations}
-      savedIds={savedIds}
+      makingLabelKey={shouldRegenerateStale || staleBusy ? 'persona.staleRegenerating' : undefined}
       onOpenBuilding={handleOpenBuilding}
       {...regen.imageProps}
       {...regen.reportProps}

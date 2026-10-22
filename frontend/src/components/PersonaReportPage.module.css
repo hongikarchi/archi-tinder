@@ -7,7 +7,7 @@
  *   E2  11px tags, 2px 8px, 18px  (.tag)
  *   E3  28px page gutter          (--rp-gutter)
  *   E5  card shadow               (.recBig)
- *   E6  rank pill / bookmark / 118px building card  (--rp-card-w, .pill*, .bm*)
+ *   E6  rank pill / 118px building card  (--rp-card-w, .pill*)
  *   E7  letter-spacing -.02em name, .14em eyebrow
  *   E8  reveal 700ms, name settle 900ms, stagger via --d
  * Do not round these to the type / spacing scale.
@@ -384,30 +384,6 @@
   font-weight: var(--fw-bold);
 }
 .recBig .pill { top: 12px; left: 12px; padding: 2px 8px; line-height: 18px; }
-
-.bm {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 26px; /* E6 */
-  height: 26px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-scrim-soft);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #fff;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  pointer-events: none; /* static — bookmark behaviour is not part of the report page yet */
-}
-.recBig .bm { top: 10px; right: 10px; width: 30px; height: 30px; }
-.bmSaved {
-  background: color-mix(in srgb, var(--accent-3) 22%, transparent);
-  border-color: color-mix(in srgb, var(--accent-3) 65%, transparent);
-  color: var(--accent-3);
-}
 
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .footerOwner {

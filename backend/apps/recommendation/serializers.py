@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
 from .models import Project
+from .report_signature import is_report_stale
 
 # ── Conversation-history blob validation limits (persisted on Project) ──
 _MAX_CHAT_MESSAGES = 60   # max items in conversation_history['messages'] list
@@ -44,6 +45,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     user = UserMiniSerializer(read_only=True)
     latest_session_id = serializers.SerializerMethodField()
     latest_session_meta = serializers.SerializerMethodField()
+    report_stale = serializers.SerializerMethodField()
 
     # ------------------------------------------------------------------
     # Ownership gate: returns True iff the requesting user owns this project
@@ -146,6 +148,12 @@ class ProjectSerializer(serializers.ModelSerializer):
             'created_at': session.created_at.isoformat() if session.created_at else None,
         }
 
+    def get_report_stale(self, obj):
+        # True iff the stored report carries a source_signature that no longer
+        # matches the board's current liked buildings. No report / no signature
+        # (legacy) / equal -> False.
+        return is_report_stale(obj.final_report, obj.liked_ids)
+
     class Meta:
         model  = Project
         fields = [
@@ -160,6 +168,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'raw_query',
             'analysis_report',
             'final_report',
+            'report_stale',
             'axis_scores',
             'report_image',
             'report_image_mime',
@@ -190,6 +199,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             'is_temp',
             'latest_session_id',
             'latest_session_meta',
+            'report_stale',
             'created_at',
             'updated_at',
         ]

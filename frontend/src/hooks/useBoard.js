@@ -13,7 +13,6 @@ function collectBoardBuildingIds(project) {
     ids.push(id)
   }
   for (const item of project?.liked_ids || []) add(item)
-  for (const item of project?.saved_ids || []) add(item)
   return ids
 }
 
