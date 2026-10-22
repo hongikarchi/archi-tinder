@@ -20,6 +20,8 @@ import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import ReportReentryBanner from './components/ReportReentryBanner.jsx'
+import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
@@ -1001,22 +1003,24 @@ export default function App() {
     setShowSaveModal(false)
     setSaveModalProject(null)
     setTempCompletedProject(null)
-    setGlobalToast({ message: '보드가 저장되었어요', type: 'success' })
-    // Land the flow on the profile so the run has a visible end — the saved
-    // board is right there in the list. Previously this stayed on the results
-    // screen, which read as "did it even save?".
-    navigate('/user/me')
+    // Land on the shared persona report page (FULL-REPORT-UI-1); it shows the
+    // "saved" toast itself (location.state.saved), so no global toast here.
+    const savedBackendId = saveModalProject?.backendId
+    navigate(savedBackendId ? `/board/${savedBackendId}/report` : '/user/me', { state: { saved: true } })
   }
 
   // CTA entry point from ResultsPage. A board that is already saved has nothing
   // to name, so it skips straight to the profile; a temp one opens the sheet.
   function handleRequestSave(project) {
-    if (!project?.backendId || !project?.isTemp) {
+    // Same id resolution as ResultsPage (falls back to project.id) so the CTA
+    // never silently skips the save for a temp board lacking backendId.
+    const backendId = resolveProjectBackendId(project)
+    if (!backendId || !project?.isTemp) {
       navigate('/user/me')
       return
     }
     setSaveModalProject({
-      backendId: project.backendId,
+      backendId,
       finalReport: project.finalReport,
       localId: project.id,
     })
@@ -1028,15 +1032,26 @@ export default function App() {
     setSaveModalProject(null)
   }
 
+  // Returns true only when the board is really gone: deleted via the API, or
+  // removed locally because it never had a backend row. API failure → false
+  // (banner stays so the user can retry). Busy ref blocks double-clicks.
+  const tempDeleteBusyRef = useRef(false)
   async function handleTempDelete() {
-    if (!tempCompletedProject?.backendId) return
+    const proj = tempCompletedProject
+    if (!proj || tempDeleteBusyRef.current) return false
+    tempDeleteBusyRef.current = true
     try {
-      await api.deleteProject(tempCompletedProject.backendId)
-      if (tempCompletedProject.localId) {
-        setProjects(prev => prev.filter(p => p.id !== tempCompletedProject.localId))
+      if (proj.backendId) await api.deleteProject(proj.backendId)
+      if (proj.localId) {
+        setProjects(prev => prev.filter(p => p.id !== proj.localId))
       }
-    } catch { /* best-effort */ }
-    setTempCompletedProject(null)
+      setTempCompletedProject(null)
+      return true
+    } catch {
+      return false
+    } finally {
+      tempDeleteBusyRef.current = false
+    }
   }
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -1196,72 +1211,18 @@ export default function App() {
           zIndex: 50,
           padding: '0 16px',
         }}>
-          <div style={{
-            maxWidth: 480,
-            margin: '0 auto',
-            background: 'color-mix(in srgb, var(--color-surface) 88%, transparent)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid var(--color-border-soft)',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          }}>
-            <p style={{
-              margin: 0,
-              fontSize: 'var(--fs-body)',
-              fontWeight: 600,
-              color: 'var(--color-text)',
-              flex: 1,
-              lineHeight: 1.4,
-            }}>
-              {t('modalB3.reportBanner.body')}
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button
-                onClick={() => {
-                  setSaveModalProject(tempCompletedProject)
-                  setShowSaveModal(true)
-                }}
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  background: 'var(--accent-1)',
-                  color: '#fff',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  minHeight: 32,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t('modalB3.reportBanner.save')}
-              </button>
-              <button
-                onClick={handleTempDelete}
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-destructive)',
-                  background: 'transparent',
-                  color: 'var(--color-destructive)',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  minHeight: 32,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t('modalB3.reportBanner.delete')}
-              </button>
-            </div>
-          </div>
+          <ReportReentryBanner
+            project={tempCompletedProject}
+            onSave={() => {
+              setSaveModalProject(tempCompletedProject)
+              setShowSaveModal(true)
+            }}
+            onDelete={async () => {
+              if (await handleTempDelete()) {
+                setGlobalToast({ message: t('modalB3.reportBanner.deleted'), type: 'info' })
+              }
+            }}
+          />
         </div>
       )}
 

@@ -12,6 +12,7 @@ import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import FloatingIconButton from '../components/FloatingIconButton.jsx'
+import FinishReportButton from '../components/FinishReportButton.jsx'
 import Modal from '../components/Modal.jsx'
 import {
   INK,
@@ -405,7 +406,8 @@ export default function SwipePage({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '20px 16px var(--tabbar-clearance)',
+        // + 52px: reserves the fixed bottom Finish button (44px + 8px gap)
+        padding: '20px 16px calc(var(--tabbar-clearance) + 52px)',
         position: 'relative',
       }}>
         <PageTopControls
@@ -439,28 +441,11 @@ export default function SwipePage({
           gap: 16, width: '100%',
         }}>
           <div style={{ width: CARD_WIDTH, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button
+            <FinishReportButton
               onClick={onViewResults}
               disabled={isResultLoading || swipePending > 0}
-              style={{
-                width: '100%',
-                padding: '13px 20px',
-                borderRadius: 14,
-                background: 'var(--accent-1)',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 700,
-                border: 'none',
-                cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
-                fontFamily: 'inherit',
-                boxShadow: '0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent)',
-                opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
-                transition: 'opacity 0.2s',
-                minHeight: 44,
-              }}
-            >
-              {isResultLoading ? 'Preparing report...' : 'Finish & View Report →'}
-            </button>
+              loading={isResultLoading}
+            />
             <p style={{
               color: 'var(--color-text-dim)',
               fontSize: 13,
@@ -520,7 +505,9 @@ export default function SwipePage({
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'flex-start', height: 'var(--page-height)', overflow: 'hidden',
-        background: 'var(--color-bg)', padding: '20px 16px var(--tabbar-clearance)',
+        background: 'var(--color-bg)',
+        // + 52px once the fixed bottom Finish button shows (44px + 8px gap)
+        padding: `20px 16px calc(var(--tabbar-clearance) + ${isAt100 ? 52 : 0}px)`,
         position: 'relative',
       }}>
 
@@ -545,29 +532,11 @@ export default function SwipePage({
         }}>
 
         {isAt100 && (
-          <div style={{ width: CARD_WIDTH }}>
-            <button
-              onClick={onViewResults}
-              disabled={isResultLoading || swipePending > 0}
-              style={{
-                width: '100%',
-                padding: '12px 20px',
-                borderRadius: 14,
-                background: 'var(--accent-1)',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 700,
-                border: 'none',
-                cursor: (isResultLoading || swipePending > 0) ? 'default' : 'pointer',
-                fontFamily: 'inherit',
-                boxShadow: '0 4px 16px color-mix(in srgb, var(--accent-1) 35%, transparent)',
-                opacity: (isResultLoading || swipePending > 0) ? 0.6 : 1,
-                transition: 'opacity 0.2s',
-              }}
-            >
-              {isResultLoading ? 'Preparing report...' : 'Finish & View Report →'}
-            </button>
-          </div>
+          <FinishReportButton
+            onClick={onViewResults}
+            disabled={isResultLoading || swipePending > 0}
+            loading={isResultLoading}
+          />
         )}
 
         {/* Card */}

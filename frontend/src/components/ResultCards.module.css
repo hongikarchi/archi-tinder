@@ -1,0 +1,248 @@
+/* ResultCards — the 3-card swipeable result view (FULL-REPORT-UI-1 WP3, #445).
+ *
+ * Source of truth: archi-tinder-mock/persona-report-all.html (vCards, VCARD_CSS,
+ * emptyBlock/cardState). DESIGN.md §11 off-scale values live HERE, do not round:
+ *   E1  13px body text            (.desc, .pattern)
+ *   E5  card shadow 0 8px 24px rgba(0,0,0,.12)   (.card, .stateBox)
+ *   E7  letter-spacing -.02em name, .14em eyebrow (.name, .eyebrow)
+ *   E8  reveal 700ms, name settle 900ms, stagger via --d (.rv, .name)
+ * Tag chips reuse PersonaReportPage.module.css (E2).
+ *
+ * Card box = the Swipe card area: width/height come from useCardSize()
+ * (--cw / --ch set inline), horizontally centred like SwipeDeck.
+ */
+
+.page {
+  height: var(--page-height);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-bg);
+  padding: 20px 0 var(--tabbar-clearance);
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Same slot SwipePage gives the deck: the card is centred in what remains. */
+.stage {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  word-break: keep-all;
+  --rc-reveal: 700ms;   /* E8 */
+  --rc-settle: 900ms;   /* E8 */
+}
+
+/* ── Carousel ───────────────────────────────────────────────────────────── */
+/* viewport = card width + 16px side margin + 16px (peek 8px = 16 - gap 8) */
+.viewport {
+  width: min(100%, calc(var(--cw) + 32px));
+  flex: none;
+}
+
+.car {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 16px;
+  padding: 24px 0 40px 16px;
+  margin: -8px 0 -26px;              /* room for the shadow without moving the card */
+  scrollbar-width: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.car::-webkit-scrollbar { display: none; }
+.car::after { content: ''; flex: 0 0 8px; }   /* trailing space so the last card can snap */
+
+.card {
+  flex: 0 0 var(--cw);
+  height: var(--ch);
+  box-sizing: border-box;
+  scroll-snap-align: start;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); /* E5 */
+  padding: 28px 24px 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+}
+.card::-webkit-scrollbar { display: none; }
+.cardEnd { justify-content: center; align-items: center; text-align: center; }
+
+/* ── Per-card reveal (first time the card becomes active) ──────────────── */
+.rv {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity var(--rc-reveal) var(--motion-ease-out) var(--d, 0s),
+    transform var(--rc-reveal) var(--motion-ease-out) var(--d, 0s),
+    letter-spacing var(--rc-settle) var(--motion-ease-out) var(--d, 0s);
+}
+.pop { transform: translateY(10px) scale(0.85); }
+.seen .rv { opacity: 1; transform: none; }
+.name { letter-spacing: 0.14em; }
+.seen .name { letter-spacing: -0.02em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rv { opacity: 1; transform: none; transition: none; }
+  .name { letter-spacing: -0.02em; }
+}
+
+/* ── Card text ──────────────────────────────────────────────────────────── */
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.14em; /* E7 */
+  text-transform: uppercase;
+}
+.eyebrowLine { width: 18px; height: 1px; background: var(--color-text-muted); flex: none; }
+
+.name {
+  margin: 0 0 12px;
+  color: var(--color-text);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+}
+.oneLiner {
+  margin: 0 0 14px;
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+}
+.desc {
+  margin: 0 0 18px;
+  color: var(--color-text-dim);
+  font-size: 13px; /* E1 */
+  line-height: 1.75;
+}
+.mainSlot { flex: 1; min-height: 170px; display: flex; flex-direction: column; }
+
+.h2 {
+  margin: 0 0 12px;
+  color: var(--color-text);
+  font-size: var(--fs-heading);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+}
+.pattern {
+  margin: 0 0 14px;
+  color: var(--color-text-dim);
+  font-size: 13px; /* E1 */
+  line-height: 1.7;
+}
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+.h3 {
+  margin: 0 0 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border-soft);
+  color: var(--color-text);
+  font-size: var(--fs-emphasis);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+}
+.legacy {
+  margin: 0 0 8px;
+  color: var(--color-text-dim);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+}
+
+/* ── Closing card ───────────────────────────────────────────────────────── */
+.thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+.thumbImg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.doneTitle {
+  margin: 0 0 8px;
+  color: var(--color-text);
+  font-size: var(--fs-heading);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+}
+.doneName {
+  margin: 0 0 6px;
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+}
+.doneBody {
+  margin: 0 0 28px;
+  max-width: 280px;
+  color: var(--color-text-dim);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+}
+.cta {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent-1);
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ── Dots ───────────────────────────────────────────────────────────────── */
+.dots {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+.dot {
+  height: 6px;
+  width: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  cursor: pointer;
+  transition: width 0.25s var(--motion-ease), background 0.25s var(--motion-ease);
+}
+.dotActive { width: 18px; background: var(--accent-1); }
+
+/* ── State card (loading / failure / zero likes) — same box as the cards ── */
+.stateBox {
+  width: var(--cw);
+  height: var(--ch);
+  flex: none;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); /* E5 */
+  overflow: hidden;
+}
+.skel { padding: 28px 24px; }
+.skelTags { display: flex; gap: 6px; margin-bottom: 24px; }

@@ -1,0 +1,38 @@
+/* Same left/right margins and max-width as the TabBar capsule (TabBar.jsx:
+ * left/right 16, maxWidth var(--tabbar-max-width)) so the two align. Sits one
+ * 8px gap above the capsule's top edge; pointer-events only on the button so
+ * the empty side margins never block the deck. */
+.wrap {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(var(--tabbar-height) + 10px + env(safe-area-inset-bottom, 0px) + 8px);
+  max-width: var(--tabbar-max-width);
+  margin: 0 auto;
+  z-index: 99;
+  pointer-events: none;
+}
+
+.btn {
+  pointer-events: auto;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 8px;
+  white-space: nowrap;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: opacity var(--motion-fast) var(--motion-ease);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

@@ -218,7 +218,7 @@ export default function TabBar() {
         position: 'fixed',
         left: 16, right: 16,
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
-        maxWidth: compact ? 280 : 420, margin: '0 auto',
+        maxWidth: compact ? 280 : 'var(--tabbar-max-width)', margin: '0 auto',
         display: 'flex', zIndex: 100,
         boxSizing: 'border-box',
         height: compact ? 'var(--tabbar-height-compact)' : 'var(--tabbar-height)',

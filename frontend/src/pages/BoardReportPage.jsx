@@ -101,6 +101,20 @@ export default function BoardReportPage({ onLogout }) {
     },
   })
 
+  // Post-save landing (App.handleBoardSaved navigates with state.saved): toast once,
+  // then drop the flag so back/forward doesn't replay it. Waits for ownership
+  // because the toast host lives in the owner-only regeneration overlay.
+  const savedRef = useRef(!!locationState?.saved)
+  const { showToast } = regen
+  useEffect(() => {
+    if (!savedRef.current || !isOwner) return
+    savedRef.current = false
+    showToast(t('results.savedToast'))
+    const { saved: _saved, ...rest } = locationState || {}
+    navigate(location.pathname, { replace: true, state: Object.keys(rest).length ? rest : null })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner])
+
   // 403/404 = private or missing board ("unavailable"); any other failure
   // (network, 5xx, timeout) is a retryable load failure.
   const boardGone = boardError?.status === 403 || boardError?.status === 404

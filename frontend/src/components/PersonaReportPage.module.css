@@ -118,6 +118,8 @@
 
 /* ── Image slot ──────────────────────────────────────────────────────────── */
 .imgBox { position: relative; height: 240px; margin-bottom: 22px; }
+/* Result-card variant (ResultCards): grows to fill the card, min 170px. */
+.imgBoxFill { flex: 1 1 auto; height: auto; min-height: 170px; margin-bottom: 0; }
 
 .img {
   width: 100%;

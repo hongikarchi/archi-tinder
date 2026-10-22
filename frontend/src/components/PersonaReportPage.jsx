@@ -14,9 +14,8 @@ import s from './PersonaReportPage.module.css'
 /**
  * PersonaReportPage — the ONE shared persona report page (FULL-REPORT-UI-1, #445).
  *
- * Used by /board/:boardId/report (BoardReportPage) and — via the thin
- * PersonaReport wrapper — by ResultsPage until WP3 lands. The post-save landing
- * reuses it too. Look, copy and behaviour follow the approved mock
+ * Used by /board/:boardId/report (BoardReportPage), which is also the post-save
+ * landing (ResultCards hands off to it). Look, copy and behaviour follow the approved mock
  * (archi-tinder-mock/persona-report-all.html); off-scale values are DESIGN.md
  * §11 E1-E10 and live in PersonaReportPage.module.css.
  *
@@ -164,7 +163,8 @@ function RefreshButton({ busy, failed, onClick, t }) {
 }
 
 /** Image slot: generating / failed / none / loaded (DESIGN.md §8.8 skeleton, no shimmer). */
-function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus, onRegenerateImage, imageRegenerating, imageRegenFailed, t }) {
+export function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus, onRegenerateImage, imageRegenerating, imageRegenFailed, fill = false, t }) {
+  const box = fill ? `${s.imgBox} ${s.imgBoxFill}` : s.imgBox   // fill: flex-grow slot inside a result card
   const owner = role === 'owner'
   const showRefresh = owner && !!onRegenerateImage
   const mime = safeImageMime(imageMime)
@@ -172,7 +172,7 @@ function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus
 
   if (src && !imageRegenerating) {
     return (
-      <div className={s.imgBox}>
+      <div className={box}>
         <img className={s.img} src={src} alt={t('persona.imageSection')} />
         {showRefresh && <RefreshButton busy={imageRegenerating} failed={imageRegenFailed} onClick={onRegenerateImage} t={t} />}
         <a className={s.imgSave} href={src} download={`persona-${boardId || 'report'}.${imageExtension(mime)}`}>
@@ -184,7 +184,7 @@ function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus
   }
   if (jobStatus === 'generating' || imageRegenerating) {
     return (
-      <div className={s.imgBox}>
+      <div className={box}>
         <div className={s.imgState} role="status" aria-live="polite">
           <div className={s.skeletonPulse} aria-hidden="true" />
           <span className={s.imgStateLabel}>{t('persona.imgGenerating')}</span>
@@ -195,7 +195,7 @@ function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus
   }
   if (jobStatus === 'error') {
     return (
-      <div className={s.imgBox}>
+      <div className={box}>
         <div className={`${s.imgState} ${s.imgFail}`} role="alert">
           <span className={s.imgFailText}>{t('persona.imgError')}</span>
           {owner && boardId && (
@@ -208,7 +208,7 @@ function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus
     )
   }
   return (
-    <div className={s.imgBox}>
+    <div className={box}>
       <div className={`${s.imgState} ${s.imgNone}`}>
         <span className={s.imgNoneName}>{personaName}</span>
         <span className={s.imgNoneCap}>{t('persona.imgNone')}</span>
