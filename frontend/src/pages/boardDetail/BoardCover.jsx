@@ -1,47 +1,72 @@
 /**
- * BoardCover — contained cover-photo card for BoardDetailPage (option a,
- * .claude/plans/archive/ui-consistency-b.md decision 7).
+ * BoardCover — persona cover card for BoardDetailPage (FULL-REPORT-UI-1 WP4,
+ * mock `boardDetail`): aspect 4:3, radius-lg, soft border, E5 shadow, bottom
+ * scrim, persona name (24px bold, white) + meta line (12px, white 72%).
  *
- * Isolated into its own tiny component with a SINGLE render condition (no
- * image -> render nothing, no grey placeholder slab) so switching to
- * option b (drop the cover entirely) is a one-line change at the call site
- * — see BoardDetailPage.jsx's `SHOW_COVER` flag.
- *
- * Aspect 16:10, capped at 260px tall (aspect-ratio + max-height together:
- * the browser still uses 100% width, so on a wide desktop column the box
- * is simply shorter than the ratio would dictate — object-fit:cover keeps
- * the image filling it with no distortion). Plain photo, no gradient, no
- * text (that lives below it now — see BoardDetailPage's title block).
+ * Image chain is decided by the caller (persona image -> first building cover);
+ * with no image a neutral accent gradient face is rendered so the title still
+ * has a surface to sit on.
  */
-export default function BoardCover({ imageUrl, alt }) {
-  if (!imageUrl) return null
-
+export default function BoardCover({ imageUrl, alt, title, meta }) {
   return (
     <div
       style={{
         position: 'relative',
         width: '100%',
-        aspectRatio: '16 / 10',
-        maxHeight: 260,
+        aspectRatio: '4 / 3',
         borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
-        background: 'var(--color-surface)',
-        marginTop: 8,
+        border: '1px solid var(--color-border-soft)',
+        boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+        background: [
+          'radial-gradient(120% 120% at 15% 10%, color-mix(in srgb, var(--accent-1) 18%, var(--color-surface)) 0%, transparent 60%)',
+          'radial-gradient(120% 120% at 90% 95%, color-mix(in srgb, var(--accent-2) 16%, var(--color-surface)) 0%, transparent 60%)',
+          'var(--color-surface-2)',
+        ].join(', '),
       }}
     >
-      <img
-        src={imageUrl}
-        alt={alt || ''}
-        fetchpriority="high"
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt={alt || ''}
+          fetchpriority="high"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+          }}
+        />
+      )}
+      <div
+        aria-hidden="true"
         style={{
           position: 'absolute',
           inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          display: 'block',
+          background: imageUrl
+            ? 'linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.2) 50%, rgba(0,0,0,0) 75%)'
+            : 'linear-gradient(to top, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 65%)',
         }}
       />
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 18px 16px' }}>
+        <h1 style={{
+          margin: '0 0 4px',
+          color: '#fff',
+          fontSize: 'var(--fs-title)',
+          fontWeight: 'var(--fw-bold)',
+          lineHeight: 1.2,
+          wordBreak: 'keep-all',
+        }}>
+          {title}
+        </h1>
+        {meta && (
+          <p style={{ margin: 0, color: 'rgba(255,255,255,.72)', fontSize: 'var(--fs-caption)' }}>
+            {meta}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

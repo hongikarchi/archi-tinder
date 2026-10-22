@@ -1,0 +1,83 @@
+/* EmptyState — neutral variant (persona report redesign, DESIGN.md §8.9):
+ * icon in a surface-2 circle, no red, optional hint + pill CTA + text button.
+ * Values follow the approved mock; the default (non-neutral) variant stays
+ * inline-styled in EmptyState.jsx. */
+
+.neutral {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 32px;
+  text-align: center;
+  height: 100%;
+  word-break: keep-all;
+}
+
+.iconCircle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--fs-emphasis);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+}
+
+.body {
+  margin: 0;
+  max-width: 280px;
+  color: var(--color-text-dim);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+}
+
+.hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+}
+
+.pill {
+  margin-top: 10px;
+  min-height: 44px;
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--accent-1);
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.textBtn {
+  min-height: 36px;
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.textBtn:hover {
+  color: var(--color-text);
+}

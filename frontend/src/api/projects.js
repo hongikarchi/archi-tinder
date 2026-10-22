@@ -105,6 +105,17 @@ export async function generateReportImage(projectId, { regenerate = false, timeo
 }
 
 /**
+ * Recommended buildings for a board's persona report. Works for the owner AND
+ * for viewers of a public board (the session-result endpoint is owner-only).
+ * Resolves to an array of normalized ImageCard objects ([] when none).
+ * Throws on network/HTTP failure — callers hide the section on error.
+ */
+export async function getProjectRecommendations(projectId) {
+  const data = await callApi('GET', `/projects/${projectId}/recommendations/`)
+  return (data?.predicted_like_images || []).map(normalizeCard).filter(Boolean)
+}
+
+/**
  * Batch-fetch building cards by IDs.
  * Returns list of normalized ImageCard objects.
  * Splits into chunks of 200 to respect the backend limit.

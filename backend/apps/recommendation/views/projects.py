@@ -26,7 +26,11 @@ from ..caches import (
     evict_project_detail,
     get_project_detail_cache_key,
     PROJECT_DETAIL_TTL,
+    PROJECT_RECOMMENDATIONS_TTL,
+    get_project_recommendations_cache_key,
 )
+from ..services import session_service
+from ..throttles import ProjectRecommendationsThrottle
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
 
@@ -261,6 +265,53 @@ class ProjectDetailView(APIView):
         evict_user_profile_detail(profile.user.id)
         logger.info('Project deleted: %s', pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectRecommendationsView(APIView):
+    """GET /api/v1/projects/{project_id}/recommendations/ — FULL-REPORT-UI-1.
+
+    Recommended buildings of a board for EVERYONE who may see the board (owner
+    and non-owner). SessionResultView stays owner-only; this endpoint exposes
+    only the predicted cards, never the session id.
+
+    Visibility mirrors ProjectDetailView.get exactly: owner or
+    visibility == 'public'; otherwise 403 {'detail': 'Forbidden'}; unknown
+    project 404. Response: {'predicted_like_images': [card, ...]} — same cards
+    and order as SessionResultView's predicted images. Empty list when the
+    board has no session / no like vectors. Cached per project (see
+    get_project_recommendations_cache_key).
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ProjectRecommendationsThrottle]
+
+    def get(self, request, pk):
+        from django.core.cache import cache as _cache
+
+        profile = _get_profile(request)
+        project = get_object_or_404(Project.objects.only('project_id', 'user_id', 'visibility'), project_id=pk)
+        is_owner = profile and project.user_id == profile.pk
+        if not is_owner and project.visibility != 'public':
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        cache_key = get_project_recommendations_cache_key(str(pk))
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        predicted = []
+        session = (
+            AnalysisSession.objects
+            .filter(project_id=pk)
+            .select_related('project')
+            .order_by('-created_at')
+            .first()
+        )
+        if session is not None and session.like_vectors:
+            predicted = session_service.build_predicted_cards(session)[0]
+
+        data = {'predicted_like_images': predicted}
+        _cache.set(cache_key, data, PROJECT_RECOMMENDATIONS_TTL)
+        return Response(data)
 
 
 class UserProjectsListView(APIView):

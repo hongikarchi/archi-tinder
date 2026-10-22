@@ -37,6 +37,18 @@ class TasteRecognizeDailyThrottle(UserRateThrottle):
     rate  = '200/day'
 
 
+class ProjectRecommendationsThrottle(UserRateThrottle):
+    """30 board-recommendation reads per minute per authenticated user.
+
+    The endpoint runs the recommendation engine on a cache miss (responses are
+    cached per project for 10 min), so the cap guards DB/embedding cost. There
+    is no LLM spend while RECOMMENDATION['gemini_rerank_enabled'] is False
+    (build_predicted_cards would call the Gemini rerank if it were enabled).
+    """
+    scope = 'project_recommendations'
+    rate  = '30/min'
+
+
 class ReportGenerateThrottle(UserRateThrottle):
     """10 persona report generations per hour per authenticated user.
 

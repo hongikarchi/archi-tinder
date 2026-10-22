@@ -82,7 +82,89 @@
   color: var(--color-text-dim);
 }
 
+/* Top action row (mock `boardDetail`) — 44px pills + circular icon buttons. */
+.topActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 18px 8px 0;
+}
+.pill,
+.circ {
+  min-height: 44px;
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--motion-normal) var(--motion-ease),
+              background var(--motion-normal) var(--motion-ease),
+              color var(--motion-normal) var(--motion-ease),
+              border-color var(--motion-normal) var(--motion-ease);
+}
+.pill {
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  border: 0;
+}
+.pillPrimary {
+  flex: 1;
+  min-width: 0;
+  background: var(--accent-1);
+  color: #fff;
+}
+.pillSecondary {
+  padding: 0 18px;
+  gap: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.pillSecondary.reacted {
+  color: var(--accent-1);
+  border-color: var(--accent-1);
+}
+.circ {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.circ.active {
+  background: var(--color-surface-2);
+  color: var(--accent-1);
+}
+.pill:hover:not(:disabled),
+.circ:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+.pill:active:not(:disabled),
+.circ:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.pill:disabled,
+.circ:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .pill,
+  .circ {
+    transition: none;
+  }
+  .pill:hover:not(:disabled),
+  .pill:active:not(:disabled),
+  .circ:hover:not(:disabled),
+  .circ:active:not(:disabled) {
+    transform: none;
+  }
   .ctaPrimary,
   .ctaSecondary {
     transition: none;
