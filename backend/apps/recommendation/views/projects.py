@@ -38,6 +38,15 @@ logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
 
 
+def _entry_id(item):
+    """Building id of a liked_ids/saved_ids entry; tolerates legacy plain strings."""
+    if isinstance(item, dict):
+        return item.get('id')
+    if isinstance(item, str):
+        return item
+    return None
+
+
 # ── Projects ──────────────────────────────────────────────────────────────────
 
 class ProjectListCreateView(APIView):
@@ -210,6 +219,16 @@ class ProjectDetailView(APIView):
                 project_id=pk,
             )
 
+            # A board must keep at least one liked building: the persona report
+            # is generated from liked_ids. Reject before any mutation/eviction.
+            if remove_ids is not None and project.liked_ids:
+                remove_set_guard = set(remove_ids)
+                if not any(_entry_id(item) not in remove_set_guard for item in project.liked_ids):
+                    return Response(
+                        {'detail': 'last_liked_building'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             serializer = None
             if schema_data:
                 serializer = ProjectSelfUpdateSerializer(project, data=schema_data, partial=True)
@@ -235,8 +254,8 @@ class ProjectDetailView(APIView):
 
             if remove_ids is not None:
                 remove_set = set(remove_ids)
-                project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
-                project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
+                project.liked_ids = [item for item in project.liked_ids if _entry_id(item) not in remove_set]
+                project.saved_ids = [item for item in project.saved_ids if _entry_id(item) not in remove_set]
                 project.save(update_fields=['liked_ids', 'saved_ids', 'updated_at'])
                 evict_taste(profile.id)
                 evict_discovery_feed(profile.id)

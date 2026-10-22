@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
-import { updateProject, getProjectReportImage } from '../api/projects.js'
+import { updateProject, getProjectReportImage, generateReport } from '../api/projects.js'
+import { useRegeneration } from '../hooks/useRegeneration.jsx'
+import { useReportImageJob, reportImageJobs } from '../hooks/useReportImageJob.js'
+import { canSelectForDelete, isLastLikedError } from '../utils/boardDeleteRules.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import RecommendedTile from './boardDetail/RecommendedTile'
@@ -48,9 +51,23 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const [deleteInProgress, setDeleteInProgress] = useState(false)
   // Capture bookmark signal once at mount so board-load effect can apply it
   const bookmarkSignalRef = useRef(location.state?.bookmarkChanged || null)
+  // Report regenerated after deleting liked buildings (null -> use board.final_report)
+  const [localFinalReport, setLocalFinalReport] = useState(null)
+  const [deletedLikedIds, setDeletedLikedIds] = useState([])
+  const [lastMsgOn, setLastMsgOn] = useState(false)
+  const lastMsgTimerRef = useRef(null)
+  const aliveRef = useRef(true)
+  const regenBusyRef = useRef(false)
+  const regenAgainRef = useRef(false)
+  useEffect(() => {
+    aliveRef.current = true
+    return () => { aliveRef.current = false; clearTimeout(lastMsgTimerRef.current) }
+  }, [])
 
   useEffect(() => {
     if (!board) return
+    setLocalFinalReport(null)
+    setDeletedLikedIds([])
     setIsReacted(!!board.is_reacted)
     setReactionCount(board.reaction_count ?? 0)
     setReactionError(null)
@@ -92,9 +109,14 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     })
     return () => { cancelled = true }
   }, [board])
-  const personaImage = board?.report_image
-    ? `data:${safeImageMime(board.report_image_mime)};base64,${board.report_image}`
-    : fetchedPersonaImage
+  // The shared image-job store wins once it holds an image (regeneration after a
+  // delete lands here), so the cover follows the newest generated image.
+  const imageJob = useReportImageJob(boardId)
+  const personaImage = imageJob.image
+    ? `data:${safeImageMime(imageJob.mime)};base64,${imageJob.image}`
+    : board?.report_image
+      ? `data:${safeImageMime(board.report_image_mime)};base64,${board.report_image}`
+      : fetchedPersonaImage
 
   async function handleToggleReaction() {
     if (!board || isReactionPending) return
@@ -169,7 +191,21 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     if (e.key === 'Escape') { setIsEditingName(false) }
   }
 
+  const likedIdList = (board?.liked_ids || []).map(item => String(item?.id ?? item))
+
+  function flashLastMessage() {
+    setLastMsgOn(true)
+    clearTimeout(lastMsgTimerRef.current)
+    lastMsgTimerRef.current = setTimeout(() => setLastMsgOn(false), 2300)
+  }
+
   function handleToggleBuildingSelect(id) {
+    if (!selectedIds.has(id) && !canSelectForDelete({
+      likedIds: likedIdList, deletedIds: deletedLikedIds, selectedIds, candidateId: id,
+    })) {
+      flashLastMessage()
+      return
+    }
     setSelectedIds(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -177,22 +213,61 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     })
   }
 
+  // Sequential, fire-and-forget after a successful delete: report first, then
+  // the image through the shared store (previous image kept on failure).
+  // Serialized: a delete during a running regeneration queues exactly one
+  // follow-up run so the final run reflects the final board state.
+  async function regenerateAfterDelete() {
+    if (regenBusyRef.current) { regenAgainRef.current = true; return }
+    regenBusyRef.current = true
+    try {
+      regen.showToast(t('board.regeneratingToast'))
+      const data = await generateReport(boardId, { regenerate: true })
+      if (!data?.final_report) throw new Error('empty report')
+      if (aliveRef.current) setLocalFinalReport(data.final_report)
+      const img = await reportImageJobs.regenerate(boardId)
+      if (!img && aliveRef.current) regen.showToast(t('persona.regenFail'))
+    } catch (err) {
+      console.error('[BoardDetailPage] regenerate after delete failed:', err?.status, err?.message)
+      if (aliveRef.current) regen.showToast(t('persona.regenFail'))
+    } finally {
+      regenBusyRef.current = false
+      if (regenAgainRef.current) {
+        regenAgainRef.current = false
+        if (aliveRef.current) regenerateAfterDelete()
+      }
+    }
+  }
+
   async function handleDeleteSelected() {
     if (!isOwner || selectedIds.size === 0 || deleteInProgress) return
     setDeleteInProgress(true)
     const ids = [...selectedIds]
+    const likedSet = new Set(likedIdList)
+    const deletedLiked = ids.filter(id => likedSet.has(String(id)))
+    const hadReport = !!board?.final_report
     try {
       await updateProject(boardId, { remove_building_ids: ids })
       setLocalBuildings(prev => (prev || []).filter(b => {
         const bid = b.image_id || b.canonical_bld_id || b.building_id || b.id
         return !ids.includes(bid)
       }))
+      if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
       setSelectedIds(new Set())
       setIsEditMode(false)
-    } catch {
-      // keep state on error
+      // Policy (2026-10-23): every board building is treated as liked, so any
+      // successful deletion regenerates the persona report and image.
+      // Skip when the board has no liked ids at all (saved-only board): nothing
+      // to regenerate from and the server would 400.
+      if (ids.length > 0 && hadReport && likedIdList.length > 0) regenerateAfterDelete()
+    } catch (err) {
+      // keep edit mode + selection on error
+      if (aliveRef.current) {
+        if (isLastLikedError(err)) flashLastMessage()
+        else regen.showToast(t('board.deleteFailed'))
+      }
     } finally {
-      setDeleteInProgress(false)
+      if (aliveRef.current) setDeleteInProgress(false)
     }
   }
 
@@ -207,6 +282,11 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const viewerId = sessionStorage.getItem('archithon_user')
   const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
   const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
+  // Toast host + owner gate (image/report regeneration is owner-only).
+  const regen = useRegeneration({ projectId: boardId, enabled: isOwner, withReport: false })
+  const finalReport = localFinalReport || board?.final_report || null
+  // All board buildings are treated as liked: any selection triggers regeneration.
+  const showRegenNotice = selectedIds.size > 0 && !!board?.final_report
   // Recompute cover from local state first so deleting the first card doesn't
   // leave a stale cover. Fall back to board.cover_image_url only when buildings
   // are present but buildings[0] lacks an image_url; null when board is empty.
@@ -220,7 +300,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   // (e.g. the "Love this" button) and an empty/broken owner avatar flash
   // briefly before `board` arrives.
   const headerLoading = loading && !board
-  const report = board?.final_report ? localizeReport(board.final_report, language) : null
+  const report = finalReport ? localizeReport(finalReport, language) : null
   const coverTitle = report?.persona_type || boardName
   const countLabel = t(buildings.length === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: buildings.length })
   const ownerHandle = board?.user?.username
@@ -538,6 +618,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
           gap: 20,
+          ...(isEditMode ? { paddingBottom: 56 } : null),
         }}>
           {buildings.map((building, index) => {
             const bid = building.image_id || building.canonical_bld_id || building.building_id || building.id
@@ -625,7 +706,10 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         </div>
       )}
 
-      {/* Edit mode floating action bar — glass capsule, consistent with the TabBar. */}
+      {regen.overlay}
+
+      {/* Edit mode floating action bar (persona-report mock `editBar`): no
+          container, two solid buttons + a solid notice pill above them. */}
       {isEditMode && (
         <div style={{
           position: 'fixed',
@@ -633,49 +717,66 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           bottom: 'var(--tabbar-clearance)',
           maxWidth: 420,
           margin: '0 auto',
-          padding: 10,
-          borderRadius: 'var(--radius-lg)',
-          background: 'var(--tabbar-glass-bg)',
-          border: '1px solid var(--tabbar-glass-border)',
-          boxShadow: 'var(--tabbar-glass-shadow)',
-          backdropFilter: 'blur(20px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
           display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
           gap: 10,
           zIndex: 200,
         }}>
-          <button
-            onClick={() => { setIsEditMode(false); setSelectedIds(new Set()) }}
-            className={s.ctaSecondary}
-            style={{
-              flex: 1, minHeight: 44,
-              fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
-              cursor: 'pointer',
-            }}
-          >
-            {t('board.cancel')}
-          </button>
-          <button
-            onClick={handleDeleteSelected}
-            disabled={selectedIds.size === 0 || deleteInProgress}
-            style={{
-              flex: 2, minHeight: 44, borderRadius: 'var(--radius-md)',
-              background: selectedIds.size > 0 ? 'var(--color-destructive)' : 'var(--color-surface-2)',
-              color: selectedIds.size > 0 ? '#fff' : 'var(--color-text-dim)',
-              border: 'none',
-              fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
-              cursor: selectedIds.size === 0 ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-              opacity: deleteInProgress ? 0.6 : 1,
-              transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
-            }}
-          >
-            {deleteInProgress
-              ? t('board.deleting')
-              : selectedIds.size > 0
-                ? t(selectedIds.size === 1 ? 'board.deleteCardOne' : 'board.deleteCardMany', { n: selectedIds.size })
-                : t('board.selectToDelete')}
-          </button>
+          <div role="status" aria-live="polite">
+          {(lastMsgOn || showRegenNotice) && (
+            <span style={{
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-soft)',
+              boxShadow: '0 4px 12px rgba(0,0,0,.12)',
+              fontSize: 'var(--fs-caption)',
+              color: lastMsgOn ? 'var(--color-text)' : 'var(--color-text-dim)',
+              fontWeight: lastMsgOn ? 'var(--fw-semibold)' : 'var(--fw-regular)',
+              textAlign: 'center',
+            }}>
+              {lastMsgOn ? t('board.lastBuilding') : t('board.deleteRegenNotice')}
+            </span>
+          )}
+          </div>
+          <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+            <button
+              onClick={() => { setIsEditMode(false); setSelectedIds(new Set()) }}
+              style={{
+                flex: 1, minHeight: 44, borderRadius: 'var(--radius-md)',
+                background: 'var(--color-surface)', color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                boxShadow: '0 6px 18px rgba(0,0,0,.18)',
+                fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
+                fontFamily: 'inherit', cursor: 'pointer',
+              }}
+            >
+              {t('board.cancel')}
+            </button>
+            <button
+              onClick={handleDeleteSelected}
+              disabled={selectedIds.size === 0 || deleteInProgress}
+              style={{
+                flex: 2, minHeight: 44, borderRadius: 'var(--radius-md)',
+                background: selectedIds.size > 0 ? 'var(--color-text)' : 'var(--color-surface-2)',
+                color: selectedIds.size > 0 ? 'var(--color-bg)' : 'var(--color-text-dim)',
+                border: 'none',
+                boxShadow: selectedIds.size > 0 ? '0 6px 18px rgba(0,0,0,.25)' : 'none',
+                fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
+                cursor: selectedIds.size === 0 ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: deleteInProgress ? 0.6 : 1,
+                transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
+              }}
+            >
+              {deleteInProgress
+                ? t('board.deleting')
+                : selectedIds.size > 0
+                  ? t(selectedIds.size === 1 ? 'board.deleteCardOne' : 'board.deleteCardMany', { n: selectedIds.size })
+                  : t('board.selectToDelete')}
+            </button>
+          </div>
         </div>
       )}
     </PageShell>
