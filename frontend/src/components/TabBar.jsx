@@ -180,6 +180,14 @@ export default function TabBar() {
     }
   }, [])
 
+  // Mirror the collapse state to <html> so siblings that dock to the capsule
+  // (FinishReportButton) can follow it. Absent attribute = expanded geometry.
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.tabbar = compact ? 'compact' : 'expanded'
+    return () => { delete root.dataset.tabbar }
+  }, [compact])
+
   const tabs = [
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
     { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/search' },
@@ -218,7 +226,7 @@ export default function TabBar() {
         position: 'fixed',
         left: 16, right: 16,
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
-        maxWidth: compact ? 280 : 'var(--tabbar-max-width)', margin: '0 auto',
+        maxWidth: compact ? 'var(--tabbar-max-width-compact)' : 'var(--tabbar-max-width)', margin: '0 auto',
         display: 'flex', zIndex: 100,
         boxSizing: 'border-box',
         height: compact ? 'var(--tabbar-height-compact)' : 'var(--tabbar-height)',

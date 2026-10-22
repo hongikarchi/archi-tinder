@@ -11,6 +11,21 @@
   margin: 0 auto;
   z-index: 99;
   pointer-events: none;
+  /* Same duration/easing as the TabBar's own size change. */
+  transition: max-width var(--motion-slow) var(--motion-ease),
+    bottom var(--motion-slow) var(--motion-ease);
+}
+
+/* TabBar compact (icon-only) state, mirrored on <html> by TabBar.jsx. */
+:global(:root[data-tabbar="compact"]) .wrap {
+  max-width: var(--tabbar-max-width-compact);
+  bottom: calc(var(--tabbar-height-compact) + 10px + env(safe-area-inset-bottom, 0px) + 8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrap {
+    transition: none;
+  }
 }
 
 .btn {
