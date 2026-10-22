@@ -201,3 +201,28 @@ class TestReportWriteEdgeCases:
         project.refresh_from_db()
         # PATCH must not clobber the stamp with the post-removal set.
         assert project.final_report['source_signature'] == liked_signature(liked)
+
+
+class TestDiscoveryDraftNameFollow:
+    """Pure rule: a discovery_ default name counts as 'not renamed by user'."""
+
+    def test_prefix_mirror_matches_discovery_feed(self):
+        from apps.recommendation import report_name
+        from apps.recommendation.discovery_feed import DISCOVERY_DRAFT_PREFIX
+        assert report_name._DISCOVERY_DRAFT_PREFIX == DISCOVERY_DRAFT_PREFIX
+
+    def test_first_report_replaces_discovery_name(self):
+        assert followed_board_name('discovery_261023_1430', None, NEW) == '새 이름'
+        assert followed_board_name('discovery_261023_1430', {}, NEW, 'en') == 'New English'
+
+    def test_regeneration_while_still_discovery_name(self):
+        assert followed_board_name('discovery_261023_1430', OLD, NEW) == '새 이름'
+
+    def test_user_renamed_untouched(self):
+        assert followed_board_name('My Board', None, NEW) is None
+        assert followed_board_name('My Board', OLD, NEW) is None
+
+    def test_empty_persona_returns_none(self):
+        assert followed_board_name('discovery_261023_1430', None, {'summary': 'x'}) is None
+        assert followed_board_name('discovery_261023_1430', None, None) is None
+        assert followed_board_name('discovery_261023_1430', None, {'persona_type': '  '}) is None

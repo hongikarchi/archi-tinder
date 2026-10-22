@@ -36,7 +36,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
       className={s.tile}
       style={{
         position: 'relative',
-        aspectRatio: '4 / 5',
+        aspectRatio: '3 / 4',
         borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
         cursor: 'pointer',
@@ -97,11 +97,9 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
         bottom: 0,
         left: 0,
         right: 0,
-        padding: '16px 18px 20px',
-      }}>
-        <h4 style={{
+      }} className={s.info}>
+        <h4 className={s.title} style={{
           color: '#fff',
-          fontSize: 18,
           fontWeight: 700,
           margin: '0 0 3px',
           lineHeight: 1.3,
@@ -113,6 +111,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
         }}>
           {building.image_title || building.name_en}
         </h4>
+        <div className={s.meta}>
         <p style={{
           color: 'rgba(255,255,255,0.55)',
           fontSize: 12,
@@ -125,6 +124,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
           <InfoCol label="ARCHITECT" value={building.metadata?.axis_architects} />
           <InfoCol label="YEAR" value={building.metadata?.axis_year} />
+        </div>
         </div>
       </div>
     </div>

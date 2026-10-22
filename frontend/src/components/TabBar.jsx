@@ -198,14 +198,26 @@ export default function TabBar() {
   function handleSelect(tabId) {
     expand()
     const tab = tabs.find(t => t.id === tabId)
-    if (!tab || tab.path === location.pathname) return
+    if (!tab) return
+
+    // Already on the profile root: re-tap = refresh (UserProfilePage watches
+    // location.state.profileRefresh -> boards tab, scroll top, refetch).
+    if (tab.id === 'profile' && location.pathname === tab.path) {
+      navigate(tab.path, { replace: true, state: { profileRefresh: Date.now() } })
+      return
+    }
+    if (tab.path === location.pathname) return
+
+    // Leaving a board (or its report) for the profile: replace so Back from the
+    // profile does not bounce through the board/report loop.
+    const replace = tab.id === 'profile' && location.pathname.startsWith('/board')
 
     // If the guard is active (Discovery mounted with draft likes >= 1), show the
     // leave-warning modal and defer navigation to the user's choice.
     if (discoveryNavigationGuard.check) {
-      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path))
+      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path, { replace }))
     } else {
-      navigate(tab.path)
+      navigate(tab.path, { replace })
     }
   }
 

@@ -7,6 +7,9 @@ OLD report's persona name in any form (flat / i18n.ko / i18n.en).
 """
 
 NAME_MAX_LENGTH = 200  # Project.name max_length
+# Mirror of discovery_feed.DISCOVERY_DRAFT_PREFIX, duplicated to keep this module
+# dependency-free; test_board_name_follow asserts the two stay equal.
+_DISCOVERY_DRAFT_PREFIX = 'discovery_'
 
 
 def _persona_names(report):
@@ -40,7 +43,11 @@ def followed_board_name(current_name, old_report, new_report, language='ko'):
     current = (current_name or '').strip()
     if not current:
         return None
-    if current not in _persona_names(old_report):
+    # A discovery draft default name ('discovery_YYMMDD_HHMM') was never typed by
+    # the user, so it counts as "not renamed" and is replaced by the persona name
+    # (covers the first generation, where the old report is empty).
+    if not current.startswith(_DISCOVERY_DRAFT_PREFIX) \
+            and current not in _persona_names(old_report):
         return None
     new_name = _new_persona_name(new_report, language or 'ko')[:NAME_MAX_LENGTH]
     if not new_name or new_name == current_name:

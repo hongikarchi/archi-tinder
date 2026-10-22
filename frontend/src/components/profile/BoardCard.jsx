@@ -155,10 +155,10 @@ export default function BoardCard({
 
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
-        padding: '12px 14px 14px',
+        padding: '16px 18px 18px',
       }}>
         <h2 style={{
-          color: '#fff', fontSize: 'var(--fs-body)', fontWeight: 700, lineHeight: 1.3,
+          color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3,
           margin: '0 0 4px',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           overflow: 'hidden', textOverflow: 'ellipsis',

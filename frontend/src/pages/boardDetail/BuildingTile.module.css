@@ -21,3 +21,21 @@
     transform: none;
   }
 }
+
+/* Board detail building grid: 2 columns on mobile, 3 from 640px (mock: 3-col, gap 10). */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.info { padding: 10px 10px 12px; }
+.title { font-size: 13px; }
+.meta { display: none; }
+
+@media (min-width: 640px) {
+  .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .info { padding: 16px 18px 20px; }
+  .title { font-size: 16px; }
+  .meta { display: block; }
+}

@@ -39,6 +39,7 @@ export default function BoardReportPage({ onLogout }) {
   // Stale-report regeneration on open (owner only, once per mount).
   const staleRef = useRef(false)
   const aliveRef = useRef(true)
+  const freshSaveRef = useRef(!!locationState?.saved)
   const [staleBusy, setStaleBusy] = useState(false)
   const [staleHandled, setStaleHandled] = useState(false)
   useEffect(() => {
@@ -71,13 +72,17 @@ export default function BoardReportPage({ onLogout }) {
   // regenerate the report (server resets staleness), then the image through the
   // shared store without blocking the report. Handled flag avoids a flash of the
   // stale flow after success.
+  // Never on a first generation: a report made in this visit (localReport) or
+  // arriving via the swipe-end save flow (freshSaveRef, captured at mount before
+  // the state flag is dropped) is fresh, so it must not be treated as stale.
   const shouldRegenerateStale = !staleHandled
-    && shouldRegenerateOnOpen({ isOwner, board })
+    && shouldRegenerateOnOpen({ isOwner, board, hasLocalReport: !!localReport, freshlySaved: freshSaveRef.current })
 
   useEffect(() => {
     if (!shouldAutoGenerate) return
     if (genRef.current) return
     genRef.current = true
+    staleRef.current = true   // first generation: the stale flow must never follow it
 
     generateReport(boardId)
       .then(data => {

@@ -11,12 +11,12 @@ export default function BoardGrid({
 }) {
   return (
     <>
-      {/* Boards grid — exactly 2 columns at every width */}
+      {/* Boards grid — responsive auto-fill, one tall tile per row on phones */}
       {boards.length > 0 ? (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: 12,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+          gap: 20,
         }}>
           {boards.map(board => (
             <BoardCard

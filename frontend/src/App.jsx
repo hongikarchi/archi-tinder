@@ -26,6 +26,7 @@ import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagin
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
+import { shouldRegenerateAfterSession } from './utils/reportStale.js'
 import { ONBOARDING_FLAG_KEY } from './utils/onboardingFlag.js'
 
 // ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
@@ -610,6 +611,7 @@ export default function App() {
           ...p,
           swipedIds: newSwipedIds,
           likedBuildings: action === 'like' ? [...p.likedBuildings, swipedCard] : p.likedBuildings,
+          likesSinceResume: (p.likesSinceResume || 0) + (action === 'like' ? 1 : 0),
         }
       }))
 
@@ -635,13 +637,25 @@ export default function App() {
         setIsResultLoading(true)
         try {
           const backendId = project?.backendId
+          // A board resumed via "continue exploring" may already own a report +
+          // image that local state does not know about: re-fetch the board (the
+          // server's report_stale flag is authoritative) before deciding.
+          const fetched = backendId ? await api.getProject(backendId) : null
+          const existingReport = project.finalReport || fetched?.final_report || null
+          const existingImage = project.reportImage || fetched?.report_image || null
+          const regen = !!backendId && shouldRegenerateAfterSession({
+            hadReport: !!existingReport,
+            newLikes: (project.likesSinceResume || 0) + (action === 'like' ? 1 : 0),
+            reportStale: fetched ? fetched.report_stale === true : null,
+          })
           // FULL-REPORT-IMG-1: persona image starts NOW, in parallel with the
           // report (facts-based prompt server-side, so it does not need the report
           // to exist). Not awaited here — PersonaReport shows the in-progress state
           // from the shared job store; this .then only persists the finished image
-          // into project state so ResultsPage remounts keep it.
-          if (backendId && !project.reportImage) {
-            reportImageJobs.start(backendId).then(img => {
+          // into project state so ResultsPage remounts keep it. Regeneration keeps
+          // the previous image until the new one lands (or on failure).
+          if (backendId && (regen || !existingImage)) {
+            (regen ? reportImageJobs.regenerate(backendId) : reportImageJobs.start(backendId)).then(img => {
               if (!img?.image_data) return
               setProjects(prev => prev.map(p => p.id === activeProjectId
                 ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
@@ -649,21 +663,27 @@ export default function App() {
           }
           const [resultData, reportData] = await Promise.all([
             api.getResult({ session_id: project.sessionId }),
-            (backendId && !project.finalReport) ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
+            (backendId && (regen || !existingReport))
+              ? api.generateReport(backendId, regen ? { regenerate: true } : undefined).catch((err) => { console.error('report generation failed:', err); return null; })
+              : Promise.resolve(null),
           ])
+          const finalReport = reportData?.final_report || existingReport
+          const axisScores = reportData?.axis_scores || (!reportData ? fetched?.axis_scores : null) || null
           setProjects(prev => prev.map(p => p.id === activeProjectId ? {
             ...p,
             predictedLikes: resultData.predicted_like_images || [],
-            ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
-            ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
+            ...(finalReport ? { finalReport } : {}),
+            ...(axisScores ? { axisScores } : {}),
+            ...(!p.reportImage && existingImage ? { reportImage: existingImage, reportImageMime: fetched?.report_image_mime || p.reportImageMime } : {}),
+            likesSinceResume: 0,
           } : p))
           // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
           // a temp project, but leave the sheet closed — the ResultsPage CTA
           // opens it. project.isTemp was set in handleStartTaste (snapshot above).
-          if (reportData?.final_report && backendId && project?.isTemp) {
+          if (finalReport && backendId && project?.isTemp) {
             setSaveModalProject({
               backendId,
-              finalReport: reportData.final_report,
+              finalReport,
               localId: activeProjectId,
             })
           }
@@ -970,9 +990,17 @@ export default function App() {
         deckImages: null,
         visibility: fetched?.visibility || 'private',
         isTemp: fetched?.is_temp ?? false,
+        // Seed the existing report/image so the session-complete guards know a
+        // report already exists (regenerate only if new likes arrive).
+        ...(fetched?.final_report ? { finalReport: fetched.final_report } : {}),
+        ...(fetched?.axis_scores ? { axisScores: fetched.axis_scores } : {}),
+        ...(fetched?.report_image ? { reportImage: fetched.report_image, reportImageMime: fetched.report_image_mime } : {}),
+        likesSinceResume: 0,
       }
       setProjects(prev => prev.find(p => p.id === id) ? prev : [...prev, syntheticProject])
       project = syntheticProject
+    } else {
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, likesSinceResume: 0 } : p))
     }
     setActiveProjectId(id)
     navigate('/swipe')

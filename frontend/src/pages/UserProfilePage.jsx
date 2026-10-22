@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
@@ -52,6 +52,11 @@ export default function UserProfilePage({ onLogout }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  // TabBar profile tap while already here stamps location.state.profileRefresh;
+  // a new value resets the view (boards tab, top) and refetches.
+  const refreshKey = location.state?.profileRefresh ?? 0
+  const scrollRef = useRef(null)
   const { t } = useTranslation()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
@@ -120,7 +125,7 @@ export default function UserProfilePage({ onLogout }) {
     getLikedBuildings(isMe ? undefined : effectiveUserId)
       .then(data => setLikedCount(data?.total ?? 0))
       .catch(() => {})
-  }, [isMe, effectiveUserId])
+  }, [isMe, effectiveUserId, refreshKey])
 
   // Fetch my personality for overlay comparison (both isMe and !isMe paths)
   // Empty deps intentional: runs once on mount to load the caller's own personality.
@@ -237,6 +242,13 @@ export default function UserProfilePage({ onLogout }) {
     let cancelled = false
     setLoading(true)
     setError(null)
+    // Reset view state (also runs on a TabBar re-tap refresh)
+    setActiveTab('boards')
+    setSelectMode(false)
+    setSelectedBoards(new Set())
+    setConfirmingBulkDelete(false)
+    setSavedStudios(null)
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
     // Reset boards state on user change
     setBoards([])
     setBoardsPage(1)
@@ -267,7 +279,7 @@ export default function UserProfilePage({ onLogout }) {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [effectiveUserId])
+  }, [effectiveUserId, refreshKey])
 
   const loadMoreBoards = useCallback(async () => {
     if (boardsLoading || !boardsHasMore || !effectiveUserId) return
@@ -438,7 +450,7 @@ export default function UserProfilePage({ onLogout }) {
   }
 
   return (
-    <div style={{
+    <div ref={scrollRef} style={{
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',

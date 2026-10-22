@@ -7,6 +7,7 @@ import { useReportImageJob } from '../hooks/useReportImageJob.js'
 import { canSelectForDelete, isLastLikedError } from '../utils/boardDeleteRules.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
 import BuildingTile from './boardDetail/BuildingTile'
+import tileStyles from './boardDetail/BuildingTile.module.css'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import BoardCover from './boardDetail/BoardCover'
@@ -558,13 +559,9 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       </div>
 
       {showBuildingsSkeleton ? (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 20,
-        }}>
+        <div className={tileStyles.grid}>
           {[1, 2, 3, 4].map(i => (
-            <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '4 / 5' }} />
+            <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '3 / 4' }} />
           ))}
         </div>
       ) : buildings.length === 0 ? (
@@ -579,12 +576,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           title={error?.message || t('board.emptyBoard')}
         />
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-          gap: 20,
-          ...(isEditMode ? { paddingBottom: 56 } : null),
-        }}>
+        <div className={tileStyles.grid} style={isEditMode ? { paddingBottom: 56 } : undefined}>
           {buildings.map((building, index) => {
             const bid = building.image_id || building.canonical_bld_id || building.building_id || building.id
             return (
