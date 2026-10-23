@@ -254,6 +254,28 @@ def get_project_detail_cache_key(project_uuid, requester_id_for_cache):
     return f'project_detail:{project_uuid}:v{ver}:r{requester_id_for_cache}'
 
 
+# ── Board recommendations cache (FULL-REPORT-UI-1) ───────────────────────────
+
+PROJECT_RECOMMENDATIONS_TTL = 600  # seconds — runs the recommendation engine
+
+
+def get_project_recommendations_cache_key(project_uuid):
+    """Cache key for ProjectRecommendationsView.
+
+    Piggybacks on the project-detail version counter: every mutation that
+    calls evict_project_detail (swipe, like removal, ...) also makes the
+    cached recommendations unreachable. The payload is requester-independent
+    (visibility is checked before the lookup), so no per-user partition.
+
+    Known trade-off: report / image (re)generation also call
+    evict_project_detail, so the next reader re-runs the engine even though
+    those writes do not change recommendations. Correct, slightly wasteful;
+    give this cache its own counter if engine cost ever matters.
+    """
+    ver = _project_detail_version(project_uuid)
+    return f'project_recommendations:{project_uuid}:v{ver}'
+
+
 # ── Discovery centroid cache (spec §2.1 — in-session fixed) ─────────────────
 
 def _discovery_centroids_key(profile_id):

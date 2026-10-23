@@ -20,6 +20,7 @@ from .. import services  # noqa: F401 — exposed for mock.patch('apps.recommend
 from .projects import (
     ProjectListCreateView,
     ProjectDetailView,
+    ProjectRecommendationsView,
     UserProjectsListView,
 )
 from .sessions import (
@@ -73,6 +74,7 @@ __all__ = [
     # Public view classes
     'ProjectListCreateView',
     'ProjectDetailView',
+    'ProjectRecommendationsView',
     'UserProjectsListView',
     'SessionCreateView',
     'SessionStateView',

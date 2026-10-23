@@ -1,3 +1,5 @@
+import styles from './EmptyState.module.css'
+
 /**
  * EmptyState — shared "no data at all" pattern (DESIGN.md §8.9 tier 1: Empty
  * component — friendly illustration + one-line description + Primary CTA).
@@ -9,8 +11,32 @@
  * §8.1 colors, radius `--radius-md`, 44px min-height) — the component OWNS
  * this button's style so every empty-state CTA across the app matches,
  * rather than each caller re-styling its own button.
+ *
+ * `neutral`: persona-report variant — icon in a surface-2 circle, `hint` line,
+ * pill CTA and an optional text button (`secondaryLabel` + `onSecondary`).
  */
-export default function EmptyState({ icon, title, body, actionLabel, onAction, style }) {
+export default function EmptyState({
+  icon, title, body, actionLabel, onAction, style,
+  neutral = false, hint, secondaryLabel, onSecondary,
+}) {
+  if (neutral) {
+    // Neutral variant (persona report states, DESIGN.md §8.9): icon circle on
+    // surface-2, pill CTA, optional hint + text button. No red.
+    return (
+      <div className={styles.neutral} style={style}>
+        {icon && <div className={styles.iconCircle} aria-hidden="true">{icon}</div>}
+        {title && <h2 className={styles.title}>{title}</h2>}
+        {body && <p className={styles.body}>{body}</p>}
+        {hint && <p className={styles.hint}>{hint}</p>}
+        {actionLabel && onAction && (
+          <button type="button" className={styles.pill} onClick={onAction}>{actionLabel}</button>
+        )}
+        {secondaryLabel && onSecondary && (
+          <button type="button" className={styles.textBtn} onClick={onSecondary}>{secondaryLabel}</button>
+        )}
+      </div>
+    )
+  }
   return (
     <div
       style={{

@@ -290,6 +290,33 @@ without a token. "Instant" is an intent, not a timing.
 .card-flip    { transition: transform var(--motion-flip) var(--motion-ease); }
 ```
 
+### 3.5a Reveal / Entrance Motion (persona report, 2026-10-22)
+
+Used by the persona report page and result cards (`docs/decisions/2026-10-22-persona-report-redesign.md`).
+Content "appears as you scroll" instead of paging; the reveal is decoration, never a gate.
+
+**Rules**
+1. A block reveals once, when ≥ 15 % of it enters the scroll container
+   (`IntersectionObserver`, `unobserve` after the first reveal). No re-play on scroll back.
+2. Reveal = `opacity 0 → 1` + `translateY(26px) → 0`, `motion-ease-out`. Tags use a
+   smaller lift (`translateY(10px) scale(.85)`).
+3. Siblings stagger via a per-element delay (`--d`), 60 ms steps for chips, 100–200 ms
+   for text blocks. Total stagger inside one section ≤ 700 ms.
+4. Data-bearing graphics may animate their data once on reveal (taste spectrum dots
+   travel from the centre to their value, row-staggered). Values are never hidden behind
+   the animation: the final DOM state is the real value.
+5. **`prefers-reduced-motion: reduce` → every reveal is skipped (content is visible
+   immediately), the spectrum renders at its final values, toasts appear without motion.**
+6. Toasts: 2 s visible, fade in with `motion-normal`, no stacking (a new toast replaces the old).
+
+**Durations**
+```yaml
+reveal (opacity/transform):  700ms  # PENDING APPROVAL — not one of the 4 tiers (see §11)
+name letter-spacing settle:  900ms  # PENDING APPROVAL
+spectrum dot travel:         900ms  # PENDING APPROVAL, cubic ease-out
+card/dots indicator:         motion-normal / motion-ease
+```
+
 ---
 
 ## 4. Design Philosophy
@@ -828,6 +855,7 @@ Type color tints:
 | Accent policy | **themed (CSS variables)** | §1.2 ✅ |
 | Responsive | **mobile-first + desktop left-sidebar re-layout** | §7 ✅ |
 | TabBar | **floating glass capsule (Instagram iOS), icon + small label, active = pill + filled icon** (2026-09-26, labels 2026-10-06) | §3.3 ✅ |
+| Persona report UI | **result cards (3) → report page (single shared component), reveal motion, neutral empty/failure states** (2026-10-22) | §3.5a, `docs/decisions/2026-10-22-persona-report-redesign.md` ✅ |
 | Border Radius | **tokenized by role: photos lg 20 · UI md 12 · inner sm 8 · sheet xl 24 · chips pill** (2026-09-26) | §3.1 ✅ |
 | Floating circle button | **28px visual / 44px hit area / 16px icon stroke 2, one shared component** (2026-09-26) | §3.2 ✅ |
 | Modal backdrop | **`--color-scrim-modal` 0.4; 0.65 family = photo overlay only** (2026-09-26) | §1.4 ✅ |
@@ -918,6 +946,26 @@ pure layout/positioning and runtime-dynamic values.
 - [ ] **Persona screen components** (Profile Action Row + Stats Row)
   - Proceed when persona-screen design work begins.
 - All other categories are resolved in the §9 decision table.
+
+### Pending exceptions — persona report redesign (2026-10-22)
+
+The persona report mock (`archi-tinder-mock/persona-report-all.html`) was approved with the values
+below, which fall **outside** the current tokens / scale. They are kept as-is for now and
+**need explicit approval** (promote to tokens, or fold into the existing scale) in a later PR.
+
+| # | Value | Where | Rule it deviates from |
+|---|---|---|---|
+| E1 | Body text **13 px** | pattern paragraph, persona description | §2.2 scale is 12 / 14 / 16 / 20 / 24 |
+| E2 | Tag text **11 px**, padding `2px 8px`, line-height 18 px | persona / pattern tags | §2.2 (caption = 12) |
+| E3 | Page gutter **28 px** (cards use 20 px + 24 px inner) | report page sections | no gutter token; current pages use 12 / 18 / 20 |
+| E4 | Spectrum text 11 px (pole labels) / 12 px (axis names), row height 48–64 px | `TasteSpectrum` | §2.2 |
+| E5 | Card shadow `0 8px 24px rgba(0,0,0,.12)` | result cards, board cover card, 1st recommendation | §8 card shadows use heavier values |
+| E6 | Rank pill height 16–18 px, bookmark button 26 / 30 px, building-card width 118 px | recommendation / liked rows | §3.2 icon button = 28 visual / 44 hit |
+| E7 | Letter-spacing `-.02em` (name), `.14em` (eyebrow) | persona name / label | no letter-spacing rule |
+| E8 | Reveal 700 ms, name settle 900 ms, spectrum travel 900 ms, stagger 60 ms | §3.5a | §3.5 allows only 180 / 220 / 400 / 500 ms |
+| E9 | Bottom CTA width = TabBar width (mock assumed 200 px) | Finish / Save CTA | must be derived from the real `TabBar`, not hard-coded |
+| E10 | Spectrum dots: accent fill, small dots at 40 % opacity; track `--color-border` 4 px | `TasteSpectrum` | new look, replaces the blob/curve |
+
 
 ---
 

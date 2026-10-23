@@ -1,0 +1,41 @@
+/* 44px hit area around a 32px visual glass circle (no border). */
+.hit {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin: -6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.hit:disabled { cursor: default; }
+
+.glass {
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-scrim-soft);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 0;
+  transition: background var(--motion-normal, 0.18s) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+/* Confirm (name dirty): lighter white glass. */
+.confirm {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass { transition: none; }
+}

@@ -16,81 +16,66 @@
   text-decoration: underline;
 }
 
-/* Action row — buttons share one row, each flex:1 so the row spans the full
-   column width (left edge aligned with the title above it). At very narrow
-   widths two full-width Korean-labelled buttons no longer fit side by side,
-   so this wraps to one button per line instead of clipping/shrinking. */
-.actionRow {
+/* Top action row (mock `boardDetail`) — 44px pills + circular icon buttons. */
+.topActions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  align-items: center;
+  margin: 18px 8px 0;
 }
-@media (max-width: 360px) {
-  .actionRow {
-    flex-wrap: wrap;
-  }
-  .actionRow > * {
-    flex: 1 1 100%;
-  }
-}
-
-/* Primary CTA — DESIGN.md §8.1 (flat accent, radius md, click-moment glow). */
-.ctaPrimary {
-  background: var(--accent-1);
-  color: #fff;
-  border: 0;
-  border-radius: var(--radius-md);
+.pill {
+  min-height: 44px;
   font-family: inherit;
-  transition: transform var(--motion-normal) var(--motion-ease),
-              background-color var(--motion-normal) var(--motion-ease),
-              box-shadow var(--motion-slow) var(--motion-ease-out);
-}
-.ctaPrimary:hover:not(:disabled) {
-  transform: scale(1.02);
-}
-.ctaPrimary:active:not(:disabled) {
-  transform: scale(0.98);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
-  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
-}
-
-/* Secondary button — DESIGN.md §8.2 (surface/border). `.reacted` = the
-   "already loved" state (accent border/text, still a secondary button).
-   `.editModeActive` = the Edit-Board toggle's pressed/"Cancel" look. */
-.ctaSecondary {
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: transform var(--motion-normal) var(--motion-ease),
               background var(--motion-normal) var(--motion-ease),
               color var(--motion-normal) var(--motion-ease),
               border-color var(--motion-normal) var(--motion-ease);
 }
-.ctaSecondary:hover:not(:disabled) {
-  transform: scale(1.02);
+.pill {
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  border: 0;
 }
-.ctaSecondary:active:not(:disabled) {
-  transform: scale(0.98);
+.pillPrimary {
+  flex: 1;
+  min-width: 0;
+  background: var(--accent-1);
+  color: #fff;
 }
-.ctaSecondary.reacted {
+.pillSecondary {
+  padding: 0 18px;
+  gap: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.pillSecondary.reacted {
   color: var(--accent-1);
   border-color: var(--accent-1);
 }
-.ctaSecondary.editModeActive {
-  background: var(--color-surface-2);
-  color: var(--color-text-dim);
+.pill:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+.pill:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.pill:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ctaPrimary,
-  .ctaSecondary {
+  .pill {
     transition: none;
   }
-  .ctaPrimary:hover:not(:disabled),
-  .ctaPrimary:active:not(:disabled),
-  .ctaSecondary:hover:not(:disabled),
-  .ctaSecondary:active:not(:disabled) {
+  .pill:hover:not(:disabled),
+  .pill:active:not(:disabled) {
     transform: none;
   }
 }

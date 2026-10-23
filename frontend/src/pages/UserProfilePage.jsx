@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
@@ -48,10 +48,15 @@ function formatBoardDate(iso) {
   }
 }
 
-export default function UserProfilePage({ onLogout, onResumeProject, onNewProjectSession }) {
+export default function UserProfilePage({ onLogout }) {
   const { userId: routeUserId } = useParams()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
+  // TabBar profile tap while already here stamps location.state.profileRefresh;
+  // a new value resets the view (boards tab, top) and refetches.
+  const refreshKey = location.state?.profileRefresh ?? 0
+  const scrollRef = useRef(null)
   const { t } = useTranslation()
 
   const sessionUserId = sessionStorage.getItem('archithon_user')
@@ -104,8 +109,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
   const [boardActionError, setBoardActionError] = useState(null)
-  // MINOR #3: per-board pending set — blocks rapid double-toggle
-  const [pendingVisibility, setPendingVisibility] = useState(() => new Set())
 
   // P6 bulk edit mode state
   const [selectMode, setSelectMode] = useState(false)
@@ -122,7 +125,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     getLikedBuildings(isMe ? undefined : effectiveUserId)
       .then(data => setLikedCount(data?.total ?? 0))
       .catch(() => {})
-  }, [isMe, effectiveUserId])
+  }, [isMe, effectiveUserId, refreshKey])
 
   // Fetch my personality for overlay comparison (both isMe and !isMe paths)
   // Empty deps intentional: runs once on mount to load the caller's own personality.
@@ -239,6 +242,13 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     let cancelled = false
     setLoading(true)
     setError(null)
+    // Reset view state (also runs on a TabBar re-tap refresh)
+    setActiveTab('boards')
+    setSelectMode(false)
+    setSelectedBoards(new Set())
+    setConfirmingBulkDelete(false)
+    setSavedStudios(null)
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
     // Reset boards state on user change
     setBoards([])
     setBoardsPage(1)
@@ -269,7 +279,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [effectiveUserId])
+  }, [effectiveUserId, refreshKey])
 
   const loadMoreBoards = useCallback(async () => {
     if (boardsLoading || !boardsHasMore || !effectiveUserId) return
@@ -323,52 +333,6 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
     document.addEventListener('mousedown', handleOutside)
     return () => document.removeEventListener('mousedown', handleOutside)
   }, [confirmingBulkDelete])
-
-  // Optimistic visibility toggle — reverts on API failure.
-  // MINOR #3: per-board pending guard blocks rapid double-toggle stale-prev race.
-  const handleVisibilityChange = useCallback(async (boardId, next) => {
-    if (pendingVisibility.has(boardId)) return
-    const prev = boards.find(b => b.board_id === boardId)?.visibility
-    if (!prev) return
-    setPendingVisibility(s => { const n = new Set(s); n.add(boardId); return n })
-    setBoards(bs => bs.map(b => b.board_id === boardId ? { ...b, visibility: next } : b))
-    try {
-      await updateProject(boardId, { visibility: next })
-    } catch (err) {
-      setBoards(bs => bs.map(b => b.board_id === boardId ? { ...b, visibility: prev } : b))
-      setBoardActionError({ type: 'patch', msg: 'Failed to update board visibility. Reverted.' })
-      console.error('[UserProfilePage] visibility toggle failed, reverted', err)
-    } finally {
-      setPendingVisibility(s => { const n = new Set(s); n.delete(boardId); return n })
-    }
-  }, [boards, pendingVisibility])
-
-  // Optimistic delete — reverts on API failure.
-  // MINOR #2: id-based revert preserves concurrently-paginated boards that
-  //           arrived after the snapshot was captured.
-  const handleDelete = useCallback(async (boardId) => {
-    const deletedBoard = boards.find(b => b.board_id === boardId)
-    const deletedIndex = boards.findIndex(b => b.board_id === boardId)
-    if (!deletedBoard) return
-    setBoards(bs => bs.filter(b => b.board_id !== boardId))
-    setBoardsTotalCount(t => Math.max(0, t - 1))
-    // Purge this project's chat cache keys on delete.
-    purgeChatCache(String(boardId))
-    try {
-      await deleteProject(boardId)
-    } catch (err) {
-      // Re-insert at original index; any boards paginated in during the flight are preserved.
-      setBoards(bs => {
-        const next = [...bs]
-        const insertAt = Math.min(deletedIndex, next.length)
-        next.splice(insertAt, 0, deletedBoard)
-        return next
-      })
-      setBoardsTotalCount(t => t + 1)
-      setBoardActionError({ type: 'delete', msg: 'Failed to delete board. Restored.' })
-      console.error('[UserProfilePage] delete failed, restored', err)
-    }
-  }, [boards])
 
   // P6: derived — whether all currently-loaded boards are selected
   const allSelected = useMemo(
@@ -486,7 +450,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
   }
 
   return (
-    <div style={{
+    <div ref={scrollRef} style={{
       height: 'var(--page-height)',
       overflowY: 'auto',
       background: 'var(--color-bg)',
@@ -669,7 +633,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             viewer, design-parity user-other.html; edit affordances inside
             each panel stay isMe-gated) */}
         <Tabs
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 8, marginBottom: 20 }}
           tabs={[
             { id: 'boards', label: t('profileB3.tabBoards') },
             { id: 'studios', label: t('profileB3.tabStudios') },
@@ -758,13 +722,9 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
           isMe={isMe}
           selectMode={selectMode}
           selectedBoards={selectedBoards}
-          onVisibilityChange={handleVisibilityChange}
-          onDelete={handleDelete}
           onSelectToggle={handleSelectToggle}
           boardsHasMore={boardsHasMore}
           boardsLoading={boardsLoading}
-          onResumeProject={onResumeProject}
-          onNewProjectSession={onNewProjectSession}
         />
 
         {/* P6: sticky bulk action bar — visible when selectMode && selection > 0 */}
@@ -863,7 +823,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
         {/* Studios tab content */}
         {activeTab === 'studios' && (
-          <div style={{ padding: '16px 0' }}>
+          <div style={{ padding: '0 0 16px' }}>
             {studiosLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
@@ -891,7 +851,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
 
         {/* Liked tab content */}
         {activeTab === 'liked' && (
-          <div style={{ padding: '16px 0' }}>
+          <div style={{ padding: '0 0 16px' }}>
             <div style={{ marginBottom: 20 }}>
               <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
             </div>
@@ -937,7 +897,7 @@ export default function UserProfilePage({ onLogout, onResumeProject, onNewProjec
             for other viewers) — rendered as plain non-interactive cards
             rather than linking anywhere else. */}
         {activeTab === 'created' && (
-          <div style={{ padding: '16px 0' }}>
+          <div style={{ padding: '0 0 16px' }}>
             <div style={{ marginBottom: 20 }}>
               <SectionTitle
                 as="h3"
