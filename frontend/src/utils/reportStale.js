@@ -37,3 +37,20 @@ export function shouldRegenerateAfterSession({ hadReport, newLikes = 0, reportSt
   if (!hadReport) return false
   return reportStale === true || newLikes > 0
 }
+
+/**
+ * Whether the swipe-end flow must re-fetch the board before deciding between
+ * first generation and regeneration. A fresh temp board that has neither a local
+ * report nor image cannot own a server report, so it skips the fetch (and its
+ * first generation is not delayed). Any other board might have been resumed.
+ */
+export function shouldFetchBoardBeforeReport(project) {
+  if (!project) return false
+  return !(project.isTemp === true && !project.finalReport && !project.reportImage)
+}
+
+/** Board name from a fresh GET /projects/:id/ payload, or null (fetch failed / blank). */
+export function pickServerBoardName(fetched) {
+  const name = fetched && typeof fetched.name === 'string' ? fetched.name.trim() : ''
+  return name || null
+}

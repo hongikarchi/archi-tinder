@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isReportStale, shouldRegenerateOnOpen, shouldRegenerateAfterSession } from './reportStale.js'
+import { isReportStale, shouldRegenerateOnOpen, shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './reportStale.js'
 
 const board = (over = {}) => ({ final_report: { persona_type: 'x' }, liked_ids: ['a'], ...over })
 
@@ -33,4 +33,19 @@ test('shouldRegenerateAfterSession: only an existing report with new likes / ser
   assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 0, reportStale: true }), true)
   assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 1, reportStale: false }), true)
   assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 2, reportStale: null }), true)
+})
+
+test('shouldFetchBoardBeforeReport: only a fresh temp board skips the fetch', () => {
+  assert.equal(shouldFetchBoardBeforeReport({ isTemp: true }), false)
+  assert.equal(shouldFetchBoardBeforeReport({ isTemp: true, finalReport: {} }), true)
+  assert.equal(shouldFetchBoardBeforeReport({ isTemp: true, reportImage: 'x' }), true)
+  assert.equal(shouldFetchBoardBeforeReport({ isTemp: false }), true)
+  assert.equal(shouldFetchBoardBeforeReport({}), true)
+  assert.equal(shouldFetchBoardBeforeReport(null), false)
+})
+test('pickServerBoardName: server name or null', () => {
+  assert.equal(pickServerBoardName({ name: ' New ' }), 'New')
+  assert.equal(pickServerBoardName({ name: '' }), null)
+  assert.equal(pickServerBoardName(null), null)
+  assert.equal(pickServerBoardName({}), null)
 })

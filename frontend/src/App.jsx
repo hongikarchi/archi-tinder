@@ -26,7 +26,7 @@ import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagin
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
-import { shouldRegenerateAfterSession } from './utils/reportStale.js'
+import { shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './utils/reportStale.js'
 import { ONBOARDING_FLAG_KEY } from './utils/onboardingFlag.js'
 
 // ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
@@ -639,8 +639,14 @@ export default function App() {
           const backendId = project?.backendId
           // A board resumed via "continue exploring" may already own a report +
           // image that local state does not know about: re-fetch the board (the
-          // server's report_stale flag is authoritative) before deciding.
-          const fetched = backendId ? await api.getProject(backendId) : null
+          // server's report_stale flag is authoritative) before deciding. The
+          // fetch runs in parallel with getResult; a brand-new temp board with no
+          // local report/image cannot own a server report, so it skips the fetch
+          // and its first generation starts immediately.
+          const needFetch = !!backendId && shouldFetchBoardBeforeReport(project)
+          const resultPromise = api.getResult({ session_id: project.sessionId })
+          resultPromise.catch(() => {}) // surfaced by the await below
+          const fetched = needFetch ? await api.getProject(backendId).catch(() => null) : null
           const existingReport = project.finalReport || fetched?.final_report || null
           const existingImage = project.reportImage || fetched?.report_image || null
           const regen = !!backendId && shouldRegenerateAfterSession({
@@ -661,9 +667,10 @@ export default function App() {
                 ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
             })
           }
+          const generating = !!backendId && (regen || !existingReport)
           const [resultData, reportData] = await Promise.all([
-            api.getResult({ session_id: project.sessionId }),
-            (backendId && (regen || !existingReport))
+            resultPromise,
+            generating
               ? api.generateReport(backendId, regen ? { regenerate: true } : undefined).catch((err) => { console.error('report generation failed:', err); return null; })
               : Promise.resolve(null),
           ])
@@ -677,6 +684,18 @@ export default function App() {
             ...(!p.reportImage && existingImage ? { reportImage: existingImage, reportImageMime: fetched?.report_image_mime || p.reportImageMime } : {}),
             likesSinceResume: 0,
           } : p))
+          // The server renames the board to follow the new persona name (first
+          // generation of a discovery_ draft, or regeneration of a never-renamed
+          // board). Refresh the local name from the server; non-blocking, and a
+          // failed fetch leaves the local name untouched.
+          if (reportData && backendId) {
+            api.getProject(backendId).then(fresh => {
+              const name = pickServerBoardName(fresh)
+              if (!name) return
+              setProjects(prev => prev.map(p => (p.id === activeProjectId && p.projectName !== name)
+                ? { ...p, projectName: name } : p))
+            }).catch(() => {})
+          }
           // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
           // a temp project, but leave the sheet closed — the ResultsPage CTA
           // opens it. project.isTemp was set in handleStartTaste (snapshot above).
