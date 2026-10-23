@@ -633,7 +633,7 @@ export default function UserProfilePage({ onLogout }) {
             viewer, design-parity user-other.html; edit affordances inside
             each panel stay isMe-gated) */}
         <Tabs
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 8, marginBottom: 20 }}
           tabs={[
             { id: 'boards', label: t('profileB3.tabBoards') },
             { id: 'studios', label: t('profileB3.tabStudios') },
@@ -823,7 +823,7 @@ export default function UserProfilePage({ onLogout }) {
 
         {/* Studios tab content */}
         {activeTab === 'studios' && (
-          <div style={{ padding: '16px 0' }}>
+          <div style={{ padding: '0 0 16px' }}>
             {studiosLoading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
                 {[0, 1, 2].map(i => <SkeletonCard key={i} />)}
@@ -851,7 +851,7 @@ export default function UserProfilePage({ onLogout }) {
 
         {/* Liked tab content */}
         {activeTab === 'liked' && (
-          <div style={{ padding: '16px 0' }}>
+          <div style={{ padding: '0 0 16px' }}>
             <div style={{ marginBottom: 20 }}>
               <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
             </div>
@@ -897,7 +897,7 @@ export default function UserProfilePage({ onLogout }) {
             for other viewers) — rendered as plain non-interactive cards
             rather than linking anywhere else. */}
         {activeTab === 'created' && (
-          <div style={{ padding: '16px 0' }}>
+          <div style={{ padding: '0 0 16px' }}>
             <div style={{ marginBottom: 20 }}>
               <SectionTitle
                 as="h3"

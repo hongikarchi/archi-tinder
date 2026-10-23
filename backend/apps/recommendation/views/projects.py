@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from ..models import AnalysisSession, Project
 from ..serializers import (
     ProjectListSerializer,
+    ProjectPatchResponseSerializer,
     ProjectSerializer,
     ProjectSelfUpdateSerializer,
     PublicProjectListSerializer,
@@ -215,10 +216,16 @@ class ProjectDetailView(APIView):
             # select_for_update().filter(user=profile) means the lock is only
             # granted when the row belongs to the requesting user — a non-owner
             # request sees 404 without ever acquiring a row lock.
+            # Defer the heavy blobs the PATCH never reads (report_image is
+            # ~270 KB base64); save() then writes only the loaded fields.
             project = get_object_or_404(
-                Project.objects.select_for_update().filter(user=profile),
+                Project.objects.select_for_update().filter(user=profile)
+                .defer('report_image', 'report_image_mime', 'analysis_report', 'conversation_history'),
                 project_id=pk,
             )
+            # Ownership is already enforced by the filter above; reuse the
+            # request's profile instead of lazy-loading project.user(.user).
+            project.user = profile
 
             # A board must keep at least one liked building: the persona report
             # is generated from liked_ids. Reject before any mutation/eviction.
@@ -277,11 +284,12 @@ class ProjectDetailView(APIView):
             if serializer is not None:
                 serializer.save()
 
-        project.refresh_from_db()
+        # No refresh_from_db(): the locked instance was mutated and saved in
+        # this transaction, so it is already current (updated_at set by save()).
         evict_projects_list(profile.id)
         evict_user_profile_detail(profile.user.id)
         evict_project_detail(str(pk))
-        return Response(ProjectSerializer(project, context={'request': request}).data)
+        return Response(ProjectPatchResponseSerializer(project, context={'request': request}).data)
 
     def delete(self, request, pk):
         profile = _get_profile(request)

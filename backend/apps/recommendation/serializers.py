@@ -1,6 +1,8 @@
 import json
 from types import SimpleNamespace
 
+from django.db import connection
+from django.db.models.expressions import RawSQL
 from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
 from .models import Project
@@ -119,7 +121,24 @@ class ProjectSerializer(serializers.ModelSerializer):
         else:
             # Fallback for non-annotated single-object contexts
             # (e.g. ProjectDetailView, serializer unit tests).
-            session = obj.sessions.order_by('-created_at').first()
+            # Only id/created_at/like count are consumed -- never transfer the
+            # 384-dim x N like_vectors blob. jsonb_array_length == len(like_vectors).
+            # SQLite (plain-pytest DB) has no jsonb_array_length: fetch the row.
+            qs = obj.sessions.order_by('-created_at')
+            if connection.vendor == 'postgresql':
+                row = (
+                    qs.annotate(_lc=RawSQL('jsonb_array_length(like_vectors)', []))
+                    .values('session_id', 'created_at', '_lc')
+                    .first()
+                )
+                if row is not None:
+                    session = SimpleNamespace(
+                        session_id=row['session_id'],
+                        _like_count=row['_lc'] or 0,
+                        created_at=row['created_at'],
+                    )
+            else:
+                session = qs.first()
 
         obj.__dict__[cache_key] = session if session is not None else False
         return session
@@ -253,6 +272,27 @@ class PublicProjectListSerializer(ProjectListSerializer):
         read_only_fields = [
             f for f in ProjectListSerializer.Meta.read_only_fields
             if f not in _PUBLIC_LIST_EXCLUDE_FIELDS
+        ]
+
+
+_PATCH_RESPONSE_EXCLUDE_FIELDS = {
+    'analysis_report', 'conversation_history', 'report_image', 'report_image_mime',
+}
+
+
+class ProjectPatchResponseSerializer(ProjectSerializer):
+    """PATCH /projects/{id}/ response variant -- drops the heavy blobs.
+
+    No frontend caller reads the PATCH body (updateProject results are awaited
+    and discarded), and report_image (~270 KB base64) dominated latency of a
+    plain rename. Every other ProjectSerializer field is preserved.
+    """
+
+    class Meta(ProjectSerializer.Meta):
+        fields = [f for f in ProjectSerializer.Meta.fields if f not in _PATCH_RESPONSE_EXCLUDE_FIELDS]
+        read_only_fields = [
+            f for f in ProjectSerializer.Meta.read_only_fields
+            if f not in _PATCH_RESPONSE_EXCLUDE_FIELDS
         ]
 
 

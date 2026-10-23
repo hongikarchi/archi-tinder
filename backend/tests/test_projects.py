@@ -116,6 +116,46 @@ class TestProjectDetailView:
         # updated_at in response must be non-null (DB-set by auto_now=True)
         assert data.get('updated_at') is not None
 
+    def test_patch_response_omits_heavy_blobs_keeps_rest(self, auth_client, user_profile):
+        """PATCH body drops report_image/conversation_history/analysis_report only."""
+        project = Project.objects.create(
+            user=user_profile, name='Before', report_image='x' * 1000,
+            report_image_mime='image/png', conversation_history={'messages': []},
+            analysis_report={'a': 1},
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/', {'name': 'After'}, format='json',
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for gone in ('report_image', 'report_image_mime', 'conversation_history', 'analysis_report'):
+            assert gone not in data
+        for kept in ('project_id', 'user', 'name', 'visibility', 'liked_ids', 'saved_ids',
+                     'final_report', 'report_stale', 'is_temp', 'latest_session_id',
+                     'latest_session_meta', 'created_at', 'updated_at'):
+            assert kept in data
+        assert 'disliked_ids' not in data
+        # Deferred blobs must not be wiped by the rename save.
+        project.refresh_from_db()
+        assert project.name == 'After'
+        assert project.report_image == 'x' * 1000
+        assert project.conversation_history == {'messages': []}
+        assert project.analysis_report == {'a': 1}
+
+    def test_patch_response_like_count_from_latest_session(self, auth_client, user_profile):
+        from apps.recommendation.models import AnalysisSession
+        project = Project.objects.create(user=user_profile, name='Before')
+        session = AnalysisSession.objects.create(
+            user=user_profile, project=project,
+            like_vectors=[{'embedding': [0.0] * 3, 'round': i} for i in range(4)],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/', {'name': 'After'}, format='json',
+        )
+        meta = resp.json()['latest_session_meta']
+        assert meta['id'] == str(session.session_id)
+        assert meta['like_count'] == 4
+
 
 # -- remove_building_ids PATCH tests ------------------------------------------
 

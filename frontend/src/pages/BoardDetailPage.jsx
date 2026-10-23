@@ -11,9 +11,11 @@ import tileStyles from './boardDetail/BuildingTile.module.css'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import BoardCover from './boardDetail/BoardCover'
+import CoverIconButton from './boardDetail/CoverIconButton'
 import { useTranslation } from '../i18n/index.js'
 import { localizeReport } from '../utils/reportText.js'
 import { resolveCoverTitle, isNameDirty } from '../utils/boardCoverTitle.js'
+import { planEditSave } from '../utils/boardEditPlan.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { safeImageMime } from '../utils/imageMime.js'
 import s from './BoardDetailPage.module.css'
@@ -28,14 +30,6 @@ import EmptyState from '../components/EmptyState.jsx'
 import Skeleton from '../components/Skeleton.jsx'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-// Glass circle buttons on the cover (mock `boardDetail` -> `mini`).
-const coverBtnStyle = {
-  flex: '0 0 32px', width: 32, height: 32, borderRadius: '50%', padding: 0,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  cursor: 'pointer', color: '#fff', backdropFilter: 'blur(8px)',
-  WebkitBackdropFilter: 'blur(8px)',
-}
 
 export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
@@ -52,12 +46,11 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const [localSavedIds, setLocalSavedIds] = useState([])
   const [localName, setLocalName] = useState('')
   const [nameDraft, setNameDraft] = useState('')
-  const [nameSaving, setNameSaving] = useState(false)
-  const [shareCopied, setShareCopied] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [localBuildings, setLocalBuildings] = useState(null)
-  const [deleteInProgress, setDeleteInProgress] = useState(false)
+  // True while a save/delete request is in flight (one lock for every edit action).
+  const [busy, setBusy] = useState(null) // null | 'saving-name' | 'deleting'
   // Capture bookmark signal once at mount so board-load effect can apply it
   const bookmarkSignalRef = useRef(location.state?.bookmarkChanged || null)
   const [deletedLikedIds, setDeletedLikedIds] = useState([])
@@ -163,36 +156,76 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     } else {
       try {
         await navigator.clipboard.writeText(window.location.href)
-        setShareCopied(true)
-        setTimeout(() => setShareCopied(false), 2000)
-      } catch { /* silent */ }
+        regen.showToast(t('board.linkCopied'))
+      } catch {
+        regen.showToast(t('board.copyFailed'))
+      }
     }
   }
 
-  function toggleEditMode() {
-    // Entering or leaving edit mode always resets selection and the name draft.
-    setIsEditMode(prev => !prev)
+  // Edit mode = { isEditMode, selectedIds, nameDraft }; these two are the only
+  // transitions (plus selection toggling and saveEdits below).
+  function enterEditMode() {
+    setIsEditMode(true)
     setSelectedIds(new Set())
     setNameDraft(localName || coverTitle)
   }
 
-  async function commitNameEdit() {
-    const trimmed = nameDraft.trim()
-    if (nameSaving || !trimmed || trimmed === localName || (!localName && trimmed === coverTitle)) {
-      if (!nameSaving) setNameDraft(localName)
-      return
-    }
-    setNameSaving(true)
+  function exitEditMode() {
+    setIsEditMode(false)
+    setSelectedIds(new Set())
+    setNameDraft(localName || coverTitle)
+  }
+
+  // Save the title draft (if dirty) and, when `deleting`, delete the selected
+  // buildings. Name first, then delete. Success of everything -> exit edit mode;
+  // any failure keeps edit mode, selection and draft. A saved name becomes the
+  // new baseline immediately so a retry never re-sends it.
+  async function saveEdits({ deleting }) {
+    if (!isOwner || busy) return
+    const plan = planEditSave({
+      draft: nameDraft, baseline: localName || coverTitle, selectedIds, deleting,
+    })
+    if (plan.blank && !deleting) return
+    if (plan.noop) { if (!plan.blank) exitEditMode(); return }
+    setBusy(deleting ? 'deleting' : 'saving-name')
     try {
-      await updateProject(boardId, { name: trimmed })
-      setLocalName(trimmed)
-      setNameDraft(trimmed)
-      regen.showToast(t('board.nameSaved'))
-    } catch {
-      // revert on error — keep original name
-      if (aliveRef.current) setNameDraft(localName)
+      if (plan.name) {
+        try {
+          await updateProject(boardId, { name: plan.name })
+        } catch {
+          if (aliveRef.current) regen.showToast(t('board.nameSaveFailed'))
+          return
+        }
+        setLocalName(plan.name)
+        setNameDraft(plan.name)
+        regen.showToast(t('board.nameSaved'))
+      }
+      if (plan.deleteIds.length > 0) {
+        const ids = plan.deleteIds
+        const likedSet = new Set(likedIdList)
+        const deletedLiked = ids.filter(id => likedSet.has(String(id)))
+        try {
+          await updateProject(boardId, { remove_building_ids: ids })
+        } catch (err) {
+          if (aliveRef.current) {
+            if (isLastLikedError(err)) flashLastMessage()
+            else regen.showToast(t('board.deleteFailed'))
+          }
+          return
+        }
+        setLocalBuildings(prev => (prev || []).filter(b => {
+          const bid = b.image_id || b.canonical_bld_id || b.building_id || b.id
+          return !ids.includes(bid)
+        }))
+        if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
+        // No regeneration here: the server flags the report stale and the owner's
+        // next open of the report page regenerates it.
+      }
+      setIsEditMode(false)
+      setSelectedIds(new Set())
     } finally {
-      if (aliveRef.current) setNameSaving(false)
+      if (aliveRef.current) setBusy(null)
     }
   }
 
@@ -216,35 +249,6 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
-  }
-
-  async function handleDeleteSelected() {
-    if (!isOwner || selectedIds.size === 0 || deleteInProgress) return
-    setDeleteInProgress(true)
-    const ids = [...selectedIds]
-    const likedSet = new Set(likedIdList)
-    const deletedLiked = ids.filter(id => likedSet.has(String(id)))
-    try {
-      await updateProject(boardId, { remove_building_ids: ids })
-      setLocalBuildings(prev => (prev || []).filter(b => {
-        const bid = b.image_id || b.canonical_bld_id || b.building_id || b.id
-        return !ids.includes(bid)
-      }))
-      if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
-      setSelectedIds(new Set())
-      setIsEditMode(false)
-      setNameDraft(localName)
-      // No regeneration here: the server flags the report stale and the owner's
-      // next open of the report page regenerates it.
-    } catch (err) {
-      // keep edit mode + selection on error
-      if (aliveRef.current) {
-        if (isLastLikedError(err)) flashLastMessage()
-        else regen.showToast(t('board.deleteFailed'))
-      }
-    } finally {
-      if (aliveRef.current) setDeleteInProgress(false)
-    }
   }
 
   // Owner chips on the cover: optimistic visibility toggle (revert on failure).
@@ -307,6 +311,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     personaType: report?.persona_type,
     defaultName: t('board.defaultName'),
   })
+  // Cover button: pencil / X / white-glass check (title draft dirty).
+  const editBtnConfirm = isOwner && isEditMode && isNameDirty(nameDraft, localName || coverTitle)
   const countLabel = t(buildings.length === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: buildings.length })
   const ownerHandle = board?.user?.username
     ? `@${board.user.username}`
@@ -335,25 +341,15 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           {!isOwner && <FloatingIconButton
             onClick={handleShare}
             ariaLabel={t('board.share')}
-            style={{
-              position: 'fixed', top: 50, left: 12, zIndex: 299,
-              color: shareCopied ? 'var(--accent-2)' : undefined,
-              borderColor: shareCopied ? 'var(--accent-2)' : undefined,
-            }}
+            style={{ position: 'fixed', top: 50, left: 12, zIndex: 299 }}
           >
-            {shareCopied ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-              </svg>
-            )}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3" />
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="19" r="3" />
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
           </FloatingIconButton>}
         </>
       }
@@ -370,12 +366,10 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           titleEditable={isOwner && isEditMode}
           titleDraft={nameDraft}
           onTitleDraftChange={setNameDraft}
-          onTitleCommit={commitNameEdit}
-          onTitleCancel={() => setNameDraft(localName)}
-          titleSaving={nameSaving}
-          titleDirty={isNameDirty(nameDraft, localName || coverTitle)}
+          onTitleCommit={() => saveEdits({ deleting: false })}
+          onTitleCancel={exitEditMode}
+          titleSaving={!!busy}
           titleLabel={t('board.nameLabel')}
-          saveLabel={t('board.save')}
           meta={coverMeta}
           ownerChips={isOwner ? {
             isPrivate: !isPublic,
@@ -384,6 +378,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
             labels: {
               makePublic: t('board.makePublic'),
               makePrivate: t('board.makePrivate'),
+              nowPublic: t('board.nowPublic'),
+              nowPrivate: t('board.nowPrivate'),
               deleteBoard: t('board.deleteBoard'),
               deleteConfirm: t('board.deleteConfirm'),
               deleteConfirmAria: t('board.deleteConfirmAria'),
@@ -391,52 +387,36 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           } : null}
           rightSlot={isOwner ? (
             <>
-              <button
-                type="button"
-                onClick={toggleEditMode}
-                disabled={!isEditMode && (!board || buildings.length === 0)}
-                aria-label={isEditMode ? t('board.cancel') : t('board.editBoard')}
-                aria-pressed={isEditMode}
-                style={{
-                  ...coverBtnStyle,
-                  background: isEditMode ? 'color-mix(in srgb, var(--accent-1) 70%, transparent)' : 'var(--color-scrim-soft)',
-                  border: `1px solid ${isEditMode ? 'var(--accent-1)' : 'rgba(255,255,255,.18)'}`,
-                  opacity: !isEditMode && (!board || buildings.length === 0) ? 0.4 : 1,
-                }}
+              <CoverIconButton
+                onClick={editBtnConfirm ? () => saveEdits({ deleting: false }) : isEditMode ? exitEditMode : enterEditMode}
+                disabled={busy || (!isEditMode && (!board || buildings.length === 0))}
+                ariaLabel={editBtnConfirm ? t('board.save') : isEditMode ? t('board.cancel') : t('board.editBoard')}
+                ariaPressed={isEditMode}
+                confirm={editBtnConfirm}
+                dimmed={!!busy || (!isEditMode && (!board || buildings.length === 0))}
               >
-                {isEditMode ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {editBtnConfirm ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                ) : isEditMode ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                   </svg>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={handleShare}
-                aria-label={t('board.share')}
-                style={{
-                  ...coverBtnStyle,
-                  background: 'var(--color-scrim-soft)',
-                  border: '1px solid rgba(255,255,255,.18)',
-                }}
-              >
-                {shareCopied ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                    <polyline points="16 6 12 2 8 6"/>
-                    <line x1="12" y1="2" x2="12" y2="15"/>
-                  </svg>
-                )}
-              </button>
+              </CoverIconButton>
+              <CoverIconButton onClick={handleShare} ariaLabel={t('board.share')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <polyline points="16 6 12 2 8 6"/>
+                  <line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
+              </CoverIconButton>
             </>
           ) : null}
         />
@@ -699,7 +679,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           </div>
           <div style={{ display: 'flex', gap: 10, width: '100%' }}>
             <button
-              onClick={() => { setIsEditMode(false); setSelectedIds(new Set()); setNameDraft(localName) }}
+              onClick={exitEditMode}
+              disabled={busy}
               style={{
                 flex: 1, minHeight: 44, borderRadius: 'var(--radius-md)',
                 background: 'var(--color-surface)', color: 'var(--color-text)',
@@ -712,8 +693,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
               {t('board.cancel')}
             </button>
             <button
-              onClick={handleDeleteSelected}
-              disabled={selectedIds.size === 0 || deleteInProgress}
+              onClick={() => saveEdits({ deleting: true })}
+              disabled={selectedIds.size === 0 || busy}
               style={{
                 flex: 2, minHeight: 44, borderRadius: 'var(--radius-md)',
                 background: selectedIds.size > 0 ? 'var(--color-text)' : 'var(--color-surface-2)',
@@ -723,11 +704,11 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                 fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
                 cursor: selectedIds.size === 0 ? 'default' : 'pointer',
                 fontFamily: 'inherit',
-                opacity: deleteInProgress ? 0.6 : 1,
+                opacity: busy ? 0.6 : 1,
                 transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
               }}
             >
-              {deleteInProgress
+              {busy === 'deleting'
                 ? t('board.deleting')
                 : selectedIds.size > 0
                   ? t(selectedIds.size === 1 ? 'board.deleteCardOne' : 'board.deleteCardMany', { n: selectedIds.size })

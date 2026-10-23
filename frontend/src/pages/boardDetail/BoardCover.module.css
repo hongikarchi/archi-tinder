@@ -1,0 +1,16 @@
+/* Confirm label grows the glass pill to the right (max-width reveal). */
+.chipLabel {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 160px;
+  animation: chipLabelGrow var(--motion-normal, 0.18s) var(--motion-ease, cubic-bezier(0.4, 0, 0.2, 1));
+}
+
+@keyframes chipLabelGrow {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 160px; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chipLabel { animation: none; }
+}

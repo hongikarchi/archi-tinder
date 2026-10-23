@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import styles from './BoardCover.module.css'
 
 /**
  * BoardCover — cover card for BoardDetailPage (FULL-REPORT-UI-1 WP4,
@@ -11,7 +12,7 @@ import { useState, useEffect, useRef } from 'react'
  * has a surface to sit on.
  *
  * ownerChips (owner only, independent of edit mode): { isPrivate, onToggleVisibility,
- * onDelete, labels: { makePublic, makePrivate, deleteBoard, deleteConfirm,
+ * onDelete, labels: { makePublic, makePrivate, nowPublic, nowPrivate, deleteBoard, deleteConfirm,
  * deleteConfirmAria } } -> glass chips top-right (lock) and top-left (X, 2-step).
  */
 
@@ -21,15 +22,18 @@ const hitStyle = {
   position: 'absolute', top: 4, width: 44, height: 44, padding: 0, margin: 0,
   display: 'flex', alignItems: 'center', background: 'transparent', border: 0,
   cursor: 'pointer', touchAction: 'manipulation', zIndex: 2,
+  textAlign: 'left', whiteSpace: 'nowrap',
 }
 
 function OwnerChips({ chips }) {
   const [confirming, setConfirming] = useState(false)
   const timerRef = useRef(null)
   const delRef = useRef(null)
+  const flashTimerRef = useRef(null)
+  const [flash, setFlash] = useState(null) // 'public' | 'private' | null
   const { isPrivate, onToggleVisibility, onDelete, labels } = chips
 
-  useEffect(() => () => clearTimeout(timerRef.current), [])
+  useEffect(() => () => { clearTimeout(timerRef.current); clearTimeout(flashTimerRef.current) }, [])
   // Click-outside cancels the pending confirm.
   useEffect(() => {
     if (!confirming) return
@@ -43,12 +47,15 @@ function OwnerChips({ chips }) {
     return () => document.removeEventListener('pointerdown', onDoc)
   }, [confirming])
 
+  // Label only while it still matches the (optimistic) state; a failed toggle reverts it.
+  const showFlash = !!flash && (flash === 'private') === isPrivate
+
   const glass = {
     background: 'var(--color-scrim-soft)',
     backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
     height: 28, minWidth: 28, boxSizing: 'border-box',
-    transition: 'all var(--motion-normal, .18s) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))',
+    transition: 'padding var(--motion-normal, .18s) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))',
   }
 
   return (
@@ -69,21 +76,28 @@ function OwnerChips({ chips }) {
             onDelete?.()
           }
         }}
-        style={{ ...hitStyle, left: 4, justifyContent: 'flex-start', paddingLeft: 8 }}
+        style={{ ...hitStyle, left: 4, width: 'auto', minWidth: 44, justifyContent: 'flex-start', paddingLeft: 8, paddingRight: confirming ? 4 : 0 }}
       >
         <span style={{
           ...glass,
-          padding: confirming ? '0 10px 0 6px' : 0,
-          borderRadius: confirming ? 'var(--radius-md)' : '50%',
+          justifyContent: 'flex-start', gap: 0,
+          width: confirming ? 'auto' : 28, flexShrink: 0,
+          padding: 0,
+          borderRadius: 999,
         }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+               style={{ flex: '0 0 14px', margin: '0 7px' }}
                stroke={confirming ? 'var(--color-destructive)' : CHIP_STROKE}
                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
             <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
           {confirming && (
-            <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-destructive)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <span className={styles.chipLabel} style={{
+              fontSize: 'var(--fs-caption)', color: 'var(--color-destructive)',
+              fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'left', lineHeight: 1,
+              paddingRight: 12,
+            }}>
               {labels.deleteConfirm}
             </span>
           )}
@@ -92,15 +106,38 @@ function OwnerChips({ chips }) {
       <button
         type="button"
         aria-label={isPrivate ? labels.makePublic : labels.makePrivate}
-        onClick={e => { e.stopPropagation(); onToggleVisibility?.(isPrivate ? 'public' : 'private') }}
-        style={{ ...hitStyle, right: 4, justifyContent: 'flex-end', paddingRight: 8 }}
+        onClick={e => {
+          e.stopPropagation()
+          const next = isPrivate ? 'public' : 'private'
+          clearTimeout(flashTimerRef.current)
+          setFlash(next)
+          flashTimerRef.current = setTimeout(() => setFlash(null), 2000)
+          onToggleVisibility?.(next)
+        }}
+        style={{ ...hitStyle, right: 4, width: 'auto', minWidth: 44, justifyContent: 'flex-end', paddingRight: 8 }}
       >
-        <span style={{ ...glass, borderRadius: '50%', width: 28 }}>
+        <span style={{
+          ...glass,
+          justifyContent: 'flex-start', gap: 0,
+          width: showFlash ? 'auto' : 28, flexShrink: 0,
+          padding: 0,
+          borderRadius: 999,
+        }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"
+               style={{ flex: '0 0 14px', margin: '0 7px' }}
                stroke={CHIP_STROKE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d={isPrivate ? 'M7 11V7a5 5 0 0 1 10 0v4' : 'M7 11V7a5 5 0 0 1 9.9-1'} />
           </svg>
+          {showFlash && (
+            <span key={flash} className={styles.chipLabel} style={{
+              fontSize: 'var(--fs-caption)', color: CHIP_STROKE,
+              fontWeight: 600, whiteSpace: 'nowrap', textAlign: 'left', lineHeight: 1,
+              paddingRight: 12,
+            }}>
+              {isPrivate ? labels.nowPrivate : labels.nowPublic}
+            </span>
+          )}
         </span>
       </button>
     </>
@@ -110,7 +147,7 @@ function OwnerChips({ chips }) {
 export default function BoardCover({
   imageUrl, alt, title, meta, rightSlot,
   titleEditable = false, titleDraft = '', onTitleDraftChange, onTitleCommit, onTitleCancel,
-  titleSaving = false, titleDirty = false, titleLabel, saveLabel,
+  titleSaving = false, titleLabel,
   ownerChips = null,
 }) {
   const [focused, setFocused] = useState(false)
@@ -196,26 +233,6 @@ export default function BoardCover({
                 outline: 'none',
               }}
             />
-            {titleDirty && (
-              <button
-                type="button"
-                onClick={() => onTitleCommit?.()}
-                disabled={titleSaving}
-                aria-label={saveLabel}
-                style={{
-                  flex: '0 0 24px', width: 24, height: 24, borderRadius: '50%', padding: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(255,255,255,.22)', border: '1px solid rgba(255,255,255,.45)',
-                  backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                  color: '#fff', fontSize: 12, fontWeight: 'var(--fw-bold)', fontFamily: 'inherit',
-                  lineHeight: 1,
-                  cursor: titleSaving ? 'default' : 'pointer',
-                  opacity: titleSaving ? 0.6 : 1,
-                }}
-              >
-                {titleSaving ? '…' : '✓'}
-              </button>
-            )}
           </div>
         ) : (
           <h1 style={{
