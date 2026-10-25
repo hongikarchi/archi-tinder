@@ -14,7 +14,7 @@ Usage:
 
 flow_issues.json schema:
   {"issues": [{
-     "id": "1", "title": "...", "status": "open" | "fixed", "fixed_on": "YYYY-MM-DD",
+     "id": "1", "title": "...", "status": "open" | "fixed" | "dismissed", "fixed_on": "YYYY-MM-DD",
      "what": "...", "why": "...",
      "fixes": [{"text": "...", "recommended": true}],
      "now": "...",                     # after-fix description (fixed only)
@@ -188,6 +188,8 @@ def issue_card(issue, idx, mode):
     status = issue.get('status', 'open')
     if status == 'fixed':
         st = f'<span class="st st-done">고쳤어요 ({esc(issue.get("fixed_on", ""))})</span>'
+    elif status == 'dismissed':
+        st = f'<span class="st st-done">문제 아님 ({esc(issue.get("fixed_on", ""))})</span>'
     else:
         st = '<span class="st st-open">확인 필요</span>'
     head = (f'<div class="ihead"><span class="inum">문제 {esc(issue["id"])}</span>{st}</div>'
@@ -344,8 +346,8 @@ def build(run_dir):
     captured = [s for s in shots if s.get('img') and not s.get('skipped')]
     n_err = sum(shot_stats(s)['errors'] + shot_stats(s)['failed'] for s in shots)
     n_slow = sum(1 for s in shots if shot_stats(s)['api_max'] > SLOW_MS)
-    open_issues = [i for i in issues if i.get('status') != 'fixed']
-    fixed = [i for i in issues if i.get('status') == 'fixed']
+    open_issues = [i for i in issues if i.get('status') not in ('fixed', 'dismissed')]
+    fixed = [i for i in issues if i.get('status') in ('fixed', 'dismissed')]
 
     facts = [f'<span>{esc(run["date"])}</span>',
              f'<span>캡처 {len(captured)}장</span>',

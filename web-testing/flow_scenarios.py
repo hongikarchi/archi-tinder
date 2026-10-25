@@ -270,7 +270,7 @@ SCENARIOS = [
          route="/search", theme="dark", actions=[{"wait": "textarea"}]),
     dict(id="55", slug="dark-profile", stage="variants", title_ko="다크 · 프로필",
          caption_ko="다크 테마의 프로필이에요.",
-         route="/user/me", theme="dark", actions=[{"wait": "text=Boards"}, {"wait": 1000}]),
+         route="/user/me", theme="dark", actions=[{"wait": "text=보드 >> nth=0"}, {"wait": 1000}]),
     dict(id="56", slug="dark-login", stage="variants", title_ko="다크 · 로그인",
          caption_ko="다크 테마의 로그인 화면이에요.",
          route="/login", account="none", theme="dark", actions=[], debug=False),
