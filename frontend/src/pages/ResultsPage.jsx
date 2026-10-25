@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
 import { useTranslation } from '../i18n/index.js'
-import { generateReport } from '../api/projects.js'
+import { generateReport, getProject } from '../api/projects.js'
 import ResultCards, { ResultsStage, ResultStateCard } from '../components/ResultCards.jsx'
 
 // /result/:sessionId — 3 swipeable result cards (FULL-REPORT-UI-1 WP3, #445).
@@ -64,6 +64,31 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
     attemptReportRepair()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendId, project?.finalReport])
+
+  // Boards reloaded via the owner list endpoint carry finalReport but no
+  // axis_scores (the list defers it). Fetch the detail once and merge it in so
+  // the spectrum isn't rendered as all no-evidence.
+  const axisFetchedRef = useRef(null)
+  const needsAxisScores = !!(project?.finalReport && !project?.axisScores && backendId)
+  useEffect(() => {
+    if (!needsAxisScores || axisFetchedRef.current === backendId) return
+    axisFetchedRef.current = backendId
+    let cancelled = false
+    getProject(backendId).then(data => {
+      if (cancelled || !data?.axis_scores) return
+      setProjects(prev => prev.map(p => (
+        resolveProjectBackendId(p) === backendId && !p.axisScores
+          ? { ...p, axisScores: data.axis_scores }
+          : p
+      )))
+    })
+    return () => {
+      cancelled = true
+      // StrictMode/dep-change cleanup cancels the apply, so release the guard
+      // (only if still ours) to let the re-run fetch again.
+      if (axisFetchedRef.current === backendId) axisFetchedRef.current = null
+    }
+  }, [needsAxisScores, backendId, setProjects])
 
   function handleReportRetry() {
     reportRepairRef.current = false

@@ -76,13 +76,26 @@ describe('localizeReport', () => {
     assert.equal(result.description, 'TOP DESC')
   })
 
-  test('empty pattern_paragraph string in i18n block is honored (not treated as missing)', () => {
+  test('blank pattern_paragraph in i18n block falls back to top-level', () => {
     const report = {
       pattern_paragraph: 'TOP PATTERN',
-      i18n: { ko: { pattern_paragraph: '' } },
+      i18n: { ko: { pattern_paragraph: '' }, en: { pattern_paragraph: '   ' } },
     }
-    const result = localizeReport(report, 'ko')
-    assert.equal(result.pattern_paragraph, '')
+    assert.equal(localizeReport(report, 'ko').pattern_paragraph, 'TOP PATTERN')
+    assert.equal(localizeReport(report, 'en').pattern_paragraph, 'TOP PATTERN')
+  })
+
+  test('blank in i18n block and top-level falls back to the other language', () => {
+    const report = {
+      pattern_paragraph: '',
+      i18n: { ko: { pattern_paragraph: '' }, en: { pattern_paragraph: 'EN PATTERN' } },
+    }
+    assert.equal(localizeReport(report, 'ko').pattern_paragraph, 'EN PATTERN')
+  })
+
+  test('all-blank pattern_paragraph stays blank', () => {
+    const report = { pattern_paragraph: '', i18n: { ko: { pattern_paragraph: '' }, en: {} } }
+    assert.equal(localizeReport(report, 'ko').pattern_paragraph, '')
   })
 
   test('does not mutate the input report', () => {

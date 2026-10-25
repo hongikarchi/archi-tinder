@@ -968,7 +968,13 @@ export default function App() {
           createdAt: p.created_at,
           deckImages: null,
         }))
-        setProjects(mapped)
+        // The list endpoint defers axis_scores (null here) — never clobber a
+        // previously fetched non-null value with that null.
+        setProjects(prev => mapped.map(m => {
+          if (m.axisScores) return m
+          const old = prev.find(p => p.id === m.id)
+          return old?.axisScores ? { ...m, axisScores: old.axisScores } : m
+        }))
         setActiveProjectId(null)
         return
       }

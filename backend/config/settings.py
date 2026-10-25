@@ -531,6 +531,15 @@ RECOMMENDATION = {
     'report_dislike_mostly':      0.8,   # disliked/shown rate at/above which the dislike_word is "mostly" (else "often")
     'report_fact_overlap_max':    0.8,   # drop a candidate fact whose supporting buildings overlap an already-selected fact's by >= this (Q38)
     'report_fact_smoothing':      1,     # Laplace smoothing constant `s` in r=(liked+s)/(shown+2s) -- guards against small-sample flukes (Q36)
+    # Tiered pattern grounding (2026-10-25 product decision: the pattern paragraph is always present).
+    # Tier 2 reruns the like/dislike selection with these looser thresholds when the strict pass yields no fact.
+    'report_fact_relaxed_min_shown': 2,    # Tier 2: min cards shown with a feature
+    'report_fact_relaxed_min_liked': 2,    # Tier 2: min liked cards with a feature for a LIKE fact
+    'report_fact_relaxed_min_disliked': 2,  # Tier 2: min disliked cards with a feature for a DISLIKE fact (1 swipe-past is not "often")
+    'report_fact_relaxed_min_ratio': 1.2,  # Tier 2: min smoothed like-rate ratio for a LIKE fact (dislike uses 1/ratio)
+    # Tier 3 (liked composition: "N of your M liked buildings had X"); only used when Tiers 1-2 yield nothing.
+    'report_fact_composition_min_with': 2,  # Tier 3: min liked buildings sharing a feature value
+    'report_fact_max_composition':  2,      # Tier 3: cap on composition facts per report
     # FULL-PERSONA-SPECTRUM (2026-09-27): axis_scores.py confidence formula --
     # confidence = min(n / axis_confidence_full_n, 1) * max(0, 1 - iqr). n=5
     # liked buildings is treated as "full" confidence (before the iqr penalty).

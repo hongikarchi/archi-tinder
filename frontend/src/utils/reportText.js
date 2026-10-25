@@ -38,11 +38,19 @@ export function localizeReport(report, language) {
   const block = report.i18n && typeof report.i18n === 'object' ? report.i18n[language] : null
   if (!block || typeof block !== 'object') return report
 
+  // Blank ('' / whitespace) counts as missing: fall back to the top-level
+  // field, and if that is blank too, to the other language's text.
+  const isBlank = v => v === undefined || v === null || (typeof v === 'string' && v.trim() === '')
+  const otherBlock = Object.entries(report.i18n)
+    .find(([lang, b]) => lang !== language && b && typeof b === 'object')?.[1]
+
   const next = { ...report }
   for (const field of TEXT_FIELDS) {
     const value = block[field]
-    if (value !== undefined && value !== null) {
+    if (!isBlank(value)) {
       next[field] = value
+    } else if (isBlank(report[field]) && otherBlock && !isBlank(otherBlock[field])) {
+      next[field] = otherBlock[field]
     }
   }
   return next
