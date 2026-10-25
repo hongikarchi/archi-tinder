@@ -44,8 +44,11 @@ from flow_scenarios import SCENARIOS, STAGES  # noqa: E402
 
 BASE_URL = 'http://localhost:5174'
 BACKEND_URL = 'http://localhost:8001'
-DEVICE = 'iPhone 13'
-VIEWPORT = [390, 844]
+# iPhone 16 full screen, same as Chrome DevTools' "iPhone 16" preset. Playwright's iPhone
+# descriptors subtract Safari's toolbars (iPhone 13 = 390x664), which looked squat.
+DEVICE = 'iPhone 16'
+DEVICE_BASE = 'iPhone 15'   # UA / touch / DPR source; Playwright has no iPhone 16 entry
+VIEWPORT = [393, 852]
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(ROOT, 'backend', '.env')
@@ -259,7 +262,9 @@ class Runner:
         self.browser_name = 'chromium'
 
     def device_kwargs(self) -> dict:
-        dev = dict(self.pw.devices[DEVICE])
+        dev = dict(self.pw.devices[DEVICE_BASE])
+        dev['viewport'] = {'width': VIEWPORT[0], 'height': VIEWPORT[1]}
+        dev['screen'] = {'width': VIEWPORT[0], 'height': VIEWPORT[1]}
         if self.browser_name == 'chromium':
             dev.pop('default_browser_type', None)
         return dev

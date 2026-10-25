@@ -197,8 +197,13 @@ def issue_card(issue, idx, mode):
     if mode == 'after':
         body = f'<dl><dt>이제 어떻게 되나</dt><dd>{esc(issue.get("now"))}</dd></dl>'
         shots = [idx.get(r) for r in issue.get('after', [])]
-        link = f'<p class="links">고치기 전 기록: <a href="#issue{esc(issue["id"])}">문제 {esc(issue["id"])}</a></p>'
-        anchor = ''
+        before = [idx.get(r) for r in issue.get('before', [])]
+        bgrid = ''.join(figure(b, anchor=False, numbered=False) for b in before if b)
+        bgrid = f'<div class="grid">{bgrid}</div>' if bgrid else ''
+        link = (f'<details class="before"><summary>고치기 전 기록 보기</summary>'
+                f'<dl><dt>무엇이 일어났나</dt><dd>{esc(issue.get("what"))}</dd>'
+                f'<dt>왜 문제였나</dt><dd>{esc(issue.get("why"))}</dd></dl>{bgrid}</details>')
+        anchor = f' id="issue{esc(issue["id"])}"'
     else:
         fixes = ''.join(
             f'<li>{"<b class=rec>추천</b> " if f.get("recommended") else ""}{esc(f.get("text"))}</li>'
@@ -289,7 +294,7 @@ section{display:grid;gap:16px;min-width:0}
 .shot{margin:0;display:grid;gap:8px;min-width:0}
 .pic{display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface);cursor:zoom-in}
 .pic img{display:block;width:100%;height:auto}
-.nopic{aspect-ratio:390/844;display:grid;place-items:center;color:var(--muted);cursor:default}
+.nopic{aspect-ratio:393/852;display:grid;place-items:center;color:var(--muted);cursor:default}
 .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .no{font-family:var(--f-num);font-weight:600;font-size:.85rem;font-variant-numeric:tabular-nums}
 .tag{font-size:.72rem;border-radius:999px;padding:1px 8px;background:var(--accent-soft);color:var(--accent)}
@@ -316,9 +321,67 @@ dialog::backdrop{background:rgb(0 0 0 / .78)}
 dialog img{display:block;max-width:100%;max-height:90vh;width:auto;border-radius:12px}
 dialog .close{position:absolute;top:8px;right:8px;font:inherit;font-size:.85rem;border:0;border-radius:999px;padding:4px 12px;background:var(--surface);color:var(--ink);cursor:pointer}
 @media (max-width:640px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Tabs: sticky bar under the intro; one panel visible at a time. */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);
+  border-bottom:1px solid var(--line);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));
+  padding-inline:max(16px,env(safe-area-inset-left,0px));display:grid;gap:8px;padding-block:10px 0}
+.tablist{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.tablist::-webkit-scrollbar{display:none}
+.tab{font:inherit;font-size:.9rem;font-weight:600;white-space:nowrap;border:0;background:none;color:var(--muted);
+  padding:8px 9px 10px;border-bottom:2px solid transparent;cursor:pointer;display:flex;gap:6px;align-items:center}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab .cnt{font-family:var(--f-num);font-size:.72rem;border-radius:999px;padding:0 7px;background:var(--line);color:var(--ink)}
+.tab .cnt.hot{background:var(--warn-soft);color:var(--warn)}
+.stagebar{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+.stagebar::-webkit-scrollbar{display:none}
+.stagebar a{white-space:nowrap;text-decoration:none;font-size:.8rem;border:1px solid var(--line);border-radius:999px;
+  padding:2px 10px;color:var(--ink);background:var(--surface)}
+.stagebar a b{font-family:var(--f-num);color:var(--accent);margin-right:4px}
+.panel{display:grid;gap:40px;min-width:0}
+.panel[hidden],.stagebar[hidden]{display:none}
+.panel section,.shot,.issue{scroll-margin-top:130px}
+.empty{background:var(--ok-soft);color:var(--ok);border-radius:12px;padding:14px 16px;margin:0}
+details.before{border-top:1px dashed var(--line);padding-top:8px}
+details.before summary{cursor:pointer;font-size:.85rem;color:var(--accent)}
+details.before[open]{display:grid;gap:10px}
+details.howto summary{cursor:pointer;font-weight:600}
+details.howto p{margin:8px 0 0}
 """
 
 JS = r"""
+const tabs = [...document.querySelectorAll('.tab')], panels = [...document.querySelectorAll('.panel')];
+const stagebar = document.querySelector('.stagebar');
+function show(name, toTop) {
+  if (!panels.some(p => p.id === 'p-' + name)) return;
+  tabs.forEach(t => t.setAttribute('aria-selected', t.dataset.tab === name ? 'true' : 'false'));
+  panels.forEach(p => { p.hidden = p.id !== 'p-' + name; });
+  if (stagebar) stagebar.hidden = name !== 'flow';
+  try { localStorage.setItem('flowqa-tab', name); } catch (e) {}
+  if (toTop) window.scrollTo({top: 0});
+}
+function go(hash) {
+  const id = (hash || '').replace('#', '');
+  if (!id) return false;
+  if (panels.some(p => p.id === 'p-' + id)) { show(id, true); return true; }
+  const el = document.getElementById(id);
+  if (!el) return false;
+  const panel = el.closest('.panel');
+  if (panel) show(panel.id.slice(2), false);
+  requestAnimationFrame(() => el.scrollIntoView({block: 'start'}));
+  return true;
+}
+tabs.forEach(t => t.addEventListener('click', () => {
+  show(t.dataset.tab, true);
+  try { history.replaceState(null, '', '#' + t.dataset.tab); } catch (e) {}
+}));
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#"]');
+  if (a && go(a.getAttribute('href'))) e.preventDefault();
+});
+let saved = null;
+try { saved = localStorage.getItem('flowqa-tab'); } catch (e) {}
+if (!go(location.hash)) show(panels.some(p => p.id === 'p-' + saved) ? saved : panels[0].id.slice(2), false);
 const dlg = document.getElementById('zoom'), big = document.getElementById('zoomimg');
 document.addEventListener('click', e => {
   const pic = e.target.closest('.pic[data-src]');
@@ -362,45 +425,65 @@ def build(run_dir):
     engine = '아이폰과 같은 사파리 엔진(WebKit)' if run.get('browser') == 'webkit' \
         else '크롬 엔진을 아이폰 화면처럼 설정'
     perf_note = ' 이번 회차는 휴대폰처럼 CPU를 4배 느리게 해서 끊김(50ms 넘는 작업)도 쟀어요.' if run.get('perf') else ''
-    note = (f'<div class="note"><strong>어떻게 찍었나요?</strong> 이 컴퓨터의 개발 서버(localhost:5174)에서 '
+    note = (f'<p>이 컴퓨터의 개발 서버(localhost:5174)에서 '
             f'테스트 계정으로 자동 로그인해 찍었어요. 진짜 폰이 아니라 {engine}으로 '
             f'{esc(run.get("device", ""))} 크기({run.get("viewport", [390, 844])[0]}×{run.get("viewport", [390, 844])[1]})를 띄웠어요. '
             f'‘단계’ 시간은 자동 대기 시간까지 포함한 값이고, API 시간은 개발 서버 기준이라 실제 서비스보다 느리게 나와요. 화면끼리 비교하는 용도로 보세요.{perf_note} '
             f'사진 아래 ‘디버그 화면’을 누르면 개발자용 표시(API 시간, 미리 불러오기 시간)가 켜진 같은 화면을 볼 수 있어요. '
-            f'코드 버전 {esc(run.get("git_sha", ""))} ({esc(run.get("branch", ""))}).</div>')
+            f'코드 버전 {esc(run.get("git_sha", ""))} ({esc(run.get("branch", ""))}).</p>')
 
-    parts = [f'<div class="intro"><h1>ArchiTinder 전체 흐름</h1>'
+    intro = (f'<div class="intro"><h1>ArchiTinder 전체 흐름</h1>'
              f'<p>휴대폰 웹에서 로그인부터 취향 찾기, 스와이프, 결과, 탐색, 검색, 소셜, 설정까지 '
              f'실제로 눌러 보며 찍은 기록이에요. 사진을 누르면 크게 볼 수 있어요.</p>'
-             f'<div class="facts">{"".join(facts)}</div></div>', note]
+             f'<div class="facts">{"".join(facts)}</div></div>')
 
-    if fixed:
-        cards = ''.join(issue_card(i, idx, 'after') for i in fixed)
-        parts.append('<section id="fixed"><header class="sec"><span class="secno">새로 고친 것</span>'
-                     '<h2>고친 뒤</h2><p>정해 주신 대로 고친 뒤 다시 찍은 화면이에요.</p></header>'
-                     f'{cards}</section>')
-    if issues:
-        cards = ''.join(issue_card(i, idx, 'record') for i in open_issues + fixed)
-        parts.append('<section id="issues"><header class="sec"><span class="secno">먼저 보기</span>'
-                     f'<h2>확인이 필요한 문제 {len(open_issues)}가지</h2>'
-                     '<p>각 문제마다 무엇이 일어나는지, 왜 헷갈릴 수 있는지, 고치는 방법 후보를 적었어요. '
-                     '고친 문제는 고치기 전 기록으로 남겨 둬요.</p></header>'
-                     f'{cards}</section>')
+    stages = [(n, st, [s for s in shots if s.get('stage') == st['key']])
+              for n, st in enumerate(manifest.get('stages', []), 1)]
+    stages = [x for x in stages if x[2]]
 
+    panels = []  # (key, label, count, hot, html)
+    open_html = ''.join(issue_card(i, idx, 'record') for i in open_issues) or \
+        '<p class="empty">지금 확인이 필요한 문제는 없어요.</p>'
+    panels.append(('issues', '문제', len(open_issues), bool(open_issues),
+                   '<section><header class="sec"><span class="secno">먼저 보기</span>'
+                   f'<h2>확인이 필요한 문제 {len(open_issues)}가지</h2>'
+                   '<p>각 문제마다 무엇이 일어나는지, 왜 헷갈릴 수 있는지, 고치는 방법 후보를 적었어요. '
+                   '고친 문제는 ‘고친 기록’ 탭으로 옮겨요.</p></header>'
+                   f'{open_html}</section>'))
+    flow_html = ''.join(
+        f'<section id="stage-{esc(st["key"])}"><header class="sec">'
+        f'<span class="secno">{n}단계</span><h2>{esc(st["title_ko"])}</h2>'
+        f'<p>{esc(st.get("desc_ko"))}</p></header>'
+        f'<div class="grid">{"".join(figure(s) for s in in_stage)}</div></section>'
+        for n, st, in_stage in stages)
+    panels.append(('flow', '전체 흐름', len(captured), False,
+                   f'<details class="note howto"><summary>어떻게 찍었나요?</summary>{note}</details>{flow_html}'))
     table = perf_table(shots)
     if table:
-        parts.append('<section id="perf"><header class="sec"><span class="secno">속도</span>'
-                     '<h2>가장 느린 요청</h2><p>이번 회차에서 오래 걸린 API 요청 12개예요. '
-                     f'{SLOW_MS:,}ms를 넘으면 빨간색이에요.</p></header>{table}</section>')
+        panels.append(('perf', '속도', n_slow, n_slow > 0,
+                       '<section><header class="sec"><span class="secno">속도</span>'
+                       '<h2>가장 느린 요청</h2><p>이번 회차에서 오래 걸린 API 요청 12개예요. '
+                       f'{SLOW_MS:,}ms를 넘으면 빨간색이에요. 개발 서버 기준이라 실제보다 느려요.</p></header>'
+                       f'{table}</section>'))
+    if fixed:
+        cards = ''.join(issue_card(i, idx, 'after') for i in fixed)
+        panels.append(('fixed', '고친 기록', len(fixed), False,
+                       '<section><header class="sec"><span class="secno">고친 것</span>'
+                       '<h2>고친 뒤</h2><p>정해 주신 대로 고친 뒤 다시 찍은 화면이에요. '
+                       '고치기 전 모습은 카드마다 접어 뒀어요.</p></header>'
+                       f'{cards}</section>'))
 
-    for n, st in enumerate(manifest.get('stages', []), 1):
-        in_stage = [s for s in shots if s.get('stage') == st['key']]
-        if not in_stage:
-            continue
-        figs = ''.join(figure(s) for s in in_stage)
-        parts.append(f'<section id="stage-{esc(st["key"])}"><header class="sec">'
-                     f'<span class="secno">{n}단계</span><h2>{esc(st["title_ko"])}</h2>'
-                     f'<p>{esc(st.get("desc_ko"))}</p></header><div class="grid">{figs}</div></section>')
+    tablist = ''.join(
+        f'<button class="tab" type="button" role="tab" data-tab="{k}" aria-selected="false">'
+        f'{label}<span class="cnt{" hot" if hot else ""}">{cnt}</span></button>'
+        for k, label, cnt, hot, _ in panels)
+    stagebar = ''.join(f'<a href="#stage-{esc(st["key"])}"><b>{n}</b>{esc(st["title_ko"])}</a>'
+                       for n, st, _ in stages)
+    body = (f'{intro}<nav class="tabs" aria-label="문서 구역">'
+            f'<div class="tablist" role="tablist">{tablist}</div>'
+            f'<div class="stagebar" hidden>{stagebar}</div></nav>'
+            + ''.join(f'<div class="panel" id="p-{k}" role="tabpanel">{h}</div>'
+                      for k, _, _, _, h in panels))
 
     page = (
         '<title>ArchiTinder 전체 흐름</title>\n'
@@ -410,7 +493,7 @@ def build(run_dir):
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700'
         '&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">\n'
         f'<style>{CSS}</style>\n'
-        f'<div class="wrap">{"".join(parts)}</div>\n'
+        f'<div class="wrap">{body}</div>\n'
         '<dialog id="zoom" aria-label="크게 보기"><button class="close" type="button">닫기</button>'
         '<img id="zoomimg" alt=""></dialog>\n'
         f'<script>{JS}</script>\n')
