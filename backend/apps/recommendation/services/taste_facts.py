@@ -198,8 +198,11 @@ def _select(candidates, cap, overlap_max, used_axes, already_selected):
     return chosen
 
 
-def compute_taste_facts(rows_by_id, liked_ids, disliked_ids, rc):
-    """Deterministically extract grounded like/dislike facts from swipe history.
+def _compute_like_dislike_facts(rows_by_id, liked_ids, disliked_ids, rc, min_shown=None, min_liked=None, min_ratio=None):
+    """Tier 1/2 core: deterministically extract grounded like/dislike facts from swipe history.
+
+    `min_shown` / `min_liked` / `min_ratio` override the strict rc thresholds (used by
+    the relaxed Tier 2 pass); None = read the strict rc key.
 
     Args:
         rows_by_id: dict[canonical_bld_id, dict] -- building row per shown id
@@ -222,9 +225,12 @@ def compute_taste_facts(rows_by_id, liked_ids, disliked_ids, rc):
     rc = rc or {}
 
     s = rc.get('report_fact_smoothing', 1)
-    min_shown = rc.get('report_fact_min_shown', 3)
-    min_liked = rc.get('report_fact_min_liked', 2)
-    min_ratio = rc.get('report_fact_min_ratio', 1.5)
+    if min_shown is None:
+        min_shown = rc.get('report_fact_min_shown', 3)
+    if min_liked is None:
+        min_liked = rc.get('report_fact_min_liked', 2)
+    if min_ratio is None:
+        min_ratio = rc.get('report_fact_min_ratio', 1.5)
     tie_ratio = rc.get('report_fact_tie_ratio', 0.3)
     max_likes = rc.get('report_fact_max_likes', 3)
     max_dislikes = rc.get('report_fact_max_dislikes', 1)
@@ -289,11 +295,16 @@ def compute_taste_facts(rows_by_id, liked_ids, disliked_ids, rc):
             }
 
             if shown_A >= min_shown and liked_A >= min_liked and ratio >= min_ratio:
-                like_candidates.append({
+                like_fact = {
                     **base_fact,
                     'polarity': 'like',
                     'building_ids': sorted(bucket['liked']),
-                })
+                }
+                # A floored multiplier below 1.5 ("about 1x") reads as no signal --
+                # such (relaxed-tier) facts state the direction only, no number.
+                if not others_rarely_liked and math.isfinite(ratio) and base_fact['ratio_display'] < 1.5:
+                    like_fact['qualitative_only'] = True
+                like_candidates.append(like_fact)
 
             if shown_A >= min_shown and shown_A > 0:
                 dislike_rate = disliked_A / shown_A
@@ -321,3 +332,95 @@ def compute_taste_facts(rows_by_id, liked_ids, disliked_ids, rc):
     )
 
     return {'facts': like_selected + dislike_selected, 'summary': summary}
+
+
+def _compute_composition_facts(rows_by_id, liked_ids, disliked_ids, rc):
+    """Tier 3: liked-only composition facts.
+
+    For the most frequent liked feature values (same extraction as the like
+    facts) with liked_with >= 2, emit
+    {polarity:'composition', axis, value, liked_with, liked_total, building_ids}.
+    `liked_total` = liked buildings we actually hold a row for (so the number
+    is never larger than what the tags were counted over). Needs liked_total >= 2.
+    Up to `report_fact_max_composition` facts (default 2), one per axis, and a
+    candidate covering (>= overlap_max) the same buildings as one already
+    chosen is skipped (it would just restate it).
+    """
+    rc = rc or {}
+    rows_by_id = rows_by_id or {}
+    liked_set, _disliked, _shown = _partition_ids(liked_ids, disliked_ids)
+    liked_known = sorted(bid for bid in liked_set if bid in rows_by_id)
+    liked_total = len(liked_known)
+    if liked_total < 2:
+        return []
+    min_with = rc.get('report_fact_composition_min_with', 2)
+    cap = rc.get('report_fact_max_composition', 2)
+    overlap_max = rc.get('report_fact_overlap_max', 0.8)
+
+    candidates = []
+    for axis_idx, axis in enumerate(AXES):
+        buckets = {}
+        for bid in liked_known:
+            for value in extract_axis_values(rows_by_id[bid], axis):
+                buckets.setdefault(value, set()).add(bid)
+        for value, ids in buckets.items():
+            if len(ids) >= min_with:
+                candidates.append((-len(ids), axis_idx, value, sorted(ids)))
+    candidates.sort(key=lambda c: (c[0], c[1], c[2]))
+
+    chosen = []
+    used_axes = set()
+    for neg_count, axis_idx, value, ids in candidates:
+        if len(chosen) >= cap:
+            break
+        axis = AXES[axis_idx]
+        if axis in used_axes:
+            continue
+        if any(_overlap_ratio(ids, sel['building_ids']) >= overlap_max for sel in chosen):
+            continue
+        chosen.append({
+            'polarity': 'composition',
+            'axis': axis,
+            'value': value,
+            'liked_with': -neg_count,
+            'liked_total': liked_total,
+            'building_ids': ids,
+        })
+        used_axes.add(axis)
+    return chosen
+
+
+def compute_taste_facts(rows_by_id, liked_ids, disliked_ids, rc):
+    """Tiered, deterministic grounding facts for the persona report's pattern paragraph.
+
+    Tier 1 'strict'      -- like/dislike facts at the strict report_fact_* thresholds.
+    Tier 2 'relaxed'     -- if Tier 1 is empty, same selection with the
+                            report_fact_relaxed_* thresholds.
+    Tier 3 'composition' -- if still empty, liked-only composition facts.
+    'none'               -- nothing grounded (caller falls back to an interpretive
+                            paragraph with no numbers).
+
+    Returns {'facts': [...], 'summary': {...}, 'tier': 'strict'|'relaxed'|'composition'|'none'}.
+    Fact shapes: see _compute_like_dislike_facts (like/dislike) and
+    _compute_composition_facts (composition).
+    """
+    rc = rc or {}
+    result = _compute_like_dislike_facts(rows_by_id, liked_ids, disliked_ids, rc)
+    if result['facts']:
+        result['tier'] = 'strict'
+        return result
+
+    relaxed = _compute_like_dislike_facts(
+        rows_by_id, liked_ids, disliked_ids, rc,
+        min_shown=rc.get('report_fact_relaxed_min_shown', 2),
+        min_liked=rc.get('report_fact_relaxed_min_liked', 2),
+        min_ratio=rc.get('report_fact_relaxed_min_ratio', 1.2),
+    )
+    if relaxed['facts']:
+        relaxed['tier'] = 'relaxed'
+        return relaxed
+
+    composition = _compute_composition_facts(rows_by_id, liked_ids, disliked_ids, rc)
+    if composition:
+        return {'facts': composition, 'summary': result['summary'], 'tier': 'composition'}
+    return {'facts': [], 'summary': result['summary'], 'tier': 'none'}

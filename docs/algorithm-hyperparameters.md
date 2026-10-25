@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — DO NOT EDIT. Source: backend/config/settings.py RECOMMENDATION dict. -->
 <!-- Regenerate: python tools/gen-hyperparams.py   (CI fails if this file is stale) -->
 
-Generated from `backend/config/settings.py` `RECOMMENDATION` — **88 parameters**.
+Generated from `backend/config/settings.py` `RECOMMENDATION` — **93 parameters**.
 Values here are what production runs with (environment overrides are marked `env`).
 The *meaning* column is the inline comment on each key in `settings.py`; to document a
 parameter, comment it there. Design intent and phase semantics: `docs/algorithm.md`.
@@ -164,6 +164,11 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 | `report_dislike_mostly` | 0.8 | float | disliked/shown rate at/above which the dislike_word is "mostly" (else "often") |
 | `report_fact_overlap_max` | 0.8 | float | drop a candidate fact whose supporting buildings overlap an already-selected fact's by >= this (Q38) |
 | `report_fact_smoothing` | 1 | int | Laplace smoothing constant `s` in r=(liked+s)/(shown+2s) -- guards against small-sample flukes (Q36) |
+| `report_fact_relaxed_min_shown` | 2 | int | Tier 2: min cards shown with a feature |
+| `report_fact_relaxed_min_liked` | 2 | int | Tier 2: min liked cards with a feature for a LIKE fact |
+| `report_fact_relaxed_min_ratio` | 1.2 | float | Tier 2: min smoothed like-rate ratio for a LIKE fact (dislike uses 1/ratio) |
+| `report_fact_composition_min_with` | 2 | int | Tier 3: min liked buildings sharing a feature value |
+| `report_fact_max_composition` | 2 | int | Tier 3: cap on composition facts per report |
 
 ## Persona axis scores
 

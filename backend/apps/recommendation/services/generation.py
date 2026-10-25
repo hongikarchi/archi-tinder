@@ -18,6 +18,10 @@ from collections import Counter
 from django.conf import settings
 from google.genai import types
 
+from ._pattern_text import (
+    build_fallback_paragraph,
+    numbers_allowed,
+)
 from ._report_prompts import build_persona_prompt
 from .taste_facts import AXES as _TASTE_AXES
 from .taste_facts import compute_taste_facts, extract_axis_values
@@ -118,6 +122,12 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
 
     taste_facts = compute_taste_facts(rows_by_id, liked_building_ids, disliked_building_ids, rc)
     facts = taste_facts.get('facts', [])
+    tier = taste_facts.get('tier', 'none')
+    # 'facts' = like/dislike facts (strict or relaxed), 'composition' = liked-only
+    # counts, 'interpretive' = no grounded fact -> number-free paragraph from tags.
+    pattern_mode = {
+        'strict': 'facts', 'relaxed': 'facts', 'composition': 'composition',
+    }.get(tier, 'interpretive')
 
     # Liked-only tag frequencies (for the interpretive `description` paragraph
     # -- NOT the shown-vs-not-shown ratio math that drives `pattern_paragraph`,
@@ -149,6 +159,7 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     payload = {
         'language': lang,
         'liked_count': len(liked_id_set),
+        'pattern_mode': pattern_mode,
         'facts': [
             {k: v for k, v in fact.items() if k != 'building_ids'}
             for fact in facts
@@ -241,13 +252,34 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
         'i18n': {'ko': ko_block, 'en': en_block},
     }
 
-    if not facts:
-        # No grounded facts (e.g. too few swipes to clear thresholds) --
-        # never let the model pad this in with an ungrounded sentence, in
-        # EITHER language.
-        report['pattern_paragraph'] = ''
-        report['i18n']['ko']['pattern_paragraph'] = ''
-        report['i18n']['en']['pattern_paragraph'] = ''
+    # 2026-10-25 product decision: pattern_paragraph is ALWAYS present. Every
+    # number must come from real data, so LLM text is guarded and blanks are
+    # filled deterministically (see _pattern_text.py).
+    pattern_source = {'strict': 'facts', 'relaxed': 'relaxed', 'composition': 'composition'}.get(
+        tier, 'interpretive',
+    )
+    used_fallback = False
+    for key in ('ko', 'en'):
+        block = report['i18n'][key]
+        text = (block.get('pattern_paragraph') or '').strip()
+        if text and not numbers_allowed(text, facts, pattern_mode):
+            logger.warning(
+                'generate_persona_report: %s pattern_paragraph has ungrounded numbers (mode=%s); using fallback',
+                key, pattern_mode,
+            )
+            text = ''
+        if not text:
+            text, kind = build_fallback_paragraph(facts, liked_tag_frequencies, key)
+            used_fallback = True
+            logger.warning(
+                'generate_persona_report: blank/rejected %s pattern_paragraph; deterministic fallback (%s)',
+                key, kind,
+            )
+        block['pattern_paragraph'] = text
+    if used_fallback:
+        pattern_source = 'fallback'
+    report['pattern_paragraph'] = report['i18n'][lang]['pattern_paragraph']
+    report['pattern_source'] = pattern_source
     # Backend-computed, not LLM. Not rendered directly by the frontend
     # (BACK-LLM-5 spec: "화면에는 표시하지 않습니다") -- but IS persisted on
     # project.final_report, which IS served by ProjectDetailView (AllowAny
@@ -260,8 +292,9 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     # for future audit/debug UIs without re-deriving them).
     report['taste_facts'] = {
         'summary': taste_facts['summary'],
+        'tier': tier,
         'facts': [
-            fact if fact.get('polarity') == 'like'
+            fact if fact.get('polarity') in ('like', 'composition')
             else {k: v for k, v in fact.items() if k != 'building_ids'}
             for fact in facts
         ],

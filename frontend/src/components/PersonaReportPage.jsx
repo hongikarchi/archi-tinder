@@ -339,27 +339,25 @@ export function PersonaReportBody({
       </section>
 
       {/* Pattern analysis */}
-      {(report.pattern_paragraph || tags.length > 0) && (
-        <section className={s.section}>
-          <p data-rv className={`${s.rv} ${s.eyebrow}`}>{t('persona.whyLabel')}</p>
-          <h2 data-rv className={`${s.rv} ${s.h2}`} style={delay(0.05)}>{t('persona.patternTitle')}</h2>
-          {report.pattern_paragraph && (
-            <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>{report.pattern_paragraph}</p>
-          )}
-          <div className={s.tags}>
-            {tags.map(([tag, cls], i) => (
-              <span
-                key={`${cls}-${tag}`}
-                data-rv
-                className={`${s.rv} ${s.pop} ${s.tag} ${cls}`}
-                style={delay(Math.min(i * TAG_STAGGER_S, TAG_STAGGER_MAX_S))}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
+      <section className={s.section}>
+        <p data-rv className={`${s.rv} ${s.eyebrow}`}>{t('persona.whyLabel')}</p>
+        <h2 data-rv className={`${s.rv} ${s.h2}`} style={delay(0.05)}>{t('persona.patternTitle')}</h2>
+        <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
+          {report.pattern_paragraph || t('persona.patternEmpty')}
+        </p>
+        <div className={s.tags}>
+          {tags.map(([tag, cls], i) => (
+            <span
+              key={`${cls}-${tag}`}
+              data-rv
+              className={`${s.rv} ${s.pop} ${s.tag} ${cls}`}
+              style={delay(Math.min(i * TAG_STAGGER_S, TAG_STAGGER_MAX_S))}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </section>
 
       {/* Taste analysis */}
       <section className={s.section}>

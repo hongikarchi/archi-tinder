@@ -70,7 +70,7 @@ shape:
   "ko": {{
     "persona_type": "1-2 word CONCRETE architectural-tendency name, in Korean",
     "one_liner": "one concrete sentence naming real tags, in Korean",
-    "pattern_paragraph": "see rules below -- factual, may be an empty string, in Korean",
+    "pattern_paragraph": "see rules below -- NEVER empty, in Korean",
     "description": "see rules below -- interpretive, in Korean"
   }},
   "en": {{
@@ -104,7 +104,13 @@ from the input data -- not a vague mood sentence. Example shape: "노출
 콘크리트와 목재를 절제되게 쓴 건물을 고르는 미니멀리스트." Applies to both
 `ko.one_liner` and `en.one_liner` -- the same tags, named in each language.
 
-## pattern_paragraph  (factual -- grounded ONLY in the provided `facts` list)
+## pattern_paragraph  (ALWAYS present -- never an empty string)
+The input has a `pattern_mode` field: "facts", "composition" or "interpretive".
+Follow ONLY the section below that matches it. In every mode every NUMBER you
+write must be copied from the input (ratio_display / liked_with / liked_total);
+never compute or invent a number.
+
+### pattern_mode = "facts"  (factual -- grounded ONLY in the provided `facts` list)
 Write this once conceptually, then produce a Korean version (`ko.pattern_paragraph`)
 and an English version (`en.pattern_paragraph`) that state the exact same facts
 in the exact same order.
@@ -156,8 +162,35 @@ in the exact same order.
   invent a ratio_display value, and never add a fact that is not in the
   `facts` array. Use the SAME 2 facts (and the same numbers) in both
   languages.
-- If the `facts` array is EMPTY, return `""` for BOTH `ko.pattern_paragraph`
-  and `en.pattern_paragraph` -- do not pad with a generic sentence.
+- A like fact with `qualitative_only: true` has a multiplier too small to
+  quote: do NOT state a number for it -- write only that those buildings were
+  chosen more often than the other buildings shown ("<feature> 건물은 다른
+  건물보다 더 자주 고르셨어요." / "the ones with <feature> were chosen more
+  often than the other buildings shown."). It does not count toward the
+  2-number cap.
+
+### pattern_mode = "composition"  (facts[] holds `polarity: "composition"` entries)
+Each fact says `liked_with` of the `liked_total` buildings the user liked
+carry one feature. There is NO comparison with other buildings -- never say
+"more often than", never state a multiplier, never mention swiped-past
+buildings. Do NOT use the "보여드린 건물 중" / "Among the buildings shown,"
+opener. Required templates, word for word (one sentence per fact, in
+facts order, joined into one short paragraph):
+  Korean (required): "좋아요한 <liked_total>곳 중 <liked_with>곳이 <feature> 건물이었어요."
+  English (required): "<liked_with> of the <liked_total> buildings you liked had <feature>."
+The only numbers allowed are those two values per fact.
+
+### pattern_mode = "interpretive"  (no grounded fact is available)
+Write a SHORT interpretive paragraph (1-2 sentences) from
+`liked_tag_frequencies` / `liked_visual_description_excerpts`, plausible and
+grounded in the liked tags that actually appear there.
+- `ko.pattern_paragraph` starts with "고르신 건물들을 보면".
+  `en.pattern_paragraph` starts with "Looking at the buildings you chose,".
+- NO digits or number words at all, NO comparison claims ("다른 건물보다",
+  "more often than"), NO statistical claims, and do NOT use the phrase
+  "보여드린 건물 중" / "Among the buildings shown".
+- Hedged tone ("~에 끌리는 취향이 보여요" / "you seem drawn to ..."). Same
+  content in both languages.
 
 ## description  (interpretive -- may READ BETWEEN THE LINES, may NOT invent facts)
 Write this once conceptually, then produce a Korean version (`ko.description`)

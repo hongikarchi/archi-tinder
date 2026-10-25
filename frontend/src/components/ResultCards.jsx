@@ -267,9 +267,9 @@ export default function ResultCards({ project, backendId, ctaLabel, onCta }) {
           <article className={cardCls(1)}>
             <p className={`${s.rv} ${s.eyebrow}`}><span className={s.eyebrowLine} />{t('persona.whyLabel')}</p>
             <h2 className={`${s.rv} ${s.h2}`} style={delay(0.1)}>{t('persona.patternTitle')}</h2>
-            {report.pattern_paragraph && (
-              <p className={`${s.rv} ${s.pattern}`} style={delay(0.2)}>{report.pattern_paragraph}</p>
-            )}
+            <p className={`${s.rv} ${s.pattern}`} style={delay(0.2)}>
+              {report.pattern_paragraph || t('persona.patternEmpty')}
+            </p>
             <div className={s.tags}>
               {tags.map(([tag, cls], i) => (
                 <span
