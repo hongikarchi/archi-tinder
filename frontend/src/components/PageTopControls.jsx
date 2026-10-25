@@ -44,7 +44,7 @@ import styles from './PageTopControls.module.css'
  * LoginPage passes no `onLogout` (unauthenticated page) -> no logout button,
  * even though the mock's markup includes one (meaningless pre-login).
  */
-export default function PageTopControls({ onLogout, leading = null, trailing = null }) {
+export default function PageTopControls({ onLogout, leading = null, trailing = null, band = false }) {
   const { theme, setTheme } = useTheme()
   const { language, setLanguage } = useLanguage()
   const { t } = useTranslation()
@@ -61,6 +61,10 @@ export default function PageTopControls({ onLogout, leading = null, trailing = n
 
   return (
     <>
+      {/* Opt-in backing band (`band`): pages whose content scrolls under the
+          fixed rails get a page-colored fade so content never visibly collides
+          with the transparent round buttons. Click-through, sits under the rails. */}
+      {band && <div aria-hidden="true" style={bandStyle} />}
       <div
         onPointerDown={stop}
         onMouseDown={stop}
@@ -137,8 +141,8 @@ export default function PageTopControls({ onLogout, leading = null, trailing = n
       {onLogout && (
         <FloatingIconButton
           onClick={handleLogoutClick}
-          title="Log out"
-          ariaLabel="Log out"
+          title={t('auth.logout')}
+          ariaLabel={t('auth.logout')}
           className={styles.logoutBtn}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -166,7 +170,18 @@ const railBase = {
   gap: 8,
   alignItems: 'center',
 }
-const leftRailStyle = { ...railBase, left: 12 }
+// 16 (top) + 28 (circle) = 44 → opaque to ~52, fade out by 64.
+const bandStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 64,
+  zIndex: 299,
+  pointerEvents: 'none',
+  background: 'linear-gradient(to bottom, var(--color-bg) 0, var(--color-bg) 52px, transparent 100%)',
+}
+const leftRailStyle ={ ...railBase, left: 12 }
 const rightRailStyle = { ...railBase, right: 12 }
 
 const pillStyle = {

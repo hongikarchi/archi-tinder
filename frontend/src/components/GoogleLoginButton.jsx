@@ -6,6 +6,7 @@
  */
 
 import { useGoogleLogin } from '@react-oauth/google'
+import { useTranslation } from '../i18n/index.js'
 
 function Spinner() {
   return (
@@ -44,6 +45,7 @@ function GoogleIcon() {
  *   className  string                  — extra class(es) applied to button element
  */
 export default function GoogleLoginButton({ onSuccess, onError, onNonOAuthError, disabled, loading, style, label = 'Continue with Google', className }) {
+  const { t } = useTranslation()
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
     onSuccess,
@@ -74,7 +76,7 @@ export default function GoogleLoginButton({ onSuccess, onError, onNonOAuthError,
       className={className}
       onClick={() => googleLogin()}
       disabled={disabled}
-      aria-label="Continue with Google for existing accounts"
+      aria-label={t('auth.continueGoogleExisting')}
       style={{ ...baseStyle, ...style }}
     >
       {loading ? <Spinner /> : <GoogleIcon />}

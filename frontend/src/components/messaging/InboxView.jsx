@@ -4,6 +4,7 @@ import Skeleton from '../Skeleton.jsx'
 import EmptyState from '../EmptyState.jsx'
 import { badgeLabel, formatMessageTime, previewText } from './messagingUtils.js'
 import styles from './Messaging.module.css'
+import { userHandle } from '../../utils/userIdentity.js'
 
 /**
  * InboxView — View A of the messages sheet: received contact requests at the
@@ -71,9 +72,9 @@ export default function InboxView({
             return (
               <div key={req.id} className={styles.requestCard}>
                 <div className={styles.requestTop}>
-                  <Avatar src={sender.avatar_url} name={sender.display_name} size={40} />
+                  <Avatar src={sender.avatar_url} name={userHandle(sender)} size={40} />
                   <div className={styles.requestText}>
-                    <p className={styles.name}>{sender.display_name || t('messaging.unknownUser')}</p>
+                    <p className={styles.name}>{userHandle(sender) || t('messaging.unknownUser')}</p>
                     <p className={styles.greeting}>{req.greeting || t('messaging.noGreeting')}</p>
                   </div>
                   <span className={styles.time}>{formatMessageTime(req.created_at, language)}</span>
@@ -120,10 +121,10 @@ export default function InboxView({
                 className={cls}
                 onClick={() => onOpenConversation(conv)}
               >
-                <Avatar src={other.avatar_url} name={other.display_name} size={40} />
+                <Avatar src={other.avatar_url} name={userHandle(other)} size={40} />
                 <span className={styles.rowMain}>
                   <span className={styles.name} style={{ display: 'block' }}>
-                    {other.display_name || t('messaging.unknownUser')}
+                    {userHandle(other) || t('messaging.unknownUser')}
                   </span>
                   <span className={styles.rowPreview} style={{ display: 'block' }}>
                     {conv.closed ? t('messaging.closedBadge') : previewText(conv.last_message, t)}

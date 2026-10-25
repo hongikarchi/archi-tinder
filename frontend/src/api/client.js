@@ -8,7 +8,7 @@
  */
 
 export { getToken, setTokens, clearTokens, getLastCall } from './core.js'
-export { socialLogin, completeOnboarding, guestLogin, promoteAccount, devLogin, logout, getMe, login, register, setPassword, linkEmail } from './auth.js'
+export { socialLogin, completeOnboarding, promoteAccount, devLogin, logout, getMe, login, register, setPassword, linkEmail } from './auth.js'
 export { normalizeCard, getImageSource, emitImageLoadEvent } from './images.js'
 export { startSession, getSessionState, recordSwipe, getResult } from './sessions.js'
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, bookmarkBuilding, generateReport, generateReportImage, getProjectRecommendations, createProject, VerifyRequiredError } from './projects.js'

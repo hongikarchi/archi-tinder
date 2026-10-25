@@ -28,6 +28,7 @@ import ContactCta from '../components/messaging/ContactCta.jsx'
 import UserActionsMenu from '../components/messaging/UserActionsMenu.jsx'
 import { useBlockedUser } from '../components/messaging/blockedUsers.js'
 import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.jsx'
+import { userHandle } from '../utils/userIdentity.js'
 
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
 // entirely if no issue surfaces.
@@ -503,7 +504,7 @@ export default function UserProfilePage({ onLogout }) {
           <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-12px 0 12px', minHeight: 44, alignItems: 'center' }}>
             <UserActionsMenu
               userId={effectiveUserId}
-              name={user.display_name || t('messaging.unknownUser')}
+              name={userHandle(user) || t('messaging.unknownUser')}
             />
           </div>
         )}

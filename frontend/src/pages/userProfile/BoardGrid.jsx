@@ -1,4 +1,5 @@
 import BoardCard from '../../components/profile/BoardCard'
+import { useTranslation } from '../../i18n/index.js'
 
 export default function BoardGrid({
   boards,
@@ -9,6 +10,7 @@ export default function BoardGrid({
   boardsHasMore,
   boardsLoading,
 }) {
+  const { t } = useTranslation()
   return (
     <>
       {/* Boards grid — responsive auto-fill, one tall tile per row on phones */}
@@ -33,7 +35,7 @@ export default function BoardGrid({
         <div style={{
           color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0',
         }}>
-          No boards yet.
+          {t('board.noBoards')}
         </div>
       ))}
     </>

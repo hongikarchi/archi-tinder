@@ -17,6 +17,10 @@ import ps from './TasteStartPage.module.css'
 const MAX_EXCLUDE = 100
 const CARD_W = 'min(280px, calc(100vw - 110px))'
 
+// Cap card height on short viewports so a whole round (bubble + chips + deck + CTA)
+// fits above the fixed composer: 38dvh = 321px on a 844px screen, 380px cap above ~1000px.
+const CARD_MAX_H = 'min(380px, 38dvh)'
+
 function tagLabel(tag, language) {
   return (language === 'en' ? tag.label_en || tag.label_ko : tag.label_ko || tag.label_en) || String(tag.value)
 }
@@ -188,7 +192,7 @@ function CardStack({ round, index, onStep, rankLabel, t, language, onSubmitRepor
       onPointerCancel={e => finish(e, true)}
       style={{ width: `calc(${CARD_W} + 28px)`, margin: '0 auto' }}
     >
-      <div style={{ position: 'relative', width: CARD_W, aspectRatio: '280 / 380', maxHeight: 380 }}>
+      <div style={{ position: 'relative', width: CARD_W, aspectRatio: '280 / 380', maxHeight: CARD_MAX_H }}>
         {cards.map((item, j) => {
           const rel = j - index
           const c = item.card
@@ -291,7 +295,7 @@ function CardStack({ round, index, onStep, rankLabel, t, language, onSubmitRepor
 function LoadingBlock({ label }) {
   return (
     <div role="status" aria-label={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '4px 0' }}>
-      <div className={ps.skelBlock} style={{ width: CARD_W, aspectRatio: '280 / 380', maxHeight: 380, borderRadius: 'var(--radius-lg)' }} />
+      <div className={ps.skelBlock} style={{ width: CARD_W, aspectRatio: '280 / 380', maxHeight: CARD_MAX_H, borderRadius: 'var(--radius-lg)' }} />
       <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)' }}>{label}</span>
     </div>
   )
@@ -434,7 +438,7 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
 
       {isLatest && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, width: '100%', alignSelf: 'center' }}>
-          <button type="button" className={ps.ctaPrimary} disabled={kept === 0 || busy || starting} onClick={() => onStart(round)} aria-busy={starting}>
+          <button type="button" data-taste-cta="" className={ps.ctaPrimary} disabled={kept === 0 || busy || starting} onClick={() => onStart(round)} aria-busy={starting}>
             {starting ? t('search.tasteStarting') : kept === n ? t('search.tasteStartSwiping') : t('search.tasteStartSwipingN', { n: kept })}
           </button>
           <button type="button" className={ps.ctaSecondary} disabled={busy || starting || round.exhausted} onClick={() => onFindAgain(round.id)}>
@@ -451,7 +455,7 @@ function Round({ round, isLatest, language, t, busy, starting, onStep, onFindAga
   )
 }
 
-export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
+export default function TasteStartPage({ onStartTaste, onLogout, showToast, reentry = null }) {
   const { t, language } = useTranslation()
   const userId = sessionStorage.getItem('archithon_user') || 'anon'
   const storageKey = `archithon_taste_${userId}_new`
@@ -464,6 +468,8 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
   const [starting, setStarting] = useState(false)
   const scrollRef = useRef(null)
   const endRef = useRef(null)
+  const composerRef = useRef(null)
+  const [composerH, setComposerH] = useState(84)
   const roundsRef = useRef(rounds)
   const [sheetRoundId, setSheetRoundId] = useState(null) // round whose query-report sheet is open
   const sheetOpenRef = useRef(false)
@@ -497,15 +503,40 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Measure the fixed composer (grows with error text) instead of hard-coding it.
+  useEffect(() => {
+    const el = composerRef.current
+    if (!el) return undefined
+    const measure = () => {
+      setComposerH(Math.ceil(el.getBoundingClientRect().height))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [inRounds])
+
   // Scroll the new round (or the loading placeholder) into view.
   useEffect(() => {
     if (pending) {
       endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
     } else if (latest) {
-      const el = scrollRef.current?.querySelector(`#taste-round-${latest.id}`)
-      // Stop below the fixed top controls (top 14 + height 34) instead of under them.
-      if (el) el.style.scrollMarginTop = '64px'
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const sc = scrollRef.current
+      const el = sc?.querySelector(`#taste-round-${latest.id}`)
+      if (!sc || !el) return
+      const scTop = sc.getBoundingClientRect().top
+      // Prefer the round top just below the fixed top controls (top 16 + 28 = 44, +20 air)
+      // so the user's query bubble stays visible ...
+      let target = el.getBoundingClientRect().top - scTop + sc.scrollTop - 64
+      // ... but never at the cost of the primary CTA sliding under the fixed composer.
+      const cta = el.querySelector('[data-taste-cta]')
+      const composerTop = composerRef.current?.getBoundingClientRect().top
+      if (cta && composerTop != null) {
+        const ctaBottom = cta.getBoundingClientRect().bottom - scTop + sc.scrollTop
+        target = Math.max(target, ctaBottom + 12 - (composerTop - scTop))
+      }
+      sc.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
     }
   }, [latest?.id, pending]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -708,6 +739,7 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
       display: 'flex', flexDirection: 'column',
     }}>
       <PageTopControls
+        band
         onLogout={onLogout}
         leading={
           <PageBackButton
@@ -727,10 +759,13 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
       {!inRounds ? (
         <div style={{
           flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column',
-          justifyContent: 'center', alignItems: 'center',
-          padding: '24px 16px', paddingBottom: 'var(--tabbar-clearance)',
+          alignItems: 'center',
+          padding: reentry ? '56px 16px 24px' : '24px 16px', paddingBottom: 'var(--tabbar-clearance)',
         }}>
-          <div style={{ width: '100%', maxWidth: 420 }}>
+          {/* margin:auto centers when there is room and, unlike justify-content:center,
+              never clips the top when the banner makes the column taller than the screen. */}
+          <div style={{ width: '100%', maxWidth: 420, margin: 'auto 0' }}>
+            {reentry && <div style={{ marginBottom: 20 }}>{reentry}</div>}
             <PageLogoHeader padding="0" marginBottom={20} />
             <h2 style={{
               fontSize: 30, fontWeight: 500, lineHeight: 1.25, margin: '0 0 24px',
@@ -751,7 +786,7 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
         <>
           <div ref={scrollRef} style={{
             flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0 16px',
-            paddingBottom: 'calc(var(--tabbar-clearance) + 84px)',
+            paddingBottom: `calc(var(--tabbar-clearance) + ${composerH}px)`,
           }}>
             <div style={{ width: '100%', maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 36 }}>
               <PageLogoHeader padding="60px 16px 6px" />
@@ -773,7 +808,7 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast }) {
             </div>
           </div>
 
-          <div style={{
+          <div ref={composerRef} style={{
             position: 'fixed', bottom: 'var(--tabbar-clearance)', left: 0, right: 0,
             padding: '12px 16px', zIndex: 30,
             background: 'linear-gradient(to top, var(--color-bg) 80%, transparent)',

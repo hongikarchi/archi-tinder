@@ -132,7 +132,7 @@ export default function BoardCard({
       {/* Select mode: selection circle (owner only), top-right */}
       {selectMode && isOwner && (
         <div
-          aria-label={isSelected ? 'Selected' : 'Not selected'}
+          aria-label={isSelected ? t('board.selected') : t('board.notSelected')}
           style={{
             position: 'absolute', top: 12, right: 12,
             width: 28, height: 28, borderRadius: '50%',

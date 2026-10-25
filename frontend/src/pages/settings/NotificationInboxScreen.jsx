@@ -23,12 +23,42 @@ import PageTopControls from '../../components/PageTopControls.jsx'
 import PageBackButton from '../../components/PageBackButton.jsx'
 import PageShell from '../../components/PageShell.jsx'
 import PageTitle from '../../components/PageTitle.jsx'
+import { userHandle } from '../../utils/userIdentity.js'
 import styles from './NotificationInboxScreen.module.css'
 
 const PAGE_SIZE = 20
 
+// Actor-less (security) notifications get a shield glyph in the Avatar slot
+// (same 40px circle, same surface/border tokens as Avatar's fallback).
+function SecurityBadge({ size = 40 }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: 'var(--color-surface-2)',
+        border: '1px solid var(--color-border-soft)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        color: 'var(--color-text-muted)',
+      }}
+    >
+      <svg
+        width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      >
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    </div>
+  )
+}
+
 function sentenceFor(n, t) {
-  const name = n.actor?.display_name || ''
+  const name = userHandle(n.actor)
   switch (n.type) {
     case 'reaction':
       return t('notifications.sentence.reaction', { name })
@@ -164,7 +194,9 @@ export default function NotificationInboxScreen({ onLogout }) {
                   onClick={() => handleRowClick(n)}
                   className={`${styles.row} ${isUnread ? styles.rowUnread : ''}`}
                 >
-                  <Avatar src={n.actor?.avatar_url} name={n.actor?.display_name} size={40} />
+                  {n.actor
+                    ? <Avatar src={n.actor.avatar_url} name={userHandle(n.actor)} size={40} />
+                    : <SecurityBadge size={40} />}
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                       {isUnread && (

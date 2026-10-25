@@ -2,7 +2,9 @@ import { Fragment, useState, useCallback, useEffect } from 'react'
 import { uploadAvatar } from '../../api/profiles.js'
 import { getRoles } from '../../api/meta.js'
 import { useLanguage } from '../../hooks/useLanguage.js'
+import { useTranslation } from '../../i18n/index.js'
 import styles from './ProfileHero.module.css'
+import { userHandle } from '../../utils/userIdentity.js'
 
 // Canvas-based center-crop + downscale to ≤512px, exported as webp (jpeg fallback).
 // UX/bandwidth optimisation only — server re-encodes authoritatively.
@@ -63,6 +65,7 @@ export default function ProfileHero({
   const [roleOptions, setRoleOptions] = useState([])
   const [imgFailed, setImgFailed] = useState(false)
   const { language } = useLanguage()
+  const { t } = useTranslation()
 
   // Reset the broken-image fallback whenever the avatar URL changes (e.g. a
   // fresh upload after a prior failure) so the user isn't stuck on the
@@ -86,7 +89,7 @@ export default function ProfileHero({
   const websiteUrl = user?.external_links?.website || null
 
   // Profile identity lines
-  const handleStr = user?.handle || ''
+  const handleStr = userHandle(user)
 
   // Role display rule (SETTINGS-POLISH-1 §A.5): legacy free-text user.role if
   // present; else localized onboarding_role label EXCEPT 'other' (suppressed
@@ -102,9 +105,9 @@ export default function ProfileHero({
   const roleAffiliation = [resolveRoleText(), user?.affiliation].filter(Boolean).join(' · ')
 
   const stats = [
-    { count: boardsTotalCount, label: 'Boards', onClick: () => onSelectTab('boards') },
-    { count: savedStudiosCount ?? 0, label: 'Studios', onClick: () => onSelectTab('studios') },
-    { count: likedCount ?? 0, label: 'Liked', onClick: () => onSelectTab('liked') },
+    { count: boardsTotalCount, label: t('profileB3.tabBoards'), onClick: () => onSelectTab('boards') },
+    { count: savedStudiosCount ?? 0, label: t('profileB3.tabStudios'), onClick: () => onSelectTab('studios') },
+    { count: likedCount ?? 0, label: t('profileB3.tabLiked'), onClick: () => onSelectTab('liked') },
   ]
 
   // 2B: single data source for the external-link pills — map renders one
@@ -185,7 +188,7 @@ export default function ProfileHero({
           />
           <img
             src={user.avatar_url}
-            alt="avatar"
+            alt={t('profile.avatarAlt')}
             onError={() => setImgFailed(true)}
             style={{
               position: 'relative', zIndex: 2,
@@ -230,7 +233,7 @@ export default function ProfileHero({
 
   // Uploading spinner overlay
   const spinnerOverlay = uploading && (
-    <div className={styles.spinnerOverlay} aria-label="Uploading..." aria-live="polite">
+    <div className={styles.spinnerOverlay} aria-label={t('profile.uploadingPhoto')} aria-live="polite">
       {/* animation inline to safely reference global @keyframes spin — same pattern as UserProfilePage spinner */}
       <div className={styles.spinner} style={{ animation: 'spin 0.8s linear infinite' }} />
     </div>
@@ -245,8 +248,8 @@ export default function ProfileHero({
         {isMe ? (
           <label
             className={styles.avatarTrigger}
-            aria-label="Change profile photo"
-            title="Change profile photo"
+            aria-label={t('profile.changePhoto')}
+            title={t('profile.changePhoto')}
           >
             <input
               type="file"
@@ -254,7 +257,7 @@ export default function ProfileHero({
               className={styles.fileInput}
               onChange={handleFileChange}
               disabled={uploading}
-              aria-label="Upload profile photo"
+              aria-label={t('profile.uploadPhoto')}
             />
             <AvatarCircle />
             {overlayContent}
@@ -278,7 +281,7 @@ export default function ProfileHero({
           color: 'var(--color-text)', fontSize: 24, fontWeight: 700,
           margin: '0 0 4px', lineHeight: 1.2, letterSpacing: '-0.01em',
         }}>
-          {handleStr || user.display_name}
+          {handleStr}
         </h1>
 
         {/* Role · Affiliation — only if at least one present */}
