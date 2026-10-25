@@ -198,11 +198,13 @@ def _select(candidates, cap, overlap_max, used_axes, already_selected):
     return chosen
 
 
-def _compute_like_dislike_facts(rows_by_id, liked_ids, disliked_ids, rc, min_shown=None, min_liked=None, min_ratio=None):
+def _compute_like_dislike_facts(rows_by_id, liked_ids, disliked_ids, rc, min_shown=None, min_liked=None, min_ratio=None,
+                                min_disliked=None):
     """Tier 1/2 core: deterministically extract grounded like/dislike facts from swipe history.
 
     `min_shown` / `min_liked` / `min_ratio` override the strict rc thresholds (used by
-    the relaxed Tier 2 pass); None = read the strict rc key.
+    the relaxed Tier 2 pass); None = read the strict rc key. `min_disliked` is an extra
+    floor on disliked cards for a DISLIKE fact (None = no floor; strict thresholds imply >= 2).
 
     Args:
         rows_by_id: dict[canonical_bld_id, dict] -- building row per shown id
@@ -306,7 +308,7 @@ def _compute_like_dislike_facts(rows_by_id, liked_ids, disliked_ids, rc, min_sho
                     like_fact['qualitative_only'] = True
                 like_candidates.append(like_fact)
 
-            if shown_A >= min_shown and shown_A > 0:
+            if shown_A >= min_shown and shown_A > 0 and (min_disliked is None or disliked_A >= min_disliked):
                 dislike_rate = disliked_A / shown_A
                 if dislike_rate >= dislike_often and ratio <= (1.0 / min_ratio):
                     dislike_word = 'mostly' if dislike_rate >= dislike_mostly else 'often'
@@ -415,6 +417,7 @@ def compute_taste_facts(rows_by_id, liked_ids, disliked_ids, rc):
         min_shown=rc.get('report_fact_relaxed_min_shown', 2),
         min_liked=rc.get('report_fact_relaxed_min_liked', 2),
         min_ratio=rc.get('report_fact_relaxed_min_ratio', 1.2),
+        min_disliked=rc.get('report_fact_relaxed_min_disliked', 2),
     )
     if relaxed['facts']:
         relaxed['tier'] = 'relaxed'

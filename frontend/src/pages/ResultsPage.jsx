@@ -82,7 +82,12 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
           : p
       )))
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      // StrictMode/dep-change cleanup cancels the apply, so release the guard
+      // (only if still ours) to let the re-run fetch again.
+      if (axisFetchedRef.current === backendId) axisFetchedRef.current = null
+    }
   }, [needsAxisScores, backendId, setProjects])
 
   function handleReportRetry() {

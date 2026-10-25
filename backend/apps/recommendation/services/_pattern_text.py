@@ -22,7 +22,7 @@ _KO_LABEL = {
     'material_visual': '{v} 소재를 쓴',
     'architectural_elements': '{v} 요소가 있는',
     'architect_names': '{v} 설계의',
-    'decade': '{v}대의',
+    'decade': '{v}년대의',
     'location_country': '{v}에 있는',
 }
 _EN_LABEL = {
@@ -52,11 +52,21 @@ _DIGIT_RE = re.compile(r'\d+')
 
 
 def _ko_feature(fact):
-    return _KO_LABEL.get(fact['axis'], '{v}').format(v=fact['value'])
+    value = str(fact['value'])
+    if fact['axis'] == 'decade' and value.endswith('s'):
+        value = value[:-1]  # '2020s' -> '2020' (template adds 년대의)
+    return _KO_LABEL.get(fact['axis'], '{v}').format(v=value)
+
+
+def _article(value):
+    return 'an' if str(value)[:1].lower() in 'aeiou' else 'a'
 
 
 def _en_feature(fact):
-    return _EN_LABEL.get(fact['axis'], '{v}').format(v=fact['value'])
+    template = _EN_LABEL.get(fact['axis'], '{v}')
+    if template.startswith('a {v}'):
+        template = _article(fact['value']) + template[1:]
+    return template.format(v=fact['value'])
 
 
 def _like_sentence(fact, lang):

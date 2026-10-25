@@ -535,6 +535,7 @@ RECOMMENDATION = {
     # Tier 2 reruns the like/dislike selection with these looser thresholds when the strict pass yields no fact.
     'report_fact_relaxed_min_shown': 2,    # Tier 2: min cards shown with a feature
     'report_fact_relaxed_min_liked': 2,    # Tier 2: min liked cards with a feature for a LIKE fact
+    'report_fact_relaxed_min_disliked': 2,  # Tier 2: min disliked cards with a feature for a DISLIKE fact (1 swipe-past is not "often")
     'report_fact_relaxed_min_ratio': 1.2,  # Tier 2: min smoothed like-rate ratio for a LIKE fact (dislike uses 1/ratio)
     # Tier 3 (liked composition: "N of your M liked buildings had X"); only used when Tiers 1-2 yield nothing.
     'report_fact_composition_min_with': 2,  # Tier 3: min liked buildings sharing a feature value

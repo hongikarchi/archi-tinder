@@ -339,12 +339,15 @@ export function PersonaReportBody({
       </section>
 
       {/* Pattern analysis */}
+      {(owner || report.pattern_paragraph || tags.length > 0) && (
       <section className={s.section}>
         <p data-rv className={`${s.rv} ${s.eyebrow}`}>{t('persona.whyLabel')}</p>
         <h2 data-rv className={`${s.rv} ${s.h2}`} style={delay(0.05)}>{t('persona.patternTitle')}</h2>
-        <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
-          {report.pattern_paragraph || t('persona.patternEmpty')}
-        </p>
+        {(report.pattern_paragraph || owner) && (
+          <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
+            {report.pattern_paragraph || t('persona.patternEmpty')}
+          </p>
+        )}
         <div className={s.tags}>
           {tags.map(([tag, cls], i) => (
             <span
@@ -358,6 +361,7 @@ export function PersonaReportBody({
           ))}
         </div>
       </section>
+      )}
 
       {/* Taste analysis */}
       <section className={s.section}>

@@ -676,6 +676,7 @@ _RC_TIERED = {
     'report_fact_relaxed_min_shown': 2,
     'report_fact_relaxed_min_liked': 2,
     'report_fact_relaxed_min_ratio': 1.2,
+    'report_fact_relaxed_min_disliked': 2,
 }
 
 
@@ -702,6 +703,15 @@ class TestTieredFacts:
         fact = _fact_for(result, 'style', 'x')
         assert fact is not None and fact['polarity'] == 'like'
         assert fact['shown'] == 2 and fact['liked'] == 2
+
+    def test_relaxed_single_disliked_card_is_not_a_dislike_fact(self):
+        # style=x shown 2, disliked 1 (liked 1): "often swiped past" would be a miscount.
+        rows = _rows_by_id(
+            _row('B0', style='a'), _row('B1', style='b'), _row('B2', style='c'),
+            _row('B3', style='d'), _row('B4', style='x'), _row('D1', style='x'),
+        )
+        result = compute_taste_facts(rows, ['B0', 'B1', 'B2', 'B3', 'B4'], ['D1'], _RC_TIERED)
+        assert not any(f['polarity'] == 'dislike' for f in result['facts'])
 
     def test_tier3_composition_counts_are_real(self):
         # Liked and disliked all share style=x -> ratio 1, no like/dislike fact.
@@ -770,6 +780,21 @@ class TestPatternText:
         assert en.startswith('Among the buildings shown, ')
         assert en.count('about 2x') == 2
         assert 'mostly swiped past' in en
+
+    def test_korean_decade_label(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        fact = {'polarity': 'composition', 'axis': 'decade', 'value': '2020s', 'liked_with': 3, 'liked_total': 3}
+        ko = build_fact_paragraph([fact], 'ko')
+        assert '2020년대의 건물' in ko and '2020s' not in ko
+
+    def test_english_article_before_vowel(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        office = {'polarity': 'composition', 'axis': 'program', 'value': 'office', 'liked_with': 2, 'liked_total': 3}
+        indus = {'polarity': 'composition', 'axis': 'style', 'value': 'Industrial', 'liked_with': 2, 'liked_total': 3}
+        assert 'had an office program' in build_fact_paragraph([office], 'en')
+        assert 'had an Industrial style' in build_fact_paragraph([indus], 'en')
 
     def test_qualitative_only_like_fact_has_no_number(self):
         from apps.recommendation.services._pattern_text import build_fact_paragraph
