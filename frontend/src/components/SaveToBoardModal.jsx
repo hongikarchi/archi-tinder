@@ -10,7 +10,7 @@ function getCardId(card) {
 
 function ProjectRow({ project, disabled, onClick, t }) {
   const projectId = project?.project_id || project?.id
-  const count = (project?.liked_ids?.length || 0) + (project?.saved_ids?.length || 0)
+  const count = project?.liked_ids?.length || 0
 
   return (
     <button

@@ -1,6 +1,6 @@
 from django.urls import path, re_path
 from .views import (
-    ProjectListCreateView, ProjectDetailView, UserProjectsListView,
+    ProjectListCreateView, ProjectDetailView, ProjectRecommendationsView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
     DiscoveryFeedView, DiscoveryFeedbackView, DiscoveryPromoteView,
     DiverseRandomView, BuildingBatchView,
@@ -17,7 +17,8 @@ urlpatterns = [
     path('projects/',                                         ProjectListCreateView.as_view()),
     # Project detail — GET (public/visibility-gated) + PATCH + DELETE
     path('projects/<uuid:pk>/',                               ProjectDetailView.as_view()),
-    path('projects/<uuid:pk>/report/generate-image/',         ProjectReportImageView.as_view()),
+    path('projects/<uuid:pk>/recommendations/',               ProjectRecommendationsView.as_view()),
+    path('projects/<uuid:pk>/report/generate-image/',        ProjectReportImageView.as_view()),
     path('projects/<uuid:pk>/report-image/',                  ProjectReportImageFetchView.as_view(), name='project-report-image'),
     path('projects/<uuid:pk>/report/generate/',               ProjectReportGenerateView.as_view()),
     path('projects/<uuid:project_id>/bookmark/',              ProjectBookmarkView.as_view()),

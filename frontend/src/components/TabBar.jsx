@@ -180,6 +180,14 @@ export default function TabBar() {
     }
   }, [])
 
+  // Mirror the collapse state to <html> so siblings that dock to the capsule
+  // (FinishReportButton) can follow it. Absent attribute = expanded geometry.
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.tabbar = compact ? 'compact' : 'expanded'
+    return () => { delete root.dataset.tabbar }
+  }, [compact])
+
   const tabs = [
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
     { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/search' },
@@ -190,14 +198,26 @@ export default function TabBar() {
   function handleSelect(tabId) {
     expand()
     const tab = tabs.find(t => t.id === tabId)
-    if (!tab || tab.path === location.pathname) return
+    if (!tab) return
+
+    // Already on the profile root: re-tap = refresh (UserProfilePage watches
+    // location.state.profileRefresh -> boards tab, scroll top, refetch).
+    if (tab.id === 'profile' && location.pathname === tab.path) {
+      navigate(tab.path, { replace: true, state: { profileRefresh: Date.now() } })
+      return
+    }
+    if (tab.path === location.pathname) return
+
+    // Leaving a board (or its report) for the profile: replace so Back from the
+    // profile does not bounce through the board/report loop.
+    const replace = tab.id === 'profile' && location.pathname.startsWith('/board')
 
     // If the guard is active (Discovery mounted with draft likes >= 1), show the
     // leave-warning modal and defer navigation to the user's choice.
     if (discoveryNavigationGuard.check) {
-      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path))
+      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path, { replace }))
     } else {
-      navigate(tab.path)
+      navigate(tab.path, { replace })
     }
   }
 
@@ -218,7 +238,7 @@ export default function TabBar() {
         position: 'fixed',
         left: 16, right: 16,
         bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
-        maxWidth: compact ? 280 : 420, margin: '0 auto',
+        maxWidth: compact ? 'var(--tabbar-max-width-compact)' : 'var(--tabbar-max-width)', margin: '0 auto',
         display: 'flex', zIndex: 100,
         boxSizing: 'border-box',
         height: compact ? 'var(--tabbar-height-compact)' : 'var(--tabbar-height)',

@@ -92,6 +92,10 @@
    * front-maker's write scope (DESIGN.md is admin-owned) — flagged in the PR
    * description. */
   --tabbar-height: 64px;
+  /* Expanded capsule max-width; shared by TabBar.jsx and the bottom
+   * "Finish & View Report" CTA (DESIGN §11 E9) so the two stay aligned. */
+  --tabbar-max-width: 420px;
+  --tabbar-max-width-compact: 280px;
   --page-height: 100vh;
   /* Capsule height + bottom gap + safe-area + breathing room — every page
    * that scrolls or centers content adds this as bottom clearance so its

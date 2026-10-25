@@ -244,6 +244,7 @@ REST_FRAMEWORK = {
         'llm_search':       '10/min',
         # Daily cap on paid JEV taste recognitions (registry; effective value = class attr).
         'taste_recognize_day': '200/day',
+        'project_recommendations': '30/min',
         'report_generate':  '10/hour',
         'report_image':     '5/hour',
         # MESSAGING (FULL-MESSAGING-1): registry only — effective values are class attrs

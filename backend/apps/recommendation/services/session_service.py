@@ -643,6 +643,50 @@ def get_session_result(session):
     liked_cards = engine.get_buildings_by_ids(liked_ids)
     liked_cards = [c for c in liked_cards if c]
 
+    predicted_cards, _cosine_top10, _gemini_top10, _dpp_top10 = build_predicted_cards(session)
+
+    # IMP-10: persist top-10 lists for bookmark provenance lookup.
+    # Atomic check-then-write inside transaction.atomic() (Finding #16). Two
+    # concurrent GET callers cannot race a partial update — the multi-field
+    # save is atomic. Lock-free: writes are IDEMPOTENT (same input → same
+    # top-10 values), so a duplicate write is a no-op, not corruption.
+    try:
+        with transaction.atomic():
+            _top10_fields_changed = (
+                session.cosine_top10_ids != _cosine_top10
+                or session.gemini_top10_ids != _gemini_top10
+                or session.dpp_top10_ids != _dpp_top10
+            )
+            if _top10_fields_changed:
+                session.cosine_top10_ids = _cosine_top10
+                session.gemini_top10_ids = _gemini_top10
+                session.dpp_top10_ids = _dpp_top10
+                session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
+    except Exception as _exc:
+        logger.warning(
+            'SessionResultView: failed to persist top10 lists for session %s: %s',
+            session.session_id, _exc,
+        )
+
+    return Response({
+        'session_id':          str(session.session_id),
+        'session_status':      session.status,
+        'liked_images':        liked_cards,
+        'predicted_images':    predicted_cards,
+        'predicted_like_count': len(predicted_cards),
+        'analysis_report':     session.project.analysis_report,
+        'generated_at':        session.created_at.isoformat(),
+    })
+
+
+def build_predicted_cards(session):
+    """Compute the session's predicted (recommended) building cards.
+
+    Factored out of get_session_result (FULL-REPORT-UI-1) so the board
+    recommendations endpoint reuses the exact MMR / rerank / DPP pipeline.
+    Pure read: no DB writes. Returns
+    (predicted_cards, cosine_top10, gemini_top10, dpp_top10).
+    """
     # Hydrate like_vectors once; reused by all MMR / DPP calls below.
     _hydrated_lv_result = hydrate_like_vectors(session) if session.like_vectors else []
 
@@ -762,35 +806,4 @@ def get_session_result(session):
     # Defensive slice handles any edge case where over-fetch candidate leaks through.
     predicted_cards = predicted_cards[:RC.get('top_k_results', 20)]
 
-    # IMP-10: persist top-10 lists for bookmark provenance lookup.
-    # Atomic check-then-write inside transaction.atomic() (Finding #16). Two
-    # concurrent GET callers cannot race a partial update — the multi-field
-    # save is atomic. Lock-free: writes are IDEMPOTENT (same input → same
-    # top-10 values), so a duplicate write is a no-op, not corruption.
-    try:
-        with transaction.atomic():
-            _top10_fields_changed = (
-                session.cosine_top10_ids != _cosine_top10
-                or session.gemini_top10_ids != _gemini_top10
-                or session.dpp_top10_ids != _dpp_top10
-            )
-            if _top10_fields_changed:
-                session.cosine_top10_ids = _cosine_top10
-                session.gemini_top10_ids = _gemini_top10
-                session.dpp_top10_ids = _dpp_top10
-                session.save(update_fields=['cosine_top10_ids', 'gemini_top10_ids', 'dpp_top10_ids'])
-    except Exception as _exc:
-        logger.warning(
-            'SessionResultView: failed to persist top10 lists for session %s: %s',
-            session.session_id, _exc,
-        )
-
-    return Response({
-        'session_id':          str(session.session_id),
-        'session_status':      session.status,
-        'liked_images':        liked_cards,
-        'predicted_images':    predicted_cards,
-        'predicted_like_count': len(predicted_cards),
-        'analysis_report':     session.project.analysis_report,
-        'generated_at':        session.created_at.isoformat(),
-    })
+    return predicted_cards, _cosine_top10, _gemini_top10, _dpp_top10

@@ -13,6 +13,7 @@ Coverage:
 """
 import pytest
 from unittest.mock import patch
+from django.core.cache import cache
 from apps.recommendation.models import Project
 
 
@@ -325,6 +326,13 @@ class TestUserProjectsListView:
 @pytest.mark.django_db
 class TestUserProfileBoardsField:
 
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        # UserProfileDetailView caches the payload; keep tests independent.
+        cache.clear()
+        yield
+        cache.clear()
+
     def test_boards_field_present(self, api_client, user_profile):
         uid = user_profile.user.id
         with patch('apps.recommendation.engine.get_building_thumbnails', return_value=[]):
@@ -395,7 +403,56 @@ class TestUserProfileBoardsField:
         with patch('apps.recommendation.engine.get_building_thumbnails', return_value=[]):
             resp = api_client.get(f'/api/v1/users/{uid}/')
         card = resp.json()['boards']['items'][0]
-        assert card['building_count'] == 3  # 2 liked + 1 saved
+        assert card['building_count'] == 2  # liked only; the saved bookmark never counts
+
+    def test_boards_count_and_previews_ignore_saved(self, api_client, user_profile):
+        """2 liked + 3 saved -> count 2; cover/thumbnails only from liked ids."""
+        Project.objects.create(
+            user=user_profile, name='LikedOnly', visibility='public',
+            liked_ids=[{'id': 'B001', 'intensity': 1.0}, {'id': 'B002', 'intensity': 1.0}],
+            saved_ids=[
+                {'id': 'S001', 'saved_at': '2026-04-28T00:00:00Z'},
+                {'id': 'S002', 'saved_at': '2026-04-28T00:00:00Z'},
+                {'id': 'S003', 'saved_at': '2026-04-28T00:00:00Z'},
+            ],
+        )
+        uid = user_profile.user.id
+        with patch('apps.recommendation.engine.get_building_thumbnails', return_value=[]) as mock_thumbs:
+            api_client.get(f'/api/v1/users/{uid}/')
+        requested = set(mock_thumbs.call_args[0][0])
+        assert requested == {'B001', 'B002'}
+
+        # The profile payload is cached per (user, requester, page); drop it so
+        # the second GET rebuilds with the new thumbnail mock.
+        cache.clear()
+        returned = [
+            {'canonical_bld_id': bid, 'image_url': f'https://cdn.example.com/{bid}.jpg'}
+            for bid in ('B001', 'B002', 'S001', 'S002', 'S003')
+        ]
+        with patch('apps.recommendation.engine.get_building_thumbnails', return_value=returned):
+            resp = api_client.get(f'/api/v1/users/{uid}/')
+        card = resp.json()['boards']['items'][0]
+        assert card['building_count'] == 2
+        assert card['cover_image_url'] == 'https://cdn.example.com/B001.jpg'
+        assert card['thumbnails'] == [
+            'https://cdn.example.com/B001.jpg',
+            'https://cdn.example.com/B002.jpg',
+        ]
+
+    def test_boards_only_saved_has_zero_count_and_empty_cover(self, api_client, user_profile):
+        Project.objects.create(
+            user=user_profile, name='SavedOnly', visibility='public',
+            saved_ids=[{'id': 'S001', 'saved_at': '2026-04-28T00:00:00Z'}],
+        )
+        uid = user_profile.user.id
+        returned = [{'canonical_bld_id': 'S001', 'image_url': 'https://cdn.example.com/S001.jpg'}]
+        with patch('apps.recommendation.engine.get_building_thumbnails', return_value=returned) as mock_thumbs:
+            resp = api_client.get(f'/api/v1/users/{uid}/')
+        card = resp.json()['boards']['items'][0]
+        assert card['building_count'] == 0
+        assert card['cover_image_url'] == ''
+        assert card['thumbnails'] == []
+        mock_thumbs.assert_not_called()
 
 
 # ── TestBoardsPagination ──────────────────────────────────────────────────────
