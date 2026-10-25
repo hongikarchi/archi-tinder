@@ -213,7 +213,9 @@ class Command(BaseCommand):
         for i in range(n):
             username = f'{SEED_PREFIX}persona_{i:02d}'
             handle = username
-            display_name = f'{_NAMES[i % len(_NAMES)]} {i + 1}' if i >= len(_NAMES) else _NAMES[i % len(_NAMES)]
+            # Unified ID: display_name == handle (the Korean _NAMES are kept
+            # only as legacy sample data; not written to the profile).
+            display_name = handle
             type_code = _TYPE_CODES[i % len(_TYPE_CODES)]
             vector = _vector_for(type_code, i)
             # Reuse the REAL derivation so seeded type_code always matches
@@ -225,7 +227,6 @@ class Command(BaseCommand):
                     username=username,
                     defaults={
                         'email': f'{username}@seed.architinder.local',
-                        'first_name': display_name,
                     },
                 )
                 if not user_created:

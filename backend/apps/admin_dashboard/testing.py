@@ -18,7 +18,7 @@ def make_operator_client(settings, *, username='admin_op', email=ADMIN_TEST_EMAI
     user = User.objects.create_user(username=username, email=email, password='testpass123')
     user.is_staff = is_staff
     user.save(update_fields=['is_staff'])
-    profile = UserProfile.objects.create(user=user, display_name=username, is_guest=guest)
+    profile = UserProfile.objects.create(user=user, display_name=username, handle=username, is_guest=guest)
     if google:
         SocialAccount.objects.create(user=profile, provider='google', provider_id=f'g-{username}')
     settings.ADMIN_EMAILS = frozenset({email.lower()}) if in_list else frozenset()

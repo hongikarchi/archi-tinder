@@ -75,7 +75,7 @@ class UserSerializer(serializers.ModelSerializer):
 class UserMiniSerializer(serializers.ModelSerializer):
     """Minimal public user shape for Project/Board nested `user` field.
 
-    Exposes ONLY: user_id, display_name, avatar_url — deliberately omits
+    Exposes ONLY: user_id, display_name, handle, avatar_url — deliberately omits
     `providers` (OAuth provider is private metadata, not a public-facing field).
 
     Used by ProjectSerializer; keeps provider info off public Project responses.
@@ -85,7 +85,7 @@ class UserMiniSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = UserProfile
-        fields = ['user_id', 'display_name', 'avatar_url']
+        fields = ['user_id', 'display_name', 'handle', 'avatar_url']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -378,7 +378,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         """handle: Hangul/ASCII/digits/underscore, 2-20 chars, unique, not reserved.
 
         Validation order:
-          1. null/empty → allow (clears the handle).
+          1. null → rejected (handle is the unified ID and can't be cleared).
           2-5. Delegated to validate_handle_value() (shared with register endpoint).
              2. NFC normalize.
              3. Regex format check (no whitespace, Hangul + ASCII + digits + _).
@@ -387,7 +387,8 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
              6. Case-insensitive uniqueness, excluding the current user (self-save OK).
         """
         if value is None:
-            return value
+            # Unified ID: handle may never be cleared (display_name == handle).
+            raise serializers.ValidationError('handle cannot be null.')
 
         return validate_handle_value(value, instance=self.instance)
 
