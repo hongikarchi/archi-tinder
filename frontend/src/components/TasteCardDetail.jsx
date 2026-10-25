@@ -57,7 +57,11 @@ export default function TasteCardDetail({ card, expanded, captionHidden, interac
         display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
         padding: '16px 18px 20px', overflow: 'hidden', color: '#fff',
         transform: expanded ? 'translateY(0)' : 'translateY(100%)',
-        transition: 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
+        // Collapsed panel is non-interactive; visibility flips after slide-out.
+        visibility: expanded ? 'visible' : 'hidden',
+        transition: expanded
+          ? 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1), visibility 0s'
+          : 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1), visibility 0s linear 0.42s',
       }}>
         <h2 style={{
           color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3, margin: '0 0 3px', flexShrink: 0,

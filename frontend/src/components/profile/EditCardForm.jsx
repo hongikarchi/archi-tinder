@@ -31,9 +31,9 @@ const BIO_MAX_HEIGHT = 240
 // Supported link keys — must match backend external_links dict keys.
 // website is stored but not yet rendered in ProfileHero (noted in PR description).
 const LINK_TYPES = {
-  instagram: { label: 'Instagram', placeholder: '@handle' },
-  email:     { label: 'Email',     placeholder: 'you@email.com' },
-  website:   { label: 'Website',   placeholder: 'https://yoursite.com' },
+  instagram: { placeholder: '@handle' },
+  email:     { placeholder: 'you@email.com' },
+  website:   { placeholder: 'https://yoursite.com' },
 }
 
 /** Convert external_links dict → array of row objects */
@@ -130,6 +130,8 @@ export default function EditCardForm({ user, onChange }) {
     commit({ ...draft, linkRows: draft.linkRows.filter(r => r.id !== id) })
   }
 
+  const linkLabel = (key) => (key in LINK_TYPES ? t(`profileEdit.linkType.${key}`) : key)
+
   // Keys already added (prevents duplicates)
   const addedKeys = new Set(draft.linkRows.map(r => r.key))
 
@@ -189,14 +191,14 @@ export default function EditCardForm({ user, onChange }) {
 
       {/* Bio — auto-grows to content, 90px→240px cap (SETTINGS-POLISH-1 §B) */}
       <div>
-        <label htmlFor="edit-bio" style={labelStyle}>Bio</label>
+        <label htmlFor="edit-bio" style={labelStyle}>{t('profileEdit.bioLabel')}</label>
         <textarea
           id="edit-bio"
           ref={bioRef}
           value={draft.bio}
           onChange={setText('bio')}
           maxLength={500}
-          placeholder="Short intro about yourself"
+          placeholder={t('profileEdit.bioPlaceholder')}
           className={styles.textarea}
         />
         <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4, textAlign: 'right' }}>
@@ -206,7 +208,7 @@ export default function EditCardForm({ user, onChange }) {
 
       {/* External links section */}
       <div>
-        <span style={sectionLabelStyle}>Links</span>
+        <span style={sectionLabelStyle}>{t('profileEdit.linksLabel')}</span>
 
         {/* Existing link rows */}
         {draft.linkRows.map(row => (
@@ -216,7 +218,7 @@ export default function EditCardForm({ user, onChange }) {
               color: 'var(--color-text-muted)', textTransform: 'uppercase',
               minWidth: 72, flexShrink: 0,
             }}>
-              {LINK_TYPES[row.key]?.label || row.key}
+              {linkLabel(row.key)}
             </span>
             <input
               type="text"
@@ -231,7 +233,7 @@ export default function EditCardForm({ user, onChange }) {
               type="button"
               onClick={() => removeLink(row.id)}
               className={styles.removeBtn}
-              aria-label={`Remove ${LINK_TYPES[row.key]?.label || row.key}`}
+              aria-label={t('profileEdit.removeLink', { label: linkLabel(row.key) })}
             >
               ×
             </button>
@@ -241,7 +243,7 @@ export default function EditCardForm({ user, onChange }) {
         {/* Add-link type buttons (only show un-added types) */}
         {Object.entries(LINK_TYPES).some(([key]) => !addedKeys.has(key)) && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 8 }}>
-            {Object.entries(LINK_TYPES).map(([key, { label }]) => (
+            {Object.keys(LINK_TYPES).map(key => (
               !addedKeys.has(key) && (
                 <button
                   key={key}
@@ -250,7 +252,7 @@ export default function EditCardForm({ user, onChange }) {
                   className={styles.addBtn}
                 >
                   <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-                  {label}
+                  {linkLabel(key)}
                 </button>
               )
             ))}

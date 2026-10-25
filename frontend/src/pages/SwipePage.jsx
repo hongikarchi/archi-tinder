@@ -89,6 +89,7 @@ function ActionCard({ card }) {
 const TARGET_SWIPES = 15 // Product promise: 10-15 swipes → Aha!
 
 function ConfidenceBar({ phase, progress }) {
+  const { t } = useTranslation()
   // `value` (confidence [0,1]) is intentionally omitted from destructuring —
   // the bar is now driven purely by swipe count, not confidence.
   // The prop remains valid on the call site; callers need no changes.
@@ -103,17 +104,17 @@ function ConfidenceBar({ phase, progress }) {
 
   if (phase === 'converged' || phase === 'completed') {
     pct = 100
-    stageLabel = 'Taste found'
+    stageLabel = t('swipe.stage.found')
   } else if (phase === 'analyzing') {
     pct = Math.min(Math.round((swipeCount / TARGET_SWIPES) * 100), 95)
-    stageLabel = 'Tuning taste'
+    stageLabel = t('swipe.stage.tuning')
   } else if (phase === 'exploring') {
     pct = Math.min(Math.round((swipeCount / TARGET_SWIPES) * 100), 95)
-    stageLabel = 'Exploring'
+    stageLabel = t('swipe.stage.exploring')
   } else {
     // Unknown / loading phase — fall back to swipe-count progress.
     pct = Math.min(Math.round((swipeCount / TARGET_SWIPES) * 100), 95)
-    stageLabel = 'Calibrating…'
+    stageLabel = t('swipe.stage.calibrating')
   }
 
   return (

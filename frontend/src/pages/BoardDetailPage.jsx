@@ -28,6 +28,7 @@ import PageTitle from '../components/PageTitle.jsx'
 import SectionTitle from '../components/SectionTitle.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import Skeleton from '../components/Skeleton.jsx'
+import { userHandle, atHandle } from '../utils/userIdentity.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -330,9 +331,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   // Cover button: pencil / X / white-glass check (title draft dirty).
   const editBtnConfirm = isOwner && isEditMode && isNameDirty(nameDraft, localName || coverTitle)
   const countLabel = t(buildings.length === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: buildings.length })
-  const ownerHandle = board?.user?.username
-    ? `@${board.user.username}`
-    : (board?.user?.display_name || '')
+  const ownerHandle = atHandle(board?.user)
   const coverMeta = isOwner
     ? [isPublic ? t('board.public') : t('board.private'), countLabel, `♥ ${reactionCount}`].join(' · ')
     : [ownerHandle, countLabel, `♥ ${reactionCount}`].filter(Boolean).join(' · ')
@@ -539,7 +538,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
               alt=""
               style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', background: 'var(--color-surface-2)' }}
             />
-            <span className={s.ownerName}>{board.user.display_name || ''}</span>
+            <span className={s.ownerName}>{userHandle(board.user)}</span>
             <span aria-hidden="true">›</span>
           </button>
         )}

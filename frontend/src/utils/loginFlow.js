@@ -56,36 +56,6 @@ export function isGuestProfileReady(profile = {}) {
 }
 
 /**
- * Normalize a user-supplied display name.
- * - Trims whitespace.
- * - Defaults to 'Guest' if blank or non-string.
- * - Caps at 30 characters.
- * Kept for test compatibility.
- */
-export function normalizeGuestName(value) {
-  if (typeof value !== 'string') return 'Guest'
-  const stripped = value.trim()
-  if (!stripped) return 'Guest'
-  return stripped.slice(0, 30)
-}
-
-/**
- * Build the POST /auth/guest/ body.
- * Kept for test compatibility (not called from new flow — new flow uses register()).
- */
-export function buildGuestLoginPayload({ displayName, role, jobRole, affiliation }) {
-  const payload = {
-    display_name: normalizeGuestName(displayName),
-    onboarding_role: role || '',
-    consent_accepted: true,
-    consent_policy_version: '1.0',
-  }
-  if (jobRole && jobRole.trim()) payload.role = jobRole.trim().slice(0, 50)
-  if (affiliation && affiliation.trim()) payload.affiliation = affiliation.trim().slice(0, 100)
-  return payload
-}
-
-/**
  * Returns true if a Google Client ID is configured, false otherwise.
  * Never returns a literal fallback string — returns null/false on empty input.
  */

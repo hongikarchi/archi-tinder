@@ -22,6 +22,7 @@
 
 import { useState } from 'react'
 import ProfileQr from './ProfileQr.jsx'
+import { userHandle } from '../../utils/userIdentity.js'
 
 // ─── Printed-card constants (intentionally hardcoded — never tokenize) ───────
 // These are theme-independent printed-card colors — white paper + dark ink.
@@ -74,7 +75,7 @@ export default function BusinessCard({ user }) {
   const [flipped, setFlipped] = useState(false)
 
   // ─── Field derivations ───────────────────────────────────────────────────
-  const displayName     = user?.handle || user?.display_name || ''
+  const displayName     = userHandle(user)
   const roleLine        = user?.role || null
   const affiliationLine = user?.affiliation || null
   // handle: @handle if present, omit entirely if absent (do NOT show #user_id)

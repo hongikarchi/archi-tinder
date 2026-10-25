@@ -618,7 +618,12 @@ export default function SwipeCard({ card, onGalleryClose }) {
             justifyContent: 'flex-end',
             background: 'transparent',
             transform: isExpanded ? 'translateY(0)' : 'translateY(100%)',
-            transition: 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
+            // Collapsed panel is non-interactive (no focus / programmatic scroll):
+            // visibility flips only after the slide-out ends, immediately on open.
+            visibility: isExpanded ? 'visible' : 'hidden',
+            transition: isExpanded
+              ? 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1), visibility 0s'
+              : 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1), visibility 0s linear 0.42s',
             display: 'flex', flexDirection: 'column',
             padding: '16px 18px 20px', gap: 0, overflow: 'hidden',
           }}>

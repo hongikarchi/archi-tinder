@@ -1,6 +1,6 @@
 /**
  * api/auth.js
- * Authentication: social login, guest login, promote, dev login, logout.
+ * Authentication: social login, promote, dev login, logout.
  */
 
 import { callApi, clearTokens, setTokens, _fetchWithTimeout, BASE } from './core.js'
@@ -25,18 +25,6 @@ export async function socialLogin(provider, body) {
  */
 export async function completeOnboarding(payload) {
   return await callApi('POST', '/auth/onboarding/', payload)
-}
-
-/**
- * Create a guest (unverified) account.
- * payload: { display_name, onboarding_role, consent_accepted: true, consent_policy_version }
- * Returns: user object (same shape as socialLogin)
- */
-export async function guestLogin(payload) {
-  clearTokens()
-  const data = await callApi('POST', '/auth/guest/', payload, false)
-  setTokens(data.access, data.refresh)
-  return data.user
 }
 
 /**

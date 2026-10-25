@@ -1,3 +1,4 @@
+import { useTranslation } from '../i18n/index.js'
 import s from './FinishReportButton.module.css'
 
 /*
@@ -7,10 +8,11 @@ import s from './FinishReportButton.module.css'
  * loading) is decided by the caller exactly as before.
  */
 export default function FinishReportButton({ onClick, disabled, loading }) {
+  const { t } = useTranslation()
   return (
     <div className={s.wrap}>
       <button type="button" className={s.btn} onClick={onClick} disabled={disabled}>
-        {loading ? 'Preparing report...' : 'Finish & View Report →'}
+        {loading ? t('swipe.finishPreparing') : t('swipe.finishCta')}
       </button>
     </div>
   )

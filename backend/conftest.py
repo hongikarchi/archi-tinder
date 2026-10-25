@@ -106,7 +106,7 @@ def user_profile(db):
     user = User.objects.create_user(
         username='testuser', email='test@test.com', password='testpass123',
     )
-    profile = UserProfile.objects.create(user=user, display_name='Test User')
+    profile = UserProfile.objects.create(user=user, display_name='TestUser', handle='TestUser')
     return profile
 
 

@@ -16,6 +16,7 @@ import SocialSegment from '../components/SocialSegment.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import { userHandle } from '../utils/userIdentity.js'
 import styles from './PeopleDiscoveryPage.module.css'
 
 const PRESET_FILTERS = [
@@ -121,7 +122,7 @@ export default function PeopleDiscoveryPage({ onLogout }) {
   }, [activeFilter, fetchPeople])
 
   function handleInterest(person) {
-    setToast(`${person.display_name}에게 관심을 보냈어요.`)
+    setToast(`${userHandle(person)}에게 관심을 보냈어요.`)
   }
 
   function dismissToast() {

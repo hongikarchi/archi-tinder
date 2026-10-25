@@ -9,6 +9,7 @@ import EmptyState from './EmptyState.jsx'
 import PageLogoHeader from './PageLogoHeader.jsx'
 import PageTopControls from './PageTopControls.jsx'
 import PageBackButton from './PageBackButton.jsx'
+import { atHandle } from '../utils/userIdentity.js'
 import s from './PersonaReportPage.module.css'
 
 /**
@@ -130,7 +131,7 @@ function MetaRow({ role, meta, t }) {
       {role === 'viewer' && user && (
         <>
           <img className={s.metaAvatar} src={user.avatar_url || ''} alt="" />
-          <span>@{user.display_name}</span>
+          <span>{atHandle(user)}</span>
           <span aria-hidden="true">·</span>
         </>
       )}

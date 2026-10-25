@@ -12,6 +12,7 @@ import { refreshUnreadMessages } from '../../hooks/useUnreadMessages.js'
 import { useVisualViewportSheetStyle } from '../../hooks/useVisualViewportSheetStyle.js'
 import InboxView from './InboxView.jsx'
 import ConversationView from './ConversationView.jsx'
+import { userHandle } from '../../utils/userIdentity.js'
 
 /**
  * MessagesSheet — inbox + conversation inside ONE bottom sheet / modal
@@ -152,7 +153,7 @@ export default function MessagesSheet({ onClose, initialConversationId = null, i
       fill
       onClose={handleClose}
       title={active ? undefined : t('messaging.title')}
-      ariaLabel={active?.other?.display_name || t('messaging.title')}
+      ariaLabel={userHandle(active?.other) || t('messaging.title')}
       closeLabel={t('messaging.close')}
       closeOnEscape={!overlayOpen}
       panelStyle={sheetStyle}

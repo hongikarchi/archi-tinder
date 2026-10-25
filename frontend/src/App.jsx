@@ -20,6 +20,7 @@ import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import NotFoundRedirect from './components/NotFoundRedirect.jsx'
 import ReportReentryBanner from './components/ReportReentryBanner.jsx'
 import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
@@ -1180,7 +1181,24 @@ export default function App() {
           <Route index element={<Navigate to="/discovery" replace />} />
           <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
-            <TasteStartPage onStartTaste={handleStartTaste} onLogout={handleLogout} showToast={setGlobalToast} />
+            <TasteStartPage
+              onStartTaste={handleStartTaste} onLogout={handleLogout} showToast={setGlobalToast}
+              reentry={tempCompletedProject ? (
+                // Re-entry banner — rendered in TasteStartPage's flow (empty state only).
+                <ReportReentryBanner
+                  project={tempCompletedProject}
+                  onSave={() => {
+                    setSaveModalProject(tempCompletedProject)
+                    setShowSaveModal(true)
+                  }}
+                  onDelete={async () => {
+                    if (await handleTempDelete()) {
+                      setGlobalToast({ message: t('modalB3.reportBanner.deleted'), type: 'info' })
+                    }
+                  }}
+                />
+              ) : null}
+            />
           } />
           <Route path="swipe" element={null} />
           <Route path="library" element={<Navigate to="/user/me" replace />} />
@@ -1216,7 +1234,7 @@ export default function App() {
           <Route path="db-check" element={<Navigate to="/admin/db-check" replace />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundRedirect userId={userId} showToast={setGlobalToast} message={t('notFound')} />} />
       </Routes>
 
       {swipeError && (
@@ -1258,31 +1276,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Re-entry banner — shown on /search when a temp project has a completed report */}
-      {location.pathname === '/search' && tempCompletedProject && (
-        <div style={{
-          position: 'fixed',
-          top: 76,
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          padding: '0 16px',
-        }}>
-          <ReportReentryBanner
-            project={tempCompletedProject}
-            onSave={() => {
-              setSaveModalProject(tempCompletedProject)
-              setShowSaveModal(true)
-            }}
-            onDelete={async () => {
-              if (await handleTempDelete()) {
-                setGlobalToast({ message: t('modalB3.reportBanner.deleted'), type: 'info' })
-              }
-            }}
-          />
-        </div>
-      )}
-
       {/* SaveBoardModal — shown after report completion for temp projects, or from banner */}
       {showSaveModal && saveModalProject && (
         <Suspense fallback={null}>
@@ -1312,7 +1305,7 @@ export default function App() {
               // Branch 1: guest deleted, merged into existing verified account.
               // Re-run full login flow to re-sync userId, projects, localStorage.
               if (user) await handleLogin(user)
-              setGlobalToast({ message: 'Verified — your existing account is now loaded.', type: 'success' })
+              setGlobalToast({ message: t('auth.toastVerifiedMerged'), type: 'success' })
               setPendingBoardCreate(null)
               setPendingLike(null)
               setSurprisePending(false)
@@ -1331,18 +1324,18 @@ export default function App() {
             if (pendingBoardCreate) {
               try {
                 await createProject(pendingBoardCreate)
-                setGlobalToast({ message: 'Board created! You can now save to it.', type: 'success' })
+                setGlobalToast({ message: t('auth.toastBoardCreated'), type: 'success' })
               } catch {
-                setGlobalToast({ message: 'Verified! Please try creating the board again.', type: 'info' })
+                setGlobalToast({ message: t('auth.toastRetryCreateBoard'), type: 'info' })
               } finally {
                 setPendingBoardCreate(null)
               }
             } else if (surprisePending) {
               // Fix 3 Option B: fat payload — prompt user to re-open the surprise modal.
-              setGlobalToast({ message: 'Verified! Please try saving the board again.', type: 'success' })
+              setGlobalToast({ message: t('auth.toastRetrySaveBoard'), type: 'success' })
               setSurprisePending(false)
             } else {
-              setGlobalToast({ message: 'Verified! You can now create boards.', type: 'success' })
+              setGlobalToast({ message: t('auth.toastVerifiedCanCreate'), type: 'success' })
             }
 
             // Retry pending like after promote — guest is now verified, gate no longer fires (Codex #193).
