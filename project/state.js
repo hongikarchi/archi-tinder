@@ -23,11 +23,25 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-23 22:10 KST',
-    head: '9bfac90',
-    branch: 'feature/claude-persona-report-redesign',
+    updatedAt: '2026-10-25 10:58 KST',
+    head: '8635dee',
+    branch: 'feature/claude-flow-qa-2',
   },
   done: [
+    {
+      id: 'PR #450',
+      title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
+      completedAt: '2026-10-25',
+      prs: [450],
+      note: '',
+    },
+    {
+      id: 'PR #449',
+      title: 'feat(FULL-REPORT-UI-1): persona report redesign',
+      completedAt: '2026-10-25',
+      prs: [449],
+      note: '',
+    },
     {
       id: 'PR #444',
       title: 'feat(FULL-AUTH-2): 소셜 전용 가입 — Google·카카오 원탭 + 온보딩 1화면',
@@ -70,22 +84,32 @@ window.PROJECT_STATE = {
       prs: [425],
       note: '',
     },
-    {
-      id: 'PR #424',
-      title: 'ci(INFRA-CI-1): run frontend node tests in CI and front-validate',
-      completedAt: '2026-10-11',
-      prs: [424],
-      note: '',
-    },
-    {
-      id: 'PR #422',
-      title: 'feat(FRONT-CONTEST-1): contest list/detail on the real API — poster hotlink + lightbox, KST D-day',
-      completedAt: '2026-10-11',
-      prs: [422],
-      note: '',
-    },
   ],
   now: [
+    {
+      id: 'FULL-AUTH-4',
+      title: '이름·ID 저장·표시 통일',
+      note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
+      issue: 455,
+    },
+    {
+      id: 'FRONT-UX-17',
+      title: '취향 시작 화면 겹침 정리',
+      note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
+      issue: 454,
+    },
+    {
+      id: 'FRONT-UX-16',
+      title: '한국어 화면 영어·문구 정리',
+      note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
+      issue: 453,
+    },
+    {
+      id: 'INFRA-QA-1',
+      title: '전체 흐름 캡처 검수 문서',
+      note: 'Flow QA doc: Playwright capture of every screen (iPhone 13 viewport, dev-login, localhost 5174/8001) + debug overlay shots + per-step API timing -> HTML doc published as artifact, republished each fix round.',
+      issue: 452,
+    },
     {
       id: 'FULL-REPORT-UI-1',
       title: '페르소나 리포트 UI 개편',
@@ -207,6 +231,42 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FULL-AUTH-5',
+        title: 'ID 대소문자 중복·이름 일치 DB 규칙',
+        note: 'Follow-up of FULL-AUTH-4 (#455). Add functional unique index on Lower(handle) + CheckConstraint handle = display_name OR handle IS NULL (migration). Before: user runs read-only prod audit (divergent rows, null handles, reserved handles e.g. \'user\' produced by old suggest_handl…',
+        issue: 457,
+      },
+      {
+        id: 'FRONT-UX-18',
+        title: '건물 상세 정보 이름표 한국어',
+        note: 'Flow QA (#452) issue 9. Building detail info labels ARCHITECT/YEAR/PROGRAM/STYLE/MATERIAL/LOCATION are hardcoded English on ko UI (pages/BuildingDetailPage*); liked empty-state copy still says \'Discovery에서 …\' (locales swipeToSave / swipeToSaveInline). Values (Museum, concrete)…',
+        issue: 456,
+      },
+      {
+        id: 'FULL-AUTH-4',
+        title: '이름·ID 저장·표시 통일',
+        note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
+        issue: 455,
+      },
+      {
+        id: 'FRONT-UX-17',
+        title: '취향 시작 화면 겹침 정리',
+        note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
+        issue: 454,
+      },
+      {
+        id: 'FRONT-UX-16',
+        title: '한국어 화면 영어·문구 정리',
+        note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
+        issue: 453,
+      },
+      {
+        id: 'INFRA-QA-1',
+        title: '전체 흐름 캡처 검수 문서',
+        note: 'Flow QA doc: Playwright capture of every screen (iPhone 13 viewport, dev-login, localhost 5174/8001) + debug overlay shots + per-step API timing -> HTML doc published as artifact, republished each fix round.',
+        issue: 452,
+      },
       {
         id: 'FULL-REPORT-UI-2',
         title: 'discovery 임시 보드 이름 변경 부작용',
@@ -408,6 +468,24 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-UX-19',
+        title: '상단 버튼 바탕 띠 다른 화면 적용',
+        note: 'Follow-up of FRONT-UX-17 (#454). PageTopControls got opt-in \'band\' prop (only TasteStartPage uses it). Candidates where content scrolls under the transparent fixed top controls: UserProfilePage, BoardDetailPage, Settings screens, PeopleDiscoveryPage, BuildingDetailPage, compet…',
+        issue: 459,
+      },
+      {
+        id: 'INFRA-QA-2',
+        title: '흐름 캡처 전용 계정·WebKit·성능 회차',
+        note: 'Follow-up of INFRA-QA-1 (#452). (1) Dedicated QA account: each run adds a swipe board to TestUser (57 boards on dev); (2) WebKit run needs \'python -m playwright install webkit\' (~70MB, user approval); (3) --perf run (CPU 4x, longtasks) when nobody demos on 5174; (4) scenario 2…',
+        issue: 458,
+      },
+      {
+        id: 'FULL-REPORT-UI-2',
+        title: 'image regenerate retry can pay twice (job-scoped marker)',
+        note: 'Follow-up from #449 review (finding F13, low).',
+        issue: 451,
+      },
+      {
         id: 'FULL-BOOKMARK-1',
         title: '북마크 잔여 코드 정리',
         note: '북마크 기능을 UI에서 제거했으나 코드가 남아 있음: BoardDetailPage(bookmarkChanged 신호, saved_ids 시드), BuildingTile, BuildingDetailPage, ArchitectProfilePage, SaveToBoardModal, SurpriseBoardModal, appHelpers, api/projects.bookmarkBuilding, App.jsx. 서버 saved_ids 필드는 다른 곳에서 쓰일 수 있어 사용처 확인 후 제거. 사용자가…',
@@ -543,6 +621,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 450,
+      title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
+      mergedAt: '2026-10-25T00:47:02Z',
+      mergedAtKST: '2026-10-25 09:47 KST',
+      sha: '8635dee',
+    },
+    {
+      number: 449,
+      title: 'feat(FULL-REPORT-UI-1): persona report redesign',
+      mergedAt: '2026-10-25T00:16:00Z',
+      mergedAtKST: '2026-10-25 09:16 KST',
+      sha: '0947ed1',
+    },
+    {
       number: 444,
       title: 'feat(FULL-AUTH-2): 소셜 전용 가입 — Google·카카오 원탭 + 온보딩 1화면',
       mergedAt: '2026-10-17T01:06:48Z',
@@ -583,20 +675,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-11T00:46:32Z',
       mergedAtKST: '2026-10-11 09:46 KST',
       sha: 'a68131c',
-    },
-    {
-      number: 424,
-      title: 'ci(INFRA-CI-1): run frontend node tests in CI and front-validate',
-      mergedAt: '2026-10-11T00:39:56Z',
-      mergedAtKST: '2026-10-11 09:39 KST',
-      sha: 'cb7a179',
-    },
-    {
-      number: 422,
-      title: 'feat(FRONT-CONTEST-1): contest list/detail on the real API — poster hotlink + lightbox, KST D-day',
-      mergedAt: '2026-10-11T00:39:32Z',
-      mergedAtKST: '2026-10-11 09:39 KST',
-      sha: '0d90414',
     },
   ],
   agents: [
@@ -915,8 +993,24 @@ window.PROJECT_STATE = {
       role: 'JWT 유저 캐시 인증',
     },
     {
+      path: 'backend/apps/accounts/identity.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/jwt_serializers.py',
       role: 'JWT 토큰 직렬화기',
+    },
+    {
+      path: 'backend/apps/accounts/management/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/management/commands/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/management/commands/resync_identity.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/merge.py',
@@ -1061,6 +1155,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/tests/test_theme_font.py',
       role: '테마·폰트 설정 테스트',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_unified_identity.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/tests/test_userserializer.py',
@@ -1904,6 +2002,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/tests/test_report_image_parallel.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_regen_dedupe.py',
       role: '',
     },
     {
@@ -2879,6 +2981,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/NotFoundRedirect.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/PageBackButton.jsx',
       role: '',
     },
@@ -3283,6 +3389,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/hooks/useReportJobs.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useResults.js',
       role: '세션 결과·북마크 훅',
     },
@@ -3515,11 +3625,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/pages/boardDetail/BoardCover.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
       role: '보드 건물 타일 카드',
     },
     {
       path: 'frontend/src/pages/boardDetail/BuildingTile.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/CoverIconButton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/CoverIconButton.module.css',
       role: '',
     },
     {
@@ -3667,6 +3789,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/boardEditPlan.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/boardEditPlan.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/contestDeadline.js',
       role: '',
     },
@@ -3699,11 +3829,27 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/postUntilReady.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/postUntilReady.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/reportImageJobs.js',
       role: '',
     },
     {
       path: 'frontend/src/utils/reportImageJobs.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportJobs.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportJobs.test.mjs',
       role: '',
     },
     {
@@ -3756,6 +3902,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/timeAgo.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/userIdentity.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/userIdentity.test.mjs',
       role: '',
     },
     {
@@ -3893,6 +4047,22 @@ window.PROJECT_STATE = {
     {
       path: 'web-testing/dashboard/style.css',
       role: '테스트 대시보드 스타일',
+    },
+    {
+      path: 'web-testing/flow_capture.py',
+      role: '',
+    },
+    {
+      path: 'web-testing/flow_doc.py',
+      role: '',
+    },
+    {
+      path: 'web-testing/flow_issues.json',
+      role: '',
+    },
+    {
+      path: 'web-testing/flow_scenarios.py',
+      role: '',
     },
     {
       path: 'web-testing/main-service-test-plan.md',
