@@ -39,6 +39,11 @@ def _report_lock_key(pk):
     return f'report_generate_lock:{pk}'
 
 
+def _generation_id(report):
+    """Per-generation id stamped into final_report by _generate (None if legacy)."""
+    return report.get('generation_id') if isinstance(report, dict) else None
+
+
 class ProjectReportGenerateView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes   = [ReportGenerateThrottle]
@@ -60,6 +65,14 @@ class ProjectReportGenerateView(APIView):
             # embedding-projection shape via the generate/regenerate path below.
             return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
 
+        # Optimistic re-POST guard: a follower that got 202 re-POSTs
+        # {regenerate: true, if_generation: <based_on>}. If the stored report was
+        # regenerated since (generation_id differs), hand it back -- no 2nd LLM call.
+        prev_gen = _generation_id(project.final_report)
+        if project.final_report and 'if_generation' in request.data:
+            if request.data.get('if_generation') != prev_gen:
+                return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
+
         liked_id_strings = _liked_id_only(project.liked_ids)
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
@@ -78,7 +91,7 @@ class ProjectReportGenerateView(APIView):
         lock_key = _report_lock_key(pk)
         lock_token = uuid.uuid4().hex
         if not cache.add(lock_key, lock_token, REPORT_LOCK_TTL):
-            return self._wait_for_leader(pk, lock_key, prev_sig)
+            return self._wait_for_leader(pk, lock_key, prev_sig, prev_gen)
 
         try:
             return self._generate(request, pk, profile, project, liked_id_strings, current_sig, prev_sig)
@@ -95,23 +108,25 @@ class ProjectReportGenerateView(APIView):
             return Response({'final_report': row['final_report'], 'axis_scores': row['axis_scores']})
         return None
 
-    def _wait_for_leader(self, pk, lock_key, prev_sig):
+    def _wait_for_leader(self, pk, lock_key, prev_sig, prev_gen=None):
         deadline = time.monotonic() + REPORT_WAIT_BUDGET
         while cache.get(lock_key) is not None:
             if time.monotonic() >= deadline:
                 return Response(
                     {'status': 'in_progress', 'detail': 'Report generation in progress.',
-                     'retry_after': 5},
+                     'retry_after': 5, 'based_on': prev_gen},
                     status=status.HTTP_202_ACCEPTED,
                     headers={'Retry-After': '5'},
                 )
             time.sleep(REPORT_WAIT_POLL)
         # Only hand back the stored report if the leader actually committed a
-        # new one; a failed leader leaves the pre-request report in place.
+        # new one (generation_id changed -- a same-signature manual regenerate
+        # keeps source_signature, so the signature cannot tell); a failed leader
+        # leaves the pre-request report in place.
         stored = self._stored_response(pk)
         if stored is not None:
             fr = stored.data['final_report']
-            if (fr.get('source_signature') if isinstance(fr, dict) else None) != prev_sig:
+            if _generation_id(fr) != prev_gen:
                 return stored
         return Response({'detail': 'Report generation failed.'}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -141,6 +156,7 @@ class ProjectReportGenerateView(APIView):
         # ProjectSerializer.report_stale can detect later liked-building changes.
         if isinstance(report, dict):
             report['source_signature'] = current_sig
+            report['generation_id'] = uuid.uuid4().hex
 
         # Final writes are mutually exclusive with ProjectDetailView.patch (which
         # also row-locks and may re-save final_report): take the same row lock so

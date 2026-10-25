@@ -760,7 +760,7 @@ export default function TasteStartPage({ onStartTaste, onLogout, showToast, reen
         <div style={{
           flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column',
           alignItems: 'center',
-          padding: reentry ? '56px 16px 24px' : '24px 16px', paddingBottom: 'var(--tabbar-clearance)',
+          paddingTop: reentry ? 56 : 24, paddingLeft: 16, paddingRight: 16, paddingBottom: 'var(--tabbar-clearance)',
         }}>
           {/* margin:auto centers when there is room and, unlike justify-content:center,
               never clips the top when the banner makes the column taller than the screen. */}

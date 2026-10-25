@@ -298,27 +298,34 @@ class GuestLoginView(APIView):
         role = _clean_guest_optional_text(request.data.get('role', ''), 50)
         affiliation = _clean_guest_optional_text(request.data.get('affiliation', ''), 100)
 
-        with transaction.atomic():
-            django_user = User(
-                username=f'guest_{_uuid.uuid4().hex}',
-                email='',
-            )
-            django_user.set_unusable_password()
-            django_user.save()
-            # Unified ID: display_name == handle. The free-text name only seeds
-            # the suggested handle.
-            handle = _suggest_handle(display_name)
-            profile = UserProfile.objects.create(
-                user=django_user,
-                display_name=handle,
-                handle=handle,
-                is_guest=True,
-                onboarding_role=onboarding_role,
-                consent_accepted_at=timezone.now(),
-                consent_policy_version=policy_version,
-                role=role,
-                affiliation=affiliation,
-            )
+        def _create_guest():
+            with transaction.atomic():
+                django_user = User(
+                    username=f'guest_{_uuid.uuid4().hex}',
+                    email='',
+                )
+                django_user.set_unusable_password()
+                django_user.save()
+                # Unified ID: display_name == handle. The free-text name only
+                # seeds the suggested handle.
+                handle = _suggest_handle(display_name)
+                return UserProfile.objects.create(
+                    user=django_user,
+                    display_name=handle,
+                    handle=handle,
+                    is_guest=True,
+                    onboarding_role=onboarding_role,
+                    consent_accepted_at=timezone.now(),
+                    consent_policy_version=policy_version,
+                    role=role,
+                    affiliation=affiliation,
+                )
+
+        try:
+            profile = _create_guest()
+        except IntegrityError:
+            # Handle race (check-then-insert): retry once with a fresh suggestion.
+            profile = _create_guest()
 
         logger.info('Guest account created: user=%s', profile.pk)
         return Response(_make_token_response(profile), status=status.HTTP_200_OK)

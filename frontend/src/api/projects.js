@@ -99,7 +99,10 @@ export async function deleteProject(projectId) {
 
 export async function generateReport(projectId, { regenerate = false } = {}) {
   // 202 in_progress (server-side dedupe of a duplicate request) is polled, not returned.
-  return postUntilReady(() => callApi('POST', `/projects/${projectId}/report/generate/`, regenerate ? { regenerate: true } : undefined))
+  return postUntilReady(ctx => callApi(
+    'POST', `/projects/${projectId}/report/generate/`,
+    regenerate ? (ctx ? { regenerate: true, if_generation: ctx.basedOn } : { regenerate: true }) : undefined,
+  ))
 }
 
 export async function generateReportImage(projectId, { regenerate = false, timeoutMs } = {}) {
