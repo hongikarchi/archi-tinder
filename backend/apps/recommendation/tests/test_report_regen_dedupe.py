@@ -154,7 +154,7 @@ class TestGenerationId:
         Project.objects.filter(pk=project.pk).update(
             final_report={'persona_type': 'New', 'source_signature': SIG, 'generation_id': 'g2'})
         res = ProjectReportGenerateView()._wait_for_leader(
-            project.project_id, f'report_generate_lock:{project.project_id}', SIG, 'g1')
+            project.project_id, f'report_generate_lock:{project.project_id}', SIG, 'g1', SIG)
         assert res.status_code == 200
         assert res.data['final_report']['generation_id'] == 'g2'
 
@@ -163,7 +163,7 @@ class TestGenerationId:
         old = {'persona_type': 'Old', 'source_signature': SIG, 'generation_id': 'g1'}
         project = _project(user_profile, final_report=old)
         res = ProjectReportGenerateView()._wait_for_leader(
-            project.project_id, f'report_generate_lock:{project.project_id}', SIG, 'g1')
+            project.project_id, f'report_generate_lock:{project.project_id}', SIG, 'g1', SIG)
         assert res.status_code == 502
 
     def test_202_body_carries_based_on(self, auth_client, user_profile):
@@ -198,3 +198,32 @@ class TestGenerationId:
         assert res.status_code == 200
         assert m.call_count == 1
         assert res.json()['final_report']['generation_id'] != 'g1'
+
+    def test_follower_202_when_leader_report_has_older_signature(self, user_profile):
+        """Leader committed a newer generation built from an older liked set:
+        follower must not hand it back as the regenerate result."""
+        from apps.recommendation.views.reports import ProjectReportGenerateView
+        old = {'persona_type': 'Old', 'source_signature': SIG, 'generation_id': 'g1'}
+        project = _project(user_profile, final_report=old)
+        Project.objects.filter(pk=project.pk).update(
+            final_report={'persona_type': 'New', 'source_signature': 'older-set', 'generation_id': 'g2'})
+        res = ProjectReportGenerateView()._wait_for_leader(
+            project.project_id, f'report_generate_lock:{project.project_id}', SIG, 'g1', SIG)
+        assert res.status_code == 202
+        assert res.data['based_on'] == 'g2'
+
+    def test_if_generation_stale_but_signature_mismatch_regenerates(self, auth_client, user_profile):
+        stored = {'persona_type': 'Fresh-but-old-set', 'source_signature': 'older-set',
+                  'generation_id': 'g2'}
+        project = _project(user_profile, final_report=stored)
+        axis = patch('apps.recommendation.views.reports.compute_axis_scores', return_value={'form': 0.1})
+        with patch('apps.recommendation.services.generate_persona_report',
+                   return_value=dict(NEW)) as m, axis:
+            res = auth_client.post(
+                f'/api/v1/projects/{project.project_id}/report/generate/',
+                {'regenerate': True, 'if_generation': 'g1'}, format='json')
+        assert res.status_code == 200
+        assert m.call_count == 1
+        body = res.json()['final_report']
+        assert body['persona_type'] == 'New Flat'
+        assert body['source_signature'] == SIG
