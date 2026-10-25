@@ -37,6 +37,31 @@ ISSUES_PATH = HERE / 'flow_issues.json'
 
 SLOW_MS = 1000  # standing product bar: every page under 1s
 
+# Flow letters and screen IDs shared with [Archibe]-SPEC (화면 명세 tab). 'Z' = theme/language variants.
+FLOWS = [
+    ('A', '시작 · 가입', '로그아웃 상태에서 처음 만나는 화면들이에요. Google·카카오 로그인은 자동화할 수 없어 화면만 담았어요.'),
+    ('B', '취향 찾기', '검색 탭에서 한 문장을 쓰면 태그와 카드 3장이 나오고, 스와이프를 거쳐 결과와 리포트까지 이어져요.'),
+    ('C', '탐색', '앱을 열면 가장 먼저 보이는 탐색 탭과, 거기서 들어가는 건물·건축가 화면이에요.'),
+    ('D', '소셜 · 공모전', '취향이 맞는 사람 찾기, 성향 검사, 공모전처럼 사람과 사람을 잇는 화면이에요.'),
+    ('E', '프로필 · 설정', '내 기록과 계정을 다루는 화면이에요.'),
+    ('Z', '다크 · 영어', '같은 화면을 다크 테마와 영어로 본 모습이에요.'),
+]
+SCREEN_OF = {}
+for _ids, _scr in [
+        ('01 02 65', 'A01'), ('03', 'A02'), ('04 05', 'A03'),
+        ('06 07 08 09 10 11 31 32 33 63', 'B01'), ('12 13 14 15 16 17 18 19 20 21', 'B02'),
+        ('22 23 24 25 26', 'B03'), ('27', 'B04'), ('28', 'B05'),
+        ('29 30 64', 'C01'), ('38', 'C02'), ('39', 'C03'),
+        ('34 35 36', 'D01'), ('49', 'D02'), ('51', 'D03'), ('52', 'D04'), ('37', 'D05'),
+        ('40 41 61', 'E01'), ('48 62', 'E02'), ('50', 'E03'), ('47', 'E04'), ('42', 'E05'),
+        ('43', 'E06'), ('44', 'E07'), ('45', 'E08'), ('46', 'E09'),
+        ('53 54 55 56 57 58 59 60', 'Z')]:
+    for _i in _ids.split():
+        SCREEN_OF[_i] = _scr
+LINKS = [('PRD', 'https://claude.ai/artifact/S8nvTvTXXg44eT33wBY3vN'),
+         ('SPEC', 'https://claude.ai/artifact/Wmv6UGRp1ntPFw9V7FqmMu'),
+         ('디자인시스템', 'https://claude.ai/artifact/G15yiY8beG7qUMYJXsgnD8')]
+
 
 def esc(s):
     return html.escape(str(s or ''), quote=True)
@@ -157,6 +182,9 @@ def figure(shot, anchor=True, numbered=True):
     fid = f' id="s{esc(sid)}"' if anchor else ''
     v = shot.get('variant') or {}
     tags = []
+    scr = SCREEN_OF.get(sid)
+    if scr and scr != 'Z' and not shot.get('_date'):
+        tags.append(f'<span class="tag scr">{esc(scr)}</span>')
     if v.get('theme') == 'dark':
         tags.append('<span class="tag">다크</span>')
     if v.get('lang') == 'en':
@@ -246,7 +274,7 @@ CSS = r"""
   --bg:#f3f5f8; --surface:#ffffff; --ink:#1b2430; --muted:#5b6778; --line:#d6dde6;
   --accent:#0969da; --accent-soft:#e3eefb;
   --ok:#1a7f37; --ok-soft:#e2f3e7; --warn:#9a6700; --warn-soft:#fbefd2;
-  --bad:#c0362c; --bad-soft:#fbe4e1;
+  --bad:#c0362c; --bad-soft:#fbe4e1; --nav:rgba(243,245,248,0.92);
   --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
 }
@@ -254,17 +282,17 @@ CSS = r"""
   --bg:#0f141b; --surface:#161d26; --ink:#e3e9f0; --muted:#94a1b2; --line:#2a3441;
   --accent:#58a6ff; --accent-soft:#16283e;
   --ok:#56d364; --ok-soft:#14301c; --warn:#e3b341; --warn-soft:#352a10;
-  --bad:#ff7b72; --bad-soft:#3b1a19; color-scheme:dark}}
+  --bad:#ff7b72; --bad-soft:#3b1a19; --nav:rgba(15,20,27,0.92); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f141b; --surface:#161d26; --ink:#e3e9f0; --muted:#94a1b2; --line:#2a3441;
   --accent:#58a6ff; --accent-soft:#16283e;
   --ok:#56d364; --ok-soft:#14301c; --warn:#e3b341; --warn-soft:#352a10;
-  --bad:#ff7b72; --bad-soft:#3b1a19; color-scheme:dark}
+  --bad:#ff7b72; --bad-soft:#3b1a19; --nav:rgba(15,20,27,0.92); color-scheme:dark}
 body{background:var(--bg);color:var(--ink);font:15px/1.7 var(--f-body);word-break:keep-all;overflow-wrap:anywhere}
 a{color:var(--accent)}
 a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .wrap{max-width:76rem;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));
-  padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 72px;display:grid;gap:40px}
+  padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 72px;display:grid;gap:40px}
 .intro h1{font-size:clamp(1.6rem,4vw,2.2rem);line-height:1.25;margin:0 0 8px;font-weight:700;text-wrap:balance}
 .intro p{margin:0;max-width:64ch;color:var(--muted)}
 .facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
@@ -321,26 +349,29 @@ dialog::backdrop{background:rgb(0 0 0 / .78)}
 dialog img{display:block;max-width:100%;max-height:90vh;width:auto;border-radius:12px}
 dialog .close{position:absolute;top:8px;right:8px;font:inherit;font-size:.85rem;border:0;border-radius:999px;padding:4px 12px;background:var(--surface);color:var(--ink);cursor:pointer}
 @media (max-width:640px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-/* Tabs: sticky bar under the intro; one panel visible at a time. */
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
-.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);
-  border-bottom:1px solid var(--line);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));
-  padding-inline:max(16px,env(safe-area-inset-left,0px));display:grid;gap:8px;padding-block:10px 0}
-.tablist{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
-.tablist::-webkit-scrollbar{display:none}
-.tab{font:inherit;font-size:.9rem;font-weight:600;white-space:nowrap;border:0;background:none;color:var(--muted);
-  padding:8px 9px 10px;border-bottom:2px solid transparent;cursor:pointer;display:flex;gap:6px;align-items:center}
-.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
-.tab .cnt{font-family:var(--f-num);font-size:.72rem;border-radius:999px;padding:0 7px;background:var(--line);color:var(--ink)}
-.tab .cnt.hot{background:var(--warn-soft);color:var(--warn)}
-.stagebar{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
-.stagebar::-webkit-scrollbar{display:none}
-.stagebar a{white-space:nowrap;text-decoration:none;font-size:.8rem;border:1px solid var(--line);border-radius:999px;
-  padding:2px 10px;color:var(--ink);background:var(--surface)}
-.stagebar a b{font-family:var(--f-num);color:var(--accent);margin-right:4px}
-.panel{display:grid;gap:40px;min-width:0}
-.panel[hidden],.stagebar[hidden]{display:none}
-.panel section,.shot,.issue{scroll-margin-top:130px}
+/* Doc nav: house format shared with [Archibe]-PRD (title left, section anchors right). */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--nav)}
+.docnav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--nav);backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+  margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding-inline:max(16px,env(safe-area-inset-left,0px))}
+.docnav .in{display:flex;align-items:center;gap:20px;height:52px;max-width:76rem;margin:0 auto}
+.docnav .t{font-weight:700;white-space:nowrap}
+.docnav .links{display:flex;gap:16px;overflow-x:auto;scrollbar-width:none;margin-left:auto}
+.docnav .links::-webkit-scrollbar{display:none}
+.docnav .links a{font-size:.8rem;color:var(--muted);text-decoration:none;white-space:nowrap}
+.docnav .links a:hover{color:var(--ink)}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.btnrow a{font-size:.88rem;font-weight:600;text-decoration:none;border-radius:12px;padding:8px 14px;border:1px solid var(--accent);color:var(--accent)}
+.glance{border:2px solid var(--ink);border-radius:14px;padding:16px 18px;background:var(--surface);display:grid;gap:8px}
+.glance h2{font-size:1.05rem;margin:0}
+.glance ul{margin:0;padding-left:1.1em;display:grid;gap:4px}
+.howto{background:var(--accent-soft);border-radius:12px;padding:14px 16px;font-size:.93rem}
+.howto b{display:block;margin-bottom:4px}
+.howto p{margin:0;max-width:80ch}
+.group{display:grid;gap:12px}
+.group h3{margin:6px 0 0;font-size:1.05rem}
+.scr{background:var(--ink);color:var(--bg)}
+.shot,.issue,section{scroll-margin-top:70px}
 .empty{background:var(--ok-soft);color:var(--ok);border-radius:12px;padding:14px 16px;margin:0}
 details.before{border-top:1px dashed var(--line);padding-top:8px}
 details.before summary{cursor:pointer;font-size:.85rem;color:var(--accent)}
@@ -350,38 +381,6 @@ details.howto p{margin:8px 0 0}
 """
 
 JS = r"""
-const tabs = [...document.querySelectorAll('.tab')], panels = [...document.querySelectorAll('.panel')];
-const stagebar = document.querySelector('.stagebar');
-function show(name, toTop) {
-  if (!panels.some(p => p.id === 'p-' + name)) return;
-  tabs.forEach(t => t.setAttribute('aria-selected', t.dataset.tab === name ? 'true' : 'false'));
-  panels.forEach(p => { p.hidden = p.id !== 'p-' + name; });
-  if (stagebar) stagebar.hidden = name !== 'flow';
-  try { localStorage.setItem('flowqa-tab', name); } catch (e) {}
-  if (toTop) window.scrollTo({top: 0});
-}
-function go(hash) {
-  const id = (hash || '').replace('#', '');
-  if (!id) return false;
-  if (panels.some(p => p.id === 'p-' + id)) { show(id, true); return true; }
-  const el = document.getElementById(id);
-  if (!el) return false;
-  const panel = el.closest('.panel');
-  if (panel) show(panel.id.slice(2), false);
-  requestAnimationFrame(() => el.scrollIntoView({block: 'start'}));
-  return true;
-}
-tabs.forEach(t => t.addEventListener('click', () => {
-  show(t.dataset.tab, true);
-  try { history.replaceState(null, '', '#' + t.dataset.tab); } catch (e) {}
-}));
-document.addEventListener('click', e => {
-  const a = e.target.closest('a[href^="#"]');
-  if (a && go(a.getAttribute('href'))) e.preventDefault();
-});
-let saved = null;
-try { saved = localStorage.getItem('flowqa-tab'); } catch (e) {}
-if (!go(location.hash)) show(panels.some(p => p.id === 'p-' + saved) ? saved : panels[0].id.slice(2), false);
 const dlg = document.getElementById('zoom'), big = document.getElementById('zoomimg');
 document.addEventListener('click', e => {
   const pic = e.target.closest('.pic[data-src]');
@@ -432,58 +431,74 @@ def build(run_dir):
             f'사진 아래 ‘디버그 화면’을 누르면 개발자용 표시(API 시간, 미리 불러오기 시간)가 켜진 같은 화면을 볼 수 있어요. '
             f'코드 버전 {esc(run.get("git_sha", ""))} ({esc(run.get("branch", ""))}).</p>')
 
+    y, mo, d = run['date'].split('-')
+    nice = f'{int(y)}년 {int(mo)}월 {int(d)}일'
+    links = ''.join(f'<a href="{u}">{esc(n)}</a>' for n, u in LINKS)
     intro = (f'<div class="intro"><h1>[Archibe]-전체흐름</h1>'
-             f'<p>휴대폰 웹에서 로그인부터 취향 찾기, 스와이프, 결과, 탐색, 검색, 소셜, 설정까지 '
-             f'실제로 눌러 보며 찍은 기록이에요. 사진을 누르면 크게 볼 수 있어요.</p>'
-             f'<div class="facts">{"".join(facts)}</div></div>')
+             f'<p>휴대폰 웹에서 로그인부터 취향 찾기, 탐색, 소셜, 프로필까지 실제로 눌러 보며 찍은 기록이에요. '
+             f'흐름 글자(A–E)와 화면 번호는 SPEC의 화면 명세와 같아요. 사진을 누르면 크게 볼 수 있어요.</p>'
+             f'<div class="facts">{"".join(facts)}</div><div class="btnrow">{links}</div></div>')
 
-    stages = [(n, st, [s for s in shots if s.get('stage') == st['key']])
-              for n, st in enumerate(manifest.get('stages', []), 1)]
-    stages = [x for x in stages if x[2]]
+    def letter_of(shot):
+        scr = SCREEN_OF.get(shot['id'])
+        if scr:
+            return scr[0]
+        return 'Z' if shot.get('stage') == 'variants' else None
 
-    panels = []  # (key, label, count, hot, html)
+    groups = []  # (letter, title, desc, shots)
+    for letter, title, desc in FLOWS:
+        mine = [s for s in shots if letter_of(s) == letter]
+        if mine:
+            groups.append((letter, title, desc, mine))
+    unmapped = [s for s in shots if letter_of(s) is None]
+    if unmapped:
+        groups.append(('Y', '기타', '흐름에 아직 묶지 않은 화면이에요.', unmapped))
+
+    one = f': {esc(open_issues[0]["title"])}' if len(open_issues) == 1 else ''
+    n_flows = len([g for g in groups if g[0] in 'ABCDE'])
+    glance = (f'<section class="glance" id="glance"><h2>한눈에 · {esc(nice)}</h2><ul>'
+              f'<li><b>화면 {len(captured)}장</b>을 흐름 {n_flows}개로 나눠 찍었어요.</li>'
+              f'<li><b>남은 문제 {len(open_issues)}개</b>{one}</li>'
+              f'<li><b>이번에 고쳐진 것 {len(fixed)}개</b>는 맨 아래에 모았어요.</li>'
+              f'<li><b>1초 넘는 요청이 있는 화면 {n_slow}곳</b>, 오류·실패 요청 {n_err}건이에요(개발 서버 기준).</li>'
+              f'</ul></section>')
+    howto = f'<section class="howto" id="howto"><b>어떻게 찍었나</b>{note}</section>'
+
     open_html = ''.join(issue_card(i, idx, 'record') for i in open_issues) or \
-        '<p class="empty">지금 확인이 필요한 문제는 없어요.</p>'
-    panels.append(('issues', '문제', len(open_issues), bool(open_issues),
-                   '<section><header class="sec"><span class="secno">먼저 보기</span>'
-                   f'<h2>확인이 필요한 문제 {len(open_issues)}가지</h2>'
-                   '<p>각 문제마다 무엇이 일어나는지, 왜 헷갈릴 수 있는지, 고치는 방법 후보를 적었어요. '
-                   '고친 문제는 ‘고친 기록’ 탭으로 옮겨요.</p></header>'
-                   f'{open_html}</section>'))
+        '<p class="empty">지금 남은 문제는 없어요.</p>'
+    remain = ('<section id="remain"><header class="sec"><span class="secno">먼저 보기</span>'
+              '<h2>지금 남은 일</h2><p>문제마다 무엇이 일어나는지, 왜 헷갈릴 수 있는지, 고칠 방법 후보를 적었어요.</p></header>'
+              f'<div class="group"><h3>1. 앱에 남은 문제</h3>{open_html}</div></section>')
+
+    def label(letter):
+        return '경우의 수' if letter == 'Z' else ('기타' if letter == 'Y' else f'흐름 {letter}')
+
     flow_html = ''.join(
-        f'<section id="stage-{esc(st["key"])}"><header class="sec">'
-        f'<span class="secno">{n}단계</span><h2>{esc(st["title_ko"])}</h2>'
-        f'<p>{esc(st.get("desc_ko"))}</p></header>'
-        f'<div class="grid">{"".join(figure(s) for s in in_stage)}</div></section>'
-        for n, st, in_stage in stages)
-    panels.append(('flow', '전체 흐름', len(captured), False,
-                   f'<details class="note howto"><summary>어떻게 찍었나요?</summary>{note}</details>{flow_html}'))
+        f'<section id="flow-{letter.lower()}"><header class="sec">'
+        f'<span class="secno">{label(letter)}</span><h2>{esc(title)}</h2><p>{esc(desc)}</p></header>'
+        f'<div class="grid">{"".join(figure(s) for s in mine)}</div></section>'
+        for letter, title, desc, mine in groups)
+
     table = perf_table(shots)
-    if table:
-        panels.append(('perf', '속도', n_slow, n_slow > 0,
-                       '<section><header class="sec"><span class="secno">속도</span>'
-                       '<h2>가장 느린 요청</h2><p>이번 회차에서 오래 걸린 API 요청 12개예요. '
-                       f'{SLOW_MS:,}ms를 넘으면 빨간색이에요. 개발 서버 기준이라 실제보다 느려요.</p></header>'
-                       f'{table}</section>'))
+    perf = ('<section id="perf"><header class="sec"><span class="secno">속도</span>'
+            '<h2>가장 느린 요청</h2><p>이번 회차에서 오래 걸린 API 요청 12개예요. '
+            f'{SLOW_MS:,}ms를 넘으면 빨간색이에요. 개발 서버 기준이라 실제보다 느려요.</p></header>'
+            f'{table}</section>') if table else ''
+    done = ''
     if fixed:
         cards = ''.join(issue_card(i, idx, 'after') for i in fixed)
-        panels.append(('fixed', '고친 기록', len(fixed), False,
-                       '<section><header class="sec"><span class="secno">고친 것</span>'
-                       '<h2>고친 뒤</h2><p>정해 주신 대로 고친 뒤 다시 찍은 화면이에요. '
-                       '고치기 전 모습은 카드마다 접어 뒀어요.</p></header>'
-                       f'{cards}</section>'))
+        done = ('<section id="fixed"><header class="sec"><span class="secno">고친 것</span>'
+                '<h2>이번에 고쳐진 것</h2><p>정해 주신 대로 고친 뒤 다시 찍은 화면이에요. '
+                '고치기 전 모습은 카드마다 접어 뒀어요.</p></header>'
+                f'{cards}</section>')
 
-    tablist = ''.join(
-        f'<button class="tab" type="button" role="tab" data-tab="{k}" aria-selected="false">'
-        f'{label}<span class="cnt{" hot" if hot else ""}">{cnt}</span></button>'
-        for k, label, cnt, hot, _ in panels)
-    stagebar = ''.join(f'<a href="#stage-{esc(st["key"])}"><b>{n}</b>{esc(st["title_ko"])}</a>'
-                       for n, st, _ in stages)
-    body = (f'{intro}<nav class="tabs" aria-label="문서 구역">'
-            f'<div class="tablist" role="tablist">{tablist}</div>'
-            f'<div class="stagebar" hidden>{stagebar}</div></nav>'
-            + ''.join(f'<div class="panel" id="p-{k}" role="tabpanel">{h}</div>'
-                      for k, _, _, _, h in panels))
+    anchors = [('glance', '한눈에'), ('remain', '남은 일')]
+    anchors += [(f'flow-{l.lower()}', l if l in 'ABCDE' else label(l)) for l, _, _, _ in groups]
+    anchors += ([('perf', '속도')] if perf else []) + ([('fixed', '고친 것')] if done else [])
+    nav = ('<nav class="docnav" aria-label="목차"><div class="in"><span class="t">[Archibe]-전체흐름</span>'
+           '<div class="links">' + ''.join(f'<a href="#{k}">{esc(v)}</a>' for k, v in anchors) +
+           '</div></div></nav>')
+    body = nav + intro + glance + howto + remain + flow_html + perf + done
 
     page = (
         '<title>[Archibe]-전체흐름</title>\n'
