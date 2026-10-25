@@ -501,7 +501,8 @@ class Runner:
                 self.goto(page, sc['route'])
             for a in sc.get('actions', []):
                 self.act(page, a)
-            self.settle(page)
+            if not sc.get('no_settle'):   # e.g. a 3s toast would expire during settle
+                self.settle(page)
             if sc.get('requires'):
                 if page.locator(sc['requires']).count() == 0:
                     rec.update(ok=False, skipped=True, error=f"precondition missing: {sc['requires']}")
