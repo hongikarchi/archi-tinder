@@ -29,7 +29,9 @@ RC = settings.RECOMMENDATION
 # a duplicate concurrent POST waits for the leader and returns its stored
 # report instead of paying for a second LLM call. TTL is a crash fallback.
 REPORT_LOCK_TTL = 120
-REPORT_WAIT_BUDGET = 25
+# Must stay below the client fetch timeout (frontend core.js FETCH_TIMEOUT_MS=15s)
+# so the follower's 202 actually reaches the browser.
+REPORT_WAIT_BUDGET = 10
 REPORT_WAIT_POLL = 1.0
 
 
@@ -70,12 +72,13 @@ class ProjectReportGenerateView(APIView):
         # post-lock check that only fires when ANOTHER request committed a
         # current-signature report while we were generating.
         current_sig = liked_signature(liked_id_strings)
-        prev_sig = (project.final_report or {}).get('source_signature')             if isinstance(project.final_report, dict) else None
+        fr = project.final_report
+        prev_sig = fr.get('source_signature') if isinstance(fr, dict) else None
 
         lock_key = _report_lock_key(pk)
         lock_token = uuid.uuid4().hex
         if not cache.add(lock_key, lock_token, REPORT_LOCK_TTL):
-            return self._wait_for_leader(pk, lock_key)
+            return self._wait_for_leader(pk, lock_key, prev_sig)
 
         try:
             return self._generate(request, pk, profile, project, liked_id_strings, current_sig, prev_sig)
@@ -92,7 +95,7 @@ class ProjectReportGenerateView(APIView):
             return Response({'final_report': row['final_report'], 'axis_scores': row['axis_scores']})
         return None
 
-    def _wait_for_leader(self, pk, lock_key):
+    def _wait_for_leader(self, pk, lock_key, prev_sig):
         deadline = time.monotonic() + REPORT_WAIT_BUDGET
         while cache.get(lock_key) is not None:
             if time.monotonic() >= deadline:
@@ -103,9 +106,13 @@ class ProjectReportGenerateView(APIView):
                     headers={'Retry-After': '5'},
                 )
             time.sleep(REPORT_WAIT_POLL)
+        # Only hand back the stored report if the leader actually committed a
+        # new one; a failed leader leaves the pre-request report in place.
         stored = self._stored_response(pk)
         if stored is not None:
-            return stored
+            fr = stored.data['final_report']
+            if (fr.get('source_signature') if isinstance(fr, dict) else None) != prev_sig:
+                return stored
         return Response({'detail': 'Report generation failed.'}, status=status.HTTP_502_BAD_GATEWAY)
 
     def _generate(self, request, pk, profile, project, liked_id_strings, current_sig, prev_sig):

@@ -109,6 +109,15 @@ class TestInFlightLock:
         assert res.json()['status'] == 'in_progress'
         assert m.call_count == 0
 
+    def test_follower_after_failed_leader_gets_502_not_old_report(self, user_profile):
+        from apps.recommendation.views.reports import ProjectReportGenerateView
+        project = _project(user_profile, final_report=OLD)
+        prev_sig = OLD.get('source_signature') if isinstance(OLD, dict) else None
+        # Lock already gone (leader finished) but report unchanged -> leader failed.
+        res = ProjectReportGenerateView()._wait_for_leader(
+            project.project_id, f'report_generate_lock:{project.project_id}', prev_sig)
+        assert res.status_code == 502
+
     def test_lock_released_after_success(self, auth_client, user_profile):
         project = _project(user_profile, final_report=OLD)
         _post(auth_client, project, lambda *a, **k: dict(NEW))

@@ -254,9 +254,10 @@ class ProjectDetailView(APIView):
             # is generated from liked_ids. Reject before any mutation/eviction.
             if remove_ids is not None and project.liked_ids:
                 remove_set_guard = set(remove_ids)
+                liked_entry_ids = (_entry_id(item) for item in project.liked_ids)
                 remaining = [
-                    _entry_id(item) for item in project.liked_ids
-                    if _entry_id(item) is not None and _entry_id(item) not in remove_set_guard
+                    i for i in liked_entry_ids
+                    if i is not None and i not in remove_set_guard
                 ]
                 if not _count_renderable(remaining):
                     return Response(
