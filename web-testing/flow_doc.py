@@ -486,7 +486,7 @@ def build(run_dir):
                       for k, _, _, _, h in panels))
 
     page = (
-        '<title>ArchiTinder 전체 흐름</title>\n'
+        '<title>[Archibe]-전체흐름</title>\n'
         '<meta name="claude:viewport-fit-sides" content="cover">\n'
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
