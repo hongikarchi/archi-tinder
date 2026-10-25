@@ -153,3 +153,48 @@ class TestReportStale:
             {'remove_building_ids': ['B002']}, format='json',
         )
         assert _detail(api_client, project)['report_stale'] is True
+
+
+@pytest.mark.django_db
+class TestLastLikedGuardCountsRenderable:
+    """Guard counts only remaining liked ids that exist and are publishable."""
+
+    def test_only_unrenderable_remaining_is_rejected(self, auth_client, user_profile):
+        project = _make_project(user_profile, liked_ids=_liked('B001', 'B002'))
+        with patch('apps.recommendation.views.projects._count_renderable', return_value=0) as m:
+            resp = auth_client.patch(
+                f'/api/v1/projects/{project.project_id}/',
+                {'remove_building_ids': ['B001']}, format='json',
+            )
+        assert resp.status_code == 400
+        assert resp.json()['detail'] == 'last_liked_building'
+        assert m.call_args[0][0] == ['B002']
+        project.refresh_from_db()
+        assert len(project.liked_ids) == 2
+
+    def test_renderable_remaining_is_allowed(self, auth_client, user_profile):
+        project = _make_project(user_profile, liked_ids=_liked('B001', 'B002'))
+        with patch('apps.recommendation.views.projects._count_renderable', return_value=1):
+            resp = auth_client.patch(
+                f'/api/v1/projects/{project.project_id}/',
+                {'remove_building_ids': ['B001']}, format='json',
+            )
+        assert resp.status_code == 200
+
+    def test_count_renderable_query_is_publishable_gated_and_parameterized(self):
+        from unittest.mock import MagicMock
+        from apps.recommendation.views.projects import _count_renderable
+        cur = MagicMock()
+        cur.fetchone.return_value = (1,)
+        conn = MagicMock()
+        conn.__getitem__.return_value.cursor.return_value.__enter__.return_value = cur
+        with patch('apps.recommendation.views.projects.connections', conn):
+            assert _count_renderable(['B002', 'B002', 'B003']) == 1
+        sql, params = cur.execute.call_args[0]
+        assert 'is_publishable = true' in sql
+        assert '%s' in sql and 'B002' not in sql
+        assert params == [['B002', 'B003']]
+
+    def test_count_renderable_empty_skips_query(self):
+        from apps.recommendation.views.projects import _count_renderable
+        assert _count_renderable([]) == 0

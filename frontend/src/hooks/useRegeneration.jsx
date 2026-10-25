@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useReportImageJob, reportImageJobs } from './useReportImageJob.js'
-import { generateReport } from '../api/projects.js'
+import { reportJobs } from './useReportJobs.js'
 import { isLegacyAxisScores } from '../utils/axisScores.js'
 import { useTranslation } from '../i18n/index.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
@@ -84,7 +84,7 @@ export function useRegeneration({ projectId, enabled = false, axisScores = null,
     setReportBusy(true)
     setReportFailed(false)
     try {
-      const data = await generateReport(projectId, { regenerate: true })
+      const data = await reportJobs.regenerate(projectId)
       if (!data?.final_report) throw new Error('empty report')
       if (!aliveRef.current) return
       onDoneRef.current?.(data)

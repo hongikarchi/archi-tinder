@@ -30,12 +30,17 @@ export function shouldRegenerateOnOpen({ isOwner, board, hasLocalReport = false,
  * (`hadReport` false) keeps the normal non-regenerate path.
  *  - reportStale: `board.report_stale` re-fetched after the swipes (true = server
  *    says the liked set no longer matches the report). null/undefined = unknown.
- *  - newLikes: likes recorded since the session was resumed (local fallback; also
- *    covers legacy reports without a signature, which the server never flags stale).
+ *  - newLikes: likes recorded since the session was resumed. Local fallback only:
+ *    used when the server flag is unknown (fetch failed) or the report is legacy
+ *    (no source_signature, which the server never flags stale).
+ *  - reportSigned: the fetched report carries a source_signature, so a non-null
+ *    reportStale is authoritative (false beats a stale local like counter).
  */
-export function shouldRegenerateAfterSession({ hadReport, newLikes = 0, reportStale = null }) {
+export function shouldRegenerateAfterSession({ hadReport, newLikes = 0, reportStale = null, reportSigned = false }) {
   if (!hadReport) return false
-  return reportStale === true || newLikes > 0
+  if (reportStale === true) return true
+  if (reportStale === false && reportSigned) return false
+  return newLikes > 0
 }
 
 /**

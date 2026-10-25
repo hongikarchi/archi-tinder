@@ -4,6 +4,7 @@ import { useBoard } from '../hooks/useBoard.js'
 import PersonaReportPage from '../components/PersonaReportPage.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport, getProjectRecommendations } from '../api/projects.js'
+import { reportJobs } from '../hooks/useReportJobs.js'
 import { useRegeneration } from '../hooks/useRegeneration.jsx'
 import { reportImageJobs } from '../hooks/useReportImageJob.js'
 import { shouldRegenerateOnOpen } from '../utils/reportStale.js'
@@ -130,13 +131,16 @@ export default function BoardReportPage({ onLogout }) {
     staleRef.current = true
     setStaleBusy(true)
     showToast(t('persona.staleRegenerating'))
-    generateReport(boardId, { regenerate: true })
+    // Shared in-flight store: joins a swipe-end regeneration already running for
+    // this board instead of sending a second POST. The image regeneration is
+    // chained by the store as soon as the report lands (even if this page was left
+    // meanwhile); the aliveRef guard only protects the state setters.
+    reportJobs.regenerate(boardId, { afterSuccess: () => { reportImageJobs.regenerate(boardId) } })
       .then(data => {
         if (!data?.final_report) throw new Error('empty report')
         if (!aliveRef.current) return
         setLocalReport(data.final_report)
         setLocalAxisScores(data.axis_scores || null)
-        reportImageJobs.regenerate(boardId)   // not awaited; previous image kept on failure
       })
       .catch(err => {
         console.error('[BoardReportPage] stale regenerate failed:', err)

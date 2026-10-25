@@ -17,7 +17,9 @@ export function isLastLikedError(err) {
 
 /**
  * May `candidateId` be added to the delete selection?
- *   likedIds     board liked ids (strings or {id})
+ *   likedIds     board liked ids (strings or {id}) — pass ONLY ids that are rendered
+ *                on the page; hidden ids can never be selected, so counting them
+ *                would let the owner delete every visible liked building
  *   deletedIds   liked ids already deleted this session (iterable)
  *   selectedIds  currently selected ids (iterable)
  *   candidateId  tile being toggled ON

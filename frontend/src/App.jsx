@@ -26,6 +26,7 @@ import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagin
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
+import { reportJobs } from './hooks/useReportJobs.js'
 import { shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './utils/reportStale.js'
 import { ONBOARDING_FLAG_KEY } from './utils/onboardingFlag.js'
 
@@ -418,14 +419,14 @@ export default function App() {
 
   // ── Shared results navigation ─────────────────────────────────────────────
   // Called from BOTH the action-card right-swipe AND the top "결과 보러 가기" button.
-  // Navigates to the result page and fires getResult only — no generateReport
-  // here. Live generation owners: ResultsPage's auto-repair effect,
-  // BoardReportPage's auto-generate effect, and handleSwipeCard's
-  // is_analysis_completed branch (guarded by !project.finalReport). goToResults
-  // used to fire generateReport too, but ResultsPage mounts on the navigate()
-  // above BEFORE this Promise.all resolves, so the two raced into concurrent
-  // POSTs (BACK-REPORT-CACHE-1 finding); the backend has no row lock, so the
-  // cache check alone can't stop that race — removing this call site is the fix.
+  // Navigates to the result page, fires getResult and runs ensureFreshReport in
+  // regen-only mode (a board resumed via "continue exploring" whose report is now
+  // out of date). First generations are NOT started here: ResultsPage's
+  // auto-repair effect / BoardReportPage's auto-generate effect own those
+  // (ResultsPage mounts on the navigate() below BEFORE this Promise.all resolves,
+  // so a first generation here raced them into concurrent POSTs, BACK-REPORT-CACHE-1).
+  // The regen path cannot race the auto-repair: it only runs when a report already
+  // exists, and auto-repair needs the report to be missing.
   async function goToResults(project) {
     if (!project?.sessionId) {
       navigate('/user/me')
@@ -436,13 +437,92 @@ export default function App() {
     navigate('/result/' + sessionId)
     setIsResultLoading(true)
     try {
-      const resultData = await api.getResult({ session_id: sessionId })
+      const [resultData] = await Promise.all([
+        api.getResult({ session_id: sessionId }),
+        ensureFreshReport(project),
+      ])
       setProjects(prev => prev.map(p => p.id === localId ? {
         ...p,
         predictedLikes: resultData.predicted_like_images || [],
       } : p))
     } catch { /* ResultsPage fetches on entry */ }
     finally { setIsResultLoading(false) }
+  }
+
+  // Shared session-end report step (swipe completion, Finish button, action-card
+  // right-swipe). Re-fetches the board when it might own a report, then:
+  //  - regen (report existed AND the liked set changed): regenerate through the
+  //    shared reportJobs store (joins an already-running regeneration, so the
+  //    paths cannot double-POST); the persona image regeneration is chained
+  //    AFTER the new report lands (the server builds the image prompt from the
+  //    stored report, so a parallel start would render the OLD persona).
+  //  - allowFirst (swipe completion only): first generation, image starts
+  //    immediately in parallel (facts-based prompt, no report needed).
+  // Never throws. `extraLikes` = a like not yet reflected in `project`.
+  async function ensureFreshReport(project, { extraLikes = 0, allowFirst = false } = {}) {
+    const backendId = project?.backendId
+    const localId = project?.id
+    if (!backendId) return
+    try {
+      // The fetch's report_stale flag is authoritative; a brand-new temp board with
+      // no local report/image cannot own a server report, so it skips the fetch.
+      const fetched = shouldFetchBoardBeforeReport(project) ? await api.getProject(backendId).catch(() => null) : null
+      const existingReport = project.finalReport || fetched?.final_report || null
+      const existingImage = project.reportImage || fetched?.report_image || null
+      const regen = shouldRegenerateAfterSession({
+        hadReport: !!existingReport,
+        newLikes: (project.likesSinceResume || 0) + extraLikes,
+        reportStale: fetched ? fetched.report_stale === true : null,
+        reportSigned: !!fetched?.final_report?.source_signature,
+      })
+      const generating = allowFirst ? (regen || !existingReport) : regen
+      const persistImage = img => {
+        if (!img?.image_data) return
+        setProjects(prev => prev.map(p => p.id === localId
+          ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
+      }
+      // PersonaReport shows progress from the shared image-job store; this only
+      // persists the finished image into project state so remounts keep it.
+      if (allowFirst && !regen && !existingImage) reportImageJobs.start(backendId).then(persistImage)
+      let reportData = null
+      if (generating) {
+        const run = regen
+          ? reportJobs.regenerate(backendId, { afterSuccess: () => { reportImageJobs.regenerate(backendId) } })
+          : api.generateReport(backendId)
+        reportData = await run.catch((err) => { console.error('report generation failed:', err); return null })
+        if (regen && reportData?.final_report && reportImageJobs.get(backendId).status === 'generating') {
+          reportImageJobs.start(backendId).then(persistImage)   // joins the chained regeneration
+        }
+      }
+      const finalReport = reportData?.final_report || existingReport
+      const axisScores = reportData?.axis_scores || (!reportData ? fetched?.axis_scores : null) || null
+      setProjects(prev => prev.map(p => p.id === localId ? {
+        ...p,
+        ...(finalReport ? { finalReport } : {}),
+        ...(axisScores ? { axisScores } : {}),
+        ...(!p.reportImage && existingImage ? { reportImage: existingImage, reportImageMime: fetched?.report_image_mime || p.reportImageMime } : {}),
+        // Counter only resets once the report is known fresh (a failed regeneration
+        // keeps the local fallback for legacy reports).
+        ...(!generating || reportData ? { likesSinceResume: 0 } : {}),
+      } : p))
+      if (!reportData) return
+      // The server renames the board to follow the new persona name (first
+      // generation of a discovery_ draft, or regeneration of a never-renamed
+      // board). Refresh the local name; non-blocking, a failed fetch leaves it.
+      api.getProject(backendId).then(fresh => {
+        const name = pickServerBoardName(fresh)
+        if (!name) return
+        setProjects(prev => prev.map(p => (p.id === localId && p.projectName !== name)
+          ? { ...p, projectName: name } : p))
+      }).catch(() => {})
+      // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on a temp
+      // project, but leave the sheet closed; the ResultsPage CTA opens it.
+      if (finalReport && project.isTemp) {
+        setSaveModalProject({ backendId, finalReport, localId })
+      }
+    } catch (err) {
+      console.error('ensureFreshReport failed:', err)
+    }
   }
   // ── End shared results navigation ─────────────────────────────────────────
 
@@ -452,6 +532,11 @@ export default function App() {
   // ({ final_report, axis_scores }); `project` is the ResultsPage-local project
   // object at call time.
   function handleReportGenerated(project, data) {
+    // A report landed outside the swipe-end flow: the local like counter no longer
+    // says anything about staleness.
+    if (data?.final_report && project?.id) {
+      setProjects(prev => prev.map(p => p.id === project.id && p.likesSinceResume ? { ...p, likesSinceResume: 0 } : p))
+    }
     if (data?.final_report && project?.backendId && project?.isTemp) {
       // FRONT-RESULTS-SAVE-1: prime the target but do NOT open the sheet.
       // Auto-opening covered the report the user just waited for; saving is now
@@ -636,76 +721,14 @@ export default function App() {
         }))
         setIsResultLoading(true)
         try {
-          const backendId = project?.backendId
-          // A board resumed via "continue exploring" may already own a report +
-          // image that local state does not know about: re-fetch the board (the
-          // server's report_stale flag is authoritative) before deciding. The
-          // fetch runs in parallel with getResult; a brand-new temp board with no
-          // local report/image cannot own a server report, so it skips the fetch
-          // and its first generation starts immediately.
-          const needFetch = !!backendId && shouldFetchBoardBeforeReport(project)
           const resultPromise = api.getResult({ session_id: project.sessionId })
           resultPromise.catch(() => {}) // surfaced by the await below
-          const fetched = needFetch ? await api.getProject(backendId).catch(() => null) : null
-          const existingReport = project.finalReport || fetched?.final_report || null
-          const existingImage = project.reportImage || fetched?.report_image || null
-          const regen = !!backendId && shouldRegenerateAfterSession({
-            hadReport: !!existingReport,
-            newLikes: (project.likesSinceResume || 0) + (action === 'like' ? 1 : 0),
-            reportStale: fetched ? fetched.report_stale === true : null,
-          })
-          // FULL-REPORT-IMG-1: persona image starts NOW, in parallel with the
-          // report (facts-based prompt server-side, so it does not need the report
-          // to exist). Not awaited here — PersonaReport shows the in-progress state
-          // from the shared job store; this .then only persists the finished image
-          // into project state so ResultsPage remounts keep it. Regeneration keeps
-          // the previous image until the new one lands (or on failure).
-          if (backendId && (regen || !existingImage)) {
-            (regen ? reportImageJobs.regenerate(backendId) : reportImageJobs.start(backendId)).then(img => {
-              if (!img?.image_data) return
-              setProjects(prev => prev.map(p => p.id === activeProjectId
-                ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
-            })
-          }
-          const generating = !!backendId && (regen || !existingReport)
-          const [resultData, reportData] = await Promise.all([
+          const [resultData] = await Promise.all([
             resultPromise,
-            generating
-              ? api.generateReport(backendId, regen ? { regenerate: true } : undefined).catch((err) => { console.error('report generation failed:', err); return null; })
-              : Promise.resolve(null),
+            ensureFreshReport(project, { extraLikes: action === 'like' ? 1 : 0, allowFirst: true }),
           ])
-          const finalReport = reportData?.final_report || existingReport
-          const axisScores = reportData?.axis_scores || (!reportData ? fetched?.axis_scores : null) || null
-          setProjects(prev => prev.map(p => p.id === activeProjectId ? {
-            ...p,
-            predictedLikes: resultData.predicted_like_images || [],
-            ...(finalReport ? { finalReport } : {}),
-            ...(axisScores ? { axisScores } : {}),
-            ...(!p.reportImage && existingImage ? { reportImage: existingImage, reportImageMime: fetched?.report_image_mime || p.reportImageMime } : {}),
-            likesSinceResume: 0,
-          } : p))
-          // The server renames the board to follow the new persona name (first
-          // generation of a discovery_ draft, or regeneration of a never-renamed
-          // board). Refresh the local name from the server; non-blocking, and a
-          // failed fetch leaves the local name untouched.
-          if (reportData && backendId) {
-            api.getProject(backendId).then(fresh => {
-              const name = pickServerBoardName(fresh)
-              if (!name) return
-              setProjects(prev => prev.map(p => (p.id === activeProjectId && p.projectName !== name)
-                ? { ...p, projectName: name } : p))
-            }).catch(() => {})
-          }
-          // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
-          // a temp project, but leave the sheet closed — the ResultsPage CTA
-          // opens it. project.isTemp was set in handleStartTaste (snapshot above).
-          if (finalReport && backendId && project?.isTemp) {
-            setSaveModalProject({
-              backendId,
-              finalReport,
-              localId: activeProjectId,
-            })
-          }
+          setProjects(prev => prev.map(p => p.id === activeProjectId
+            ? { ...p, predictedLikes: resultData.predicted_like_images || [] } : p))
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
@@ -963,6 +986,7 @@ export default function App() {
     // Purge ALL archithon_chat_* keys so stale chat doesn't surface on a shared device.
     purgeChatCache()
     reportImageJobs.reset()
+    reportJobs.reset()
     sessionStorage.removeItem('archithon_user')
     sessionStorage.removeItem(ONBOARDING_FLAG_KEY)
     // Clear Discovery session so a re-login starts a brand-new collection
