@@ -4,29 +4,13 @@ Dry-run by default; pass --apply to write. Refuses to run against the
 production DB host unless --allow-prod. Output: counts + profile ids only
 (never emails / names).
 """
-import unicodedata
-
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.accounts.models import UserProfile
-from apps.accounts.serializers import _HANDLE_RE, _HANDLE_RESERVED
-from apps.accounts.views.auth import _suggest_handle
+from apps.accounts.identity import ensure_unified_identity
 
 _PROD_HOST_MARKER = 'ep-broad-hat'
-
-
-def _handle_is_valid(handle):
-    """Format check only (uniqueness is guaranteed by the DB constraint)."""
-    if not handle:
-        return False
-    if unicodedata.normalize('NFC', handle) != handle:
-        return False
-    if not _HANDLE_RE.fullmatch(handle):
-        return False
-    if len(handle) < 2 or len(handle) > 20:
-        return False
-    return handle.lower() not in _HANDLE_RESERVED
 
 
 class Command(BaseCommand):
@@ -56,15 +40,13 @@ class Command(BaseCommand):
         apply = options['apply']
         assigned, synced = [], []
         for profile in UserProfile.objects.all().order_by('pk').iterator():
-            fields = []
-            if not _handle_is_valid(profile.handle):
-                # Seed from the old handle, else the display name.
-                profile.handle = _suggest_handle(profile.handle or profile.display_name)
-                fields.append('handle')
+            # Seed from the old handle, else the display name.
+            fields = ensure_unified_identity(
+                profile, profile.handle or profile.display_name, replace_invalid=True,
+            )
+            if 'handle' in fields:
                 assigned.append(profile.pk)
-            if profile.display_name != profile.handle:
-                profile.display_name = profile.handle
-                fields.append('display_name')
+            if 'display_name' in fields:
                 synced.append(profile.pk)
             if fields and apply:
                 profile.save(update_fields=fields)

@@ -1,6 +1,5 @@
 import logging
 import os
-import secrets
 import unicodedata
 import uuid as _uuid
 import requests
@@ -22,9 +21,10 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from ..authentication import invalidate_user_cache
+from ..identity import ensure_unified_identity, suggest_handle as _suggest_handle
 from ..models import UserProfile, SocialAccount
 from ..serializers import (
-    UserSerializer, validate_handle_value, _HANDLE_RE, _HANDLE_RESERVED,
+    UserSerializer, validate_handle_value,
 )
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from ..throttling import (
@@ -152,20 +152,6 @@ def _exchange_google_code(code):
 
 class DevLoginThrottle(AnonRateThrottle):
     rate = '5/minute'
-
-
-def _suggest_handle(nickname):
-    """Build a valid, unused unified ID (handle) from a provider nickname."""
-    base = unicodedata.normalize('NFC', nickname or '')
-    base = ''.join(c for c in base if _HANDLE_RE.fullmatch(c))[:16]
-    if len(base) < 2 or base.lower() in _HANDLE_RESERVED:
-        base = 'user'
-    candidate = base
-    for _ in range(20):
-        if not UserProfile.objects.filter(handle__iexact=candidate).exists():
-            return candidate
-        candidate = f'{base}{secrets.randbelow(10 ** (2 + secrets.randbelow(3)))}'
-    return f'{base[:10]}{secrets.randbelow(10 ** 8):08d}'
 
 
 def _create_social_user(provider, provider_id, email, display_name, avatar_url,
@@ -461,11 +447,10 @@ class GuestPromoteView(APIView):
                 guest_profile.is_guest = False
                 # Unified ID: keep display_name == handle; assign a handle only
                 # when the guest lacks one (never rename an existing handle).
-                if not guest_profile.handle:
-                    guest_profile.handle = _suggest_handle(
-                        guest_profile.display_name or google_data['display_name']
-                    )
-                guest_profile.display_name = guest_profile.handle
+                ensure_unified_identity(
+                    guest_profile,
+                    guest_profile.display_name or google_data['display_name'],
+                )
                 guest_profile.avatar_url = google_data.get('avatar_url', '') or guest_profile.avatar_url
                 guest_profile.save(
                     update_fields=['is_guest', 'handle', 'display_name', 'avatar_url']
@@ -798,10 +783,7 @@ class DevLoginView(APIView):
         )
         # Unified ID: display_name == handle. Assign a handle only when missing
         # (never rename an existing one), then keep display_name in sync.
-        if created or not profile.handle:
-            profile.handle = _suggest_handle('TestUser')
-        if profile.display_name != profile.handle:
-            profile.display_name = profile.handle
+        ensure_unified_identity(profile, 'TestUser')
         profile.save(update_fields=['handle', 'display_name'])
         return Response(_make_token_response(profile), status=status.HTTP_200_OK)
 

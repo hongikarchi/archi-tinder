@@ -138,6 +138,31 @@ _HANDLE_RE = re.compile(
 )
 
 
+def _handle_format_error(value):
+    """Return the first format violation message for an NFC-normalized value, else None."""
+    # fullmatch required: re.match with $ accepts a trailing newline, which
+    # would allow CRLF injection into URLs/cards.
+    if not _HANDLE_RE.fullmatch(value):
+        return (
+            'ID may only contain Korean characters, letters, digits, or underscore. '
+            'Spaces are not allowed.'
+        )
+    if len(value) < 2 or len(value) > 20:
+        return 'ID must be 2-20 characters.'
+    # Case-insensitive: Hangul has no case, but ASCII reserved words are blocked
+    # regardless of case.
+    if value.lower() in _HANDLE_RESERVED:
+        return f'"{value}" is a reserved ID.'
+    return None
+
+
+def handle_format_ok(value):
+    """Pure format check (no DB): already-NFC, charset, 2-20 length, not reserved."""
+    if not value or unicodedata.normalize('NFC', value) != value:
+        return False
+    return _handle_format_error(value) is None
+
+
 def validate_handle_value(value, instance=None):
     """Shared handle/unified-ID validation (reused by register + serializer).
 
@@ -161,27 +186,9 @@ def validate_handle_value(value, instance=None):
     # from being treated as different IDs (e.g. composed vs. decomposed Jamo).
     value = unicodedata.normalize('NFC', value)
 
-    # Format regex — no whitespace, only allowed character classes.
-    # fullmatch required: re.match with $ accepts a trailing newline, which
-    # would allow CRLF injection into URLs/cards.
-    if not _HANDLE_RE.fullmatch(value):
-        raise serializers.ValidationError(
-            'ID may only contain Korean characters, letters, digits, or underscore. '
-            'Spaces are not allowed.'
-        )
-
-    # Length check after NFC normalization.
-    if len(value) < 2 or len(value) > 20:
-        raise serializers.ValidationError(
-            'ID must be 2-20 characters.'
-        )
-
-    # Reserved word check (case-insensitive; Hangul has no case, but ASCII reserved
-    # words should still be blocked regardless of case).
-    if value.lower() in _HANDLE_RESERVED:
-        raise serializers.ValidationError(
-            f'"{value}" is a reserved ID.'
-        )
+    error = _handle_format_error(value)
+    if error:
+        raise serializers.ValidationError(error)
 
     # Case-insensitive uniqueness, excluding the current user so re-saving
     # the same handle doesn't conflict against themselves.

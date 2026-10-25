@@ -188,3 +188,12 @@ def test_resync_identity_refuses_prod_host(settings):
     }
     with pytest.raises(CommandError):
         call_command('resync_identity', '--apply', stdout=StringIO())
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('seed', ['', None, 'a', 'user', 'admin'])
+def test_suggest_handle_fallback_is_not_reserved(seed):
+    from apps.accounts.identity import suggest_handle
+    from apps.accounts.serializers import handle_format_ok
+    handle = suggest_handle(seed)
+    assert handle_format_ok(handle)
