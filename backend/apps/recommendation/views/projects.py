@@ -1,7 +1,7 @@
 import logging
 
 from django.conf import settings
-from django.db import transaction
+from django.db import DatabaseError, connections, transaction
 from django.db.models import IntegerField, OuterRef, Subquery
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
@@ -47,6 +47,29 @@ def _entry_id(item):
     if isinstance(item, str):
         return item
     return None
+
+
+def _count_renderable(building_ids):
+    """Number of ids that exist and are publishable in the buildings DB.
+
+    Liked ids that are missing / unpublishable never render, so they must not
+    keep the last-liked guard open. If the buildings DB is unreachable, fall
+    back to the raw id count (fail open: do not block the user's edit).
+    """
+    ids = list(dict.fromkeys(building_ids))
+    if not ids:
+        return 0
+    try:
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT count(*) FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true AND canonical_bld_id = ANY(%s)',
+                [ids],
+            )
+            return cur.fetchone()[0]
+    except DatabaseError:
+        logger.warning('last_liked guard: buildings lookup failed; using raw count', exc_info=True)
+        return len(ids)
 
 
 # ── Projects ──────────────────────────────────────────────────────────────────
@@ -231,7 +254,11 @@ class ProjectDetailView(APIView):
             # is generated from liked_ids. Reject before any mutation/eviction.
             if remove_ids is not None and project.liked_ids:
                 remove_set_guard = set(remove_ids)
-                if not any(_entry_id(item) not in remove_set_guard for item in project.liked_ids):
+                remaining = [
+                    _entry_id(item) for item in project.liked_ids
+                    if _entry_id(item) is not None and _entry_id(item) not in remove_set_guard
+                ]
+                if not _count_renderable(remaining):
                     return Response(
                         {'detail': 'last_liked_building'},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -344,7 +371,6 @@ class ProjectRecommendationsView(APIView):
         session = (
             AnalysisSession.objects
             .filter(project_id=pk)
-            .select_related('project')
             .order_by('-created_at')
             .first()
         )

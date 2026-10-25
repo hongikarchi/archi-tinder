@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useImageTelemetry } from '../../hooks/useImageTelemetry.js'
 import { getProjectReportImage } from '../../api/projects.js'
 import { useTranslation } from '../../i18n/index.js'
+import { safeImageMime } from '../../utils/imageMime.js'
 import s from './BoardCard.module.css'
 
 /**
@@ -47,7 +48,7 @@ export default function BoardCard({
       if (cancelled) return
       // null = no image / not visible to this caller -> keep the fallback.
       if (data?.image_data) {
-        setPersonaImage(`data:${data.mime_type || 'image/png'};base64,${data.image_data}`)
+        setPersonaImage(`data:${safeImageMime(data.mime_type)};base64,${data.image_data}`)
       }
     })
     return () => { cancelled = true }

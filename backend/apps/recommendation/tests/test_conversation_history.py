@@ -23,7 +23,7 @@ from apps.recommendation.serializers import (
 
 @pytest.mark.django_db
 class TestConversationHistoryPersistence:
-    """(a) owner PATCH + GET round-trip."""
+    """(a) owner PATCH persists; PATCH response omits it; detail GET returns it."""
 
     def test_owner_patch_persists_and_returns_on_detail(self, auth_client, user_profile):
         p = Project.objects.create(user=user_profile, name='LLMBoard')
@@ -42,10 +42,9 @@ class TestConversationHistoryPersistence:
             format='json',
         )
         assert resp.status_code == 200, resp.json()
-        # Returned in PATCH response
-        data = resp.json()
-        assert 'conversation_history' in data
-        assert data['conversation_history'] == payload
+        # PATCH returns ProjectPatchResponseSerializer, which intentionally
+        # excludes conversation_history (large; the client already has it).
+        assert 'conversation_history' not in resp.json()
 
         # Persisted to DB
         p.refresh_from_db()

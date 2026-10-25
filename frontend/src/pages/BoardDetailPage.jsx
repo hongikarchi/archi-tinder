@@ -58,6 +58,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const [visibilityOverride, setVisibilityOverride] = useState(null)
   const lastMsgTimerRef = useRef(null)
   const aliveRef = useRef(true)
+  const visPendingRef = useRef(false)
   useEffect(() => {
     aliveRef.current = true
     return () => { aliveRef.current = false; clearTimeout(lastMsgTimerRef.current) }
@@ -229,7 +230,13 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     }
   }
 
+  // Only liked ids that are actually rendered count toward the "keep one liked
+  // building" rule: ids the page cannot show (non-publishable / missing) can never
+  // be selected, so counting them would let the owner delete every visible one.
+  const renderedIdSet = new Set((localBuildings ?? board?.buildings ?? [])
+    .map(b => String(b.image_id || b.canonical_bld_id || b.building_id || b.id)))
   const likedIdList = (board?.liked_ids || []).map(item => String(item?.id ?? item))
+    .filter(id => renderedIdSet.has(id))
 
   function flashLastMessage() {
     setLastMsgOn(true)
@@ -252,16 +259,25 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   }
 
   // Owner chips on the cover: optimistic visibility toggle (revert on failure).
+  // One PATCH at a time (taps during a pending request are ignored) so requests
+  // cannot commit out of order; on success the server's value wins.
   async function handleToggleVisibility(next) {
+    if (visPendingRef.current) return
+    visPendingRef.current = true
     const prev = visibility
     setVisibilityOverride(next)
     try {
-      await updateProject(boardId, { visibility: next })
+      const res = await updateProject(boardId, { visibility: next })
+      if (aliveRef.current && (res?.visibility === 'public' || res?.visibility === 'private')) {
+        setVisibilityOverride(res.visibility)
+      }
     } catch {
       if (aliveRef.current) {
         setVisibilityOverride(prev ?? null)
         regen.showToast(t('board.visibilityFailed'))
       }
+    } finally {
+      visPendingRef.current = false
     }
   }
 
@@ -389,11 +405,11 @@ export default function BoardDetailPage({ onResume, onLogout }) {
             <>
               <CoverIconButton
                 onClick={editBtnConfirm ? () => saveEdits({ deleting: false }) : isEditMode ? exitEditMode : enterEditMode}
-                disabled={busy || (!isEditMode && (!board || buildings.length === 0))}
+                disabled={busy || (!isEditMode && !board)}
                 ariaLabel={editBtnConfirm ? t('board.save') : isEditMode ? t('board.cancel') : t('board.editBoard')}
                 ariaPressed={isEditMode}
                 confirm={editBtnConfirm}
-                dimmed={!!busy || (!isEditMode && (!board || buildings.length === 0))}
+                dimmed={!!busy || (!isEditMode && !board)}
               >
                 {editBtnConfirm ? (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

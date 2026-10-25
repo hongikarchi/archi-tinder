@@ -33,6 +33,10 @@ test('shouldRegenerateAfterSession: only an existing report with new likes / ser
   assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 0, reportStale: true }), true)
   assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 1, reportStale: false }), true)
   assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 2, reportStale: null }), true)
+  // signed report: the server flag beats the local counter; legacy (unsigned) keeps the counter
+  assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 5, reportStale: false, reportSigned: true }), false)
+  assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 5, reportStale: false, reportSigned: false }), true)
+  assert.equal(shouldRegenerateAfterSession({ hadReport: true, newLikes: 0, reportStale: true, reportSigned: true }), true)
 })
 
 test('shouldFetchBoardBeforeReport: only a fresh temp board skips the fetch', () => {

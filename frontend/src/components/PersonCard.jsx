@@ -34,6 +34,7 @@ import { useNavigate } from 'react-router-dom'
 import PentagonChart from './PentagonChart.jsx'
 import { getPersonReportImage } from '../api/people.js'
 import { useTranslation } from '../i18n/index.js'
+import { safeImageMime } from '../utils/imageMime.js'
 import {
   photoCardShellStyle,
   photoCardImageStyle,
@@ -65,7 +66,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
     getPersonReportImage(person.user_id).then(data => {
       if (cancelled) return
       if (data?.image_data) {
-        setImage(`data:${data.mime_type || 'image/png'};base64,${data.image_data}`)
+        setImage(`data:${safeImageMime(data.mime_type)};base64,${data.image_data}`)
       } else {
         setImageFailed(true)
       }

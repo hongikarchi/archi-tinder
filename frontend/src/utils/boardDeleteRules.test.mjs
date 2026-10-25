@@ -28,6 +28,17 @@ describe('canSelectForDelete', () => {
   })
 })
 
+describe('canSelectForDelete with hidden liked ids', () => {
+  test('caller filters liked ids to rendered ones: last visible liked is refused', () => {
+    const all = ['a', 'b', 'x']          // x = non-publishable, not rendered
+    const rendered = new Set(['a', 'b'])
+    const likedIds = all.filter(id => rendered.has(id))
+    assert.equal(canSelectForDelete({ likedIds, selectedIds: ['a'], candidateId: 'b' }), false)
+    // unfiltered list would wrongly allow it
+    assert.equal(canSelectForDelete({ likedIds: all, selectedIds: ['a'], candidateId: 'b' }), true)
+  })
+})
+
 describe('isLastLikedError', () => {
   test('detects the 400 body', () => {
     assert.equal(isLastLikedError({ status: 400, data: { detail: 'last_liked_building' } }), true)
