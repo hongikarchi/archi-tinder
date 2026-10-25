@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-flow_doc.py -- build the "ArchiTinder 전체 흐름" QA page from a flow_capture run.
+flow_doc.py -- build the "[Archibe]-전체흐름" QA page from a flow_capture run.
 
 Input:
   <run dir>/manifest.json          written by flow_capture.py
@@ -432,7 +432,7 @@ def build(run_dir):
             f'사진 아래 ‘디버그 화면’을 누르면 개발자용 표시(API 시간, 미리 불러오기 시간)가 켜진 같은 화면을 볼 수 있어요. '
             f'코드 버전 {esc(run.get("git_sha", ""))} ({esc(run.get("branch", ""))}).</p>')
 
-    intro = (f'<div class="intro"><h1>ArchiTinder 전체 흐름</h1>'
+    intro = (f'<div class="intro"><h1>[Archibe]-전체흐름</h1>'
              f'<p>휴대폰 웹에서 로그인부터 취향 찾기, 스와이프, 결과, 탐색, 검색, 소셜, 설정까지 '
              f'실제로 눌러 보며 찍은 기록이에요. 사진을 누르면 크게 볼 수 있어요.</p>'
              f'<div class="facts">{"".join(facts)}</div></div>')
