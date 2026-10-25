@@ -29,3 +29,24 @@ test('a body with final_report is never treated as in progress; errors propagate
   assert.equal(await postUntilReady(async () => b), b)
   await assert.rejects(postUntilReady(async () => { throw Object.assign(new Error('x'), { status: 429 }) }), /x/)
 })
+
+test('202 with based_on passes { basedOn } to the next post(); first call gets undefined', async () => {
+  const seen = []
+  const rs = [{ status: 'in_progress', based_on: 'g1' }, OK]
+  await postUntilReady(async ctx => { seen.push(ctx); return rs.shift() }, { wait: async () => {} })
+  assert.deepEqual(seen, [undefined, { basedOn: 'g1' }])
+})
+
+test('202 without based_on key leaves ctx undefined', async () => {
+  const seen = []
+  const rs = [{ status: 'in_progress' }, OK]
+  await postUntilReady(async ctx => { seen.push(ctx); return rs.shift() }, { wait: async () => {} })
+  assert.deepEqual(seen, [undefined, undefined])
+})
+
+test('202 with based_on null passes { basedOn: null }', async () => {
+  const seen = []
+  const rs = [{ status: 'in_progress', based_on: null }, OK]
+  await postUntilReady(async ctx => { seen.push(ctx); return rs.shift() }, { wait: async () => {} })
+  assert.deepEqual(seen, [undefined, { basedOn: null }])
+})

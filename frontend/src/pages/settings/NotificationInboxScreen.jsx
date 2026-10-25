@@ -194,9 +194,9 @@ export default function NotificationInboxScreen({ onLogout }) {
                   onClick={() => handleRowClick(n)}
                   className={`${styles.row} ${isUnread ? styles.rowUnread : ''}`}
                 >
-                  {n.actor
-                    ? <Avatar src={n.actor.avatar_url} name={userHandle(n.actor)} size={40} />
-                    : <SecurityBadge size={40} />}
+                  {n.category === 'security'
+                    ? <SecurityBadge size={40} />
+                    : <Avatar src={n.actor?.avatar_url} name={n.actor ? userHandle(n.actor) : ''} size={40} />}
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                       {isUnread && (
