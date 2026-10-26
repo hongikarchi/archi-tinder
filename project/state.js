@@ -23,11 +23,32 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-25 10:58 KST',
-    head: '8635dee',
-    branch: 'feature/claude-flow-qa-2',
+    updatedAt: '2026-10-26 18:57 KST',
+    head: 'ecc0577',
+    branch: 'feature/claude-social-board-like',
   },
   done: [
+    {
+      id: 'PR #462',
+      title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
+      completedAt: '2026-10-25',
+      prs: [462],
+      note: '',
+    },
+    {
+      id: 'PR #461',
+      title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
+      completedAt: '2026-10-25',
+      prs: [461],
+      note: '',
+    },
+    {
+      id: 'PR #460',
+      title: 'fix(FRONT-UX-16): 흐름 검수 1차 — 한국어 문구·취향 시작 겹침·이름 ID 통일',
+      completedAt: '2026-10-25',
+      prs: [460],
+      note: '',
+    },
     {
       id: 'PR #450',
       title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
@@ -63,58 +84,13 @@ window.PROJECT_STATE = {
       prs: [439],
       note: '',
     },
-    {
-      id: 'PR #437',
-      title: 'feat(feedback): taste-start card report + query-recognition report',
-      completedAt: '2026-10-17',
-      prs: [437],
-      note: '',
-    },
-    {
-      id: 'PR #431',
-      title: 'feat(taste-start): Taste start redesign — JEV tags → top-3 cards → taste_v2 swipe',
-      completedAt: '2026-10-17',
-      prs: [431],
-      note: '',
-    },
-    {
-      id: 'PR #425',
-      title: 'fix(contests): guest verify gate on interest + control-char URL reject',
-      completedAt: '2026-10-11',
-      prs: [425],
-      note: '',
-    },
   ],
   now: [
     {
-      id: 'FULL-AUTH-4',
-      title: '이름·ID 저장·표시 통일',
-      note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
-      issue: 455,
-    },
-    {
-      id: 'FRONT-UX-17',
-      title: '취향 시작 화면 겹침 정리',
-      note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
-      issue: 454,
-    },
-    {
-      id: 'FRONT-UX-16',
-      title: '한국어 화면 영어·문구 정리',
-      note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
-      issue: 453,
-    },
-    {
-      id: 'INFRA-QA-1',
-      title: '전체 흐름 캡처 검수 문서',
-      note: 'Flow QA doc: Playwright capture of every screen (iPhone 13 viewport, dev-login, localhost 5174/8001) + debug overlay shots + per-step API timing -> HTML doc published as artifact, republished each fix round.',
-      issue: 452,
-    },
-    {
-      id: 'FULL-REPORT-UI-1',
-      title: '페르소나 리포트 UI 개편',
-      note: '스와이프 종료 → 결과 카드 3장 → 저장 → 리포트 페이지로 이어지는 페르소나 리포트 경험을 개편한다. 확정된 시연(진입 5개 × 상황)과 설계는 `docs/decisions/2026-10-22-persona-report-redesign.md`, 실행 계획은 `.claude/plans/persona-report-redesign.md`.',
-      issue: 445,
+      id: 'FULL-BOOKMARK-1',
+      title: '북마크 잔여 코드 정리',
+      note: '북마크 기능을 UI에서 제거했으나 코드가 남아 있음: BoardDetailPage(bookmarkChanged 신호, saved_ids 시드), BuildingTile, BuildingDetailPage, ArchitectProfilePage, SaveToBoardModal, SurpriseBoardModal, appHelpers, api/projects.bookmarkBuilding, App.jsx. 서버 saved_ids 필드는 다른 곳에서 쓰일 수 있어 사용처 확인 후 제거. 사용자가…',
+      issue: 448,
     },
   ],
   next: {
@@ -468,6 +444,18 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-TABBAR-MODAL-1',
+        title: 'TabBar unreachable while a modal is open (design decision)',
+        note: 'While a modal or overlay is open (e.g. `WorkDetailModal`, `SaveBoardModal`), the bottom TabBar',
+        issue: 464,
+      },
+      {
+        id: 'DB-BOOKMARK-1',
+        title: 'drop dead saved_ids column + bookmark telemetry (after code removal ships)',
+        note: 'Drop the dead bookmark storage from the database after the code stops using it.',
+        issue: 463,
+      },
+      {
         id: 'FRONT-UX-19',
         title: '상단 버튼 바탕 띠 다른 화면 적용',
         note: 'Follow-up of FRONT-UX-17 (#454). PageTopControls got opt-in \'band\' prop (only TasteStartPage uses it). Candidates where content scrolls under the transparent fixed top controls: UserProfilePage, BoardDetailPage, Settings screens, PeopleDiscoveryPage, BuildingDetailPage, compet…',
@@ -621,6 +609,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 462,
+      title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
+      mergedAt: '2026-10-25T03:01:42Z',
+      mergedAtKST: '2026-10-25 12:01 KST',
+      sha: 'ecc0577',
+    },
+    {
+      number: 461,
+      title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
+      mergedAt: '2026-10-25T03:01:37Z',
+      mergedAtKST: '2026-10-25 12:01 KST',
+      sha: '774616e',
+    },
+    {
+      number: 460,
+      title: 'fix(FRONT-UX-16): 흐름 검수 1차 — 한국어 문구·취향 시작 겹침·이름 ID 통일',
+      mergedAt: '2026-10-25T02:32:30Z',
+      mergedAtKST: '2026-10-25 11:32 KST',
+      sha: '9d46fb2',
+    },
+    {
       number: 450,
       title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
       mergedAt: '2026-10-25T00:47:02Z',
@@ -654,27 +663,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-17T00:00:29Z',
       mergedAtKST: '2026-10-17 09:00 KST',
       sha: '9894cc1',
-    },
-    {
-      number: 437,
-      title: 'feat(feedback): taste-start card report + query-recognition report',
-      mergedAt: '2026-10-17T00:07:50Z',
-      mergedAtKST: '2026-10-17 09:07 KST',
-      sha: 'a37ee71',
-    },
-    {
-      number: 431,
-      title: 'feat(taste-start): Taste start redesign — JEV tags → top-3 cards → taste_v2 swipe',
-      mergedAt: '2026-10-17T00:00:40Z',
-      mergedAtKST: '2026-10-17 09:00 KST',
-      sha: 'f420b28',
-    },
-    {
-      number: 425,
-      title: 'fix(contests): guest verify gate on interest + control-char URL reject',
-      mergedAt: '2026-10-11T00:46:32Z',
-      mergedAtKST: '2026-10-11 09:46 KST',
-      sha: 'a68131c',
     },
   ],
   agents: [
@@ -1109,6 +1097,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/accounts/tests/test_guest_handle_retry.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_guest_role_affiliation.py',
       role: '게스트 역할/소속 테스트',
     },
@@ -1119,10 +1111,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/tests/test_language.py',
       role: '언어 설정 필드 테스트',
-    },
-    {
-      path: 'backend/apps/accounts/tests/test_liked_buildings.py',
-      role: '좋아요 건물 테스트',
     },
     {
       path: 'backend/apps/accounts/tests/test_merge_cap.py',
@@ -1849,6 +1837,10 @@ window.PROJECT_STATE = {
       role: 'Gemini 클라이언트·재시도 래퍼',
     },
     {
+      path: 'backend/apps/recommendation/services/_pattern_text.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/services/_report_prompts.py',
       role: '리포트 문장 규칙 프롬프트',
     },
@@ -2002,6 +1994,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/tests/test_report_image_parallel.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_owner_only.py',
       role: '',
     },
     {
@@ -2197,6 +2193,10 @@ window.PROJECT_STATE = {
       role: 'social 테스트 픽스처',
     },
     {
+      path: 'backend/apps/social/tests/test_board_feed.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/social/tests/test_reaction.py',
       role: '프로젝트 리액션 테스트',
     },
@@ -2211,6 +2211,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/views.py',
       role: '팔로우/리액션 뷰',
+    },
+    {
+      path: 'backend/apps/social/views_liked.py',
+      role: '',
     },
     {
       path: 'backend/apps/social/views_people.py',
@@ -2351,10 +2355,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_board_detail_perf.py',
       role: '보드 상세 성능 테스트',
-    },
-    {
-      path: 'backend/tests/test_bookmark.py',
-      role: '북마크 테스트',
     },
     {
       path: 'backend/tests/test_cache_backend.py',
@@ -2637,6 +2637,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/decisions/2026-10-25-pattern-paragraph-always.md',
+      role: '',
+    },
+    {
       path: 'docs/decisions/architect-unification.md',
       role: 'Office/Architect 통합 결정 기록 (Phase 0 완료, 1-4 미착수)',
     },
@@ -2829,10 +2833,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/api/liked.js',
-      role: '좋아요 건물 API 클라이언트',
-    },
-    {
       path: 'frontend/src/api/messaging.js',
       role: '',
     },
@@ -2902,6 +2902,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/Avatar.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/BoardSocialCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/BoardSocialCard.module.css',
       role: '',
     },
     {
@@ -3025,14 +3033,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/PersonCard.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/PersonCard.module.css',
-      role: '',
-    },
-    {
       path: 'frontend/src/components/PersonaReportPage.jsx',
       role: '',
     },
@@ -3081,10 +3081,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/SaveToBoardModal.jsx',
-      role: '보드 저장 모달',
-    },
-    {
       path: 'frontend/src/components/SectionTitle.jsx',
       role: '',
     },
@@ -3115,10 +3111,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/StudioCard.module.css',
       role: '',
-    },
-    {
-      path: 'frontend/src/components/SurpriseBoardModal.jsx',
-      role: '큐레이션 보드 제안 모달',
     },
     {
       path: 'frontend/src/components/SwipeCard.jsx',
@@ -3373,6 +3365,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/hooks/useNearViewport.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useNow.js',
       role: '',
     },
@@ -3507,10 +3503,6 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/KakaoCallbackPage.jsx',
       role: '',
-    },
-    {
-      path: 'frontend/src/pages/LikedProjectsPage.jsx',
-      role: '좋아요 건물 그리드 페이지',
     },
     {
       path: 'frontend/src/pages/LoginPage.jsx',
@@ -3885,6 +3877,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/socialFeed.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/socialFeed.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/tasteStart.js',
       role: '',
     },
@@ -3898,6 +3898,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/teamFit.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/throttleRetry.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/throttleRetry.test.mjs',
       role: '',
     },
     {
