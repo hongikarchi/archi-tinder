@@ -51,13 +51,15 @@ class TestProjectRecommendations:
         assert resp.json() == {'predicted_like_images': _CARDS}
         assert 'latest_session_id' not in resp.json()
 
-    def test_non_owner_public_board_200(self, other_auth_client, user_profile):
+    def test_non_owner_public_board_403(self, other_auth_client, user_profile):
+        # Persona report content is owner-only, even on a public board.
         project = _project(user_profile, visibility='public')
         _session(project, user_profile)
-        with patch(_BUILD, return_value=(_CARDS, [], None, None)):
+        with patch(_BUILD) as build:
             resp = other_auth_client.get(_url(project.project_id))
-        assert resp.status_code == 200
-        assert resp.json()['predicted_like_images'] == _CARDS
+        assert resp.status_code == 403
+        assert resp.json() == {'detail': 'Forbidden'}
+        build.assert_not_called()
 
     def test_non_owner_private_board_403(self, other_auth_client, user_profile):
         project = _project(user_profile, visibility='private')
@@ -94,14 +96,25 @@ class TestProjectRecommendations:
         assert resp.json() == {'predicted_like_images': []}
         build.assert_not_called()
 
-    def test_cache_hit_does_not_rerun_engine(self, auth_client, other_auth_client, user_profile):
+    def test_cache_hit_does_not_rerun_engine(self, auth_client, user_profile):
         project = _project(user_profile, visibility='public')
         _session(project, user_profile)
         with patch(_BUILD, return_value=(_CARDS, [], None, None)) as build:
             first = auth_client.get(_url(project.project_id))
-            second = other_auth_client.get(_url(project.project_id))
+            second = auth_client.get(_url(project.project_id))
         assert first.json() == second.json() == {'predicted_like_images': _CARDS}
         assert build.call_count == 1
+
+    def test_cached_owner_payload_not_served_to_non_owner(
+        self, auth_client, other_auth_client, user_profile,
+    ):
+        project = _project(user_profile, visibility='public')
+        _session(project, user_profile)
+        with patch(_BUILD, return_value=(_CARDS, [], None, None)):
+            assert auth_client.get(_url(project.project_id)).status_code == 200  # warms cache
+            resp = other_auth_client.get(_url(project.project_id))
+        assert resp.status_code == 403
+        assert resp.json() == {'detail': 'Forbidden'}
 
     def test_evict_project_detail_invalidates_cache(self, auth_client, user_profile):
         from apps.recommendation.caches import evict_project_detail

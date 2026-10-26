@@ -95,6 +95,14 @@ export default function UserProfilePage({ onLogout }) {
   const [likedError, setLikedError] = useState(false)
   const likedSentinelRef = useRef(null)
   const likedReqRef = useRef(0)
+  const studiosReqRef = useRef(0)
+  const worksReqRef = useRef(0)
+  // Invalidate every in-flight lazy-tab fetch on unmount.
+  useEffect(() => () => {
+    likedReqRef.current++
+    studiosReqRef.current++
+    worksReqRef.current++
+  }, [])
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
   const [studiosLoading, setStudiosLoading] = useState(false)
   const [buildingsMap, setBuildingsMap] = useState({}) // architect_id → buildings[]
@@ -140,16 +148,19 @@ export default function UserProfilePage({ onLogout }) {
   // Fetch architect profiles for buildingsMap whenever savedStudios changes
   useEffect(() => {
     if (!savedStudios?.length) return
+    const req = studiosReqRef.current
     savedStudios.forEach(office => {
       if (buildingsMap[office.architect_id] !== undefined) return
       getArchitectProfile(office.architect_id)
         .then(profile => {
+          if (req !== studiosReqRef.current) return
           setBuildingsMap(prev => ({
             ...prev,
             [office.architect_id]: profile?.buildings || [],
           }))
         })
         .catch(() => {
+          if (req !== studiosReqRef.current) return
           setBuildingsMap(prev => ({ ...prev, [office.architect_id]: [] }))
         })
     })
@@ -169,14 +180,17 @@ export default function UserProfilePage({ onLogout }) {
   const handleStudiosTab = async () => {
     setActiveTab('studios')
     if (savedStudios !== null) return  // already loaded
+    const req = ++studiosReqRef.current
     setStudiosLoading(true)
     try {
       const data = await getUserSavedStudios(effectiveUserId)
+      if (req !== studiosReqRef.current) return
       setSavedStudios(data)
     } catch {
+      if (req !== studiosReqRef.current) return
       setSavedStudios([])
     } finally {
-      setStudiosLoading(false)
+      if (req === studiosReqRef.current) setStudiosLoading(false)
     }
   }
 
@@ -213,14 +227,17 @@ export default function UserProfilePage({ onLogout }) {
   const handleCreatedTab = async () => {
     setActiveTab('created')
     if (works !== null) return  // already loaded
+    const req = ++worksReqRef.current
     setWorksLoading(true)
     try {
       const data = isMe ? await getMyWorks() : await getUserWorks(effectiveUserId)
+      if (req !== worksReqRef.current) return
       setWorks(data?.works || [])
     } catch {
+      if (req !== worksReqRef.current) return
       setWorks([])
     } finally {
-      setWorksLoading(false)
+      if (req === worksReqRef.current) setWorksLoading(false)
     }
   }
 
@@ -264,8 +281,20 @@ export default function UserProfilePage({ onLogout }) {
     setSelectMode(false)
     setSelectedBoards(new Set())
     setConfirmingBulkDelete(false)
+    setBulkPending(false)
+    clearTimeout(bulkConfirmTimerRef.current)
+    setBoardActionError(null)
+    setBoardsLoading(false)
+    // Close the work-detail overlay and drop every lazily loaded tab so a
+    // profileRefresh really starts from a clean default profile.
+    setSelectedWorkId(null)
+    setWorksLoading(false)
+    setStudiosLoading(false)
+    setBuildingsMap({})
     setSavedStudios(null)
     likedReqRef.current++
+    studiosReqRef.current++
+    worksReqRef.current++
     setLikedBoards(null)
     setLikedPage(1)
     setLikedHasMore(false)

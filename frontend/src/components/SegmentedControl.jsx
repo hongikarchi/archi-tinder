@@ -71,6 +71,7 @@ export default function SegmentedControl({
   options,
   value,
   onChange,
+  onReselect,             // optional: fired when the already-active option is pressed
   variant = 'pill',       // 'pill' | 'underline'
   size = 'md',            // 'sm' | 'md' | 'lg'
   as = 'radio',           // 'radio' | 'tabs' | 'nav'
@@ -171,6 +172,7 @@ export default function SegmentedControl({
 
   function handleSelect(opt) {
     if (opt.value !== value) onChange(opt.value)
+    else onReselect?.(opt.value)
   }
 
   function handleKeyDown(e) {

@@ -197,7 +197,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         }))
         if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
         // No regeneration here: the server flags the report stale and the owner's
-        // next open of the report page regenerates it.
+        // next open of the report page regenerates it (the report is owner-only;
+        // non-owners never receive it).
       }
       setIsEditMode(false)
       setSelectedIds(new Set())
@@ -422,17 +423,17 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       ) : (
       <div>
         {/* Action row — owner: [report pill | continue exploring] (no report:
-            continue only); viewer: [report pill | reaction pill]. Owner edit +
+            continue only); viewer: reaction pill only (report is owner-only). Owner edit +
             share live on the cover. */}
         <div className={s.topActions}>
-          {board?.final_report && (
+          {isOwner && board?.final_report && (
             <button
               onClick={() => navigate(`/board/${board.board_id}/report`)}
               className={`${s.pill} ${s.pillPrimary}`}
-              style={isOwner ? {
+              style={{
                 flex: onResume ? '3 1 0' : '1 1 0', minWidth: 0, padding: '0 12px',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              } : undefined}
+              }}
             >
               {t('board.viewReport')}
             </button>
@@ -459,7 +460,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
               aria-label={isReacted ? t('board.loved', { r: reactionCount }) : t('board.loveThis')}
               aria-pressed={isReacted}
               className={`${s.pill} ${s.pillSecondary}${isReacted ? ` ${s.reacted}` : ''}`}
-              style={board?.final_report ? undefined : { marginLeft: 'auto' }}
+              style={{ marginLeft: 'auto' }}
             >
               <svg
                 width="16" height="16" viewBox="0 0 24 24"

@@ -28,7 +28,9 @@ function adaptProjectToBoard(project, buildings) {
 
 // `fetchResult: false` skips the owner-only session-result fetch (the persona
 // report page loads recommendations itself via getProjectRecommendations, which
-// also works for viewers).
+// is owner-only too: the report is owner-only, and the server nulls
+// final_report / analysis_report / axis_scores for non-owners. Only the persona
+// IMAGE stays public).
 export function useBoard(projectId, { fetchResult = true } = {}) {
   const [board, setBoard] = useState(null)
   const [recommended, setRecommended] = useState([])

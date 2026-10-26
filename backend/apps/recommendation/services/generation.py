@@ -282,10 +282,12 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     report['pattern_source'] = pattern_source
     # Backend-computed, not LLM. Not rendered directly by the frontend
     # (BACK-LLM-5 spec: "화면에는 표시하지 않습니다") -- but IS persisted on
-    # project.final_report, which IS served by ProjectDetailView (AllowAny
-    # for public boards) via ProjectSerializer. serializers.py's `disliked_ids`
-    # invariant (never exposed to ANY caller, owner included) therefore
-    # applies here too: a dislike fact's `building_ids` are disliked
+    # project.final_report. The report is OWNER-ONLY: non-owners get
+    # final_report/analysis_report/axis_scores nulled (report_stale False) from
+    # ProjectSerializer, and /recommendations/ is owner-only. The owner still
+    # receives it, and serializers.py's `disliked_ids` invariant (never exposed
+    # to ANY caller, owner included) therefore applies here:
+    # a dislike fact's `building_ids` are disliked
     # canonical_bld_ids, so they must be stripped before attaching. A like
     # fact's `building_ids` are liked ids, already exposed via the
     # `liked_ids` field on the same serializer, so those are kept (useful

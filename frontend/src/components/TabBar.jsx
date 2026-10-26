@@ -199,24 +199,23 @@ export default function TabBar() {
     const tab = tabs.find(t => t.id === tabId)
     if (!tab) return
 
-    // Already on the profile root: re-tap = refresh (UserProfilePage watches
-    // location.state.profileRefresh -> boards tab, scroll top, refetch).
-    if (tab.id === 'profile' && location.pathname === tab.path) {
-      navigate(tab.path, { replace: true, state: { profileRefresh: Date.now() } })
-      return
-    }
-    if (tab.path === location.pathname) return
+    // Profile tab: every press lands on the own profile and refreshes it
+    // (UserProfilePage watches location.state.profileRefresh -> boards tab,
+    // scroll top, refetch), from any screen incl. another user's profile.
+    const profileState = tab.id === 'profile' ? { profileRefresh: Date.now() } : undefined
+    if (tab.id !== 'profile' && tab.path === location.pathname) return
 
     // Leaving a board (or its report) for the profile: replace so Back from the
     // profile does not bounce through the board/report loop.
-    const replace = tab.id === 'profile' && location.pathname.startsWith('/board')
+    const replace = tab.id === 'profile'
+      && (location.pathname.startsWith('/board') || location.pathname === tab.path)
 
     // If the guard is active (Discovery mounted with draft likes >= 1), show the
     // leave-warning modal and defer navigation to the user's choice.
     if (discoveryNavigationGuard.check) {
-      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path, { replace }))
+      discoveryNavigationGuard.check(tab.path, () => navigate(tab.path, { replace, state: profileState }))
     } else {
-      navigate(tab.path, { replace })
+      navigate(tab.path, { replace, state: profileState })
     }
   }
 
@@ -266,6 +265,7 @@ export default function TabBar() {
         options={options}
         value={activeTab}
         onChange={handleSelect}
+        onReselect={tabId => { if (tabId === 'profile') handleSelect(tabId) }}
         style={{ width: '100%', height: '100%' }}
         optionStyle={(opt, isActive) => ({
           height: '100%',

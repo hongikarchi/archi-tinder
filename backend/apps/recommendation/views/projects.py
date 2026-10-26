@@ -183,6 +183,10 @@ class ProjectDetailView(APIView):
     PATCH: owner-only — name + visibility only (ProjectSelfUpdateSerializer).
     DELETE: owner-only — returns 404 for cross-user (not 403) to avoid leaking
             project existence to non-owners.
+
+    Report fields (final_report, analysis_report, axis_scores) are owner-only:
+    non-owners and anonymous callers on a public board receive them as null and
+    report_stale=False. Structural fields and the report image stay public.
     """
     permission_classes = [AllowAny]
 
@@ -339,15 +343,14 @@ class ProjectDetailView(APIView):
 class ProjectRecommendationsView(APIView):
     """GET /api/v1/projects/{project_id}/recommendations/ — FULL-REPORT-UI-1.
 
-    Recommended buildings of a board for EVERYONE who may see the board (owner
-    and non-owner). SessionResultView stays owner-only; this endpoint exposes
-    only the predicted cards, never the session id.
-
-    Visibility mirrors ProjectDetailView.get exactly: owner or
-    visibility == 'public'; otherwise 403 {'detail': 'Forbidden'}; unknown
-    project 404. Response: {'predicted_like_images': [card, ...]} — same cards
-    and order as SessionResultView's predicted images. Empty list when the
-    board has no session / no like vectors. Cached per project (see
+    OWNER-ONLY (the recommendations are part of the persona report; non-owners
+    must not see them). Non-owner (public or private board, or anonymous) ->
+    403 {'detail': 'Forbidden'}; unknown project 404. The access check runs
+    BEFORE the cache lookup, so the (requester-independent) cached payload is
+    only ever served to the owner.
+    Response: {'predicted_like_images': [card, ...]} — same cards and order as
+    SessionResultView's predicted images; never the session id. Empty list when
+    the board has no session / no like vectors. Cached per project (see
     get_project_recommendations_cache_key).
     """
     permission_classes = [IsAuthenticated]
@@ -359,7 +362,7 @@ class ProjectRecommendationsView(APIView):
         profile = _get_profile(request)
         project = get_object_or_404(Project.objects.only('project_id', 'user_id', 'visibility'), project_id=pk)
         is_owner = profile and project.user_id == profile.pk
-        if not is_owner and project.visibility != 'public':
+        if not is_owner:
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         cache_key = get_project_recommendations_cache_key(str(pk))
@@ -436,7 +439,9 @@ class UserProjectsListView(APIView):
             .order_by('-updated_at')
         )
         if not is_owner:
-            qs = qs.filter(visibility='public')
+            # Persona report text is owner-only: don't even load it (the
+            # serializer nulls it regardless).
+            qs = qs.filter(visibility='public').defer('final_report')
         start = (page - 1) * page_size
         # PERF-1 change C: page_size+1 trick eliminates the separate COUNT query.
         chunk_plus_one = list(qs[start:start + page_size + 1])

@@ -240,7 +240,9 @@ function BuildingCard({ card, rank, big, onOpen }) {
 /* ── Body ───────────────────────────────────────────────────────────────── */
 /**
  * Props:
- *   role              'owner' | 'viewer'
+ *   role              'owner' | 'viewer' (the report is owner-only now: the server
+ *                     nulls report data for non-owners and BoardReportPage redirects
+ *                     them away, so 'viewer' is a defensive fallback only)
  *   boardId           string|null  - project UUID (image job + download name)
  *   finalReport       object       - { persona_type, one_liner, description, pattern_paragraph, dominant_* }
  *   axisScores        object|null  - see TasteSpectrum
