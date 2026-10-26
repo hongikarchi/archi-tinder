@@ -136,6 +136,65 @@ class TestFeed:
         # distance is present for every filter
         assert all('distance' in i for i in c.get(FEED).data['results'])
 
+    def test_inspired_opposite_exclude_own_boards(self, me):
+        mu, mp = me
+        _, near = _person('near', vec=(1, 0, 0, 0, 0))
+        _, far = _person('far', vec=(4, 0, 0, 0, 0))
+        _board(mp, 'mine1', 1)
+        _board(mp, 'mine2', 2)
+        n = _board(near, 'n', 3)
+        f = _board(far, 'f', 4)
+        c = _client(mu)
+        assert _ids(c.get(FEED, {'filter': 'inspired'})) == [str(n.pk), str(f.pk)]
+        assert _ids(c.get(FEED, {'filter': 'opposite'})) == [str(f.pk), str(n.pk)]
+        for flt in ('inspired', 'opposite'):
+            assert not any(i['is_me'] for i in c.get(FEED, {'filter': flt}).data['results'])
+
+    def test_no_filter_and_type_code_keep_own_boards(self, me):
+        mu, mp = me
+        _, other = _person('other', vec=(1, 0, 0, 0, 0), type_code='RSDT')
+        mine = _board(mp, 'mine', 1)
+        theirs = _board(other, 'theirs', 2)
+        c = _client(mu)
+        r = c.get(FEED)
+        assert _ids(r) == [str(mine.pk), str(theirs.pk)]
+        assert r.data['results'][0]['is_me'] is True
+        r = c.get(FEED, {'filter': 'clon'})      # my own type
+        assert _ids(r) == [str(mine.pk)] and r.data['results'][0]['is_me'] is True
+        assert _ids(c.get(FEED, {'filter': 'rsdt'})) == [str(theirs.pk)]
+
+    def test_inspired_keeps_other_users_at_distance_zero(self, me):
+        mu, mp = me
+        _, twin = _person('twin', vec=(0, 0, 0, 0, 0))
+        _board(mp, 'mine', 1)
+        t = _board(twin, 'twin-board', 2)
+        r = _client(mu).get(FEED, {'filter': 'inspired'})
+        assert _ids(r) == [str(t.pk)] and r.data['results'][0]['distance'] == 0.0
+
+    @pytest.mark.parametrize('flt', ['inspired', 'opposite'])
+    def test_distance_pagination_with_many_own_boards(self, me, flt):
+        mu, mp = me
+        owners = [_person(f'p{i}', vec=(i + 1, 0, 0, 0, 0))[1] for i in range(3)]
+        for n in range(4):
+            _board(mp, f'mine{n}', n)
+        for n in range(5):
+            _board(owners[n % 3], f'o{n}', n)
+        c = _client(mu)
+        full = _ids(c.get(FEED, {'filter': flt, 'page_size': 30}))
+        assert len(full) == 5
+        seen, cursor = [], None
+        while True:
+            q = {'filter': flt, 'page_size': 2}
+            if cursor:
+                q['cursor'] = cursor
+            r = c.get(FEED, q)
+            assert r.status_code == 200
+            seen += _ids(r)
+            if not r.data['has_more']:
+                break
+            cursor = r.data['next_cursor']
+        assert seen == full
+
     def test_type_code_filter(self, me):
         mu, _ = me
         _, a = _person('a', type_code='RSDT')
@@ -462,7 +521,7 @@ class TestFeedCache:
         b = _board(o, 'secret name', 1)
         _client(mu).get(FEED, {'filter': 'inspired'})
         key = views_people._cache_key(mp.pk, 'inspired', None)
-        assert key.startswith('people_feed:v2:')
+        assert key.startswith('people_feed:v3:')
         entries = cache.get(key)
         assert entries and len(entries) == 1
         sort_key, pid, dist = entries[0]

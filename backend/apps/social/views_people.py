@@ -20,7 +20,10 @@ Candidate pool (every condition is a hard requirement):
     hide-me switch; also what supplies the vector / type_code).
   * owner is not blocked by / blocking the requester (blocked_profile_ids,
     both directions, independent of MESSAGING_ENABLED).
-  * The requester and guests are INCLUDED (FRONT-PEOPLE-FEED-1, 2026-09-03).
+  * The requester's own boards are INCLUDED, except under the 'inspired' and
+    'opposite' filters where they are EXCLUDED (distance 0 to self would pin
+    them first / last). Own boards stay in the no-filter feed and appear in a
+    type-code filter only when the owner's type matches.
 
 Ordering (ties are broken deterministically, project_id last):
   absent / type code : updated_at DESC, project_id
@@ -160,14 +163,19 @@ def _decode_cursor(token, key_len):
 
 
 def _cache_key(profile_pk, filter_param, type_code_filter):
-    return f'people_feed:v2:{profile_pk}:{filter_param or type_code_filter or "-"}'
+    return f'people_feed:v3:{profile_pk}:{filter_param or type_code_filter or "-"}'
 
 
-def _load_sorted_entries(my_vec, filter_param, type_code_filter, blocked_ids):
+def _load_sorted_entries(my_vec, filter_param, type_code_filter, blocked_ids,
+                         requester_pk=None):
     """Fetch up to _CANDIDATE_CAP candidate rows and return them sorted as
     [(sort_key, project_id_str, distance), ...]. This is the expensive part that
     is cached per (requester, filter) for _FEED_CACHE_TTL seconds; display fields
-    are deliberately NOT kept (they are re-read fresh per page)."""
+    are deliberately NOT kept (they are re-read fresh per page).
+
+    For 'inspired' / 'opposite' the requester's OWN boards are excluded here
+    (distance 0 to self would always sort first / last), so the cached list
+    never contains them. No-filter and type-code feeds keep own boards."""
     qs = (
         Project.objects
         .filter(
@@ -180,6 +188,8 @@ def _load_sorted_entries(my_vec, filter_param, type_code_filter, blocked_ids):
     )
     if blocked_ids:
         qs = qs.exclude(user_id__in=blocked_ids)
+    if requester_pk is not None and filter_param in ('inspired', 'opposite'):
+        qs = qs.exclude(user_id=requester_pk)
     if type_code_filter is not None:
         qs = qs.filter(user__personality__type_code=type_code_filter)
 
@@ -302,7 +312,8 @@ class PeopleDiscoveryView(APIView):
         entries = cache.get(cache_key)
         if entries is None:
             entries = _load_sorted_entries(
-                my_vec, filter_param, type_code_filter, blocked_ids)
+                my_vec, filter_param, type_code_filter, blocked_ids,
+                requester_pk=requester_profile.pk)
             cache.set(cache_key, entries, _FEED_CACHE_TTL)
 
         if cursor_key is not None:
