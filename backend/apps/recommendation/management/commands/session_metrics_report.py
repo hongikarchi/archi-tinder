@@ -2,7 +2,7 @@
 Management command: session_metrics_report
 
 First analytics reader for the write-only SessionEvent telemetry (spec §6).
-Aggregates bookmark provenance / rank-zone stats, image_load outcome +
+Aggregates image_load outcome +
 latency percentiles, and session-level (confidence_update + swipe)
 distributions over a rolling time window.
 
@@ -17,7 +17,7 @@ command follows).
 Every payload key is read via .get() with a safe default -- a session's
 payload shape can vary across app versions, and malformed / missing keys
 must never crash the report. Sections that encounter payloads without an
-expected key attribute (e.g. bookmark with no 'provenance' dict) count
+expected key attribute (e.g. image_load with a non-dict payload) count
 those rows in a `malformed` bucket instead of raising.
 
 NOTE: event_type 'session_end' has ZERO emitters anywhere in the codebase
@@ -69,64 +69,6 @@ def _fraction_true(count_true, count_total):
     if count_total <= 0:
         return None
     return count_true / count_total
-
-
-def _build_bookmarks_section(since):
-    """event_type='bookmark' aggregation.
-
-    Wires the 'objective primary metric' named in SessionEvent's docstring
-    (models.py ~155-158): top-10 bookmark rate broken down by provenance
-    source, plus the primary/secondary rank_zone split.
-    """
-    payloads = SessionEvent.objects.filter(
-        event_type='bookmark', created_at__gte=since,
-    ).values_list('payload', flat=True)
-
-    total = 0
-    malformed = 0
-    with_provenance = 0
-    provenance_true = {'in_cosine_top10': 0, 'in_gemini_top10': 0, 'in_dpp_top10': 0}
-    rank_zone_counts = {'primary': 0, 'secondary': 0, 'unknown': 0}
-    rank_le_10 = 0
-
-    for payload in payloads:
-        total += 1
-        if not isinstance(payload, dict):
-            malformed += 1
-            continue
-
-        provenance = payload.get('provenance')
-        if isinstance(provenance, dict):
-            with_provenance += 1
-            for key in provenance_true:
-                if provenance.get(key) is True:
-                    provenance_true[key] += 1
-        else:
-            malformed += 1
-
-        rank_zone = payload.get('rank_zone')
-        if rank_zone in ('primary', 'secondary'):
-            rank_zone_counts[rank_zone] += 1
-        else:
-            rank_zone_counts['unknown'] += 1
-
-        rank = payload.get('rank')
-        if isinstance(rank, (int, float)) and not isinstance(rank, bool) and rank <= 10:
-            rank_le_10 += 1
-
-    provenance_rates = {
-        key: _fraction_true(count, with_provenance)
-        for key, count in provenance_true.items()
-    }
-
-    return {
-        'total': total,
-        'malformed': malformed,
-        'with_provenance': with_provenance,
-        'provenance_top10_rate': provenance_rates,
-        'rank_zone': rank_zone_counts,
-        'rank_le_10_count': rank_le_10,
-    }
 
 
 def _outcome_rates(outcome_counts, group_total):
@@ -461,7 +403,7 @@ def _build_sessions_section(since):
 class Command(BaseCommand):
     help = (
         "Report analytics aggregates over the write-only SessionEvent telemetry: "
-        "bookmark provenance / rank-zone rates, image_load outcome + latency "
+        "image_load outcome + latency "
         "percentiles, and confidence_update / swipe distributions. "
         "Windowed on created_at via --days (default %d)." % DEFAULT_DAYS
     )
@@ -486,7 +428,6 @@ class Command(BaseCommand):
         as_json = options["as_json"]
         since = timezone.now() - timedelta(days=days)
 
-        bookmarks = _build_bookmarks_section(since)
         image_load = _build_image_load_section(since)
         sessions = _build_sessions_section(since)
 
@@ -494,7 +435,6 @@ class Command(BaseCommand):
             result = {
                 "window_days": days,
                 "generated_for": since.isoformat(),
-                "bookmarks": bookmarks,
                 "image_load": image_load,
                 "sessions": sessions,
             }
@@ -506,34 +446,11 @@ class Command(BaseCommand):
         )
         self.stdout.write("")
 
-        self._write_bookmarks_block(bookmarks)
-        self.stdout.write("")
         self._write_image_load_block(image_load)
         self.stdout.write("")
         self._write_sessions_block(sessions)
 
     # ── Text rendering ────────────────────────────────────────────────────────
-
-    def _write_bookmarks_block(self, section):
-        self.stdout.write("── bookmarks ─────────────────────────")
-        if section['total'] == 0:
-            self.stdout.write(self.style.WARNING(
-                "no bookmark events in window — nothing to report"
-            ))
-            return
-        self.stdout.write("total: %d" % section['total'])
-        self.stdout.write("malformed: %d" % section['malformed'])
-        self.stdout.write("with_provenance: %d" % section['with_provenance'])
-        for key, rate in section['provenance_top10_rate'].items():
-            self.stdout.write(
-                "%s rate: %s" % (key, "n/a" if rate is None else "%.4f" % rate)
-            )
-        rz = section['rank_zone']
-        self.stdout.write(
-            "rank_zone: primary=%d secondary=%d unknown=%d"
-            % (rz['primary'], rz['secondary'], rz['unknown'])
-        )
-        self.stdout.write("rank<=10 count: %d" % section['rank_le_10_count'])
 
     def _write_image_load_block(self, section):
         self.stdout.write("── image_load ─────────────────────────")

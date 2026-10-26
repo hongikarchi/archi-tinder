@@ -41,7 +41,7 @@ RC = settings.RECOMMENDATION
 
 
 def _entry_id(item):
-    """Building id of a liked_ids/saved_ids entry; tolerates legacy plain strings."""
+    """Building id of a liked_ids entry; tolerates legacy plain strings."""
     if isinstance(item, dict):
         return item.get('id')
     if isinstance(item, str):
@@ -222,7 +222,7 @@ class ProjectDetailView(APIView):
         if not profile:
             return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # remove_building_ids: remove specified buildings from liked_ids and saved_ids
+        # remove_building_ids: remove specified buildings from liked_ids
         remove_ids = request.data.get('remove_building_ids')
         if remove_ids is not None:
             if not isinstance(remove_ids, list) or not all(isinstance(x, str) for x in remove_ids):
@@ -290,7 +290,7 @@ class ProjectDetailView(APIView):
 
             if remove_ids is not None:
                 remove_set = set(remove_ids)
-                update_fields = ['liked_ids', 'saved_ids', 'updated_at']
+                update_fields = ['liked_ids', 'updated_at']
                 # FULL-REPORT-UI-1: a legacy report has no source_signature, so
                 # it could never be flagged stale. Stamp it with the liked set
                 # as it is BEFORE this removal so the removal makes it stale.
@@ -305,7 +305,6 @@ class ProjectDetailView(APIView):
                     }
                     update_fields.append('final_report')
                 project.liked_ids = [item for item in project.liked_ids if _entry_id(item) not in remove_set]
-                project.saved_ids = [item for item in project.saved_ids if _entry_id(item) not in remove_set]
                 project.save(update_fields=update_fields)
                 evict_taste(profile.id)
                 evict_discovery_feed(profile.id)
@@ -324,7 +323,7 @@ class ProjectDetailView(APIView):
         if not profile:
             return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
         # Filter by user=profile so non-owner requests get 404, not 403,
-        # matching the security-manager recommendation and ProjectBookmarkView pattern.
+        # matching the security-manager recommendation pattern.
         project = get_object_or_404(Project.objects.filter(user=profile), project_id=pk)
         project.delete()
         # Evict AFTER delete: a concurrent GET arriving between the version bump

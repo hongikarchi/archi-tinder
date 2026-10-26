@@ -18,7 +18,7 @@
  * 480; radius 16 -> `--radius-md` (12); title 17px -> `--fs-heading` (20px);
  * gained a top-right (X) close button; now renders as a mobile bottom sheet
  * (<=768px) instead of always being a centered box. `zIndex={10100}`
- * preserved so it still stacks above SaveToBoardModal.
+ * preserved so it still stacks above other modals.
  */
 
 import { hasGoogleLogin } from '../utils/loginFlow.js'

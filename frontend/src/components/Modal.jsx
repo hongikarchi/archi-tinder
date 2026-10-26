@@ -15,12 +15,12 @@ import styles from './Modal.module.css'
  * `role="dialog" aria-modal aria-labelledby` (via `useId`) on the panel.
  *
  * `zIndex` — NOT hardcoded, because callers stack at different layers today
- * (e.g. VerifyGateModal at 10100, above SaveToBoardModal) — losing that
+ * (e.g. VerifyGateModal at 10100) — losing that
  * would break layering when this replaces a caller's own backdrop.
  *
  * Adopted so far (UI-CONSISTENCY-B Phase 2b): `VerifyGateModal`. Phase 3
- * migrated every other modal in the app (`ShareCardModal`, `SaveToBoardModal`,
- * `SaveBoardModal`, `SurpriseBoardModal`, `WorkDetailModal`, plus SwipePage's
+ * migrated every other modal in the app (`ShareCardModal`,
+ * `SaveBoardModal`, `WorkDetailModal`, plus SwipePage's
  * exit/dismiss confirm popups and DiscoveryPage's leave-warning modal).
  *
  * `centered` (Phase 3 addition, backward-compatible — default false keeps

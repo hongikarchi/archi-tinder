@@ -158,7 +158,7 @@ def get_or_build_discovery_feed(profile, cursor, limit, builder):
     `builder` is a zero-arg callable that returns the response dict
     {cards, next_cursor, has_more, taste_state}. Result is cached per
     (profile_id, cursor, limit) for DISCOVERY_FEED_TTL seconds.
-    Invalidation: call evict_discovery_feed(profile_id) on swipe/bookmark/
+    Invalidation: call evict_discovery_feed(profile_id) on swipe/
     project mutations.
     """
     key = _discovery_feed_key(profile.id, cursor, limit)

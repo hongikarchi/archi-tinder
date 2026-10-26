@@ -1,6 +1,6 @@
 /**
  * api/projects.js
- * Project (board) CRUD, building batch-fetch, bookmark, and report generation.
+ * Project (board) CRUD, building batch-fetch, and report generation.
  */
 
 import { callApi } from './core.js'
@@ -163,24 +163,6 @@ export async function getBoardBuildings(buildingIds) {
     console.error('[api/client] getBoardBuildings failed:', err)
     return []
   }
-}
-
-/**
- * Toggle bookmark (⭐) on a result-page card.
- * @param {string} projectId - backend project UUID
- * @param {string} cardId - building_id
- * @param {'save'|'unsave'} action
- * @param {number} rank - 1-indexed position in result page (1-50)
- * @param {string|null} sessionId - optional, for event association
- * @returns {Promise<{saved_ids: string[], count: number}>}
- */
-export async function bookmarkBuilding(projectId, cardId, action, rank, sessionId = null) {
-  return callApi('POST', `/projects/${projectId}/bookmark/`, {
-    card_id: cardId,
-    action,
-    rank,
-    ...(sessionId ? { session_id: sessionId } : {}),
-  })
 }
 
 /**

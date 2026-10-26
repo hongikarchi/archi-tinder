@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getArchitectProfile, followArchitect, unfollowArchitect } from '../api/architects.js'
-import { listProjects } from '../api/client.js'
-import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
 import styles from './ArchitectProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
@@ -41,20 +39,7 @@ export default function ArchitectProfilePage({ onLogout }) {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
   const [followPending, setFollowPending] = useState(false)
-  const [saveCard, setSaveCard] = useState(null)
-  const [savedIds, setSavedIds] = useState(new Set())
   const [activeTab, setActiveTab] = useState('built')
-
-  useEffect(() => {
-    listProjects().then(resp => {
-      const ids = new Set()
-      for (const p of (resp?.results || [])) {
-        for (const id of (p.liked_ids || [])) ids.add(id)
-        for (const id of (p.saved_ids || [])) ids.add(id)
-      }
-      setSavedIds(ids)
-    }).catch(() => {})
-  }, [])
 
   useEffect(() => {
     if (!architectId) {
@@ -395,26 +380,13 @@ export default function ArchitectProfilePage({ onLogout }) {
                       {displayedBuildings.map(building => {
                         const title = building.name_en || building.name || ''
                         const subtitle = [building.year, building.program].filter(Boolean).join(' · ')
-                        const isSaved = savedIds.has(building.canonical_bld_id)
                         return (
                           <PhotoTile
                             key={building.canonical_bld_id}
                             imageUrl={building.image_url}
                             title={title}
                             subtitle={subtitle}
-                            onClick={() => navigate('/buildings/' + building.canonical_bld_id, { state: { fromRecommended: true } })}
-                            topRight={(
-                              <FloatingIconButton
-                                onClick={(e) => { e.stopPropagation(); setSaveCard(building) }}
-                                ariaLabel="Save to board"
-                                variant="onPhoto"
-                                className={isSaved ? styles.saveBtnActive : ''}
-                              >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill={isSaved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                                </svg>
-                              </FloatingIconButton>
-                            )}
+                            onClick={() => navigate('/buildings/' + building.canonical_bld_id)}
                           />
                         )
                       })}
@@ -432,18 +404,6 @@ export default function ArchitectProfilePage({ onLogout }) {
 
       </div>
 
-      {saveCard && (
-        <SaveToBoardModal
-          card={saveCard}
-          onClose={() => setSaveCard(null)}
-          onSaved={() => {
-            if (saveCard?.canonical_bld_id) {
-              setSavedIds(prev => { const s = new Set(prev); s.add(saveCard.canonical_bld_id); return s })
-            }
-            setSaveCard(null)
-          }}
-        />
-      )}
     </div>
   )
 }

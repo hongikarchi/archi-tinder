@@ -135,10 +135,9 @@
   outline-offset: 2px;
 }
 
-/* Interest control — mirrors ResultCard's bookmark button (position, size,
-   circular shape, dark translucent fill, blur) so the two tiles read as one
-   family. Slightly smaller (28px vs 32px) because this tile also carries a
-   caption in the same corner region at narrow column counts. */
+/* Interest control — circular, dark translucent fill, blur. 28px because this
+   tile also carries a caption in the same corner region at narrow column
+   counts. */
 .interestBtn {
   position: absolute;
   top: 8px;

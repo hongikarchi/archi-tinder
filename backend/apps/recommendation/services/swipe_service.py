@@ -1,7 +1,7 @@
 """swipe_service.py — orchestration extracted from views/swipe.py.
 
 Pure move: buffer helpers and view-body orchestration relocated verbatim
-from SwipeView and ProjectBookmarkView.  Zero behaviour changes.
+from SwipeView.  Zero behaviour changes.
 
 Mock-patch discipline (CRITICAL):
 - engine, event_log imported AS MODULES so that test patches via
@@ -20,9 +20,7 @@ import logging
 
 import numpy as np
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connections, transaction
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -30,10 +28,6 @@ from .. import engine  # noqa: import MODULE — patch via apps.recommendation.v
 from .. import event_log  # noqa: import MODULE
 from ..models import Project, AnalysisSession, SwipeEvent
 from ..caches import (
-    evict_projects_list,
-    evict_discovery_feed,
-    evict_user_profile_detail,
-    evict_project_detail,
     evict_swipe_caches_after_commit,
 )
 from ..views._shared import _progress, _liked_id_only
@@ -148,143 +142,6 @@ def _v2_select_card(session, hydrated_lv, project, recent_actions):
 
 
 # ── View body orchestration ───────────────────────────────────────────────────
-
-def handle_bookmark(request, profile, project_id):
-    """Orchestrate ProjectBookmarkView.post body.
-
-    Verbatim from the original view: validate → atomic toggle → cache eviction →
-    session provenance lookup → event emission → response.
-    """
-    # Existence check outside the lock — cheap 404 guard before acquiring row lock.
-    if not Project.objects.filter(project_id=project_id, user=profile).exists():
-        return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    card_id = request.data.get('card_id')
-    action = request.data.get('action')
-    rank = request.data.get('rank')
-    session_id = request.data.get('session_id')
-
-    # --- Validate inputs ---
-    if not card_id or not isinstance(card_id, str) or len(card_id) > 20:
-        return Response({'detail': 'invalid card_id'}, status=status.HTTP_400_BAD_REQUEST)
-    if action not in ('save', 'unsave'):
-        return Response(
-            {'detail': "action must be 'save' or 'unsave'"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if not isinstance(rank, int) or rank < 1 or rank > 100:
-        return Response(
-            {'detail': 'rank must be integer in [1, 100]'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # --- Validate building exists and is publishable (save path only) ---
-    # unsave must always succeed so a later-unpublished building can be removed
-    # from saved_ids (gating it would trap the id forever).
-    if action == 'save':
-        with connections['buildings'].cursor() as cur:
-            cur.execute(
-                'SELECT 1 FROM canonical_v2_buildings'
-                ' WHERE canonical_bld_id = %s AND is_publishable = true',
-                [card_id],
-            )
-            if not cur.fetchone():
-                return Response({'detail': 'building not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    # --- Toggle saved_ids (atomic read-modify-write to prevent lost updates) ---
-    with transaction.atomic():
-        try:
-            project = Project.objects.select_for_update().get(
-                project_id=project_id, user=profile,
-            )
-        except Project.DoesNotExist:
-            return Response({'detail': 'project not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        existing = list(project.saved_ids or [])
-        existing_by_id = {
-            e['id']: e
-            for e in existing
-            if isinstance(e, dict) and 'id' in e
-        }
-
-        if action == 'save':
-            if card_id not in existing_by_id:
-                existing.append({'id': card_id, 'saved_at': timezone.now().isoformat()})
-        else:  # unsave
-            existing = [
-                e for e in existing
-                if not (isinstance(e, dict) and e.get('id') == card_id)
-            ]
-
-        project.saved_ids = existing
-        project.save(update_fields=['saved_ids', 'updated_at'])
-
-    evict_projects_list(profile.id)
-    evict_discovery_feed(profile.id)
-    # Boards payload no longer reads saved_ids (liked only), but the profile
-    # detail cache is still evicted on bookmark change — harmless and conservative.
-    evict_user_profile_detail(profile.user_id)
-    evict_project_detail(str(project_id))
-
-    # --- Resolve optional session for event association ---
-    session = None
-    if session_id:
-        try:
-            session = AnalysisSession.objects.filter(
-                session_id=session_id, user=profile,
-            ).first()
-        except (ValueError, ValidationError, Exception):
-            session = None
-
-    # --- Compute rank_zone per Spec v1.2 §6 implementation requirement #4 ---
-    rank_zone = 'primary' if rank <= 10 else 'secondary'
-
-    # --- rank_corpus: deferred (Finding #14b) ---
-    # compute_corpus_rank() does a full O(N) pgvector scan (~39k rows) synchronously,
-    # blocking the bookmark response. rank_corpus is telemetry-only (stored in
-    # SessionEvent.payload); it is not returned to the client and has no correctness
-    # impact on bookmarking. Setting to None here; move to a background task when
-    # Celery/task-queue is available.
-    # TODO(Finding #14b): compute_corpus_rank deferred — add background task here.
-    rank_corpus = None
-
-    # --- Provenance booleans per Spec v1.2 / IMP-10 sub-task A (Topic 02/04 attribution) ---
-    # Read from session.cosine_top10_ids / gemini_top10_ids / dpp_top10_ids set by
-    # SessionResultView at result-page load time.
-    # Legacy sessions (created before migration 0013) have None → all False (same as before).
-    # New sessions have accurate provenance once SessionResultView has been called.
-    if session is not None:
-        provenance = {
-            'in_cosine_top10': card_id in (session.cosine_top10_ids or []),
-            'in_gemini_top10': card_id in (session.gemini_top10_ids or []),
-            'in_dpp_top10': card_id in (session.dpp_top10_ids or []),
-        }
-    else:
-        provenance = {
-            'in_cosine_top10': False,
-            'in_gemini_top10': False,
-            'in_dpp_top10': False,
-        }
-
-    # --- Emit bookmark SessionEvent ---
-    event_log.emit_event(
-        'bookmark',
-        session=session,
-        user=profile,
-        card_id=card_id,
-        action=action,
-        rank=rank,
-        rank_zone=rank_zone,
-        rank_corpus=rank_corpus,
-        provenance=provenance,
-    )
-
-    saved_id_list = [e['id'] for e in existing if isinstance(e, dict) and 'id' in e]
-    return Response({
-        'saved_ids': saved_id_list,
-        'count': len(saved_id_list),
-    })
-
 
 def handle_swipe_extend(request, profile, session, session_id, client_buffer_ids):
     """Handle the S3 extend-session short-circuit path of SwipeView.post.
@@ -415,7 +272,7 @@ def handle_swipe_normal(
         # sessions lazily, under this row lock.
         _v2_upgraded = session_pool.ensure_v2(session)
         # Keep Project JSON lists synchronized per existing API contract.
-        # Lock order: Session -> Project (bookmark POST takes only Project).
+        # Lock order: Session -> Project.
         project = Project.objects.select_for_update().get(pk=session.project_id)
 
         # 1. Get embedding and update preference vector

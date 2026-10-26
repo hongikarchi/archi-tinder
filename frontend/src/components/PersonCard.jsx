@@ -12,7 +12,7 @@
  *   Front — the user's taste-report architecture image, full-bleed, with the
  *           recommendation tile's bottom scrim + caption (name / @handle), a
  *           type-code chip top-left where the tile puts its #rank, and the
- *           interest control top-right where it puts its bookmark star.
+ *           interest control top-right.
  *   Back  — personality chart overlaid with the viewer's own, plus the name.
  *           The reason copy is dropped: at tile width it wraps to four or
  *           five lines and squeezes the chart out.
@@ -161,8 +161,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
           {person.type_code && (
             <div className={styles.typeBadge}>{person.type_code}</div>
           )}
-          {/* Top-right circular control — same placement and treatment as the
-              recommendation tile's bookmark star (ResultsPage ResultCard). */}
+          {/* Top-right circular control. */}
           <button
             type="button"
             data-no-flip="true"

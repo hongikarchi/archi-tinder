@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
-import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
+import { getUserProfile, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
@@ -80,14 +80,11 @@ export default function UserProfilePage({ onLogout }) {
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
-  // Tab state — 'boards' | 'studios' | 'liked'
+  // Tab state — 'boards' | 'studios' | 'created'
   const [activeTab, setActiveTab] = useState('boards')
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
   const [studiosLoading, setStudiosLoading] = useState(false)
   const [buildingsMap, setBuildingsMap] = useState({}) // architect_id → buildings[]
-  const [likedBuildings, setLikedBuildings] = useState(null) // null = not yet fetched
-  const [likedLoading, setLikedLoading] = useState(false)
-  const [likedCount, setLikedCount] = useState(0)
   const [works, setWorks] = useState(null)  // null = not loaded yet
   const [worksLoading, setWorksLoading] = useState(false)
   const [selectedWorkId, setSelectedWorkId] = useState(null)
@@ -119,15 +116,6 @@ export default function UserProfilePage({ onLogout }) {
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
-  // Fetch likedCount on mount for ProfileHero stat display — own list when
-  // isMe, otherwise the viewed user's liked list (design-parity, FRONT-*).
-  useEffect(() => {
-    if (!effectiveUserId) return
-    getLikedBuildings(isMe ? undefined : effectiveUserId)
-      .then(data => setLikedCount(data?.total ?? 0))
-      .catch(() => {})
-  }, [isMe, effectiveUserId, refreshKey])
-
   // Fetch my personality for overlay comparison (both isMe and !isMe paths)
   // Empty deps intentional: runs once on mount to load the caller's own personality.
   useEffect(() => {
@@ -153,21 +141,6 @@ export default function UserProfilePage({ onLogout }) {
         })
     })
   }, [savedStudios]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleLikedTab() {
-    setActiveTab('liked')
-    if (likedBuildings !== null) return
-    setLikedLoading(true)
-    try {
-      const data = await getLikedBuildings(isMe ? undefined : effectiveUserId)
-      setLikedBuildings(data?.buildings || [])
-      setLikedCount(data?.total ?? 0)
-    } catch {
-      setLikedBuildings([])
-    } finally {
-      setLikedLoading(false)
-    }
-  }
 
   // Helper: exit select mode and reset all selection state.
   // NOTE: does NOT clear bulkPending — bulk handlers clear it themselves after
@@ -254,11 +227,9 @@ export default function UserProfilePage({ onLogout }) {
     setBoards([])
     setBoardsPage(1)
     setBoardsHasMore(false)
-    // Reset Liked/Created tab caches on user change — both are now reachable
-    // for !isMe (design-parity), so navigating between two profiles without
-    // an unmount must not leak the previous user's likes/works/count.
-    setLikedBuildings(null)
-    setLikedCount(0)
+    // Reset Created tab cache on user change — reachable for !isMe, so
+    // navigating between two profiles without an unmount must not leak the
+    // previous user's works.
     setWorks(null)
     getUserProfile(effectiveUserId, { boardsPage: 1, boardsPageSize: 12 })
       .then(data => {
@@ -513,10 +484,8 @@ export default function UserProfilePage({ onLogout }) {
           user={user}
           boardsTotalCount={boardsTotalCount}
           savedStudiosCount={user.saved_studios_count ?? 0}
-          likedCount={likedCount}
           onSelectTab={(t) => {
             if (t === 'studios') handleStudiosTab()
-            else if (t === 'liked') handleLikedTab()
             else if (t === 'created') handleCreatedTab()
             else setActiveTab('boards')
           }}
@@ -630,7 +599,7 @@ export default function UserProfilePage({ onLogout }) {
         })()}
         {/* ── End personality section ────────────────────────────────────── */}
 
-        {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
+        {/* Tab bar — Boards | Studios | Created (all visible to any
             viewer, design-parity user-other.html; edit affordances inside
             each panel stay isMe-gated) */}
         <Tabs
@@ -638,13 +607,11 @@ export default function UserProfilePage({ onLogout }) {
           tabs={[
             { id: 'boards', label: t('profileB3.tabBoards') },
             { id: 'studios', label: t('profileB3.tabStudios') },
-            { id: 'liked', label: t('profileB3.tabLiked') },
             { id: 'created', label: t('profileB3.tabCreated') },
           ]}
           value={activeTab}
           onChange={(id) => {
             if (id === 'studios') handleStudiosTab()
-            else if (id === 'liked') handleLikedTab()
             else if (id === 'created') handleCreatedTab()
             else setActiveTab('boards')
           }}
@@ -843,48 +810,6 @@ export default function UserProfilePage({ onLogout }) {
                     office={office}
                     buildings={buildingsMap[office.architect_id] ?? null}
                     onClick={() => navigate('/architects/' + office.architect_id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Liked tab content */}
-        {activeTab === 'liked' && (
-          <div style={{ padding: '0 0 16px' }}>
-            <div style={{ marginBottom: 20 }}>
-              <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
-            </div>
-            {likedLoading ? (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 20,
-              }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-2)' }} />
-                ))}
-              </div>
-            ) : !likedBuildings || likedBuildings.length === 0 ? (
-              <EmptyState
-                title={t('profile.noLikedProjectsInline')}
-                body={t('profile.swipeToSaveInline')}
-              />
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 20,
-              }}>
-                {likedBuildings.map((bld, i) => (
-                  <PhotoTile
-                    key={bld.canonical_bld_id || i}
-                    imageUrl={bld.image_url || bld.display_cover_url}
-                    title={bld.name || bld.canonical_bld_id}
-                    subtitle={bld.architect_names?.length > 0 ? bld.architect_names.join(', ') : 'Building'}
-                    placeholder={<BuildingIconEmpty />}
-                    onClick={() => navigate('/buildings/' + bld.canonical_bld_id)}
                   />
                 ))}
               </div>

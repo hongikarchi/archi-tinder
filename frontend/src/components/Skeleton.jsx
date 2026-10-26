@@ -8,7 +8,7 @@
  *
  * Build-only in UI-CONSISTENCY-B Phase 2b — no page adopts this component
  * yet; the existing inline skeleton blocks across UserProfilePage /
- * LikedProjectsPage / etc. are untouched (no adoption site was in-scope).
+ * etc. are untouched (no adoption site was in-scope).
  */
 export default function Skeleton({ width = '100%', height = 16, radius = 'var(--radius-sm)', circle = false, style, className }) {
   return (

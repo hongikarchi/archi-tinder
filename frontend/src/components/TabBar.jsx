@@ -103,8 +103,8 @@ const TAB_ICONS = {
 
 /*
  * getActiveTab — route -> tab mapping.
- * UI-CONSISTENCY-B Phase 2a fix (2026-09-26): `/upload`, `/notifications`,
- * `/liked-projects` previously fell through to the `discovery` default even
+ * UI-CONSISTENCY-B Phase 2a fix (2026-09-26): `/upload`, `/notifications`
+ * previously fell through to the `discovery` default even
  * though they are profile-cluster screens (see App.jsx routes). Added here.
  * `/architects/:id`, `/buildings/:id`, `/library*`, `/my/liked-offices`
  * (dead redirect), `/admin*` intentionally still fall through
@@ -120,8 +120,7 @@ function getActiveTab(pathname) {
     pathname.startsWith('/board') ||
     pathname.startsWith('/settings') ||
     pathname.startsWith('/upload') ||
-    pathname.startsWith('/notifications') ||
-    pathname.startsWith('/liked-projects')
+    pathname.startsWith('/notifications')
   ) return 'profile'
   return 'discovery'
 }

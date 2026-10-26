@@ -15,7 +15,7 @@ class Project(models.Model):
     name            = models.CharField(max_length=200)
     liked_ids       = models.JSONField(default=list)   # list[{id: str, intensity: float}] — Like 1.0, Love 1.8 (Sprint 3 A-1)
     disliked_ids    = models.JSONField(default=list)   # list[str] — building_ids only, no intensity
-    saved_ids       = models.JSONField(default=list)   # list[{id: str, saved_at: ISO timestamp}] — bookmark (primary metric)
+    saved_ids       = models.JSONField(default=list)   # DEPRECATED/UNUSED: bookmark feature removed; column kept until DB cleanup (issue #463)
     filters         = models.JSONField(default=dict)
     raw_query       = models.TextField(null=True, blank=True)  # original user search text, shown on public Board
     analysis_report = models.JSONField(null=True, blank=True)
@@ -95,8 +95,8 @@ class AnalysisSession(models.Model):
     # K-Means immediately. Null for normal-funnel sessions (RC default = single
     # centroid through the first ~10 swipes).
     original_q_text   = models.TextField(null=True, blank=True)  # Topic 01 RRF: original raw_query for re-relaxation
-    # IMP-10 sub-task A / Spec v1.7 §11.1: top-10 id lists for bookmark provenance
-    # Populated by SessionResultView when each ranking channel runs.
+    # IMP-10 sub-task A / Spec v1.7 §11.1: top-10 id lists (bookmark provenance).
+    # DEPRECATED/UNUSED: no longer written since the bookmark feature was removed; column kept until DB cleanup (issue #463).
     # Null when the flag for that channel was off, or for sessions before migration 0013.
     cosine_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 cosine-ordered ids at result time
     gemini_top10_ids  = models.JSONField(null=True, blank=True)  # first 10 Gemini-rerank ids (None when flag off)
@@ -150,7 +150,8 @@ class SessionEvent(models.Model):
     - Bookmark rank_zone separation: payload['rank_zone'] is 'primary' (1-10) or
       'secondary' (11-50) -- used by primary-metric extractor to distinguish
       top-10 bookmark rate (objective) from exploration-zone clicks (secondary).
-      Wired when bookmark endpoint ships in Sprint 4.
+      DEPRECATED: the bookmark endpoint was removed; 'bookmark' choice kept for
+      historical rows (DB cleanup: issue #463).
     """
 
     EVENT_TYPE_CHOICES = [

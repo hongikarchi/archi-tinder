@@ -62,9 +62,9 @@ def _patch_get_buildings_by_ids():
 
 @pytest.fixture(autouse=True)
 def _patch_swipe_service_connections():
-    """Make the swipe/bookmark building-existence guard pass by default.
+    """Make the swipe building-existence guard pass by default.
 
-    handle_swipe_normal + handle_bookmark validate canonical_bld_id against
+    handle_swipe_normal validates canonical_bld_id against
     canonical_v2_buildings (owned by Make DB, absent in the test DB) via
     connections['buildings'] before any write.  Default the check to
     'building exists'; tests asserting the 404 path override with their own

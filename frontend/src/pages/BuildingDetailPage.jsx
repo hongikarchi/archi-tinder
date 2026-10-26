@@ -1,17 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { bookmarkBuilding, getBuildings } from '../api/client.js'
-import SaveToBoardModal from '../components/SaveToBoardModal.jsx'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { getBuildings } from '../api/client.js'
 import ErrorState from './buildingDetail/ErrorState.jsx'
 import Header from './buildingDetail/Header.jsx'
 import LoadingState from './buildingDetail/LoadingState.jsx'
-import { isValidRank, kindLabel, metadataItems } from './buildingDetail/helpers.js'
+import { kindLabel, metadataItems } from './buildingDetail/helpers.js'
 import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageTitle from '../components/PageTitle.jsx'
 import SectionTitle from '../components/SectionTitle.jsx'
-import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import { useTranslation } from '../i18n/index.js'
 import styles from './BuildingDetailPage.module.css'
 
@@ -20,35 +18,13 @@ const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 export default function BuildingDetailPage({ onLogout }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const location = useLocation()
   const rawBuildingId = useParams().buildingId
   const buildingId = BUILDING_ID_RE.test(String(rawBuildingId || '')) ? rawBuildingId : null
-  const fromProjectId = location.state?.fromProjectId || null
-  const fromSessionId = location.state?.fromSessionId || null
-  const referrer = location.state?.referrer || null
-  const fromRecommended = !!location.state?.fromRecommended
-  const rank = isValidRank(location.state?.rank) ? location.state.rank : null
-  const savedIds = useMemo(
-    () => (Array.isArray(location.state?.savedIds) ? location.state.savedIds : []),
-    [location.state?.savedIds]
-  )
-  const initialBookmarked = !!buildingId && savedIds.includes(buildingId)
-  const initialBookmarkedRef = useRef(initialBookmarked)
   const [building, setBuilding] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [isBookmarked, setIsBookmarked] = useState(initialBookmarked)
-  const [bookmarkPending, setBookmarkPending] = useState(false)
-  const [saveModalOpen, setSaveModalOpen] = useState(false)
-  const [isSaved, setIsSaved] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(null) // null = closed
-
-  useEffect(() => {
-    const next = !!buildingId && savedIds.includes(buildingId)
-    initialBookmarkedRef.current = next
-    setIsBookmarked(next)
-  }, [buildingId, savedIds])
 
   useEffect(() => {
     if (!buildingId) {
@@ -115,34 +91,7 @@ export default function BuildingDetailPage({ onLogout }) {
   const items = metadataItems(building)
 
   function handleBack() {
-    const netChanged = isBookmarked !== initialBookmarkedRef.current
-    if (netChanged && referrer && buildingId) {
-      navigate(referrer, {
-        replace: true,
-        state: {
-          bookmarkChanged: {
-            buildingId,
-            action: isBookmarked ? 'save' : 'unsave',
-          },
-        },
-      })
-    } else {
-      navigate(-1)
-    }
-  }
-
-  async function handleToggleBookmark() {
-    if (!fromProjectId || !buildingId || !rank || bookmarkPending) return
-    const wasBookmarked = isBookmarked
-    setBookmarkPending(true)
-    setIsBookmarked(!wasBookmarked)
-    try {
-      await bookmarkBuilding(fromProjectId, buildingId, wasBookmarked ? 'unsave' : 'save', rank, fromSessionId)
-    } catch {
-      setIsBookmarked(wasBookmarked)
-    } finally {
-      setBookmarkPending(false)
-    }
+    navigate(-1)
   }
 
   if (loading) {
@@ -176,14 +125,6 @@ export default function BuildingDetailPage({ onLogout }) {
       <PageTopControls onLogout={onLogout} leading={<Header onBack={handleBack} />} />
       <PageLogoHeader />
 
-      {saveModalOpen && building && (
-        <SaveToBoardModal
-          card={{ ...building, canonical_bld_id: buildingId }}
-          onClose={() => setSaveModalOpen(false)}
-          onSaved={() => { setSaveModalOpen(false); setIsSaved(true) }}
-        />
-      )}
-
       {lightboxIndex !== null && lightboxImages.length > 0 && (
         <PhotoLightbox
           images={lightboxImages}
@@ -204,89 +145,10 @@ export default function BuildingDetailPage({ onLogout }) {
         }}>
           {t('detailB3.buildingDetailEyebrow')}
         </p>
-        {/* Title row — save-to-board + bookmark now sit beside the h1
-         * (canvas-design-port.md §6d item 6; building-detail.html moves this
-         * cluster out of the old sticky header into this exact spot).
-         * UI-CONSISTENCY-B3b-5: h1 → PageTitle (24), bookmark circle →
-         * FloatingIconButton, #fbbf24 literals → var(--accent-3) (reads as
-         * gold/amber in 3 of 4 themes, a burnt-amber "star" tint in GitHub
-         * Light — acceptable per DESIGN.md's own escape clause since no
-         * dedicated amber token exists). The save-to-board pill keeps its
-         * own compact button (has a text label, not an icon-only circle —
-         * doesn't fit FloatingIconButton) but is now token-radius (md) and
-         * token-typed. */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 16,
-          margin: '0 0 8px',
-        }}>
+        <div style={{ margin: '0 0 8px' }}>
           <PageTitle style={{ margin: 0, lineHeight: 1.08 }}>
             {title}
           </PageTitle>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, paddingTop: 10 }}>
-            {/* Save to Board — only on recommended buildings, not on board-saved ones */}
-            {fromRecommended && (
-              <button
-                type="button"
-                onClick={() => !isSaved && setSaveModalOpen(true)}
-                aria-label={isSaved ? 'Saved to board' : 'Save to board'}
-                style={{
-                  height: 34,
-                  padding: '0 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: isSaved ? '1px solid color-mix(in srgb, var(--accent-3) 50%, transparent)' : 'none',
-                  background: isSaved ? 'color-mix(in srgb, var(--accent-3) 12%, transparent)' : 'var(--accent-1)',
-                  color: isSaved ? 'var(--accent-3)' : '#fff',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 'var(--fw-bold)',
-                  cursor: isSaved ? 'default' : 'pointer',
-                  fontFamily: 'inherit',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
-                }}
-              >
-                {isSaved ? (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    {t('buildingDetail.saved')}
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    {t('buildingDetail.save')}
-                  </>
-                )}
-              </button>
-            )}
-
-            {!!fromProjectId && !!rank && (
-              <FloatingIconButton
-                onClick={handleToggleBookmark}
-                disabled={bookmarkPending}
-                ariaLabel={isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
-                style={{
-                  borderColor: isBookmarked ? 'color-mix(in srgb, var(--accent-3) 65%, transparent)' : undefined,
-                  background: isBookmarked ? 'color-mix(in srgb, var(--accent-3) 18%, transparent)' : undefined,
-                  color: isBookmarked ? 'var(--accent-3)' : undefined,
-                  cursor: bookmarkPending ? 'default' : 'pointer',
-                  opacity: bookmarkPending ? 0.65 : 1,
-                  fontSize: 16,
-                }}
-              >
-                {isBookmarked ? '★' : '☆'}
-              </FloatingIconButton>
-            )}
-          </div>
         </div>
         {architect && (
           <p style={{

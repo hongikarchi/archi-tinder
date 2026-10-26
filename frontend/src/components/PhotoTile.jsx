@@ -5,9 +5,7 @@ import styles from './PhotoTile.module.css'
  * caption (plan decision 6, 2026-09-26: "caption OVERLAID on the photo
  * bottom ... 4:5 portrait, radius lg 20").
  *
- * Consolidates LikedProjectsPage's local `LikedBuildingCard` and
- * UserProfilePage's Liked-tab card (previously caption-BELOW-image) onto one
- * component. Deliberately NOT based on `photoCardShell.js` — that shell is a
+ * One shared photo card for building tiles across surfaces. Deliberately NOT based on `photoCardShell.js` — that shell is a
  * different card (2:3 aspect, `--radius-sm`-scale 12px radius, 10/9px fonts
  * for ResultsPage/PersonCard's denser grid); retuning it to 4:5/radius-lg
  * would restyle those two unrelated pages, which is out of this PR's scope.
@@ -23,7 +21,7 @@ import styles from './PhotoTile.module.css'
  *                 lift/outline when set (a tile with no `onClick` renders as
  *                 a plain static block — no cursor, no hover, no button role,
  *                 matching a non-owner's read-only view).
- *   topRight    — optional overlay slot (e.g. a bookmark/select badge).
+ *   topRight    — optional overlay slot (e.g. a select badge).
  *   placeholder — optional node shown instead of the scrim+caption when
  *                 there is no `imageUrl` (e.g. `<BuildingIconEmpty/>`).
  *   aspect      — override the default 4/5 ratio.

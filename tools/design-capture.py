@@ -32,7 +32,6 @@ ROUTES = {
     "profile": "/user/me",
     "user-other": "/user/2",
     "board-detail": "/board/1",
-    "liked-projects": "/liked-projects",
     "building-detail": "/buildings/1",
     "architect": "/architects/1",
     "office": "/office/1",

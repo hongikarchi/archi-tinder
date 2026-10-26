@@ -30,7 +30,6 @@ from .sessions import (
 )
 from .swipe import (
     SwipeView,
-    ProjectBookmarkView,
     BuildingBatchView,
     DiverseRandomView,
     # Private helpers accessed by tests
@@ -80,7 +79,6 @@ __all__ = [
     'SessionStateView',
     'SessionResultView',
     'SwipeView',
-    'ProjectBookmarkView',
     'BuildingBatchView',
     'DiverseRandomView',
     'TasteRecognizeView',

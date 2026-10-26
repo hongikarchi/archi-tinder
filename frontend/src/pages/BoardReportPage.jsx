@@ -184,7 +184,7 @@ export default function BoardReportPage({ onLogout }) {
   function handleOpenBuilding(card) {
     const id = cardId(card)
     if (!id) return
-    navigate(`/buildings/${id}`, { state: { referrer: location.pathname } })
+    navigate(`/buildings/${id}`)
   }
 
   let state = 'ready'

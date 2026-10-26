@@ -182,7 +182,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             'visibility',
             'reaction_count',
             'liked_ids',
-            'saved_ids',
             'filters',
             'raw_query',
             'analysis_report',
@@ -202,7 +201,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             'project_id',
             'user',
             'liked_ids',
-            'saved_ids',
             'reaction_count',
             'analysis_report',
             'final_report',
@@ -299,7 +297,7 @@ class ProjectPatchResponseSerializer(ProjectSerializer):
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
     """PATCH /api/v1/projects/{project_id}/ — owner updates name, visibility, conversation_history, is_temp.
 
-    All other fields (liked_ids, saved_ids, filters, reaction_count, etc.)
+    All other fields (liked_ids, filters, reaction_count, etc.)
     are managed by swipe flow or system — silently ignored on PATCH.
 
     FEAT-TASTE-FLOW-1 save-confirm action: PATCH {is_temp: false, name, visibility}

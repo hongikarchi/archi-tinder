@@ -1,10 +1,8 @@
 import io
 import logging
-import re
 from uuid import uuid4
 
 from django.conf import settings
-from django.db import connections as _dj_connections
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -43,7 +41,7 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     image; the card prefers it over cover_image_url).
 
     Liked buildings only: building_count, cover and thumbnails come from
-    liked_ids (bookmarked saved_ids never count). Cover = first liked building
+    liked_ids. Cover = first liked building
     with an image → ''.
     Image batch lookup is performed only for the paged slice to avoid N+1 at
     scale.
@@ -81,7 +79,7 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
 
     # Collect all building_ids needed for image resolution (cover + thumbnails).
     # Per project: take first 7 unique ids from liked_ids ONLY (boards show liked
-    # buildings; bookmarks never feed cover/thumbnails/count — 2026-10-23).
+    # buildings).
     # Cover uses first; thumbnails use up to 6 from the rest.
     def _extract_ids(project):
         liked = [
@@ -452,143 +450,3 @@ class AvatarUploadView(APIView):
         # Return the same UserSerializer shape as /auth/me/ so the frontend
         # can update its auth-user state in one round-trip.
         return Response(UserSerializer(profile).data)
-
-
-# -- Liked Buildings (SNS-LIKED-PROJECTS) ----------------------------------
-
-_LIKED_BUILDINGS_CAP = 200
-# FULL-LOGIN-REDESIGN-1 (BACK-AUTH-3): guest users may add up to 50 liked
-# buildings.  The 51st attempt triggers the verify-gate — frontend catches
-# this 403 and opens VerifyGateModal to prompt Google OAuth promotion.
-# Mirrors the board-gate precedent in apps/recommendation/views/projects.py.
-# Gate is on the ADD path only (new bld_id not yet in the list); the remove
-# path and re-liking an already-present id are unaffected.
-_GUEST_LIKE_LIMIT = 50
-_BLD_ID_MAX_LEN = 20
-_BLD_ID_RE = re.compile(r'^bld_\d{6}$')
-
-
-class LikedBuildingsView(APIView):
-    """POST/GET /api/v1/liked-buildings/
-
-    POST — add a building to the authenticated user's liked list.
-      Body:   {"canonical_bld_id": "bld_000123"}
-      200:    {"liked_count": N}
-      400:    {"detail": "<reason>"}
-
-    GET — return a user's liked buildings as full card objects.
-      Query param: user_id (optional). Omitted -> caller's own liked list.
-        Provided -> that user's liked list (design-parity public-profile
-        tabs; any AUTHENTICATED user may view another user's likes — taste
-        sharing is the product concept, still no anonymous access). Unknown
-        user_id -> 404.
-      200:    {"buildings": [...], "total": N}
-
-    Ordering: newest first (prepend on POST). Deduped. Capped at
-    _LIKED_BUILDINGS_CAP entries; the cap is silently enforced on write.
-    get_building_card gates on is_publishable=true and returns None for
-    unpublished / missing buildings — those are silently filtered from GET.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        bld_id = request.data.get('canonical_bld_id', '')
-        if not bld_id or not isinstance(bld_id, str):
-            return Response(
-                {'detail': 'canonical_bld_id required'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        bld_id = bld_id.strip()
-        if not bld_id:
-            return Response(
-                {'detail': 'canonical_bld_id required'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if len(bld_id) > _BLD_ID_MAX_LEN:
-            return Response(
-                {'detail': 'canonical_bld_id too long'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not _BLD_ID_RE.match(bld_id):
-            return Response(
-                {'detail': 'invalid canonical_bld_id format'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        with _dj_connections['buildings'].cursor() as cur:
-            cur.execute(
-                'SELECT 1 FROM canonical_v2_buildings'
-                ' WHERE canonical_bld_id = %s AND is_publishable = true',
-                [bld_id],
-            )
-            if not cur.fetchone():
-                return Response(
-                    {'detail': 'building not found'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        current = list(profile.liked_building_ids or [])
-        if bld_id not in current:
-            # Guest verify-gate: block the add if the guest already has
-            # _GUEST_LIKE_LIMIT likes.  Verified users are not gated here.
-            if profile.is_guest and len(current) >= _GUEST_LIKE_LIMIT:
-                return Response(
-                    {
-                        'detail': 'verify_required',
-                        'reason': 'liked_limit_reached',
-                        'limit': _GUEST_LIKE_LIMIT,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            current.insert(0, bld_id)
-            # Enforce cap silently
-            current = current[:_LIKED_BUILDINGS_CAP]
-            profile.liked_building_ids = current
-            profile.save(update_fields=['liked_building_ids'])
-            # BACK-RECOMMEND-4: evict taste + discovery-feed caches so the new like
-            # shapes the vector and is excluded from future feed pages immediately.
-            # Local import avoids accounts→recommendation circular dependency.
-            from apps.recommendation.caches import evict_taste, evict_discovery_feed
-            evict_taste(profile.id)
-            evict_discovery_feed(profile.id)
-
-        return Response({'liked_count': len(profile.liked_building_ids)})
-
-    def get(self, request):
-        target_user_id_raw = request.query_params.get('user_id')
-        if target_user_id_raw is not None:
-            try:
-                target_user_id = int(target_user_id_raw)
-            except (ValueError, TypeError):
-                return Response(
-                    {'detail': 'user_id must be an integer.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            try:
-                profile = UserProfile.objects.get(user__id=target_user_id)
-            except UserProfile.DoesNotExist:
-                return Response(
-                    {'detail': 'Not found.'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                return Response(
-                    {'detail': 'Profile not found'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        from apps.recommendation import engine
-
-        bld_ids = list(profile.liked_building_ids or [])[:_LIKED_BUILDINGS_CAP]
-        cards = engine.get_buildings_by_ids(bld_ids)
-        return Response({'buildings': cards, 'total': len(cards)})

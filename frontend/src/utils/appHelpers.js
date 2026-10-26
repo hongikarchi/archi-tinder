@@ -46,15 +46,6 @@ export function extractLikedIds(rawLikedIds) {
     .filter(Boolean)
 }
 
-// Backend saved_ids shape: list[{id: str, saved_at: datetime}].
-// Returns plain id strings.
-export function extractSavedIds(rawSavedIds) {
-  if (!Array.isArray(rawSavedIds)) return []
-  return rawSavedIds
-    .map(entry => (typeof entry === 'string' ? entry : entry?.id))
-    .filter(Boolean)
-}
-
 /**
  * Purge LEGACY localStorage keys matching archithon_chat_* (old Gemini search chat,
  * removed 2026-10; nothing writes them anymore - this only clears stale data).

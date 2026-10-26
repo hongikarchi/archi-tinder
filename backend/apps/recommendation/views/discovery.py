@@ -53,7 +53,7 @@ logger = logging.getLogger('apps.recommendation')
 
 RC = settings.RECOMMENDATION
 
-# Building-ID validation constants (mirrors LikedBuildingsView in profile.py)
+# Building-ID validation constants
 _BLD_ID_MAX_LEN = 20
 _BLD_ID_RE = re.compile(r'^bld_\d{6}$')
 
@@ -131,7 +131,7 @@ class DiscoveryFeedView(APIView):
         project_rows = list(
             Project.objects.filter(user=profile, is_temp=False)
             .order_by('-created_at')[:cap]
-            .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
+            .values('name', 'liked_ids', 'disliked_ids')
         )
         _ms_projects = (time.perf_counter() - _t) * 1000
 
@@ -632,18 +632,12 @@ class BoardSurpriseView(APIView):
             return Response({'detail': 'unauthenticated'}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Build exclusion set (all user projects incl. draft)
-        projects = Project.objects.filter(user=profile).values('liked_ids', 'disliked_ids', 'saved_ids')
+        projects = Project.objects.filter(user=profile).values('liked_ids', 'disliked_ids')
         liked_ids = []
         disliked_ids = []
-        saved_ids = []
         for project in projects:
             liked_ids.extend(_liked_id_only(project.get('liked_ids')))
             disliked_ids.extend(project.get('disliked_ids') or [])
-            saved_ids.extend(
-                e.get('id')
-                for e in (project.get('saved_ids') or [])
-                if isinstance(e, dict) and e.get('id')
-            )
 
         # BACK-RECOMMEND-4: include buildings liked via UserProfile.liked_building_ids
         profile_liked_bld_ids = [
@@ -652,7 +646,7 @@ class BoardSurpriseView(APIView):
         ]
         exclude_ids = []
         seen = set()
-        for bid in liked_ids + disliked_ids + saved_ids + profile_liked_bld_ids:
+        for bid in liked_ids + disliked_ids + profile_liked_bld_ids:
             if isinstance(bid, str) and bid not in seen:
                 exclude_ids.append(bid)
                 seen.add(bid)
