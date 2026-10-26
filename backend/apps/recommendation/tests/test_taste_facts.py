@@ -126,6 +126,7 @@ class TestSmoothingAndRatioMath:
 # ---------------------------------------------------------------------------
 
 class TestLikeThresholds:
+    """Strict (Tier 1) thresholds, tested on the strict core directly."""
 
     def test_shown_below_min_shown_no_fact(self):
         # style='x' shown on only 2 ids (< min_shown=3), both liked.
@@ -133,7 +134,7 @@ class TestLikeThresholds:
             _row('A1', style='x'), _row('A2', style='x'),
             _row('A3', style='y'), _row('D1', style='y'),
         )
-        result = compute_taste_facts(
+        result = tf._compute_like_dislike_facts(
             rows, liked_ids=['A1', 'A2', 'A3'], disliked_ids=['D1'], rc=_RC,
         )
         assert _fact_for(result, 'style', 'x') is None
@@ -144,7 +145,7 @@ class TestLikeThresholds:
             _row('A1', style='x'), _row('D1', style='x'), _row('D2', style='x'),
             _row('A2', style='y'), _row('D3', style='y'),
         )
-        result = compute_taste_facts(
+        result = tf._compute_like_dislike_facts(
             rows, liked_ids=['A1', 'A2'], disliked_ids=['D1', 'D2', 'D3'], rc=_RC,
         )
         assert _fact_for(result, 'style', 'x') is None
@@ -156,7 +157,7 @@ class TestLikeThresholds:
             _row('A1', style='x'), _row('A2', style='x'), _row('D1', style='x'),
             _row('A3', style='y'), _row('A4', style='y'), _row('D2', style='y'),
         )
-        result = compute_taste_facts(
+        result = tf._compute_like_dislike_facts(
             rows, liked_ids=['A1', 'A2', 'A3', 'A4'], disliked_ids=['D1', 'D2'], rc=_RC,
         )
         assert _fact_for(result, 'style', 'x') is None
@@ -519,7 +520,8 @@ class TestGeneratePersonaReportGrounding:
         assert like_fact is not None
         assert sorted(like_fact['building_ids']) == ['B1', 'B2', 'B3']
 
-    def test_pattern_paragraph_forced_empty_when_no_facts(self, monkeypatch):
+    def test_pattern_paragraph_kept_in_interpretive_mode_when_no_facts(self, monkeypatch):
+        # Product decision 2026-10-25: no forced blanking; digit-free LLM text is kept.
         from apps.recommendation.services import generation
 
         services = _mock_cursor(monkeypatch, [_row('B1')])
@@ -531,7 +533,8 @@ class TestGeneratePersonaReportGrounding:
 
         report = generation.generate_persona_report(['B1'])
         assert report['taste_facts']['facts'] == []
-        assert report['pattern_paragraph'] == ''
+        assert report['pattern_paragraph'] == 'stub pattern text'
+        assert report['pattern_source'] == 'interpretive'
 
     def test_backward_compatible_call_with_liked_ids_only(self, monkeypatch):
         from apps.recommendation.services import generation
@@ -626,7 +629,7 @@ class TestGeneratePersonaReportBilingual:
         assert report['i18n']['ko']['persona_type'] == 'The Minimalist'
         assert any('ko block missing' in record.message for record in caplog.records)
 
-    def test_empty_facts_forces_pattern_paragraph_empty_in_both_languages(self, monkeypatch):
+    def test_empty_facts_keeps_llm_pattern_paragraph_in_both_languages(self, monkeypatch):
         from apps.recommendation.services import generation
 
         services = _mock_cursor(monkeypatch, [_row('B1')])
@@ -639,10 +642,9 @@ class TestGeneratePersonaReportBilingual:
         report = generation.generate_persona_report(['B1'])
 
         assert report['taste_facts']['facts'] == []
-        assert report['pattern_paragraph'] == ''
-        assert report['i18n']['ko']['pattern_paragraph'] == ''
-        assert report['i18n']['en']['pattern_paragraph'] == ''
-        # description is interpretive, not fact-gated -- untouched.
+        # _STUB_BILINGUAL_REPORT has no digits -> passes the interpretive guard.
+        assert report['i18n']['ko']['pattern_paragraph'] == _STUB_BILINGUAL_REPORT['ko']['pattern_paragraph']
+        assert report['i18n']['en']['pattern_paragraph'] == _STUB_BILINGUAL_REPORT['en']['pattern_paragraph']
         assert report['i18n']['ko']['description'] == _STUB_BILINGUAL_REPORT['ko']['description']
         assert report['i18n']['en']['description'] == _STUB_BILINGUAL_REPORT['en']['description']
 
@@ -663,3 +665,294 @@ class TestGeneratePersonaReportBilingual:
         # filled with that same content rather than crashing on a missing key.
         assert report['i18n']['ko']['persona_type'] == 'The Minimalist'
         assert report['i18n']['en']['persona_type'] == 'The Minimalist'
+
+
+# ---------------------------------------------------------------------------
+# Tiered pattern grounding (2026-10-25): strict -> relaxed -> composition -> interpretive
+# ---------------------------------------------------------------------------
+
+_RC_TIERED = {
+    **_RC,
+    'report_fact_relaxed_min_shown': 2,
+    'report_fact_relaxed_min_liked': 2,
+    'report_fact_relaxed_min_ratio': 1.2,
+    'report_fact_relaxed_min_disliked': 2,
+}
+
+
+class TestTieredFacts:
+
+    def test_tier1_strict_unchanged(self):
+        rows = _rows_by_id(
+            _row('B1', style='brutalist'), _row('B2', style='brutalist'),
+            _row('B3', style='brutalist'), _row('B4', style='other'),
+            _row('B5', style='other'), _row('B6', style='other'),
+        )
+        result = compute_taste_facts(rows, ['B1', 'B2', 'B3', 'B4'], ['B5', 'B6'], _RC_TIERED)
+        assert result['tier'] == 'strict'
+        assert _fact_for(result, 'style', 'brutalist')['polarity'] == 'like'
+
+    def test_tier2_relaxed_when_strict_empty(self):
+        # style=x shown 2 (< strict min_shown 3), both liked; 2 others shown, 0 liked.
+        rows = _rows_by_id(
+            _row('B1', style='x'), _row('B2', style='x'),
+            _row('B3', style='y'), _row('B4', style='z'),
+        )
+        result = compute_taste_facts(rows, ['B1', 'B2'], ['B3', 'B4'], _RC_TIERED)
+        assert result['tier'] == 'relaxed'
+        fact = _fact_for(result, 'style', 'x')
+        assert fact is not None and fact['polarity'] == 'like'
+        assert fact['shown'] == 2 and fact['liked'] == 2
+
+    def test_relaxed_single_disliked_card_is_not_a_dislike_fact(self):
+        # style=x shown 2, disliked 1 (liked 1): "often swiped past" would be a miscount.
+        rows = _rows_by_id(
+            _row('B0', style='a'), _row('B1', style='b'), _row('B2', style='c'),
+            _row('B3', style='d'), _row('B4', style='x'), _row('D1', style='x'),
+        )
+        result = compute_taste_facts(rows, ['B0', 'B1', 'B2', 'B3', 'B4'], ['D1'], _RC_TIERED)
+        assert not any(f['polarity'] == 'dislike' for f in result['facts'])
+
+    def test_tier3_composition_counts_are_real(self):
+        # Liked and disliked all share style=x -> ratio 1, no like/dislike fact.
+        rows = _rows_by_id(
+            _row('B1', style='x'), _row('B2', style='x'), _row('B3', style='x'),
+            _row('D1', style='x'), _row('D2', style='x'), _row('D3', style='x'),
+        )
+        result = compute_taste_facts(rows, ['B1', 'B2', 'B3'], ['D1', 'D2', 'D3'], _RC_TIERED)
+        assert result['tier'] == 'composition'
+        facts = result['facts']
+        assert len(facts) == 1
+        top = facts[0]
+        assert top['polarity'] == 'composition'
+        assert (top['axis'], top['value']) == ('style', 'x')
+        assert top['liked_with'] == 3 and top['liked_total'] == 3
+        assert top['liked_with'] == len(top['building_ids'])
+        assert not any(bid.startswith('D') for bid in top['building_ids'])
+
+    def test_tier4_none_when_single_like(self):
+        rows = _rows_by_id(_row('B1', style='x'))
+        result = compute_taste_facts(rows, ['B1'], [], _RC_TIERED)
+        assert result['tier'] == 'none' and result['facts'] == []
+
+    def test_tier4_none_when_no_shared_feature(self):
+        rows = _rows_by_id(_row('B1', style='x'), _row('B2', style='y'))
+        result = compute_taste_facts(rows, ['B1', 'B2'], [], _RC_TIERED)
+        assert result['tier'] == 'none'
+
+
+class TestPatternText:
+
+    def test_composition_templates_exact(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        fact = {'polarity': 'composition', 'axis': 'style', 'value': 'brutalist', 'liked_with': 3, 'liked_total': 4}
+        assert build_fact_paragraph([fact], 'ko') == '좋아요한 4곳 중 3곳이 brutalist 스타일의 건물이었어요.'
+        assert build_fact_paragraph([fact], 'en') == '3 of the 4 buildings you liked had a brutalist style.'
+
+    def test_interpretive_fallback_has_no_digits_and_generic_when_no_tags(self):
+        from apps.recommendation.services._pattern_text import (
+            GENERIC_EN, GENERIC_KO, build_fallback_paragraph,
+        )
+
+        freq = {'style': {'brutalist': 2}, 'atmosphere': {'calm': 1}}
+        ko, kind = build_fallback_paragraph([], freq, 'ko')
+        en, _ = build_fallback_paragraph([], freq, 'en')
+        assert kind == 'interpretive'
+        assert ko == '고르신 건물들을 보면 brutalist, calm 쪽에 끌리는 취향이 보여요.'
+        assert en == 'Looking at the buildings you chose, you seem drawn to brutalist and calm.'
+        assert build_fallback_paragraph([], {}, 'ko') == (GENERIC_KO, 'generic')
+        assert build_fallback_paragraph([], {}, 'en') == (GENERIC_EN, 'generic')
+
+    def test_like_dislike_templates_and_two_number_cap(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        likes = [
+            {'polarity': 'like', 'axis': 'style', 'value': f'v{i}', 'ratio_display': 2, 'others_rarely_liked': False}
+            for i in range(3)
+        ]
+        dis = {'polarity': 'dislike', 'axis': 'program', 'value': 'office', 'dislike_word': 'mostly'}
+        ko = build_fact_paragraph(likes + [dis], 'ko')
+        assert ko.startswith('보여드린 건물 중 ')
+        assert ko.count('약 2배') == 2
+        assert '대부분 넘기셨어요' in ko
+        en = build_fact_paragraph(likes + [dis], 'en')
+        assert en.startswith('Among the buildings shown, ')
+        assert en.count('about 2x') == 2
+        assert 'mostly swiped past' in en
+
+    def test_korean_decade_label(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        fact = {'polarity': 'composition', 'axis': 'decade', 'value': '2020s', 'liked_with': 3, 'liked_total': 3}
+        ko = build_fact_paragraph([fact], 'ko')
+        assert '2020년대의 건물' in ko and '2020s' not in ko
+
+    def test_english_article_before_vowel(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        office = {'polarity': 'composition', 'axis': 'program', 'value': 'office', 'liked_with': 2, 'liked_total': 3}
+        indus = {'polarity': 'composition', 'axis': 'style', 'value': 'Industrial', 'liked_with': 2, 'liked_total': 3}
+        assert 'had an office program' in build_fact_paragraph([office], 'en')
+        assert 'had an Industrial style' in build_fact_paragraph([indus], 'en')
+
+    def test_qualitative_only_like_fact_has_no_number(self):
+        from apps.recommendation.services._pattern_text import build_fact_paragraph
+
+        fact = {'polarity': 'like', 'axis': 'style', 'value': 'x', 'ratio_display': 1, 'qualitative_only': True}
+        assert not any(ch.isdigit() for ch in build_fact_paragraph([fact], 'ko'))
+        assert '1x' not in build_fact_paragraph([fact], 'en')
+
+
+def _stub_llm(monkeypatch, services, generation, ko_pattern, en_pattern):
+    monkeypatch.setattr(generation, 'build_persona_prompt', lambda language: 'SYS')
+    payload = json.loads(json.dumps(_STUB_BILINGUAL_REPORT))
+    payload['ko']['pattern_paragraph'] = ko_pattern
+    payload['en']['pattern_paragraph'] = en_pattern
+    captured = {}
+
+    def fake_generate(*args, **kwargs):
+        captured['contents'] = kwargs['contents']
+        return _fake_gemini_response(payload)
+
+    monkeypatch.setattr(services, 'generate_content_with_fallback', fake_generate)
+    return captured
+
+
+_COMPOSITION_ROWS = [
+    _row('B1', style='x'), _row('B2', style='x'), _row('B3', style='x'),
+    _row('D1', style='x'), _row('D2', style='x'), _row('D3', style='x'),
+]
+_COMP_ARGS = (['B1', 'B2', 'B3'], ['D1', 'D2', 'D3'])
+
+
+class TestGeneratePersonaReportTiers:
+
+    def test_facts_path_pattern_source_and_mode(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        rows = [
+            _row('B1', style='brutalist'), _row('B2', style='brutalist'),
+            _row('B3', style='brutalist'), _row('B4', style='other'),
+            _row('B5', style='other'), _row('B6', style='other'),
+        ]
+        services = _mock_cursor(monkeypatch, rows)
+        captured = _stub_llm(monkeypatch, services, generation, 'KO text', 'EN text')
+        report = generation.generate_persona_report(['B1', 'B2', 'B3', 'B4'], ['B5', 'B6'])
+        assert json.loads(captured['contents'])['pattern_mode'] == 'facts'
+        assert report['pattern_source'] == 'facts'
+        assert report['taste_facts']['tier'] == 'strict'
+        assert report['i18n']['ko']['pattern_paragraph'] == 'KO text'
+
+    def test_relaxed_path(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        rows = [_row('B1', style='x'), _row('B2', style='x'), _row('B3', style='y'), _row('B4', style='z')]
+        services = _mock_cursor(monkeypatch, rows)
+        captured = _stub_llm(monkeypatch, services, generation, 'KO text', 'EN text')
+        report = generation.generate_persona_report(['B1', 'B2'], ['B3', 'B4'])
+        assert json.loads(captured['contents'])['pattern_mode'] == 'facts'
+        assert report['pattern_source'] == 'relaxed'
+        assert report['taste_facts']['tier'] == 'relaxed'
+
+    def test_composition_path_numbers_real(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, _COMPOSITION_ROWS)
+        captured = _stub_llm(
+            monkeypatch, services, generation,
+            '좋아요한 3곳 중 3곳이 x 스타일의 건물이었어요.', '3 of the 3 buildings you liked had a x style.',
+        )
+        report = generation.generate_persona_report(*_COMP_ARGS)
+        sent = json.loads(captured['contents'])
+        assert sent['pattern_mode'] == 'composition'
+        assert sent['facts'][0]['liked_with'] == 3 and sent['facts'][0]['liked_total'] == 3
+        assert report['pattern_source'] == 'composition'
+        assert report['taste_facts']['facts'][0]['polarity'] == 'composition'
+        assert 'D1' not in json.dumps(report)
+
+    def test_composition_llm_with_invented_number_replaced(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, _COMPOSITION_ROWS)
+        _stub_llm(monkeypatch, services, generation, '좋아요한 3곳 중 9곳이 x 건물이었어요.', 'ok no digits')
+        report = generation.generate_persona_report(*_COMP_ARGS)
+        assert report['i18n']['ko']['pattern_paragraph'] == '좋아요한 3곳 중 3곳이 x 스타일의 건물이었어요.'
+        assert report['i18n']['en']['pattern_paragraph'] == 'ok no digits'
+        assert report['pattern_source'] == 'fallback'
+
+    def test_interpretive_path_prompt_mode_and_digit_guard(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1', style='x')])
+        captured = _stub_llm(
+            monkeypatch, services, generation,
+            '고르신 건물들을 보면 3곳이 x예요.', 'Looking at the buildings you chose, you seem drawn to x.',
+        )
+        report = generation.generate_persona_report(['B1'])
+        assert json.loads(captured['contents'])['pattern_mode'] == 'interpretive'
+        for key in ('ko', 'en'):
+            assert not any(ch.isdigit() for ch in report['i18n'][key]['pattern_paragraph'])
+        assert report['i18n']['ko']['pattern_paragraph'] == '고르신 건물들을 보면 x 쪽에 끌리는 취향이 보여요.'
+        assert report['i18n']['en']['pattern_paragraph'].startswith('Looking at the buildings you chose')
+        assert report['pattern_source'] == 'fallback'
+
+    def test_interpretive_clean_llm_text_kept(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1', style='x')])
+        _stub_llm(monkeypatch, services, generation, '고르신 건물들을 보면 x에 끌려요.', 'Looking at the buildings you chose, x.')
+        report = generation.generate_persona_report(['B1'])
+        assert report['pattern_source'] == 'interpretive'
+        assert report['pattern_paragraph'] == '고르신 건물들을 보면 x에 끌려요.'
+
+    def test_blank_llm_fallback_both_languages_from_facts(self, monkeypatch, caplog):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, _COMPOSITION_ROWS)
+        _stub_llm(monkeypatch, services, generation, '', '   ')
+        rec_logger = logging.getLogger('apps.recommendation')
+        rec_logger.addHandler(caplog.handler)
+        try:
+            report = generation.generate_persona_report(*_COMP_ARGS)
+        finally:
+            rec_logger.removeHandler(caplog.handler)
+        assert report['i18n']['ko']['pattern_paragraph'] == '좋아요한 3곳 중 3곳이 x 스타일의 건물이었어요.'
+        assert report['i18n']['en']['pattern_paragraph'] == '3 of the 3 buildings you liked had a x style.'
+        assert report['pattern_source'] == 'fallback'
+        assert any('deterministic fallback' in r.message for r in caplog.records)
+
+    def test_blank_one_language_keeps_other_and_fills_blank(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        services = _mock_cursor(monkeypatch, [_row('B1', style='x')])
+        _stub_llm(monkeypatch, services, generation, '', 'Looking at the buildings you chose, you like x.')
+        report = generation.generate_persona_report(['B1'], language='en')
+        assert report['i18n']['en']['pattern_paragraph'] == 'Looking at the buildings you chose, you like x.'
+        assert report['i18n']['ko']['pattern_paragraph'] == '고르신 건물들을 보면 x 쪽에 끌리는 취향이 보여요.'
+        assert report['pattern_paragraph'] == report['i18n']['en']['pattern_paragraph']
+
+    def test_blank_llm_no_tags_uses_generic(self, monkeypatch):
+        from apps.recommendation.services import generation
+        from apps.recommendation.services._pattern_text import GENERIC_EN, GENERIC_KO
+
+        services = _mock_cursor(monkeypatch, [_row('B1')])
+        _stub_llm(monkeypatch, services, generation, '', '')
+        report = generation.generate_persona_report(['B1'])
+        assert report['i18n']['ko']['pattern_paragraph'] == GENERIC_KO
+        assert report['i18n']['en']['pattern_paragraph'] == GENERIC_EN
+
+    def test_blank_llm_with_dislike_fact_strips_ids(self, monkeypatch):
+        from apps.recommendation.services import generation
+
+        rows = [
+            _row('B1', style='other'), _row('B2', style='other'), _row('B3', style='other'),
+            _row('B4', style='brutalist'), _row('B5', style='brutalist'), _row('B6', style='brutalist'),
+        ]
+        services = _mock_cursor(monkeypatch, rows)
+        _stub_llm(monkeypatch, services, generation, '', '')
+        report = generation.generate_persona_report(['B1', 'B2', 'B3'], ['B4', 'B5', 'B6'])
+        blob = json.dumps(report)
+        for disliked_id in ('B4', 'B5', 'B6'):
+            assert disliked_id not in blob
+        assert '대부분 넘기셨어요' in report['i18n']['ko']['pattern_paragraph']

@@ -34,6 +34,7 @@ import { useNavigate } from 'react-router-dom'
 import PentagonChart from './PentagonChart.jsx'
 import { getPersonReportImage } from '../api/people.js'
 import { useTranslation } from '../i18n/index.js'
+import { safeImageMime } from '../utils/imageMime.js'
 import {
   photoCardShellStyle,
   photoCardImageStyle,
@@ -42,6 +43,7 @@ import {
   photoCardTitleStyle,
 } from './photoCardShell.js'
 import styles from './PersonCard.module.css'
+import { userHandle } from '../utils/userIdentity.js'
 
 export default function PersonCard({ person, myVector, onClick, onInterest }) {
   const navigate = useNavigate()
@@ -65,7 +67,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
     getPersonReportImage(person.user_id).then(data => {
       if (cancelled) return
       if (data?.image_data) {
-        setImage(`data:${data.mime_type || 'image/png'};base64,${data.image_data}`)
+        setImage(`data:${safeImageMime(data.mime_type)};base64,${data.image_data}`)
       } else {
         setImageFailed(true)
       }
@@ -133,7 +135,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFlip(e) }
       }}
-      aria-label={t('personCard.flipCard', { name: person.display_name })}
+      aria-label={t('personCard.flipCard', { name: userHandle(person) })}
       aria-pressed={isFlipped}
     >
       <div
@@ -145,7 +147,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
           {image ? (
             <img
               src={image}
-              alt={t('personCard.reportImageAlt', { name: person.display_name })}
+              alt={t('personCard.reportImageAlt', { name: userHandle(person) })}
               loading="lazy"
               style={photoCardImageStyle}
               draggable={false}
@@ -166,7 +168,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
             data-no-flip="true"
             className={styles.interestBtn}
             onClick={handleInterestClick}
-            aria-label={t('personCard.interest', { name: person.display_name })}
+            aria-label={t('personCard.interest', { name: userHandle(person) })}
             title={t('personCard.interestTitle')}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -174,7 +176,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
             </svg>
           </button>
           <div style={photoCardCaptionStyle}>
-            <h2 style={photoCardTitleStyle}>{person.handle || person.display_name}</h2>
+            <h2 style={photoCardTitleStyle}>{userHandle(person)}</h2>
           </div>
         </div>
 
@@ -198,7 +200,7 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
               highlightAxis={isMe ? null : (person.highlight_axis ?? null)}
               mini
               legend={!isMe}
-              legendTheirsLabel={person.display_name}
+              legendTheirsLabel={userHandle(person)}
             />
           </div>
 
@@ -208,9 +210,9 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
               data-no-flip="true"
               className={styles.nameBtn}
               onClick={goToProfile}
-              aria-label={t('personCard.viewProfile', { name: person.display_name })}
+              aria-label={t('personCard.viewProfile', { name: userHandle(person) })}
             >
-              {person.display_name}
+              {userHandle(person)}
             </button>
             {/* Without this the single-polygon chart above reads as a bug
                 ("why does this one card have no comparison?"). */}

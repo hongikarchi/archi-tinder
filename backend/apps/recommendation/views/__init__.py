@@ -20,6 +20,7 @@ from .. import services  # noqa: F401 — exposed for mock.patch('apps.recommend
 from .projects import (
     ProjectListCreateView,
     ProjectDetailView,
+    ProjectRecommendationsView,
     UserProjectsListView,
 )
 from .sessions import (
@@ -35,12 +36,6 @@ from .swipe import (
     # Private helpers accessed by tests
     _merge_buffer_into_exposed,
     _async_prefetch_thread,
-)
-from .search import (
-    ParseQueryView,
-    ParseQueryStreamView,
-    # Private helper accessed by tests
-    _spawn_stage2,
 )
 from .discovery import (
     DiscoveryFeedView,
@@ -67,6 +62,7 @@ from .inspect import (
     InspectBuildingDetailView,
     InspectSearchView,
 )
+from .taste_start import TasteRecognizeView, TasteCardsView
 from ._shared import (
     # Private helpers accessed by tests
     _liked_id_only,
@@ -78,6 +74,7 @@ __all__ = [
     # Public view classes
     'ProjectListCreateView',
     'ProjectDetailView',
+    'ProjectRecommendationsView',
     'UserProjectsListView',
     'SessionCreateView',
     'SessionStateView',
@@ -86,8 +83,8 @@ __all__ = [
     'ProjectBookmarkView',
     'BuildingBatchView',
     'DiverseRandomView',
-    'ParseQueryView',
-    'ParseQueryStreamView',
+    'TasteRecognizeView',
+    'TasteCardsView',
     'DiscoveryFeedView',
     'DiscoveryFeedbackView',
     'DiscoveryPromoteView',
@@ -109,5 +106,4 @@ __all__ = [
     '_progress',
     '_merge_buffer_into_exposed',
     '_async_prefetch_thread',
-    '_spawn_stage2',
 ]

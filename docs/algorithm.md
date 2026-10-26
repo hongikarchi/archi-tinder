@@ -20,6 +20,8 @@ OpenAI `gpt-5.4-mini` (strict schema) via `LLM_PROVIDER=openai`; the code defaul
 rollback is Gemini; persona text and images are Gemini, pinned in code. Where the
 notes below say "Gemini call" for parsing, read "LLM call".
 
+> **취향 시작 개편 진행 중 (2026-10-11~):** 새 흐름(JEV 태그 → 세 장 → 새 스와이프 규칙)의 결정은 `docs/decisions/2026-10-11-taste-start-redesign.md`를 볼 것. 이 문서는 현재 운영 코드를 설명함. 개편이 끝나면 그 결정이 이 문서의 Phase 0–2를 대체함.
+
 ---
 
 ## Recommendation Pipeline Theory
@@ -157,6 +159,8 @@ _(Updated 2026-04-25 190c830: Like writes now carry an `intensity` field (defaul
 - **Extreme Dislike Bias:** If consecutive dislikes >= `max_consecutive_dislikes`, pick building farthest from dislike centroid (escape dead-end). K-Means cannot run without likes.
 
   _(Updated 2026-04-25 f04646f: `max_consecutive_dislikes` reduced 10 → 5 per spec Section 5.1; silent dislike fallback now fires sooner.)_
+
+  _(Updated 2026-10-17 f420b28: taste_v2 (#431) removed `max_consecutive_dislikes` + `get_dislike_fallback`; skip streaks now raise the check-card share (`taste_v2_skip_streak`, `taste_v2_skip_streak_hard`). `initial_explore_rounds` and `context_caching_ttl_seconds` also removed — the tuning ranges below are historical.)_
 - **Pool Exhaustion:** If all pool buildings shown and delta_V still above epsilon (erratic swiping), force exit to results. UI indicates best-effort results.
 
   _(Updated 2026-04-25 f17cb5e: §5.6 + §6 implementation requirement A4 — engine.refresh_pool_if_low(threshold=5) called from SwipeView in normal + action-card paths; auto-escalates to next 3-tier filter relaxation level (full → drop geo/numeric → random) and merges new candidates with exclude_ids = pool_ids ∪ exposed_ids. Migration 0008 adds session-level relaxation state (original_filters, original_filter_priority, original_seed_ids, current_pool_tier).)_

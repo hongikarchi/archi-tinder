@@ -116,6 +116,46 @@ class TestProjectDetailView:
         # updated_at in response must be non-null (DB-set by auto_now=True)
         assert data.get('updated_at') is not None
 
+    def test_patch_response_omits_heavy_blobs_keeps_rest(self, auth_client, user_profile):
+        """PATCH body drops report_image/conversation_history/analysis_report only."""
+        project = Project.objects.create(
+            user=user_profile, name='Before', report_image='x' * 1000,
+            report_image_mime='image/png', conversation_history={'messages': []},
+            analysis_report={'a': 1},
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/', {'name': 'After'}, format='json',
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        for gone in ('report_image', 'report_image_mime', 'conversation_history', 'analysis_report'):
+            assert gone not in data
+        for kept in ('project_id', 'user', 'name', 'visibility', 'liked_ids', 'saved_ids',
+                     'final_report', 'report_stale', 'is_temp', 'latest_session_id',
+                     'latest_session_meta', 'created_at', 'updated_at'):
+            assert kept in data
+        assert 'disliked_ids' not in data
+        # Deferred blobs must not be wiped by the rename save.
+        project.refresh_from_db()
+        assert project.name == 'After'
+        assert project.report_image == 'x' * 1000
+        assert project.conversation_history == {'messages': []}
+        assert project.analysis_report == {'a': 1}
+
+    def test_patch_response_like_count_from_latest_session(self, auth_client, user_profile):
+        from apps.recommendation.models import AnalysisSession
+        project = Project.objects.create(user=user_profile, name='Before')
+        session = AnalysisSession.objects.create(
+            user=user_profile, project=project,
+            like_vectors=[{'embedding': [0.0] * 3, 'round': i} for i in range(4)],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/', {'name': 'After'}, format='json',
+        )
+        meta = resp.json()['latest_session_meta']
+        assert meta['id'] == str(session.session_id)
+        assert meta['like_count'] == 4
+
 
 # -- remove_building_ids PATCH tests ------------------------------------------
 
@@ -191,6 +231,108 @@ class TestProjectRemoveBuildingIds:
         assert len(project.liked_ids) == 2
         liked_id_values = [item['id'] for item in project.liked_ids]
         assert 'bld_001' in liked_id_values
+
+    def test_patch_remove_all_liked_rejected(self, auth_client, user_profile):
+        """Removing every liked building -> 400 last_liked_building, project unchanged."""
+        liked = [{'id': 'bld_001'}, {'id': 'bld_002'}]
+        saved = [{'id': 'bld_001', 'saved_at': '2024-01-01T00:00:00Z'}]
+        project = Project.objects.create(
+            user=user_profile, name='LastLiked', liked_ids=liked, saved_ids=saved,
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_001', 'bld_002']},
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {'detail': 'last_liked_building'}
+        project.refresh_from_db()
+        assert project.liked_ids == liked
+        assert project.saved_ids == saved
+
+    def test_patch_remove_all_but_one_liked_ok(self, auth_client, user_profile):
+        project = Project.objects.create(
+            user=user_profile, name='KeepOne',
+            liked_ids=[{'id': 'bld_001'}, {'id': 'bld_002'}, {'id': 'bld_003'}],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_001', 'bld_002']},
+            format='json',
+        )
+        assert resp.status_code == 200
+        assert [i['id'] for i in resp.json()['liked_ids']] == ['bld_003']
+
+    def test_patch_remove_tolerates_legacy_string_entry(self, auth_client, user_profile):
+        """A legacy plain-string liked_ids entry must not 500 the guard/removal."""
+        project = Project.objects.create(
+            user=user_profile, name='LegacyString',
+            liked_ids=[{'id': 'bld_001'}, 'bld_legacy', {'id': 'bld_002'}],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_001', 'bld_002']},
+            format='json',
+        )
+        assert resp.status_code == 200
+        project.refresh_from_db()
+        assert project.liked_ids == ['bld_legacy']
+
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_legacy']},
+            format='json',
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {'detail': 'last_liked_building'}
+
+    def test_patch_remove_saved_only_ids_ok(self, auth_client, user_profile):
+        project = Project.objects.create(
+            user=user_profile, name='SavedOnly',
+            liked_ids=[{'id': 'bld_001'}],
+            saved_ids=[{'id': 'bld_009', 'saved_at': '2024-01-01T00:00:00Z'}],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_009']},
+            format='json',
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [i['id'] for i in data['liked_ids']] == ['bld_001']
+        assert data['saved_ids'] == []
+
+    def test_patch_zero_liked_remove_saved_ok(self, auth_client, user_profile):
+        project = Project.objects.create(
+            user=user_profile, name='NoLiked', liked_ids=[],
+            saved_ids=[{'id': 'bld_009', 'saved_at': '2024-01-01T00:00:00Z'}],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_009']},
+            format='json',
+        )
+        assert resp.status_code == 200
+        assert resp.json()['saved_ids'] == []
+
+    def test_patch_remove_non_owner_404(self, auth_client, user_profile):
+        from django.contrib.auth.models import User
+        from apps.accounts.models import UserProfile
+        other = UserProfile.objects.create(
+            user=User.objects.create_user(username='other_rm', email='o_rm@test.com'),
+            display_name='Other',
+        )
+        project = Project.objects.create(
+            user=other, name='NotMine', liked_ids=[{'id': 'bld_001'}],
+        )
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['bld_001']},
+            format='json',
+        )
+        assert resp.status_code == 404
+        project.refresh_from_db()
+        assert len(project.liked_ids) == 1
 
 
 # -- UserProjectsListView --------------------------------------------------------

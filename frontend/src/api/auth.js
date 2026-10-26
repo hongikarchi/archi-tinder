@@ -1,37 +1,30 @@
 /**
  * api/auth.js
- * Authentication: social login, guest login, promote, dev login, logout.
+ * Authentication: social login, promote, dev login, logout.
  */
 
 import { callApi, clearTokens, setTokens, _fetchWithTimeout, BASE } from './core.js'
 
 /**
- * Exchange a provider access_token (or auth code) for a backend JWT.
- * provider: 'google' | 'kakao' | 'naver'
- * accessToken: OAuth access_token (implicit flow) -- may be null for auth-code flow
- * code: authorization code (auth-code flow) -- used when accessToken is null
- * Returns: { access, refresh, user }
+ * Exchange a provider auth code for a backend JWT.
+ * provider: 'google' | 'kakao'
+ * body: { code } (google) | { code, redirect_uri } (kakao)
+ * Returns: user object (tokens are stored).
  */
-export async function socialLogin(provider, accessToken, code) {
+export async function socialLogin(provider, body) {
   clearTokens()  // Remove stale tokens so callApi doesn't send an invalid Authorization header
-  const body = {}
-  if (accessToken) body.access_token = accessToken
-  if (code) body.code = code
   const data = await callApi('POST', `/auth/social/${provider}/`, body, false)
   setTokens(data.access, data.refresh)
   return data.user
 }
 
 /**
- * Create a guest (unverified) account.
- * payload: { display_name, onboarding_role, consent_accepted: true, consent_policy_version }
- * Returns: user object (same shape as socialLogin)
+ * Complete first-login onboarding (authenticated).
+ * payload: { handle, affiliation, onboarding_role, consent_accepted: true, consent_policy_version }
+ * Returns: updated user object (onboarding_required: false).
  */
-export async function guestLogin(payload) {
-  clearTokens()
-  const data = await callApi('POST', '/auth/guest/', payload, false)
-  setTokens(data.access, data.refresh)
-  return data.user
+export async function completeOnboarding(payload) {
+  return await callApi('POST', '/auth/onboarding/', payload)
 }
 
 /**

@@ -223,17 +223,16 @@ class TestHandlePatch:
         assert 'handle' in response.json()
 
     @pytest.mark.django_db
-    def test_handle_null_clears_value(self, user_and_profile, auth_client):
-        """PATCH with handle=null is accepted and clears the handle."""
+    def test_handle_null_rejected(self, user_and_profile, auth_client):
+        """PATCH with handle=null is rejected (unified ID can't be cleared)."""
         # Set a handle first
         auth_client.patch('/api/v1/users/me/', {'handle': 'my_handle'}, format='json')
         # Now clear it
         response = auth_client.patch(
             '/api/v1/users/me/', {'handle': None}, format='json',
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data['handle'] is None
+        assert response.status_code == 400
+        assert 'handle' in response.json()
 
 
 # ---------------------------------------------------------------------------

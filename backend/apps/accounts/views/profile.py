@@ -42,10 +42,11 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     has_report_image + report_image_url (pointer to the persona report
     image; the card prefers it over cover_image_url).
 
-    Cover derivation: first liked_ids building → first saved_ids building → ''.
+    Liked buildings only: building_count, cover and thumbnails come from
+    liked_ids (bookmarked saved_ids never count). Cover = first liked building
+    with an image → ''.
     Image batch lookup is performed only for the paged slice to avoid N+1 at
-    scale. The image_focus echo in card payloads enables frontend objectFit
-    decisions.
+    scale.
     """
     from apps.recommendation.models import Project
     from apps.recommendation import engine
@@ -79,20 +80,17 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
         }
 
     # Collect all building_ids needed for image resolution (cover + thumbnails).
-    # Per project: take first 7 unique ids from liked_ids + saved_ids combined
-    # (cover uses first; thumbnails use up to 6 from the rest).
+    # Per project: take first 7 unique ids from liked_ids ONLY (boards show liked
+    # buildings; bookmarks never feed cover/thumbnails/count — 2026-10-23).
+    # Cover uses first; thumbnails use up to 6 from the rest.
     def _extract_ids(project):
         liked = [
             (entry if isinstance(entry, str) else entry.get('id', ''))
             for entry in (project.liked_ids or [])
         ]
-        saved = [
-            (entry if isinstance(entry, str) else entry.get('id', ''))
-            for entry in (project.saved_ids or [])
-        ]
         # De-dup while preserving order; take first 7 to have cover + 6 thumbs
         seen, result = set(), []
-        for bid in liked + saved:
+        for bid in liked:
             if bid and bid not in seen:
                 seen.add(bid)
                 result.append(bid)
@@ -116,9 +114,7 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
         bids = project_bid_lists[p.project_id]
         cover_url = next((image_map.get(bid, '') for bid in bids if image_map.get(bid)), '')
         thumbnails = [image_map[bid] for bid in bids if image_map.get(bid)][:6]
-        building_count = (
-            len(p.liked_ids or []) + len(p.saved_ids or [])
-        )
+        building_count = len(p.liked_ids or [])
         items.append({
             'project_id':     str(p.project_id),
             'name':           p.name,

@@ -5,6 +5,7 @@
 
 import { callApi } from './core.js'
 import { normalizeCard } from './images.js'
+import { postUntilReady } from '../utils/postUntilReady.js'
 
 /**
  * Typed error thrown when the backend returns 403 with reason=board_limit_reached.
@@ -97,11 +98,26 @@ export async function deleteProject(projectId) {
 }
 
 export async function generateReport(projectId, { regenerate = false } = {}) {
-  return callApi('POST', `/projects/${projectId}/report/generate/`, regenerate ? { regenerate: true } : undefined)
+  // 202 in_progress (server-side dedupe of a duplicate request) is polled, not returned.
+  return postUntilReady(ctx => callApi(
+    'POST', `/projects/${projectId}/report/generate/`,
+    regenerate ? (ctx ? { regenerate: true, if_generation: ctx.basedOn } : { regenerate: true }) : undefined,
+  ))
 }
 
 export async function generateReportImage(projectId, { regenerate = false, timeoutMs } = {}) {
   return callApi('POST', `/projects/${projectId}/report/generate-image/`, regenerate ? { regenerate: true } : undefined, true, timeoutMs)
+}
+
+/**
+ * Recommended buildings for a board's persona report. Works for the owner AND
+ * for viewers of a public board (the session-result endpoint is owner-only).
+ * Resolves to an array of normalized ImageCard objects ([] when none).
+ * Throws on network/HTTP failure — callers hide the section on error.
+ */
+export async function getProjectRecommendations(projectId) {
+  const data = await callApi('GET', `/projects/${projectId}/recommendations/`)
+  return (data?.predicted_like_images || []).map(normalizeCard).filter(Boolean)
 }
 
 /**

@@ -1,42 +1,52 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
-import PersonaReport from '../components/PersonaReport.jsx'
-import styles from './BoardReportPage.module.css'
+import PersonaReportPage from '../components/PersonaReportPage.jsx'
 import { useTranslation } from '../i18n/index.js'
-import { generateReport } from '../api/projects.js'
-import PageLogoHeader from '../components/PageLogoHeader.jsx'
-import PageTopControls from '../components/PageTopControls.jsx'
-import PageBackButton from '../components/PageBackButton.jsx'
-
-function Spinner() {
-  return (
-    <div style={{
-      width: 32, height: 32, borderRadius: '50%',
-      border: '3px solid var(--color-border)',
-      borderTopColor: 'var(--accent-1)',
-      animation: 'spin 1.2s linear infinite',
-    }} />
-  )
-}
+import { generateReport, getProjectRecommendations } from '../api/projects.js'
+import { reportJobs } from '../hooks/useReportJobs.js'
+import { useRegeneration } from '../hooks/useRegeneration.jsx'
+import { reportImageJobs } from '../hooks/useReportImageJob.js'
+import { shouldRegenerateOnOpen } from '../utils/reportStale.js'
 
 /* ── BoardReportPage ────────────────────────────────────────────────────── */
+// Data + ownership for /board/:boardId/report; all rendering (report body and
+// the loading / failure / empty / unavailable states) is the shared
+// PersonaReportPage component.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function cardId(card) {
+  return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
+}
 
 export default function BoardReportPage({ onLogout }) {
   const navigate = useNavigate()
   const { boardId: rawBoardId } = useParams()
   // Same gate as BoardDetailPage: malformed URL param → null, never reaches the API layer.
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
-  const locationState = useLocation().state
+  const location = useLocation()
+  const locationState = location.state
   const { t } = useTranslation()
 
-  const { board, loading } = useBoard(boardId)
+  // Recommendations come from the project-recommendations endpoint (owner AND
+  // public-board viewers), not the owner-only session result.
+  const { board, loading, error: boardError, reload: reloadBoard } = useBoard(boardId, { fetchResult: false })
 
   const [localReport, setLocalReport] = useState(null)
   const [localAxisScores, setLocalAxisScores] = useState(null)
   const [genError, setGenError] = useState(false)
+  const [recommendations, setRecommendations] = useState([])
   const genRef = useRef(false)
+  // Stale-report regeneration on open (owner only, once per mount).
+  const staleRef = useRef(false)
+  const aliveRef = useRef(true)
+  const freshSaveRef = useRef(!!locationState?.saved)
+  const [staleBusy, setStaleBusy] = useState(false)
+  const [staleHandled, setStaleHandled] = useState(false)
+  useEffect(() => {
+    aliveRef.current = true
+    return () => { aliveRef.current = false }
+  }, [])
 
   // Ownership. Same derivation as BoardDetailPage (viewer id from sessionStorage
   // vs the board's owner id) so both pages agree on who owns a board.
@@ -44,25 +54,36 @@ export default function BoardReportPage({ onLogout }) {
   const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
   const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
 
-  const report = board?.final_report || localReport
+  // localReport (auto-generated or regenerated) wins over the fetched board copy.
+  const report = localReport || board?.final_report
+  const axisScores = localAxisScores || locationState?.axisScores || board?.axis_scores || null
   // Auto-generate condition, computed once and reused for both the effect
-  // guard AND the render branch below — this is what avoids the first-paint
-  // flash: while the condition holds but the effect (fired via useEffect,
-  // one tick after paint) hasn't run yet, we still render the spinner
-  // instead of the noReport state.
+  // guard AND the render branch below — avoids the first-paint flash: while the
+  // condition holds but the effect (one tick after paint) hasn't run yet, we
+  // still render the "making" skeleton instead of the noReport state.
   //
   // isOwner gate: without it, opening someone else's report-less board fired
   // generateReport against THEIR project — a write on another user's data
-  // (and a Gemini call) triggered just by viewing. Non-owners now fall through
-  // to the existing no-report state instead.
+  // (and a Gemini call) triggered just by viewing.
   const shouldAutoGenerate = !!(
     isOwner && board && !report && !genError && board.liked_ids?.length > 0
   )
+
+  // Owner opens a board whose liked buildings changed after the report was made:
+  // regenerate the report (server resets staleness), then the image through the
+  // shared store without blocking the report. Handled flag avoids a flash of the
+  // stale flow after success.
+  // Never on a first generation: a report made in this visit (localReport) or
+  // arriving via the swipe-end save flow (freshSaveRef, captured at mount before
+  // the state flag is dropped) is fresh, so it must not be treated as stale.
+  const shouldRegenerateStale = !staleHandled
+    && shouldRegenerateOnOpen({ isOwner, board, hasLocalReport: !!localReport, freshlySaved: freshSaveRef.current })
 
   useEffect(() => {
     if (!shouldAutoGenerate) return
     if (genRef.current) return
     genRef.current = true
+    staleRef.current = true   // first generation: the stale flow must never follow it
 
     generateReport(boardId)
       .then(data => {
@@ -78,105 +99,136 @@ export default function BoardReportPage({ onLogout }) {
         setGenError(true)
       })
     // No finally-reset of genRef — auto-generate fires at most once per mount.
-    // Retry is user-initiated via the button below (handleRetry resets the ref).
+    // Retry is user-initiated (handleRetry resets the ref).
   }, [shouldAutoGenerate, boardId])
 
+  // Recommendations: fetched once the board is known to be viewable. A failed
+  // or empty fetch just hides the section.
+  const hasBoard = !!board
+  useEffect(() => {
+    if (!boardId || !hasBoard) return
+    let cancelled = false
+    getProjectRecommendations(boardId)
+      .then(cards => { if (!cancelled) setRecommendations(cards) })
+      .catch(() => { if (!cancelled) setRecommendations([]) })
+    return () => { cancelled = true }
+  }, [boardId, hasBoard])
+
+  // Owner-only image + report regeneration (viewers get no handlers, so no POST).
+  const regen = useRegeneration({
+    projectId: boardId,
+    enabled: isOwner,
+    axisScores,
+    onReportRegenerated: data => {
+      setLocalReport(data.final_report)
+      setLocalAxisScores(data.axis_scores || null)
+    },
+  })
+
+  const { showToast } = regen
+  useEffect(() => {
+    if (!shouldRegenerateStale || staleRef.current) return
+    staleRef.current = true
+    setStaleBusy(true)
+    showToast(t('persona.staleRegenerating'))
+    // Shared in-flight store: joins a swipe-end regeneration already running for
+    // this board instead of sending a second POST. The image regeneration is
+    // chained by the store as soon as the report lands (even if this page was left
+    // meanwhile); the aliveRef guard only protects the state setters.
+    reportJobs.regenerate(boardId, { afterSuccess: () => { reportImageJobs.regenerate(boardId) } })
+      .then(data => {
+        if (!data?.final_report) throw new Error('empty report')
+        if (!aliveRef.current) return
+        setLocalReport(data.final_report)
+        setLocalAxisScores(data.axis_scores || null)
+      })
+      .catch(err => {
+        console.error('[BoardReportPage] stale regenerate failed:', err)
+        if (aliveRef.current) showToast(t('persona.regenFail'))
+      })
+      .finally(() => {
+        if (!aliveRef.current) return
+        setStaleHandled(true)
+        setStaleBusy(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRegenerateStale, boardId])
+
+  // Post-save landing (App.handleBoardSaved navigates with state.saved): toast once,
+  // then drop the flag so back/forward doesn't replay it. Waits for ownership
+  // because the toast host lives in the owner-only regeneration overlay.
+  const savedRef = useRef(!!locationState?.saved)
+  useEffect(() => {
+    if (!savedRef.current || !isOwner) return
+    savedRef.current = false
+    showToast(t('results.savedToast'))
+    const { saved: _saved, ...rest } = locationState || {}
+    navigate(location.pathname, { replace: true, state: Object.keys(rest).length ? rest : null })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOwner])
+
+  // 403/404 = private or missing board ("unavailable"); any other failure
+  // (network, 5xx, timeout) is a retryable load failure.
+  const boardGone = boardError?.status === 403 || boardError?.status === 404
+  const loadFailed = !!boardError && !board && !boardGone
+
   function handleRetry() {
+    if (loadFailed) {
+      reloadBoard()
+      return
+    }
     genRef.current = false
     setGenError(false)
   }
 
-  /* Loading state (board fetch) OR auto-generate in flight (incl. pre-effect paint) */
-  if (loading || shouldAutoGenerate) {
-    return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Spinner />
-        </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
+  function handleOpenBuilding(card) {
+    const id = cardId(card)
+    if (!id) return
+    navigate(`/buildings/${id}`, { state: { referrer: location.pathname } })
   }
 
-  /* Board not found */
-  if (!board) {
-    return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0 }}>
-            {t('board.notFound')}
-          </p>
-        </div>
-      </div>
-    )
-  }
+  let state = 'ready'
+  if (!boardId) state = 'unavailable'
+  else if (loading) state = 'fetching'
+  else if (shouldAutoGenerate || shouldRegenerateStale || staleBusy) state = 'making'
+  else if (!board) state = loadFailed ? 'loadFail' : 'unavailable'
+  else if (genError) state = 'genFail'
+  else if (!report) state = 'noReport'
 
-  /* Auto-generate failed — distinct copy + retry from the "no report at all" state */
-  if (genError) {
-    return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
-          <p style={{ color: 'var(--color-destructive)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0, textAlign: 'center' }}>
-            {t('board.reportGenError')}
-          </p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              onClick={handleRetry}
-              style={{
-                padding: '10px 24px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--accent-1)',
-                border: 'none',
-                color: '#fff',
-                fontSize: 'var(--fs-body)',
-                fontWeight: 'var(--fw-semibold)',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              {t('board.retry')}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  /* No report available (no liked buildings — generation never attempted) */
-  if (!report) {
-    return (
-      <div className={styles.page} style={{ display: 'flex', flexDirection: 'column' }}>
-        <PageLogoHeader />
-        <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 20px' }}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-semibold)', margin: 0 }}>
-            {t('board.noReport')}
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Liked row = the liked subset of the board's buildings (saved-only ones are not "liked").
+  const buildings = board?.buildings || []
+  const likedIdSet = new Set((board?.liked_ids || []).map(item => String(item?.id ?? item)))
+  const likedBuildings = board?.liked_ids ? buildings.filter(b => likedIdSet.has(String(cardId(b)))) : buildings
 
   return (
-    <div className={styles.page}>
-      <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(`/board/${boardId}`)} label={t('board.backToDetail')} />} />
-      <div className={styles.container}>
-        <PersonaReport
-          boardId={boardId}
-          canRegenerate={isOwner}
-          finalReport={report}
-          axisScores={locationState?.axisScores || localAxisScores || board?.axis_scores || null}
-          reportImage={board?.report_image || null}
-          reportImageMime={board?.report_image_mime || null}
-        />
-      </div>
-    </div>
+    <>
+    <PersonaReportPage
+      state={state}
+      role={isOwner ? 'owner' : 'viewer'}
+      onLogout={onLogout}
+      onBack={() => (state === 'ready' ? navigate(`/board/${boardId}`) : navigate(-1))}
+      backLabel={t('board.backToDetail')}
+      onRetry={handleRetry}
+      onProfile={() => navigate('/user/me')}
+      boardId={boardId}
+      finalReport={report}
+      axisScores={axisScores}
+      reportImage={board?.report_image || null}
+      reportImageMime={board?.report_image_mime || null}
+      meta={{
+        visibility: board?.visibility,
+        buildingCount: buildings.length,
+        reactionCount: board?.reaction_count ?? 0,
+        user: board?.user || board?.owner || null,
+      }}
+      likedBuildings={likedBuildings}
+      recommendations={recommendations}
+      makingLabelKey={shouldRegenerateStale || staleBusy ? 'persona.staleRegenerating' : undefined}
+      onOpenBuilding={handleOpenBuilding}
+      {...regen.imageProps}
+      {...regen.reportProps}
+    />
+    {regen.overlay}
+    </>
   )
 }

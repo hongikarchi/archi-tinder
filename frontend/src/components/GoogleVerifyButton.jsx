@@ -6,6 +6,7 @@
  */
 
 import { useGoogleLogin } from '@react-oauth/google'
+import { useTranslation } from '../i18n/index.js'
 
 function Spinner() {
   return (
@@ -33,6 +34,7 @@ function Spinner() {
  *                   replaces the default button (the hook stays inside this component)
  */
 export default function GoogleVerifyButton({ onSuccess, onError, onNonOAuthError, disabled, loading, label, renderTrigger }) {
+  const { t } = useTranslation()
   const googleLogin = useGoogleLogin({
     flow: 'auth-code',
     onSuccess,
@@ -49,7 +51,7 @@ export default function GoogleVerifyButton({ onSuccess, onError, onNonOAuthError
       type="button"
       onClick={() => googleLogin()}
       disabled={disabled}
-      aria-label="Verify with Google"
+      aria-label={t('auth.verifyWithGoogle')}
       style={{
         display: 'flex',
         alignItems: 'center',

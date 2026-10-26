@@ -1,7 +1,7 @@
 import logging
 
 from django.conf import settings
-from django.db import transaction
+from django.db import DatabaseError, connections, transaction
 from django.db.models import IntegerField, OuterRef, Subquery
 from django.db.models.expressions import RawSQL
 from django.shortcuts import get_object_or_404
@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from ..models import AnalysisSession, Project
 from ..serializers import (
     ProjectListSerializer,
+    ProjectPatchResponseSerializer,
     ProjectSerializer,
     ProjectSelfUpdateSerializer,
     PublicProjectListSerializer,
@@ -26,12 +27,49 @@ from ..caches import (
     evict_project_detail,
     get_project_detail_cache_key,
     PROJECT_DETAIL_TTL,
+    PROJECT_RECOMMENDATIONS_TTL,
+    get_project_recommendations_cache_key,
 )
+from ..report_signature import liked_signature
+from ..services import session_service
+from ..throttles import ProjectRecommendationsThrottle
 from ..perf_timing import endpoint, stage
 from ._shared import _get_profile
 
 logger = logging.getLogger('apps.recommendation')
 RC = settings.RECOMMENDATION
+
+
+def _entry_id(item):
+    """Building id of a liked_ids/saved_ids entry; tolerates legacy plain strings."""
+    if isinstance(item, dict):
+        return item.get('id')
+    if isinstance(item, str):
+        return item
+    return None
+
+
+def _count_renderable(building_ids):
+    """Number of ids that exist and are publishable in the buildings DB.
+
+    Liked ids that are missing / unpublishable never render, so they must not
+    keep the last-liked guard open. If the buildings DB is unreachable, fall
+    back to the raw id count (fail open: do not block the user's edit).
+    """
+    ids = list(dict.fromkeys(building_ids))
+    if not ids:
+        return 0
+    try:
+        with connections['buildings'].cursor() as cur:
+            cur.execute(
+                'SELECT count(*) FROM canonical_v2_buildings'
+                ' WHERE is_publishable = true AND canonical_bld_id = ANY(%s)',
+                [ids],
+            )
+            return cur.fetchone()[0]
+    except DatabaseError:
+        logger.warning('last_liked guard: buildings lookup failed; using raw count', exc_info=True)
+        return len(ids)
 
 
 # ── Projects ──────────────────────────────────────────────────────────────────
@@ -201,10 +239,31 @@ class ProjectDetailView(APIView):
             # select_for_update().filter(user=profile) means the lock is only
             # granted when the row belongs to the requesting user — a non-owner
             # request sees 404 without ever acquiring a row lock.
+            # Defer the heavy blobs the PATCH never reads (report_image is
+            # ~270 KB base64); save() then writes only the loaded fields.
             project = get_object_or_404(
-                Project.objects.select_for_update().filter(user=profile),
+                Project.objects.select_for_update().filter(user=profile)
+                .defer('report_image', 'report_image_mime', 'analysis_report', 'conversation_history'),
                 project_id=pk,
             )
+            # Ownership is already enforced by the filter above; reuse the
+            # request's profile instead of lazy-loading project.user(.user).
+            project.user = profile
+
+            # A board must keep at least one liked building: the persona report
+            # is generated from liked_ids. Reject before any mutation/eviction.
+            if remove_ids is not None and project.liked_ids:
+                remove_set_guard = set(remove_ids)
+                liked_entry_ids = (_entry_id(item) for item in project.liked_ids)
+                remaining = [
+                    i for i in liked_entry_ids
+                    if i is not None and i not in remove_set_guard
+                ]
+                if not _count_renderable(remaining):
+                    return Response(
+                        {'detail': 'last_liked_building'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             serializer = None
             if schema_data:
@@ -231,19 +290,34 @@ class ProjectDetailView(APIView):
 
             if remove_ids is not None:
                 remove_set = set(remove_ids)
-                project.liked_ids = [item for item in project.liked_ids if item.get('id') not in remove_set]
-                project.saved_ids = [item for item in project.saved_ids if item.get('id') not in remove_set]
-                project.save(update_fields=['liked_ids', 'saved_ids', 'updated_at'])
+                update_fields = ['liked_ids', 'saved_ids', 'updated_at']
+                # FULL-REPORT-UI-1: a legacy report has no source_signature, so
+                # it could never be flagged stale. Stamp it with the liked set
+                # as it is BEFORE this removal so the removal makes it stale.
+                if (
+                    isinstance(project.final_report, dict)
+                    and project.final_report
+                    and not project.final_report.get('source_signature')
+                ):
+                    project.final_report = {
+                        **project.final_report,
+                        'source_signature': liked_signature(project.liked_ids),
+                    }
+                    update_fields.append('final_report')
+                project.liked_ids = [item for item in project.liked_ids if _entry_id(item) not in remove_set]
+                project.saved_ids = [item for item in project.saved_ids if _entry_id(item) not in remove_set]
+                project.save(update_fields=update_fields)
                 evict_taste(profile.id)
                 evict_discovery_feed(profile.id)
             if serializer is not None:
                 serializer.save()
 
-        project.refresh_from_db()
+        # No refresh_from_db(): the locked instance was mutated and saved in
+        # this transaction, so it is already current (updated_at set by save()).
         evict_projects_list(profile.id)
         evict_user_profile_detail(profile.user.id)
         evict_project_detail(str(pk))
-        return Response(ProjectSerializer(project, context={'request': request}).data)
+        return Response(ProjectPatchResponseSerializer(project, context={'request': request}).data)
 
     def delete(self, request, pk):
         profile = _get_profile(request)
@@ -261,6 +335,52 @@ class ProjectDetailView(APIView):
         evict_user_profile_detail(profile.user.id)
         logger.info('Project deleted: %s', pk)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectRecommendationsView(APIView):
+    """GET /api/v1/projects/{project_id}/recommendations/ — FULL-REPORT-UI-1.
+
+    Recommended buildings of a board for EVERYONE who may see the board (owner
+    and non-owner). SessionResultView stays owner-only; this endpoint exposes
+    only the predicted cards, never the session id.
+
+    Visibility mirrors ProjectDetailView.get exactly: owner or
+    visibility == 'public'; otherwise 403 {'detail': 'Forbidden'}; unknown
+    project 404. Response: {'predicted_like_images': [card, ...]} — same cards
+    and order as SessionResultView's predicted images. Empty list when the
+    board has no session / no like vectors. Cached per project (see
+    get_project_recommendations_cache_key).
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ProjectRecommendationsThrottle]
+
+    def get(self, request, pk):
+        from django.core.cache import cache as _cache
+
+        profile = _get_profile(request)
+        project = get_object_or_404(Project.objects.only('project_id', 'user_id', 'visibility'), project_id=pk)
+        is_owner = profile and project.user_id == profile.pk
+        if not is_owner and project.visibility != 'public':
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+        cache_key = get_project_recommendations_cache_key(str(pk))
+        cached = _cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        predicted = []
+        session = (
+            AnalysisSession.objects
+            .filter(project_id=pk)
+            .order_by('-created_at')
+            .first()
+        )
+        if session is not None and session.like_vectors:
+            predicted = session_service.build_predicted_cards(session)[0]
+
+        data = {'predicted_like_images': predicted}
+        _cache.set(cache_key, data, PROJECT_RECOMMENDATIONS_TTL)
+        return Response(data)
 
 
 class UserProjectsListView(APIView):

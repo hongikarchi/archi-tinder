@@ -32,16 +32,21 @@ class UserSerializer(serializers.ModelSerializer):
     email        = serializers.SerializerMethodField()
     has_password = serializers.SerializerMethodField()
     is_admin     = serializers.SerializerMethodField()
+    onboarding_required = serializers.SerializerMethodField()
 
     class Meta:
         model  = UserProfile
         fields = [
+            'onboarding_required',
             'user_id', 'display_name', 'avatar_url', 'providers', 'theme', 'font',
             'language', 'is_guest', 'onboarding_role', 'consent_accepted_at', 'handle',
             'notifications', 'role', 'affiliation',
             # AUTH-LOGIN-1 self-only fields
             'email', 'email_verified_at', 'has_password', 'is_admin',
         ]
+
+    def get_onboarding_required(self, obj):
+        return obj.consent_accepted_at is None
 
     def get_providers(self, obj):
         return list(obj.social_accounts.values_list('provider', flat=True))
@@ -70,7 +75,7 @@ class UserSerializer(serializers.ModelSerializer):
 class UserMiniSerializer(serializers.ModelSerializer):
     """Minimal public user shape for Project/Board nested `user` field.
 
-    Exposes ONLY: user_id, display_name, avatar_url — deliberately omits
+    Exposes ONLY: user_id, display_name, handle, avatar_url — deliberately omits
     `providers` (OAuth provider is private metadata, not a public-facing field).
 
     Used by ProjectSerializer; keeps provider info off public Project responses.
@@ -80,7 +85,7 @@ class UserMiniSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = UserProfile
-        fields = ['user_id', 'display_name', 'avatar_url']
+        fields = ['user_id', 'display_name', 'handle', 'avatar_url']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -133,6 +138,31 @@ _HANDLE_RE = re.compile(
 )
 
 
+def _handle_format_error(value):
+    """Return the first format violation message for an NFC-normalized value, else None."""
+    # fullmatch required: re.match with $ accepts a trailing newline, which
+    # would allow CRLF injection into URLs/cards.
+    if not _HANDLE_RE.fullmatch(value):
+        return (
+            'ID may only contain Korean characters, letters, digits, or underscore. '
+            'Spaces are not allowed.'
+        )
+    if len(value) < 2 or len(value) > 20:
+        return 'ID must be 2-20 characters.'
+    # Case-insensitive: Hangul has no case, but ASCII reserved words are blocked
+    # regardless of case.
+    if value.lower() in _HANDLE_RESERVED:
+        return f'"{value}" is a reserved ID.'
+    return None
+
+
+def handle_format_ok(value):
+    """Pure format check (no DB): already-NFC, charset, 2-20 length, not reserved."""
+    if not value or unicodedata.normalize('NFC', value) != value:
+        return False
+    return _handle_format_error(value) is None
+
+
 def validate_handle_value(value, instance=None):
     """Shared handle/unified-ID validation (reused by register + serializer).
 
@@ -156,27 +186,9 @@ def validate_handle_value(value, instance=None):
     # from being treated as different IDs (e.g. composed vs. decomposed Jamo).
     value = unicodedata.normalize('NFC', value)
 
-    # Format regex — no whitespace, only allowed character classes.
-    # fullmatch required: re.match with $ accepts a trailing newline, which
-    # would allow CRLF injection into URLs/cards.
-    if not _HANDLE_RE.fullmatch(value):
-        raise serializers.ValidationError(
-            'ID may only contain Korean characters, letters, digits, or underscore. '
-            'Spaces are not allowed.'
-        )
-
-    # Length check after NFC normalization.
-    if len(value) < 2 or len(value) > 20:
-        raise serializers.ValidationError(
-            'ID must be 2-20 characters.'
-        )
-
-    # Reserved word check (case-insensitive; Hangul has no case, but ASCII reserved
-    # words should still be blocked regardless of case).
-    if value.lower() in _HANDLE_RESERVED:
-        raise serializers.ValidationError(
-            f'"{value}" is a reserved ID.'
-        )
+    error = _handle_format_error(value)
+    if error:
+        raise serializers.ValidationError(error)
 
     # Case-insensitive uniqueness, excluding the current user so re-saving
     # the same handle doesn't conflict against themselves.
@@ -373,7 +385,7 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
         """handle: Hangul/ASCII/digits/underscore, 2-20 chars, unique, not reserved.
 
         Validation order:
-          1. null/empty → allow (clears the handle).
+          1. null → rejected (handle is the unified ID and can't be cleared).
           2-5. Delegated to validate_handle_value() (shared with register endpoint).
              2. NFC normalize.
              3. Regex format check (no whitespace, Hangul + ASCII + digits + _).
@@ -382,7 +394,8 @@ class UserProfileSelfUpdateSerializer(serializers.ModelSerializer):
              6. Case-insensitive uniqueness, excluding the current user (self-save OK).
         """
         if value is None:
-            return value
+            # Unified ID: handle may never be cleared (display_name == handle).
+            raise serializers.ValidationError('handle cannot be null.')
 
         return validate_handle_value(value, instance=self.instance)
 

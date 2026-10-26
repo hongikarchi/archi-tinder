@@ -1,21 +1,19 @@
 import BoardCard from '../../components/profile/BoardCard'
+import { useTranslation } from '../../i18n/index.js'
 
 export default function BoardGrid({
   boards,
   isMe,
   selectMode,
   selectedBoards,
-  onVisibilityChange,
-  onDelete,
   onSelectToggle,
   boardsHasMore,
   boardsLoading,
-  onResumeProject,
-  onNewProjectSession,
 }) {
+  const { t } = useTranslation()
   return (
     <>
-      {/* Boards grid — same unified container, responsive auto-fill */}
+      {/* Boards grid — responsive auto-fill, one tall tile per row on phones */}
       {boards.length > 0 ? (
         <div style={{
           display: 'grid',
@@ -27,14 +25,9 @@ export default function BoardGrid({
               key={board.board_id}
               board={board}
               isOwner={isMe}
-              onVisibilityChange={(next) => onVisibilityChange(board.board_id, next)}
-              onDelete={() => onDelete(board.board_id)}
               selectMode={selectMode}
               isSelected={selectedBoards.has(board.board_id)}
               onSelectToggle={onSelectToggle}
-              directNavigate={!board.latest_session_meta}
-              onResume={onResumeProject ? () => onResumeProject(board.board_id) : undefined}
-              onStartNew={onNewProjectSession ? () => onNewProjectSession(board.board_id) : undefined}
             />
           ))}
         </div>
@@ -42,7 +35,7 @@ export default function BoardGrid({
         <div style={{
           color: 'var(--color-text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0',
         }}>
-          No boards yet.
+          {t('board.noBoards')}
         </div>
       ))}
     </>

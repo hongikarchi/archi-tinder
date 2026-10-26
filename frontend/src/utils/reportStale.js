@@ -1,0 +1,61 @@
+/**
+ * utils/reportStale.js
+ * FULL-REPORT-UI-1: deleting liked buildings no longer regenerates the persona
+ * report on the spot. The server flags the board `report_stale`; the owner's
+ * next open of the report page regenerates it once.
+ */
+
+/** Stale flag from the board payload (server always sends a boolean; undefined = false). */
+export function isReportStale(board) {
+  if (!board) return false
+  return board.report_stale === true
+}
+
+/**
+ * Owner opens a board whose EXISTING report is stale and which still has liked
+ * buildings. Never for a first generation: a report produced in this visit
+ * (`hasLocalReport`) or one that arrived with the swipe-end save flow
+ * (`freshlySaved`, report generated seconds ago for this very liked set) is fresh
+ * by definition, so the "regenerating because of changes" flow must not run.
+ */
+export function shouldRegenerateOnOpen({ isOwner, board, hasLocalReport = false, freshlySaved = false }) {
+  if (hasLocalReport || freshlySaved) return false
+  return !!(isOwner && board && board.final_report && isReportStale(board) && board.liked_ids?.length > 0)
+}
+
+/**
+ * Swipe session just completed (incl. a board resumed via "continue exploring").
+ * Regenerate the persona report (+ image) only when a report ALREADY existed for
+ * the board and the liked set grew during this session. A first generation
+ * (`hadReport` false) keeps the normal non-regenerate path.
+ *  - reportStale: `board.report_stale` re-fetched after the swipes (true = server
+ *    says the liked set no longer matches the report). null/undefined = unknown.
+ *  - newLikes: likes recorded since the session was resumed. Local fallback only:
+ *    used when the server flag is unknown (fetch failed) or the report is legacy
+ *    (no source_signature, which the server never flags stale).
+ *  - reportSigned: the fetched report carries a source_signature, so a non-null
+ *    reportStale is authoritative (false beats a stale local like counter).
+ */
+export function shouldRegenerateAfterSession({ hadReport, newLikes = 0, reportStale = null, reportSigned = false }) {
+  if (!hadReport) return false
+  if (reportStale === true) return true
+  if (reportStale === false && reportSigned) return false
+  return newLikes > 0
+}
+
+/**
+ * Whether the swipe-end flow must re-fetch the board before deciding between
+ * first generation and regeneration. A fresh temp board that has neither a local
+ * report nor image cannot own a server report, so it skips the fetch (and its
+ * first generation is not delayed). Any other board might have been resumed.
+ */
+export function shouldFetchBoardBeforeReport(project) {
+  if (!project) return false
+  return !(project.isTemp === true && !project.finalReport && !project.reportImage)
+}
+
+/** Board name from a fresh GET /projects/:id/ payload, or null (fetch failed / blank). */
+export function pickServerBoardName(fetched) {
+  const name = fetched && typeof fetched.name === 'string' ? fetched.name.trim() : ''
+  return name || null
+}

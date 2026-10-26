@@ -21,7 +21,8 @@ ENDPOINT_FILE_MAP = {
     '/api/v1/images/': 'backend/apps/images/',
     '/api/v1/images/batch/': 'backend/apps/images/views.py',
     '/api/v1/images/diverse-random/': 'backend/apps/images/views.py',
-    '/api/v1/parse-query/': 'backend/apps/recommendation/services.py',
+    '/api/v1/taste/recognize/': 'backend/apps/recommendation/views/taste_start.py',
+    '/api/v1/taste/cards/': 'backend/apps/recommendation/views/taste_start.py',
 }
 
 # -- Performance cause hints --
@@ -31,7 +32,7 @@ PERFORMANCE_HINTS = {
     '/images/': 'image_loading',
     '/report/': 'llm_api',
     '/sessions/': 'database_query',
-    '/parse-query/': 'llm_api',
+    '/recognize/': 'llm_api',
     '/batch/': 'database_query',
 }
 

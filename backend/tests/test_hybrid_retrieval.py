@@ -8,7 +8,6 @@ Tests for:
 - Failure cascade: SQL exception => emit failure event, fall back to Mode V/F
 - q_text length validation (>1000 => coerced to None in views.py)
 - original_q_text persistence on AnalysisSession
-- refresh_pool_if_low passes original_q_text through
 - Backward compatibility: all existing flag-off paths unchanged
 
 No real DB queries against architecture_vectors -- connection.cursor is mocked.
@@ -21,7 +20,6 @@ from django.conf import settings
 from apps.recommendation.engine import (
     create_bounded_pool,
     create_pool_with_relaxation,
-    refresh_pool_if_low,
 )
 
 _FAKE_VEC = [0.01] * 384
@@ -442,283 +440,9 @@ class TestQTextPassThrough:
         assert tier == 3
 
 
-# ---------------------------------------------------------------------------
-# TestQTextValidation
-# ---------------------------------------------------------------------------
-
-class TestQTextValidation:
-    """Views.py: q_text is validated (type + length) before reaching engine."""
-
-    @pytest.mark.django_db
-    def test_oversized_q_text_coerced_to_none(self, auth_client, monkeypatch):
-        """query >1000 chars => silently coerced to None in views.py."""
-        monkeypatch.setitem(settings.RECOMMENDATION, 'hybrid_retrieval_enabled', True)
-
-        import numpy as np
-        fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
-        fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
-        for bid in fake_embeddings:
-            v = fake_embeddings[bid]
-            fake_embeddings[bid] = v / np.linalg.norm(v)
-
-        def _mock_farthest(pool_ids, exposed_ids, pool_embs):
-            s = set(exposed_ids)
-            for bid in pool_ids:
-                if bid not in s:
-                    return bid
-            return None
-
-        captured_q_text = {}
-
-        def _mock_relaxation(filters, fp, seeds, v_initial=None, q_text=None, **kwargs):
-            captured_q_text['value'] = q_text
-            return fake_pool, fake_scores, 1
-
-        _V = 'apps.recommendation.views.engine'
-        with patch(f'{_V}.create_pool_with_relaxation', side_effect=_mock_relaxation), \
-             patch(f'{_V}.get_pool_embeddings', return_value=fake_embeddings), \
-             patch(f'{_V}.farthest_point_from_pool', side_effect=_mock_farthest), \
-             patch(f'{_V}.get_building_card',
-                   side_effect=lambda bid: {'building_id': bid, 'name_en': bid,
-                                            'project_name': '', 'image_url': '',
-                                            'url': None, 'gallery': [],
-                                            'gallery_drawing_start': 0, 'metadata': {}}):
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'query': 'x' * 1001},
-                format='json',
-            )
-
-        assert resp.status_code == 201
-        # Flag ON but query too long => coerced to None before engine call
-        assert captured_q_text['value'] is None
-
-    @pytest.mark.django_db
-    def test_flag_off_q_text_not_passed_to_engine(self, auth_client, monkeypatch):
-        """Flag OFF: even valid q_text must NOT reach engine as non-None."""
-        monkeypatch.setitem(settings.RECOMMENDATION, 'hybrid_retrieval_enabled', False)
-
-        import numpy as np
-        fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
-        fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
-        for bid in fake_embeddings:
-            v = fake_embeddings[bid]
-            fake_embeddings[bid] = v / np.linalg.norm(v)
-
-        def _mock_farthest(pool_ids, exposed_ids, pool_embs):
-            s = set(exposed_ids)
-            for bid in pool_ids:
-                if bid not in s:
-                    return bid
-            return None
-
-        captured_q_text = {}
-
-        def _mock_relaxation(filters, fp, seeds, v_initial=None, q_text=None, **kwargs):
-            captured_q_text['value'] = q_text
-            return fake_pool, fake_scores, 1
-
-        _V = 'apps.recommendation.views.engine'
-        with patch(f'{_V}.create_pool_with_relaxation', side_effect=_mock_relaxation), \
-             patch(f'{_V}.get_pool_embeddings', return_value=fake_embeddings), \
-             patch(f'{_V}.farthest_point_from_pool', side_effect=_mock_farthest), \
-             patch(f'{_V}.get_building_card',
-                   side_effect=lambda bid: {'building_id': bid, 'name_en': bid,
-                                            'project_name': '', 'image_url': '',
-                                            'url': None, 'gallery': [],
-                                            'gallery_drawing_start': 0, 'metadata': {}}):
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'query': 'concrete brutalist museum'},
-                format='json',
-            )
-
-        assert resp.status_code == 201
-        # Flag OFF => q_text_param=None passed to engine
-        assert captured_q_text['value'] is None
-
-
-# ---------------------------------------------------------------------------
-# TestOriginalQTextPersistence
-# ---------------------------------------------------------------------------
-
-class TestOriginalQTextPersistence:
-    """AnalysisSession.original_q_text is persisted correctly."""
-
-    @pytest.mark.django_db
-    def test_original_q_text_stored_when_flag_on(self, auth_client, monkeypatch):
-        """With flag ON + valid query, session.original_q_text == query."""
-        from apps.recommendation.models import AnalysisSession
-
-        monkeypatch.setitem(settings.RECOMMENDATION, 'hybrid_retrieval_enabled', True)
-        monkeypatch.setitem(settings.RECOMMENDATION, 'hyde_vinitial_enabled', False)
-
-        import numpy as np
-        fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
-        fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
-        for bid in fake_embeddings:
-            v = fake_embeddings[bid]
-            fake_embeddings[bid] = v / np.linalg.norm(v)
-
-        def _mock_farthest(pool_ids, exposed_ids, pool_embs):
-            s = set(exposed_ids)
-            for bid in pool_ids:
-                if bid not in s:
-                    return bid
-            return None
-
-        _V = 'apps.recommendation.views.engine'
-        with patch(f'{_V}.create_pool_with_relaxation', return_value=(fake_pool, fake_scores, 1)), \
-             patch(f'{_V}.get_pool_embeddings', return_value=fake_embeddings), \
-             patch(f'{_V}.farthest_point_from_pool', side_effect=_mock_farthest), \
-             patch(f'{_V}.get_building_card',
-                   side_effect=lambda bid: {'building_id': bid, 'name_en': bid,
-                                            'project_name': '', 'image_url': '',
-                                            'url': None, 'gallery': [],
-                                            'gallery_drawing_start': 0, 'metadata': {}}):
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'query': 'concrete brutalist museum'},
-                format='json',
-            )
-
-        assert resp.status_code == 201
-        session = AnalysisSession.objects.get(session_id=resp.data['session_id'])
-        assert session.original_q_text == 'concrete brutalist museum'
-
-    @pytest.mark.django_db
-    def test_original_q_text_none_when_flag_off(self, auth_client, monkeypatch):
-        """With flag OFF, session.original_q_text is None."""
-        from apps.recommendation.models import AnalysisSession
-
-        monkeypatch.setitem(settings.RECOMMENDATION, 'hybrid_retrieval_enabled', False)
-
-        import numpy as np
-        fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
-        fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
-        for bid in fake_embeddings:
-            v = fake_embeddings[bid]
-            fake_embeddings[bid] = v / np.linalg.norm(v)
-
-        def _mock_farthest(pool_ids, exposed_ids, pool_embs):
-            s = set(exposed_ids)
-            for bid in pool_ids:
-                if bid not in s:
-                    return bid
-            return None
-
-        _V = 'apps.recommendation.views.engine'
-        with patch(f'{_V}.create_pool_with_relaxation', return_value=(fake_pool, fake_scores, 1)), \
-             patch(f'{_V}.get_pool_embeddings', return_value=fake_embeddings), \
-             patch(f'{_V}.farthest_point_from_pool', side_effect=_mock_farthest), \
-             patch(f'{_V}.get_building_card',
-                   side_effect=lambda bid: {'building_id': bid, 'name_en': bid,
-                                            'project_name': '', 'image_url': '',
-                                            'url': None, 'gallery': [],
-                                            'gallery_drawing_start': 0, 'metadata': {}}):
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'query': 'concrete brutalist museum'},
-                format='json',
-            )
-
-        assert resp.status_code == 201
-        session = AnalysisSession.objects.get(session_id=resp.data['session_id'])
-        assert session.original_q_text is None
-
-
-# ---------------------------------------------------------------------------
-# TestRefreshPoolIfLowPreservesQText
-# ---------------------------------------------------------------------------
-
-class TestRefreshPoolIfLowPreservesQText:
-    """refresh_pool_if_low passes session.original_q_text through to create_pool_with_relaxation."""
-
-    @pytest.mark.django_db
-    def test_original_q_text_forwarded_on_escalation(self, user_profile, monkeypatch):
-        """When pool is low, refresh_pool_if_low passes original_q_text from session."""
-        from apps.recommendation.models import AnalysisSession, Project
-
-        project = Project.objects.create(user=user_profile, name='Test')
-        pool = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        session = AnalysisSession.objects.create(
-            user=user_profile,
-            project=project,
-            phase='exploring',
-            pool_ids=pool,
-            pool_scores={},
-            current_round=0,
-            preference_vector=[],
-            exposed_ids=pool,  # all exposed => remaining=0 => escalation fires
-            initial_batch=pool[:1],
-            like_vectors=[],
-            convergence_history=[],
-            previous_pref_vector=[],
-            original_filters={'program': 'Museum'},
-            original_filter_priority=['program'],
-            original_seed_ids=[],
-            current_pool_tier=1,
-            v_initial=None,
-            original_q_text='brutalist concrete structures',
-        )
-
-        new_pool = ['B00010', 'B00011']
-        captured_kwargs = {}
-
-        def _mock_relaxation(*args, **kwargs):
-            captured_kwargs.update(kwargs)
-            return new_pool, {}, 2
-
-        with patch('apps.recommendation.engine.create_pool_with_relaxation',
-                   side_effect=_mock_relaxation):
-            refresh_pool_if_low(session, threshold=5)
-
-        assert 'q_text' in captured_kwargs
-        assert captured_kwargs['q_text'] == 'brutalist concrete structures'
-
-    @pytest.mark.django_db
-    def test_original_q_text_none_forwarded_gracefully(self, user_profile):
-        """Session with original_q_text=None escalates without crash."""
-        from apps.recommendation.models import AnalysisSession, Project
-
-        project = Project.objects.create(user=user_profile, name='Test')
-        pool = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        session = AnalysisSession.objects.create(
-            user=user_profile,
-            project=project,
-            phase='exploring',
-            pool_ids=pool,
-            pool_scores={},
-            current_round=0,
-            preference_vector=[],
-            exposed_ids=pool,
-            initial_batch=pool[:1],
-            like_vectors=[],
-            convergence_history=[],
-            previous_pref_vector=[],
-            original_filters={},
-            original_filter_priority=[],
-            original_seed_ids=[],
-            current_pool_tier=1,
-            v_initial=None,
-            original_q_text=None,
-        )
-
-        captured_kwargs = {}
-
-        def _mock_relaxation(*args, **kwargs):
-            captured_kwargs.update(kwargs)
-            return ['B00010'], {}, 2
-
-        with patch('apps.recommendation.engine.create_pool_with_relaxation',
-                   side_effect=_mock_relaxation):
-            refresh_pool_if_low(session, threshold=5)
-
-        assert captured_kwargs.get('q_text') is None
+# (TestQTextValidation / TestOriginalQTextPersistence removed: session create no longer
+# runs the RRF pool -- every create goes through the taste_v2 path, which neither
+# forwards q_text to the engine nor stores original_q_text.)
 
 
 # ---------------------------------------------------------------------------
@@ -751,7 +475,6 @@ class TestBackwardCompatibility:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -765,7 +488,9 @@ class TestBackwardCompatibility:
             return None
 
         _V = 'apps.recommendation.views.engine'
-        with patch(f'{_V}.create_pool_with_relaxation', return_value=(fake_pool, fake_scores, 1)), \
+        with patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]), \
+             patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings', return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool', side_effect=_mock_farthest), \
              patch(f'{_V}.get_building_card',

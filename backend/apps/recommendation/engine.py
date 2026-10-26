@@ -41,8 +41,7 @@ from .engine_filters import (  # noqa: F401
     _build_idf_score_cases, _REQUIRED_SLATE_FIELDS_SET,
 )
 from .engine_cards import (  # noqa: F401
-    _row_to_card, _card_cache_key, _with_image_focus,
-    _VALID_IMAGE_FOCUS, _CARD_CACHE_SCHEMA, _CARD_SELECT_COLS,
+    _row_to_card, _card_cache_key, _CARD_CACHE_SCHEMA, _CARD_SELECT_COLS,
 )
 
 
@@ -155,18 +154,12 @@ def _dictfetchall(cursor):
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def get_diverse_random(n=10, filters=None, image_focus=None):
+def get_diverse_random(n=10, filters=None):
     """
     Select n maximally diverse buildings from candidates.
     Uses greedy farthest-point sampling on cosine distance.
     Returns list of ImageCard dicts.
-
-    image_focus: optional value in {'exterior','interior','drawing','aerial',
-    'detail'} forwarded to _row_to_card so the cover is picked from
-    covers_by_type[image_focus] when available.
     """
-    if image_focus is None and filters:
-        image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -231,7 +224,7 @@ def get_diverse_random(n=10, filters=None, image_focus=None):
                 best_idx, best_dist = i, dist
         selected.append(remaining.pop(best_idx))
 
-    return [_row_to_card(r, image_focus=image_focus) for r in selected]
+    return [_row_to_card(r) for r in selected]
 
 
 def get_building_embedding(canonical_bld_id):
@@ -267,18 +260,12 @@ def _card_cache_ttl():
     return _CARD_CACHE_TTL
 
 
-def get_building_card(canonical_bld_id, image_focus=None):
-    """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id.
-
-    image_focus, when set, picks the cover from covers_by_type[image_focus].
-    Cache key is per-canonical_bld_id (not per-focus) — focus only re-routes the
-    cover field at row-to-card time; the cached card holds full covers_by_type +
-    all_images so a different focus can be selected without re-fetching.
-    """
+def get_building_card(canonical_bld_id):
+    """Fetch a single building as an ImageCard dict. Results cached per canonical_bld_id."""
     key = _card_cache_key(canonical_bld_id)
     cached = cache.get(key)
     if cached is not None:
-        return _with_image_focus(cached, image_focus)
+        return cached
 
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -289,7 +276,7 @@ def get_building_card(canonical_bld_id, image_focus=None):
             [canonical_bld_id],
         )
         rows = _dictfetchall(cur)
-    card = _row_to_card(rows[0], image_focus=image_focus) if rows else None
+    card = _row_to_card(rows[0]) if rows else None
     if card is not None:
         cache.set(key, _row_to_card(rows[0]), _card_cache_ttl())
     return card
@@ -313,11 +300,10 @@ def update_preference_vector(pref_vector, embedding, action):
     return _normalize(updated)
 
 
-def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
+def get_top_k_results(pref_vector, exposed_ids, k=None):
     """
     Query top-k buildings by cosine similarity to preference vector.
     Excludes exposed_ids. Returns list of ImageCard dicts.
-    image_focus: forwarded to _row_to_card for per-focus cover selection.
     """
     if k is None:
         k = RC['top_k_results']
@@ -370,10 +356,10 @@ def get_top_k_results(pref_vector, exposed_ids, k=None, image_focus=None):
             )
             rows = _dictfetchall(cur)
 
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]
 
 
-def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+def get_buildings_by_ids(canonical_bld_ids):
     """Fetch multiple buildings by ID list. Returns list of ImageCard dicts.
 
     Cache-aware: checks per-building cache first, DB-fetches only uncached IDs,
@@ -389,7 +375,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
     for bid in canonical_bld_ids:
         cached = cache.get(_card_cache_key(bid))
         if cached is not None:
-            card_map[bid] = _with_image_focus(cached, image_focus)
+            card_map[bid] = cached
         else:
             miss_ids.append(bid)
 
@@ -408,7 +394,7 @@ def get_buildings_by_ids(canonical_bld_ids, image_focus=None):
 
         ttl = _card_cache_ttl()
         for row in rows:
-            card = _row_to_card(row, image_focus=image_focus)
+            card = _row_to_card(row)
             card_map[row['canonical_bld_id']] = card
             cache.set(_card_cache_key(row['canonical_bld_id']), _row_to_card(row), ttl)
 
@@ -475,14 +461,11 @@ def get_building_thumbnails(canonical_bld_ids):
     return [out[bid] for bid in canonical_bld_ids if bid in out]
 
 
-def search_by_filters(filters, limit=20, image_focus=None):
+def search_by_filters(filters, limit=20):
     """
     Return buildings matching the given filters dict.
-    Used by ParseQueryView (Phase 3).
-    image_focus: forwarded to _row_to_card; falls back to filters.get('image_focus').
+    Used by /inspect/search/ and the QC tooling.
     """
-    if image_focus is None and filters:
-        image_focus = filters.get('image_focus')
     where, params = _build_filter_sql(filters)
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -497,16 +480,16 @@ def search_by_filters(filters, limit=20, image_focus=None):
             params + [limit],
         )
         rows = _dictfetchall(cur)
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]
 
 
 def search_by_filters_scored(
     filters, raw_query, filter_priority=None, limit=20,
-    image_focus=None, topk=None,
+    topk=None,
 ):
     """LLM-SEARCH-RANK-1: 2-stage bounded CTE ranking (tag-score topK + BM25 rerank).
 
-    Replaces the 3-tier relaxation ladder in ParseQueryView with a single pure-soft
+    Replaces the old 3-tier relaxation ladder with a single pure-soft
     ranked query:
       1. scored CTE: is_publishable=true gate + IDF-weighted tag-score per row.
       2. topk CTE:   ORDER BY tag_score DESC LIMIT K  (arithmetic sort, fast).
@@ -524,20 +507,16 @@ def search_by_filters_scored(
     with zero lexemes → bm25_score = 0 for all rows → graceful no-op.
 
     Args:
-        filters:         dict from parse_query (may include atmosphere/color_tone/typology_primary).
+        filters:         filter dict (may include atmosphere/color_tone/typology_primary).
         raw_query:       first user text verbatim (used for BM25).
         filter_priority: ordered list of axis names (highest priority first).
         limit:           number of cards to return (default 20).
-        image_focus:     forwarded to _row_to_card.
         topk:            K for tag-score narrowing before BM25 (default from RC).
 
     Returns:
         list of ImageCard dicts (may be shorter than limit if corpus is small).
     """
     from .caches import get_corpus_tag_df  # local import avoids circular at module load
-
-    if image_focus is None and filters:
-        image_focus = filters.get('image_focus')
 
     # Read tuneable hyperparams from RC (with safe defaults)
     _topk = topk if topk is not None else RC.get('llm_search_topk', 200)
@@ -635,7 +614,7 @@ def search_by_filters_scored(
         )
         return []
 
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]
 
 
 # ── Phase-Aware Algorithm (PRD v4.0) ──────────────────────────────────────────────
@@ -923,60 +902,6 @@ def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None)
         pool_ids.insert(0, sid)
         pool_scores[sid] = 1.1
     return pool_ids, pool_scores
-
-
-def refresh_pool_if_low(session, threshold=5):
-    """
-    If session's remaining pool (pool_ids - exposed_ids) is below threshold, escalate
-    to the next tier and merge new pool_ids into the session.
-
-    Side effect: when escalation fires, session.pool_ids, session.pool_scores, and
-    session.current_pool_tier are mutated in-place. Caller MUST save the session with
-    these fields in update_fields.
-
-    Returns the session's pool_ids list (updated if escalation fired, unchanged otherwise).
-    Per spec §5.6 + §6: triggered when remaining pool < threshold (default 5).
-    """
-    exposed_set = set(session.exposed_ids or [])
-    remaining = [bid for bid in session.pool_ids if bid not in exposed_set]
-    if len(remaining) >= threshold:
-        return session.pool_ids  # No escalation needed
-    if session.current_pool_tier >= 3:
-        return session.pool_ids  # Already at tier 3 — nothing to escalate to
-
-    next_tier = session.current_pool_tier + 1
-    # exclude_ids: both current pool AND exposed (belt-and-suspenders; exposed already
-    # excluded by pool construction but cheap defensive guard)
-    exclude_ids = list(session.pool_ids or []) + list(session.exposed_ids or [])
-    new_pool_ids, new_pool_scores, tier_used = create_pool_with_relaxation(
-        session.original_filters,
-        session.original_filter_priority,
-        session.original_seed_ids,
-        exclude_ids=exclude_ids,
-        start_tier=next_tier,
-        v_initial=getattr(session, 'v_initial', None),
-        q_text=getattr(session, 'original_q_text', None),
-    )
-    if not new_pool_ids:
-        # No new candidates available even at higher tier — degrade gracefully
-        logger.info(
-            'Session %s: pool exhaustion escalation to tier %d found no new candidates',
-            session.session_id, next_tier,
-        )
-        return session.pool_ids
-
-    # Merge: append new IDs (guaranteed disjoint by exclude_ids) and scores
-    session.pool_ids = list(session.pool_ids) + new_pool_ids
-    merged_scores = dict(session.pool_scores or {})
-    merged_scores.update(new_pool_scores)
-    session.pool_scores = merged_scores
-    session.current_pool_tier = tier_used
-
-    logger.info(
-        'Session %s: pool exhaustion guard escalated to tier %d, added %d buildings (total pool=%d)',
-        session.session_id, tier_used, len(new_pool_ids), len(session.pool_ids),
-    )
-    return session.pool_ids
 
 
 def _run_hybrid_rrf_pool(filters, filter_priority, seed_ids, target, v_initial, q_text):
@@ -1727,100 +1652,8 @@ def compute_taste_centroids(like_vectors, round_num, multimodal_floor=None):
     return centroids, global_centroid
 
 
-def compute_mmr_next(
-    pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num,
-    multimodal_floor=None,
-):
-    """
-    Select next building using MMR (Maximal Marginal Relevance).
-    Returns canonical_bld_id string or None if no candidates.
-    """
-    candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
-    if not candidates:
-        return None
-
-    if not like_vectors:
-        return random.choice(candidates)
-
-    centroids, _ = compute_taste_centroids(like_vectors, round_num, multimodal_floor=multimodal_floor)
-
-    # Topic 04 (a): compute per-swipe λ once, outside the candidate loop
-    mmr_lambda_base = RC.get('mmr_penalty', 0.3)
-    if RC.get('mmr_lambda_ramp_enabled', False):
-        n_ref = max(1, RC.get('mmr_lambda_ramp_n_ref', 10))
-        mmr_lambda = mmr_lambda_base * min(1.0, len(exposed_ids) / n_ref)
-    else:
-        mmr_lambda = mmr_lambda_base
-
-    valid_candidates = [bid for bid in candidates if bid in pool_embeddings]
-    if not valid_candidates:
-        return None
-
-    C = np.stack([pool_embeddings[bid] for bid in valid_candidates])  # (N, 384)
-
-    # ── Relevance (vectorized) ────────────────────────────────────────────
-    K_mat = np.stack(centroids)   # (K, 384)
-    sim_mat = _cosine_sim_matrix(C, K_mat)  # (N, K)
-
-    if RC.get('soft_relevance_enabled', False) and len(centroids) > 1:
-        # Numerically stable softmax-weighted average per candidate (Topic 06)
-        sim_shifted = sim_mat - sim_mat.max(axis=1, keepdims=True)
-        exp_sims = np.exp(sim_shifted)
-        weights = exp_sims / exp_sims.sum(axis=1, keepdims=True)  # (N, K)
-        relevance = (sim_mat * weights).sum(axis=1)               # (N,)
-    else:
-        relevance = sim_mat.max(axis=1)  # (N,)
-
-    # ── Redundancy (vectorized) ───────────────────────────────────────────
-    exposed_valid = [e for e in exposed_ids if e in pool_embeddings]
-    if exposed_valid:
-        E = np.stack([pool_embeddings[e] for e in exposed_valid])  # (M, 384)
-        redundancy = _cosine_sim_matrix(C, E).max(axis=1)           # (N,)
-    else:
-        redundancy = np.zeros(len(valid_candidates))
-
-    # ── MMR scores → best candidate ──────────────────────────────────────
-    mmr_scores = relevance - mmr_lambda * redundancy  # (N,)
-    return valid_candidates[int(np.argmax(mmr_scores))]
-
-
-def get_dislike_fallback(pool_ids, exposed_ids, pool_embeddings, dislike_vectors):
-    """
-    Select building farthest from dislike centroid.
-    Returns canonical_bld_id string or None if no candidates.
-    """
-    candidates = [bid for bid in pool_ids if bid not in set(exposed_ids)]
-    if not candidates:
-        return None
-
-    if not dislike_vectors:
-        return random.choice(candidates)
-
-    # Compute dislike centroid
-    dislike_embeddings = [np.array(dv) for dv in dislike_vectors]
-    dislike_centroid = np.mean(dislike_embeddings, axis=0)
-    dislike_centroid = dislike_centroid / np.linalg.norm(dislike_centroid)  # normalize
-
-    best_candidate = None
-    best_distance = -1
-
-    for candidate in candidates:
-        if candidate not in pool_embeddings:
-            continue
-
-        candidate_emb = pool_embeddings[candidate]
-        similarity = np.dot(candidate_emb, dislike_centroid)
-        distance = 1 - similarity  # cosine distance
-
-        if distance > best_distance:
-            best_distance = distance
-            best_candidate = candidate
-
-    return best_candidate
-
-
 def get_top_k_mmr(
-    like_vectors, exposed_ids, k=None, round_num=None, image_focus=None,
+    like_vectors, exposed_ids, k=None, round_num=None,
     multimodal_floor=None,
 ):
     """
@@ -1919,7 +1752,7 @@ def get_top_k_mmr(
     selected = [rows[i] for i in selected_idx]
 
     # Convert to ImageCard format
-    return [_row_to_card(row, image_focus=image_focus) for row in selected]
+    return [_row_to_card(row) for row in selected]
 
 
 def rerank_pool_with_v_initial(*, pool_ids, exposed_ids, initial_batch_ids, v_initial_vector):
@@ -2208,11 +2041,10 @@ def compute_user_taste_vector(profile):
     return np.array(normalized, dtype=np.float64)
 
 
-def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
+def taste_ranked_page(v_taste, exclude_ids, limit, offset):
     """
     Cosine-rank all buildings against v_taste, skipping exclude_ids,
     and return one page.
-    image_focus: forwarded to _row_to_card for per-focus cover selection.
     """
     _required_cols = _CARD_SELECT_COLS
     _optional_cols = ()
@@ -2236,4 +2068,4 @@ def taste_ranked_page(v_taste, exclude_ids, limit, offset, image_focus=None):
         logger.warning('taste_ranked_page: pgvector query failed (%s)', exc)
         return []
 
-    return [_row_to_card(r, image_focus=image_focus) for r in rows]
+    return [_row_to_card(r) for r in rows]

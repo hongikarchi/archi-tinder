@@ -4,6 +4,7 @@ import uuid
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +13,8 @@ from rest_framework.views import APIView
 from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail, evict_user_profile_detail
+from ..report_name import followed_board_name
+from ..report_signature import liked_signature
 from ..services.axis_scores import compute_axis_scores
 from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
@@ -21,6 +24,25 @@ RC = settings.RECOMMENDATION
 
 
 # ── Reports ───────────────────────────────────────────────────────────────────
+
+# Per-project report-generation lock (same scheme as the image lock below):
+# a duplicate concurrent POST waits for the leader and returns its stored
+# report instead of paying for a second LLM call. TTL is a crash fallback.
+REPORT_LOCK_TTL = 120
+# Must stay below the client fetch timeout (frontend core.js FETCH_TIMEOUT_MS=15s)
+# so the follower's 202 actually reaches the browser.
+REPORT_WAIT_BUDGET = 10
+REPORT_WAIT_POLL = 1.0
+
+
+def _report_lock_key(pk):
+    return f'report_generate_lock:{pk}'
+
+
+def _generation_id(report):
+    """Per-generation id stamped into final_report by _generate (None if legacy)."""
+    return report.get('generation_id') if isinstance(report, dict) else None
+
 
 class ProjectReportGenerateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -43,10 +65,90 @@ class ProjectReportGenerateView(APIView):
             # embedding-projection shape via the generate/regenerate path below.
             return Response({'final_report': project.final_report, 'axis_scores': project.axis_scores})
 
+        prev_gen = _generation_id(project.final_report)
         liked_id_strings = _liked_id_only(project.liked_ids)
         if not liked_id_strings:
             return Response({'detail': 'No liked buildings yet'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Signature of the liked set this request will build from, and of the
+        # report stored when the request arrived. The manual "regenerate report"
+        # button (useRegeneration) deliberately asks for a fresh LLM report even
+        # when the stored one is NOT stale, so equality of the two must NOT
+        # short-circuit. Dedupe is instead per-project (cache lock below) plus a
+        # post-lock check that only fires when ANOTHER request committed a
+        # current-signature report while we were generating.
+        current_sig = liked_signature(liked_id_strings)
+        fr = project.final_report
+        prev_sig = fr.get('source_signature') if isinstance(fr, dict) else None
+
+        # Optimistic re-POST guard: a follower that got 202 re-POSTs
+        # {regenerate: true, if_generation: <based_on>}. If the stored report was
+        # regenerated since (generation_id differs) AND was built from the
+        # current liked set, hand it back -- no 2nd LLM call. A newer report from
+        # an OLDER liked set (leader started before more likes) must not satisfy
+        # an explicit regenerate: fall through and generate fresh.
+        if (
+            fr
+            and 'if_generation' in request.data
+            and request.data.get('if_generation') != prev_gen
+            and prev_sig == current_sig
+        ):
+            return Response({'final_report': fr, 'axis_scores': project.axis_scores})
+
+        lock_key = _report_lock_key(pk)
+        lock_token = uuid.uuid4().hex
+        if not cache.add(lock_key, lock_token, REPORT_LOCK_TTL):
+            return self._wait_for_leader(pk, lock_key, prev_sig, prev_gen, current_sig)
+
+        try:
+            return self._generate(request, pk, profile, project, liked_id_strings, current_sig, prev_sig)
+        finally:
+            # Release only our own lock (get-then-delete race accepted, see
+            # IMAGE_LOCK_TTL note).
+            if cache.get(lock_key) == lock_token:
+                cache.delete(lock_key)
+
+    @staticmethod
+    def _stored_response(pk):
+        row = Project.objects.filter(project_id=pk).values('final_report', 'axis_scores').first()
+        if row and row['final_report']:
+            return Response({'final_report': row['final_report'], 'axis_scores': row['axis_scores']})
+        return None
+
+    def _wait_for_leader(self, pk, lock_key, prev_sig, prev_gen=None, current_sig=None):
+        deadline = time.monotonic() + REPORT_WAIT_BUDGET
+        while cache.get(lock_key) is not None:
+            if time.monotonic() >= deadline:
+                return Response(
+                    {'status': 'in_progress', 'detail': 'Report generation in progress.',
+                     'retry_after': 5, 'based_on': prev_gen},
+                    status=status.HTTP_202_ACCEPTED,
+                    headers={'Retry-After': '5'},
+                )
+            time.sleep(REPORT_WAIT_POLL)
+        # Only hand back the stored report if the leader actually committed a
+        # current-signature one (generation_id changed -- a same-signature manual regenerate
+        # keeps source_signature, so the signature cannot tell); a failed leader
+        # leaves the pre-request report in place.
+        stored = self._stored_response(pk)
+        if stored is not None:
+            fr = stored.data['final_report']
+            new_gen = _generation_id(fr)
+            if new_gen != prev_gen:
+                if fr.get('source_signature') == current_sig:
+                    return stored
+                # Leader committed a report from an older liked set: tell the
+                # client to re-POST with if_generation=new_gen, which then
+                # generates fresh against the current liked set.
+                return Response(
+                    {'status': 'in_progress', 'detail': 'Report is out of date; retry.',
+                     'retry_after': 1, 'based_on': new_gen},
+                    status=status.HTTP_202_ACCEPTED,
+                    headers={'Retry-After': '1'},
+                )
+        return Response({'detail': 'Report generation failed.'}, status=status.HTTP_502_BAD_GATEWAY)
+
+    def _generate(self, request, pk, profile, project, liked_id_strings, current_sig, prev_sig):
         # BACK-LLM-5: ground the report in BOTH sides of the swipe history +
         # the requesting profile's language preference (fallback 'ko').
         disliked_id_strings = list(project.disliked_ids or [])
@@ -68,11 +170,56 @@ class ProjectReportGenerateView(APIView):
 
         axis_scores = compute_axis_scores(liked_id_strings)
 
-        project.final_report = report
-        project.axis_scores = axis_scores
-        project.save(update_fields=['final_report', 'axis_scores'])
+        # FULL-REPORT-UI-1: stamp which liked set this report was built from so
+        # ProjectSerializer.report_stale can detect later liked-building changes.
+        if isinstance(report, dict):
+            report['source_signature'] = current_sig
+            report['generation_id'] = uuid.uuid4().hex
+
+        # Final writes are mutually exclusive with ProjectDetailView.patch (which
+        # also row-locks and may re-save final_report): take the same row lock so
+        # a PATCH cannot overwrite this fresh report with its stamped older copy.
+        with transaction.atomic():
+            locked = (
+                Project.objects.select_for_update()
+                .filter(pk=project.pk, user=profile)
+                .first()
+            )
+            if locked is None:
+                return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Another request committed a current-signature report while this
+            # one was generating: keep it (no overwrite, no rename, no evict).
+            stored = locked.final_report
+            if (
+                isinstance(stored, dict)
+                and stored.get('source_signature') == current_sig
+                and prev_sig != current_sig
+            ):
+                return Response({'final_report': stored, 'axis_scores': locked.axis_scores})
+
+            # Board name follows the new persona name unless the user renamed it
+            # (current name != OLD report's persona name). Decided from the
+            # LOCKED row, so a rename committed during the LLM call wins and the
+            # old report is the one actually being replaced.
+            new_name = followed_board_name(locked.name, stored, report, language)
+
+            locked.final_report = report
+            locked.axis_scores = axis_scores
+            update_fields = ['final_report', 'axis_scores']
+            if new_name is not None:
+                locked.name = new_name
+                update_fields.append('name')
+            # Write ONLY these columns (never a stale copy of liked_ids /
+            # saved_ids loaded before the slow LLM call).
+            locked.save(update_fields=update_fields)
+
+        # Evictions run after commit so readers never re-cache pre-commit state.
         evict_projects_list(profile.id)
         evict_project_detail(str(pk))
+        # final_report / report_stale appear in the profile boards serializers, so
+        # always drop the cached profile card (not only when the name followed).
+        evict_user_profile_detail(profile.user.id)
         logger.info('Persona report generated for project %s', pk)
         return Response({'final_report': report, 'axis_scores': axis_scores})
 

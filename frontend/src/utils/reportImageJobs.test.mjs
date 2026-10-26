@@ -114,3 +114,66 @@ test('start() on a done job short-circuits without POST', async () => {
   assert.equal(again.image_data, 'AAAA')
   assert.equal(jobs.get('p1').status, 'done')
 })
+
+test('regenerate: previous image kept while generating, replaced on success, first POST only carries regenerate', async () => {
+  const opts = []
+  const NEW = { image_data: 'BBBB', mime_type: 'image/jpeg' }
+  const jobs = createReportImageJobs(async (id, o) => { opts.push(o.regenerate); return opts.length === 1 ? IMG : NEW }, noWait)
+  await jobs.start('p1')
+  const seen = []
+  jobs.subscribe(() => { const j = jobs.get('p1'); seen.push([j.status, j.image, j.regen]) })
+  const a = jobs.regenerate('p1')
+  assert.equal(jobs.regenerate('p1'), a)   // joins in-flight, no second request
+  assert.deepEqual(jobs.get('p1'), { status: 'generating', image: 'AAAA', mime: 'image/png', regen: true, regenFailed: false })
+  await a
+  assert.deepEqual(opts, [false, true])
+  assert.deepEqual(seen, [['generating', 'AAAA', true], ['done', 'BBBB', false]])
+  assert.equal(jobs.get('p1').mime, 'image/jpeg')
+})
+
+test('regenerate failure keeps the previous image and flags regenFailed; next attempt clears it', async () => {
+  let fail = true
+  const jobs = createReportImageJobs(async () => {
+    if (fail) throw Object.assign(new Error('x'), { status: 429 })
+    return { image_data: 'CCCC', mime_type: 'image/png' }
+  }, noWait)
+  fail = false
+  await jobs.start('p1')
+  fail = true
+  assert.equal(await jobs.regenerate('p1'), null)
+  const j = jobs.get('p1')
+  assert.equal(j.status, 'done')
+  assert.equal(j.image, 'CCCC')
+  assert.equal(j.regen, false)
+  assert.equal(j.regenFailed, true)
+  fail = false
+  const p = jobs.regenerate('p1')
+  assert.equal(jobs.get('p1').regenFailed, false)
+  await p
+  assert.equal(jobs.get('p1').regenFailed, false)
+})
+
+test('regenerate: 202 in_progress re-POSTs WITH regenerate:true; first-generation 202 re-POSTs without it', async () => {
+  const calls = []
+  const responses = [IMG, { status: 'in_progress', retry_after: 5 }, { image_data: 'DDDD', mime_type: 'image/png' }]
+  const waits = []
+  const jobs = createReportImageJobs(async (id, o) => { calls.push(o.regenerate); return responses.shift() }, { wait: async ms => { waits.push(ms) } })
+  await jobs.start('p1')
+  await jobs.regenerate('p1')
+  assert.deepEqual(calls, [false, true, true])
+  assert.deepEqual(waits, [5000])
+  assert.equal(jobs.get('p1').image, 'DDDD')
+  assert.equal(jobs.get('p1').regenFailed, false)
+
+  const c2 = []
+  const r2 = [{ status: 'in_progress', retry_after: 5 }, IMG]
+  const j2 = createReportImageJobs(async (id, o) => { c2.push(o.regenerate); return r2.shift() }, noWait)
+  await j2.start('p2')
+  assert.deepEqual(c2, [false, false])
+})
+
+test('regenerate with no previous entry (image came from the board) fails back to idle + regenFailed', async () => {
+  const jobs = createReportImageJobs(async () => { throw Object.assign(new Error('x'), { status: 400 }) }, noWait)
+  await jobs.regenerate('p1')
+  assert.deepEqual(jobs.get('p1'), { status: 'idle', image: null, mime: null, regen: false, regenFailed: true })
+})

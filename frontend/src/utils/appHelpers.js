@@ -1,7 +1,7 @@
 export function normalizeFilters(filters) {
   if (!filters) return {}
   const out = {}
-  // Structured filters from LLM parse-query -- pass through
+  // Structured filters saved on older boards -- pass through
   if (filters.program) out.program = filters.program
   if (filters.location_country) out.location_country = filters.location_country
   if (filters.material) out.material = filters.material
@@ -56,7 +56,8 @@ export function extractSavedIds(rawSavedIds) {
 }
 
 /**
- * Purge localStorage keys matching archithon_chat_* pattern.
+ * Purge LEGACY localStorage keys matching archithon_chat_* (old Gemini search chat,
+ * removed 2026-10; nothing writes them anymore - this only clears stale data).
  * Called on logout (all keys) and project delete (that project's keys).
  *
  * @param {string|null} projectId - if provided, only purge keys containing

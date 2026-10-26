@@ -9,7 +9,7 @@ import AdminGate from './pages/admin/AdminGate.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
-  LoginPage, LLMSearchPage, LLMSearchUpdateWrapper, UserProfilePage, ResultsPage,
+  LoginPage, TasteStartPage, UserProfilePage, ResultsPage,
   BuildingDetailPage, BoardDetailPage, BoardReportPage, LikedProjectsPage, UploadWorkPage,
   ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, CompetitionListPage,
   CompetitionDetailPage, SettingsPage, AccountScreen, NotificationsScreen,
@@ -20,16 +20,24 @@ import * as api from './api/client.js'
 import { createProject, VerifyRequiredError } from './api/projects.js'
 import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import NotFoundRedirect from './components/NotFoundRedirect.jsx'
+import ReportReentryBanner from './components/ReportReentryBanner.jsx'
+import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
+import { reportJobs } from './hooks/useReportJobs.js'
+import { shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './utils/reportStale.js'
+import { ONBOARDING_FLAG_KEY } from './utils/onboardingFlag.js'
 
 // ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
 // stay out of the eager import graph. Gated by AdminGate (UX only; the backend
 // IsAdminOperator permission is the real gate).
 const AdminPage = lazy(() => import('./pages/admin/AdminPage.jsx'))
 const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage.jsx'))
+const KakaoCallbackPage = lazy(() => import('./pages/KakaoCallbackPage.jsx'))
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
@@ -295,7 +303,7 @@ export default function App() {
         // exact card the user was looking at, not the backend's last selection.
         const hintKey = `archithon_currentCard_${userId}_${activeProjectId}`
         const currentHint = localStorage.getItem(hintKey) || null
-        initSession(activeProjectId, project.filters, [], [], project.sessionId || null, currentHint)
+        initSession(activeProjectId, project.filters, project.sessionId || null, currentHint)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -362,7 +370,7 @@ export default function App() {
     }
   }
 
-  async function initSession(projectId, filters, filterPriority = [], seedIds = [], existingSessionId = null, currentHint = null, visualDescription = null, projectName = 'Untitled', rawQuery = '', imageFocus = null, forceNew = false) {
+  async function initSession(projectId, filters, existingSessionId = null, currentHint = null, projectName = 'Untitled', rawQuery = '', forceNew = false, options = {}) {
     setIsSwipeLoading(true)
     setIsSessionCompleted(false)
     setKeepExploringChosen(false)
@@ -382,12 +390,14 @@ export default function App() {
         project_id: projectId,
         name: projectName,
         filters: normalizeFilters(filters),
-        filter_priority: filterPriority,
-        seed_ids: seedIds,
-        visual_description: visualDescription || undefined,
         raw_query: rawQuery || '',
-        image_focus: imageFocus,
         force_new: forceNew,
+        // Taste-start v2 (optional): tags + the 3 chosen start cards, in order.
+        ...(options.tasteTags ? {
+          taste_tags: options.tasteTags,
+          start_ids: options.startIds || [],
+          exclude_ids: options.excludeIds || [],
+        } : {}),
       })
       applySessionResponse(projectId, result)
       return result
@@ -401,44 +411,23 @@ export default function App() {
       if (!(err instanceof VerifyRequiredError)) {
         setSwipeError(err.message || 'Failed to start session')
       }
+      // Callers that need to know (handleStartTaste) read this; others ignore it.
+      return { failed: true, verify: err instanceof VerifyRequiredError }
     } finally {
       setIsSwipeLoading(false)
     }
   }
 
-  async function handleStart(projectName, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, visibility = 'private', rawQuery = '', imageFocus = null) {
-    const projectId = `proj_${Date.now()}`
-    const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
-    const newProject = {
-      id: projectId, projectName, filters: llmFilters || {},
-      likedBuildings: [], swipedIds: [],
-      predictedLikes: [],
-      sessionId: null, createdAt: new Date().toISOString(),
-      deckImages: preloadedImages || null,
-      visibility,
-      isTemp: true, // backend creates project with is_temp=True; saved on board save
-    }
-    setProjects(prev => [...prev, newProject])
-    setActiveProjectId(projectId)
-    navigate('/swipe')
-    const result = await initSession(projectId, llmFilters || {}, filterPriority, seedIds, null, null, visualDescription, projectName, rawQuery || '', imageFocus)
-    if (visibility !== 'private' && result?.project_id) {
-      api.updateProject(result.project_id, { visibility }).catch(err =>
-        console.error('[App] updateProject visibility sync failed:', err)
-      )
-    }
-  }
-
   // ── Shared results navigation ─────────────────────────────────────────────
   // Called from BOTH the action-card right-swipe AND the top "결과 보러 가기" button.
-  // Navigates to the result page and fires getResult only — no generateReport
-  // here. Live generation owners: ResultsPage's auto-repair effect,
-  // BoardReportPage's auto-generate effect, and handleSwipeCard's
-  // is_analysis_completed branch (guarded by !project.finalReport). goToResults
-  // used to fire generateReport too, but ResultsPage mounts on the navigate()
-  // above BEFORE this Promise.all resolves, so the two raced into concurrent
-  // POSTs (BACK-REPORT-CACHE-1 finding); the backend has no row lock, so the
-  // cache check alone can't stop that race — removing this call site is the fix.
+  // Navigates to the result page, fires getResult and runs ensureFreshReport in
+  // regen-only mode (a board resumed via "continue exploring" whose report is now
+  // out of date). First generations are NOT started here: ResultsPage's
+  // auto-repair effect / BoardReportPage's auto-generate effect own those
+  // (ResultsPage mounts on the navigate() below BEFORE this Promise.all resolves,
+  // so a first generation here raced them into concurrent POSTs, BACK-REPORT-CACHE-1).
+  // The regen path cannot race the auto-repair: it only runs when a report already
+  // exists, and auto-repair needs the report to be missing.
   async function goToResults(project) {
     if (!project?.sessionId) {
       navigate('/user/me')
@@ -449,13 +438,92 @@ export default function App() {
     navigate('/result/' + sessionId)
     setIsResultLoading(true)
     try {
-      const resultData = await api.getResult({ session_id: sessionId })
+      const [resultData] = await Promise.all([
+        api.getResult({ session_id: sessionId }),
+        ensureFreshReport(project),
+      ])
       setProjects(prev => prev.map(p => p.id === localId ? {
         ...p,
         predictedLikes: resultData.predicted_like_images || [],
       } : p))
     } catch { /* ResultsPage fetches on entry */ }
     finally { setIsResultLoading(false) }
+  }
+
+  // Shared session-end report step (swipe completion, Finish button, action-card
+  // right-swipe). Re-fetches the board when it might own a report, then:
+  //  - regen (report existed AND the liked set changed): regenerate through the
+  //    shared reportJobs store (joins an already-running regeneration, so the
+  //    paths cannot double-POST); the persona image regeneration is chained
+  //    AFTER the new report lands (the server builds the image prompt from the
+  //    stored report, so a parallel start would render the OLD persona).
+  //  - allowFirst (swipe completion only): first generation, image starts
+  //    immediately in parallel (facts-based prompt, no report needed).
+  // Never throws. `extraLikes` = a like not yet reflected in `project`.
+  async function ensureFreshReport(project, { extraLikes = 0, allowFirst = false } = {}) {
+    const backendId = project?.backendId
+    const localId = project?.id
+    if (!backendId) return
+    try {
+      // The fetch's report_stale flag is authoritative; a brand-new temp board with
+      // no local report/image cannot own a server report, so it skips the fetch.
+      const fetched = shouldFetchBoardBeforeReport(project) ? await api.getProject(backendId).catch(() => null) : null
+      const existingReport = project.finalReport || fetched?.final_report || null
+      const existingImage = project.reportImage || fetched?.report_image || null
+      const regen = shouldRegenerateAfterSession({
+        hadReport: !!existingReport,
+        newLikes: (project.likesSinceResume || 0) + extraLikes,
+        reportStale: fetched ? fetched.report_stale === true : null,
+        reportSigned: !!fetched?.final_report?.source_signature,
+      })
+      const generating = allowFirst ? (regen || !existingReport) : regen
+      const persistImage = img => {
+        if (!img?.image_data) return
+        setProjects(prev => prev.map(p => p.id === localId
+          ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
+      }
+      // PersonaReport shows progress from the shared image-job store; this only
+      // persists the finished image into project state so remounts keep it.
+      if (allowFirst && !regen && !existingImage) reportImageJobs.start(backendId).then(persistImage)
+      let reportData = null
+      if (generating) {
+        const run = regen
+          ? reportJobs.regenerate(backendId, { afterSuccess: () => { reportImageJobs.regenerate(backendId) } })
+          : api.generateReport(backendId)
+        reportData = await run.catch((err) => { console.error('report generation failed:', err); return null })
+        if (regen && reportData?.final_report && reportImageJobs.get(backendId).status === 'generating') {
+          reportImageJobs.start(backendId).then(persistImage)   // joins the chained regeneration
+        }
+      }
+      const finalReport = reportData?.final_report || existingReport
+      const axisScores = reportData?.axis_scores || (!reportData ? fetched?.axis_scores : null) || null
+      setProjects(prev => prev.map(p => p.id === localId ? {
+        ...p,
+        ...(finalReport ? { finalReport } : {}),
+        ...(axisScores ? { axisScores } : {}),
+        ...(!p.reportImage && existingImage ? { reportImage: existingImage, reportImageMime: fetched?.report_image_mime || p.reportImageMime } : {}),
+        // Counter only resets once the report is known fresh (a failed regeneration
+        // keeps the local fallback for legacy reports).
+        ...(!generating || reportData ? { likesSinceResume: 0 } : {}),
+      } : p))
+      if (!reportData) return
+      // The server renames the board to follow the new persona name (first
+      // generation of a discovery_ draft, or regeneration of a never-renamed
+      // board). Refresh the local name; non-blocking, a failed fetch leaves it.
+      api.getProject(backendId).then(fresh => {
+        const name = pickServerBoardName(fresh)
+        if (!name) return
+        setProjects(prev => prev.map(p => (p.id === localId && p.projectName !== name)
+          ? { ...p, projectName: name } : p))
+      }).catch(() => {})
+      // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on a temp
+      // project, but leave the sheet closed; the ResultsPage CTA opens it.
+      if (finalReport && project.isTemp) {
+        setSaveModalProject({ backendId, finalReport, localId })
+      }
+    } catch (err) {
+      console.error('ensureFreshReport failed:', err)
+    }
   }
   // ── End shared results navigation ─────────────────────────────────────────
 
@@ -465,6 +533,11 @@ export default function App() {
   // ({ final_report, axis_scores }); `project` is the ResultsPage-local project
   // object at call time.
   function handleReportGenerated(project, data) {
+    // A report landed outside the swipe-end flow: the local like counter no longer
+    // says anything about staleness.
+    if (data?.final_report && project?.id) {
+      setProjects(prev => prev.map(p => p.id === project.id && p.likesSinceResume ? { ...p, likesSinceResume: 0 } : p))
+    }
     if (data?.final_report && project?.backendId && project?.isTemp) {
       // FRONT-RESULTS-SAVE-1: prime the target but do NOT open the sheet.
       // Auto-opening covered the report the user just waited for; saving is now
@@ -624,6 +697,7 @@ export default function App() {
           ...p,
           swipedIds: newSwipedIds,
           likedBuildings: action === 'like' ? [...p.likedBuildings, swipedCard] : p.likedBuildings,
+          likesSinceResume: (p.likesSinceResume || 0) + (action === 'like' ? 1 : 0),
         }
       }))
 
@@ -648,39 +722,14 @@ export default function App() {
         }))
         setIsResultLoading(true)
         try {
-          const backendId = project?.backendId
-          // FULL-REPORT-IMG-1: persona image starts NOW, in parallel with the
-          // report (facts-based prompt server-side, so it does not need the report
-          // to exist). Not awaited here — PersonaReport shows the in-progress state
-          // from the shared job store; this .then only persists the finished image
-          // into project state so ResultsPage remounts keep it.
-          if (backendId && !project.reportImage) {
-            reportImageJobs.start(backendId).then(img => {
-              if (!img?.image_data) return
-              setProjects(prev => prev.map(p => p.id === activeProjectId
-                ? { ...p, reportImage: img.image_data, reportImageMime: img.mime_type } : p))
-            })
-          }
-          const [resultData, reportData] = await Promise.all([
-            api.getResult({ session_id: project.sessionId }),
-            (backendId && !project.finalReport) ? api.generateReport(backendId).catch((err) => { console.error('report generation failed:', err); return null; }) : Promise.resolve(null),
+          const resultPromise = api.getResult({ session_id: project.sessionId })
+          resultPromise.catch(() => {}) // surfaced by the await below
+          const [resultData] = await Promise.all([
+            resultPromise,
+            ensureFreshReport(project, { extraLikes: action === 'like' ? 1 : 0, allowFirst: true }),
           ])
-          setProjects(prev => prev.map(p => p.id === activeProjectId ? {
-            ...p,
-            predictedLikes: resultData.predicted_like_images || [],
-            ...(reportData?.final_report ? { finalReport: reportData.final_report } : {}),
-            ...(reportData?.axis_scores ? { axisScores: reportData.axis_scores } : {}),
-          } : p))
-          // FRONT-RESULTS-SAVE-1: prime the save target when the report lands on
-          // a temp project, but leave the sheet closed — the ResultsPage CTA
-          // opens it. project.isTemp was set in handleStart (snapshot above).
-          if (reportData?.final_report && backendId && project?.isTemp) {
-            setSaveModalProject({
-              backendId,
-              finalReport: reportData.final_report,
-              localId: activeProjectId,
-            })
-          }
+          setProjects(prev => prev.map(p => p.id === activeProjectId
+            ? { ...p, predictedLikes: resultData.predicted_like_images || [] } : p))
         } catch {
           // ResultsPage will attempt a fresh GET /result/ on entry.
         } finally {
@@ -838,16 +887,31 @@ export default function App() {
     }
   }
 
-  async function handleUpdateWithImages(id, preloadedImages, llmFilters = {}, filterPriority = [], visualDescription = null, imageFocus = null) {
-    const project = projects.find(p => p.id === id)
-    if (!project) return
-    const seedIds = (preloadedImages || []).map(c => c.image_id).filter(Boolean)
-    setActiveProjectId(id)
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, deckImages: preloadedImages } : p))
+  // Taste-start v2 (docs/decisions/2026-10-11-taste-start-redesign.md): start a
+  // session from the 3 chosen cards + recognized tags in a fresh local project.
+  async function handleStartTaste({ projectName, rawQuery, tags, startIds, excludeIds }) {
+    const options = { tasteTags: tags, startIds, excludeIds }
+    const name = projectName || t('search.untitledProject')
+    const localId = `proj_${Date.now()}`
+    setProjects(prev => [...prev, {
+      id: localId, projectName: name, filters: { taste_tags: tags },
+      likedBuildings: [], swipedIds: [], predictedLikes: [],
+      sessionId: null, createdAt: new Date().toISOString(),
+      deckImages: null, visibility: 'private',
+      isTemp: true, // backend creates project with is_temp=True; saved on board save
+    }])
+    setActiveProjectId(localId)
+    // Stay on the start page until the POST succeeds so a failure never leaves
+    // an orphan local project (sessionId null) on /swipe.
+    const r = await initSession(localId, {}, null, null, name, rawQuery || '', false, options)
+    if (r?.failed) {
+      setProjects(prev => prev.filter(p => p.id !== localId))
+      setActiveProjectId(prev => (prev === localId ? null : prev))
+      setSwipeError(null)
+      return r.verify ? 'verify' : 'error'
+    }
     navigate('/swipe')
-    // Update-with-new-images intends a FRESH session reflecting the new seeds/filters,
-    // not a resume — force_new bypasses #212's server-side resume guard.
-    await initSession(id, llmFilters || project.filters, filterPriority, seedIds, null, null, visualDescription, project.projectName, '', imageFocus, true)
+    return 'ok'
   }
 
   async function handleLogin(user) {
@@ -857,6 +921,9 @@ export default function App() {
       api.setTokens(user.access, user.refresh)
     }
     sessionStorage.setItem('archithon_user', id)
+    const needsOnboarding = typeof user === 'object' && user.onboarding_required === true
+    if (needsOnboarding) sessionStorage.setItem(ONBOARDING_FLAG_KEY, '1')
+    else sessionStorage.removeItem(ONBOARDING_FLAG_KEY)
     // Clear Discovery draft session so a re-login always starts a brand-new collection.
     // Same four keys as handleLogout — prevents a stale draftLikeCount >= 10 from
     // triggering a premature Taste card on the next Discovery visit.
@@ -872,7 +939,7 @@ export default function App() {
     setCurrentCard(null)
     setSessionProgress(null)
     setIsSessionCompleted(false)
-    navigate('/')
+    navigate(needsOnboarding ? '/onboarding' : '/')
 
     // Sync projects from backend (if JWT available)
     try {
@@ -901,7 +968,13 @@ export default function App() {
           createdAt: p.created_at,
           deckImages: null,
         }))
-        setProjects(mapped)
+        // The list endpoint defers axis_scores (null here) — never clobber a
+        // previously fetched non-null value with that null.
+        setProjects(prev => mapped.map(m => {
+          if (m.axisScores) return m
+          const old = prev.find(p => p.id === m.id)
+          return old?.axisScores ? { ...m, axisScores: old.axisScores } : m
+        }))
         setActiveProjectId(null)
         return
       }
@@ -920,7 +993,9 @@ export default function App() {
     // Purge ALL archithon_chat_* keys so stale chat doesn't surface on a shared device.
     purgeChatCache()
     reportImageJobs.reset()
+    reportJobs.reset()
     sessionStorage.removeItem('archithon_user')
+    sessionStorage.removeItem(ONBOARDING_FLAG_KEY)
     // Clear Discovery session so a re-login starts a brand-new collection
     sessionStorage.removeItem('discovery_draft_id')
     sessionStorage.removeItem('discovery_draft_likes')
@@ -965,25 +1040,21 @@ export default function App() {
         deckImages: null,
         visibility: fetched?.visibility || 'private',
         isTemp: fetched?.is_temp ?? false,
+        // Seed the existing report/image so the session-complete guards know a
+        // report already exists (regenerate only if new likes arrive).
+        ...(fetched?.final_report ? { finalReport: fetched.final_report } : {}),
+        ...(fetched?.axis_scores ? { axisScores: fetched.axis_scores } : {}),
+        ...(fetched?.report_image ? { reportImage: fetched.report_image, reportImageMime: fetched.report_image_mime } : {}),
+        likesSinceResume: 0,
       }
       setProjects(prev => prev.find(p => p.id === id) ? prev : [...prev, syntheticProject])
       project = syntheticProject
+    } else {
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, likesSinceResume: 0 } : p))
     }
     setActiveProjectId(id)
     navigate('/swipe')
-    await initSession(id, project.filters, [], [], project.sessionId || null, null, null, project.projectName)
-  }
-
-  // Start a fresh swipe session for an existing project, discarding the old session.
-  async function handleNewProjectSession(boardId) {
-    const id = String(boardId)
-    const project = projects.find(p => p.id === id)
-    if (!project) return
-    // Clear stored sessionId so initSession creates a brand-new session
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, sessionId: null, latestSessionMeta: null } : p))
-    setActiveProjectId(id)
-    navigate('/swipe')
-    await initSession(id, project.filters, [], [], null, null, null, project.projectName, '', null, true)
+    await initSession(id, project.filters, project.sessionId || null, null, project.projectName)
   }
 
   // ── SaveBoardModal callbacks ────────────────────────────────────────────────
@@ -998,22 +1069,24 @@ export default function App() {
     setShowSaveModal(false)
     setSaveModalProject(null)
     setTempCompletedProject(null)
-    setGlobalToast({ message: '보드가 저장되었어요', type: 'success' })
-    // Land the flow on the profile so the run has a visible end — the saved
-    // board is right there in the list. Previously this stayed on the results
-    // screen, which read as "did it even save?".
-    navigate('/user/me')
+    // Land on the shared persona report page (FULL-REPORT-UI-1); it shows the
+    // "saved" toast itself (location.state.saved), so no global toast here.
+    const savedBackendId = saveModalProject?.backendId
+    navigate(savedBackendId ? `/board/${savedBackendId}/report` : '/user/me', { state: { saved: true } })
   }
 
   // CTA entry point from ResultsPage. A board that is already saved has nothing
   // to name, so it skips straight to the profile; a temp one opens the sheet.
   function handleRequestSave(project) {
-    if (!project?.backendId || !project?.isTemp) {
+    // Same id resolution as ResultsPage (falls back to project.id) so the CTA
+    // never silently skips the save for a temp board lacking backendId.
+    const backendId = resolveProjectBackendId(project)
+    if (!backendId || !project?.isTemp) {
       navigate('/user/me')
       return
     }
     setSaveModalProject({
-      backendId: project.backendId,
+      backendId,
       finalReport: project.finalReport,
       localId: project.id,
     })
@@ -1025,15 +1098,26 @@ export default function App() {
     setSaveModalProject(null)
   }
 
+  // Returns true only when the board is really gone: deleted via the API, or
+  // removed locally because it never had a backend row. API failure → false
+  // (banner stays so the user can retry). Busy ref blocks double-clicks.
+  const tempDeleteBusyRef = useRef(false)
   async function handleTempDelete() {
-    if (!tempCompletedProject?.backendId) return
+    const proj = tempCompletedProject
+    if (!proj || tempDeleteBusyRef.current) return false
+    tempDeleteBusyRef.current = true
     try {
-      await api.deleteProject(tempCompletedProject.backendId)
-      if (tempCompletedProject.localId) {
-        setProjects(prev => prev.filter(p => p.id !== tempCompletedProject.localId))
+      if (proj.backendId) await api.deleteProject(proj.backendId)
+      if (proj.localId) {
+        setProjects(prev => prev.filter(p => p.id !== proj.localId))
       }
-    } catch { /* best-effort */ }
-    setTempCompletedProject(null)
+      setTempCompletedProject(null)
+      return true
+    } catch {
+      return false
+    } finally {
+      tempDeleteBusyRef.current = false
+    }
   }
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -1067,8 +1151,6 @@ export default function App() {
       setActiveProjectId(null)
       navigate('/discovery')
     },
-    onResumeProject: handleResumeProject,
-    onNewProjectSession: handleNewProjectSession,
     nextCard: prefetchCard,
   }
 
@@ -1083,6 +1165,20 @@ export default function App() {
           )
         } />
 
+        <Route path="/auth/kakao/callback" element={
+          <Suspense fallback={<RouteFallback />}>
+            <KakaoCallbackPage onLogin={handleLogin} />
+          </Suspense>
+        } />
+
+        <Route path="/onboarding" element={
+          userId ? (
+            <Suspense fallback={<RouteFallback />}>
+              <OnboardingPage />
+            </Suspense>
+          ) : <Navigate to="/login" replace />
+        } />
+
         <Route element={
           <ProtectedRoute userId={userId}>
             <MainLayout {...sharedLayoutProps} />
@@ -1091,20 +1187,23 @@ export default function App() {
           <Route index element={<Navigate to="/discovery" replace />} />
           <Route path="discovery" element={<DiscoveryPage showToast={setGlobalToast} onLogout={handleLogout} />} />
           <Route path="search" element={
-            <LLMSearchPage
-              mode="new"
-              onBack={() => navigate('/discovery')}
-              onStart={handleStart}
-              onUpdate={handleUpdateWithImages}
-              onLogout={handleLogout}
-            />
-          } />
-          <Route path="search/:projectId" element={
-            <LLMSearchUpdateWrapper
-              onBack={() => navigate('/')}
-              onStart={handleStart}
-              onUpdate={handleUpdateWithImages}
-              onLogout={handleLogout}
+            <TasteStartPage
+              onStartTaste={handleStartTaste} onLogout={handleLogout} showToast={setGlobalToast}
+              reentry={tempCompletedProject ? (
+                // Re-entry banner — rendered in TasteStartPage's flow (empty state only).
+                <ReportReentryBanner
+                  project={tempCompletedProject}
+                  onSave={() => {
+                    setSaveModalProject(tempCompletedProject)
+                    setShowSaveModal(true)
+                  }}
+                  onDelete={async () => {
+                    if (await handleTempDelete()) {
+                      setGlobalToast({ message: t('modalB3.reportBanner.deleted'), type: 'info' })
+                    }
+                  }}
+                />
+              ) : null}
             />
           } />
           <Route path="swipe" element={null} />
@@ -1141,7 +1240,7 @@ export default function App() {
           <Route path="db-check" element={<Navigate to="/admin/db-check" replace />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundRedirect userId={userId} showToast={setGlobalToast} message={t('notFound')} />} />
       </Routes>
 
       {swipeError && (
@@ -1158,7 +1257,7 @@ export default function App() {
       {globalToast && (
         <div style={{
           position: 'fixed',
-          bottom: 'var(--tabbar-clearance)',
+          bottom: location.pathname === '/search' ? 'calc(var(--tabbar-clearance) + 76px)' : 'var(--tabbar-clearance)',
           left: '50%',
           transform: 'translateX(-50%)',
           background: 'color-mix(in srgb, var(--color-surface, #F6F8FA) 72%, transparent)',
@@ -1180,85 +1279,6 @@ export default function App() {
           boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
         }}>
           {globalToast.message}
-        </div>
-      )}
-
-      {/* Re-entry banner — shown on /search when a temp project has a completed report */}
-      {location.pathname === '/search' && tempCompletedProject && (
-        <div style={{
-          position: 'fixed',
-          top: 76,
-          left: 0,
-          right: 0,
-          zIndex: 50,
-          padding: '0 16px',
-        }}>
-          <div style={{
-            maxWidth: 480,
-            margin: '0 auto',
-            background: 'color-mix(in srgb, var(--color-surface) 88%, transparent)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid var(--color-border-soft)',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          }}>
-            <p style={{
-              margin: 0,
-              fontSize: 'var(--fs-body)',
-              fontWeight: 600,
-              color: 'var(--color-text)',
-              flex: 1,
-              lineHeight: 1.4,
-            }}>
-              {t('modalB3.reportBanner.body')}
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button
-                onClick={() => {
-                  setSaveModalProject(tempCompletedProject)
-                  setShowSaveModal(true)
-                }}
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  background: 'var(--accent-1)',
-                  color: '#fff',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  minHeight: 32,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t('modalB3.reportBanner.save')}
-              </button>
-              <button
-                onClick={handleTempDelete}
-                style={{
-                  padding: '7px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-destructive)',
-                  background: 'transparent',
-                  color: 'var(--color-destructive)',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  minHeight: 32,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t('modalB3.reportBanner.delete')}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -1291,7 +1311,7 @@ export default function App() {
               // Branch 1: guest deleted, merged into existing verified account.
               // Re-run full login flow to re-sync userId, projects, localStorage.
               if (user) await handleLogin(user)
-              setGlobalToast({ message: 'Verified — your existing account is now loaded.', type: 'success' })
+              setGlobalToast({ message: t('auth.toastVerifiedMerged'), type: 'success' })
               setPendingBoardCreate(null)
               setPendingLike(null)
               setSurprisePending(false)
@@ -1310,18 +1330,18 @@ export default function App() {
             if (pendingBoardCreate) {
               try {
                 await createProject(pendingBoardCreate)
-                setGlobalToast({ message: 'Board created! You can now save to it.', type: 'success' })
+                setGlobalToast({ message: t('auth.toastBoardCreated'), type: 'success' })
               } catch {
-                setGlobalToast({ message: 'Verified! Please try creating the board again.', type: 'info' })
+                setGlobalToast({ message: t('auth.toastRetryCreateBoard'), type: 'info' })
               } finally {
                 setPendingBoardCreate(null)
               }
             } else if (surprisePending) {
               // Fix 3 Option B: fat payload — prompt user to re-open the surprise modal.
-              setGlobalToast({ message: 'Verified! Please try saving the board again.', type: 'success' })
+              setGlobalToast({ message: t('auth.toastRetrySaveBoard'), type: 'success' })
               setSurprisePending(false)
             } else {
-              setGlobalToast({ message: 'Verified! You can now create boards.', type: 'success' })
+              setGlobalToast({ message: t('auth.toastVerifiedCanCreate'), type: 'success' })
             }
 
             // Retry pending like after promote — guest is now verified, gate no longer fires (Codex #193).

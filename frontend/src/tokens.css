@@ -92,6 +92,10 @@
    * front-maker's write scope (DESIGN.md is admin-owned) — flagged in the PR
    * description. */
   --tabbar-height: 64px;
+  /* Expanded capsule max-width; shared by TabBar.jsx and the bottom
+   * "Finish & View Report" CTA (DESIGN §11 E9) so the two stay aligned. */
+  --tabbar-max-width: 420px;
+  --tabbar-max-width-compact: 280px;
   --page-height: 100vh;
   /* Capsule height + bottom gap + safe-area + breathing room — every page
    * that scrolls or centers content adds this as bottom clearance so its
@@ -168,6 +172,7 @@
   --color-tag-bg:           rgba(0,0,0,0.07);
   --color-tag-border:       rgba(0,0,0,0.15);
   --color-tag-label:        rgba(0,0,0,0.40);
+  --color-cta-neutral:      #3D444D;  /* neutral CTA / send button fill; text+icon always #fff */
 
   /* Scrim — photo overlay / white-text-on-photo gradients (NOT modal
    * backdrops → use --color-scrim-modal below) */
@@ -237,6 +242,7 @@
   --color-tag-bg:           rgba(255,255,255,0.10);
   --color-tag-border:       rgba(255,255,255,0.18);
   --color-tag-label:        rgba(255,255,255,0.50);
+  --color-cta-neutral:      #545D68;  /* neutral CTA / send button fill; text+icon always #fff */
 
   /* Scrim — alpha raised vs. light baseline: a black veil over an already-dark
    * ground (#0d1117) needs more opacity to still read as "deepening further" */
@@ -299,6 +305,7 @@
   --color-tag-bg:           rgba(0,0,0,0.06);
   --color-tag-border:       rgba(0,0,0,0.12);
   --color-tag-label:        rgba(0,0,0,0.38);
+  --color-cta-neutral:      #3D444D;  /* neutral CTA / send button fill; text+icon always #fff */
 
   /* Scrim — photo overlay / white-text-on-photo gradients (NOT modal
    * backdrops → use --color-scrim-modal below) */
@@ -360,6 +367,7 @@
   --color-tag-bg:           rgba(255,255,255,0.10);
   --color-tag-border:       rgba(255,255,255,0.20);
   --color-tag-label:        rgba(255,255,255,0.55);
+  --color-cta-neutral:      #545D68;  /* neutral CTA / send button fill; text+icon always #fff */
 
   /* Scrim — tinted toward the theme's own purple-navy ground (rgb 26,22,37,
    * darker than --color-bg #262335, same B>R>G channel order) instead of

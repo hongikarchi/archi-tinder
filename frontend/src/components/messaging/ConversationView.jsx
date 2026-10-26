@@ -10,6 +10,7 @@ import { VerifyRequiredError } from '../../api/projects.js'
 import { refreshUnreadMessages } from '../../hooks/useUnreadMessages.js'
 import { formatMessageTime, isConnectedSystem, maxMessageId } from './messagingUtils.js'
 import styles from './Messaging.module.css'
+import { userHandle } from '../../utils/userIdentity.js'
 
 const POLL_MS = 4000
 const MESSAGE_MAX = 1000
@@ -30,7 +31,7 @@ const STICK_THRESHOLD = 80
 export default function ConversationView({ conversation, onBack, onOverlayChange }) {
   const { t, language } = useTranslation()
   const { id: conversationId, other } = conversation
-  const otherName = other?.display_name || t('messaging.unknownUser')
+  const otherName = userHandle(other) || t('messaging.unknownUser')
 
   const [loadState, setLoadState] = useState('loading') // 'loading' | 'ready' | 'error'
   const [messages, setMessages] = useState([])
@@ -221,7 +222,7 @@ export default function ConversationView({ conversation, onBack, onOverlayChange
           </svg>
         </FloatingIconButton>
         <div className={styles.convTitle}>
-          <Avatar src={other?.avatar_url} name={other?.display_name} size={32} />
+          <Avatar src={other?.avatar_url} name={userHandle(other)} size={32} />
           <h3 className={styles.convName}>{otherName}</h3>
         </div>
         {other?.user_id != null && (

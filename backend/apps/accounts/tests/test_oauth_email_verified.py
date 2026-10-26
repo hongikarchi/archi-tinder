@@ -77,7 +77,7 @@ def test_get_or_create_user_verified_email_links_existing():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_get_or_create_user_unverified_email_returns_none():
+def test_get_or_create_user_unverified_email_creates_separate():
     """UNVERIFIED email matching an existing account → None (no account creation).
 
     LOGIN-ONBOARD-1: create-new branch removed. Returns None so caller returns
@@ -97,16 +97,15 @@ def test_get_or_create_user_unverified_email_returns_none():
         email_verified=False,
     )
 
-    # LOGIN-ONBOARD-1: returns None (no new account created)
-    assert result_profile is None
-
-    # Only one profile — existing user untouched
-    assert UserProfile.objects.count() == 1
-
-    # No SocialAccount was created for the attacker
-    assert not SocialAccount.objects.filter(
+    # Social-only signup: a NEW separate account is created, victim untouched
+    assert result_profile is not None
+    assert UserProfile.objects.count() == 2
+    victim = User.objects.get(username='victim')
+    assert result_profile.user_id != victim.pk
+    assert result_profile.user.email == ''
+    assert SocialAccount.objects.get(
         provider='google', provider_id='google_sub_attacker',
-    ).exists()
+    ).user.pk == result_profile.pk
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +113,7 @@ def test_get_or_create_user_unverified_email_returns_none():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_get_or_create_user_brand_new_returns_none():
+def test_get_or_create_user_brand_new_creates():
     """No existing account + new provider_id → None (signup_required)."""
     result_profile = _get_or_create_user(
         provider='google',
@@ -126,8 +125,10 @@ def test_get_or_create_user_brand_new_returns_none():
     )
 
     # LOGIN-ONBOARD-1: no account creation → None
-    assert result_profile is None
-    assert UserProfile.objects.count() == 0
+    assert result_profile is not None
+    assert UserProfile.objects.count() == 1
+    assert result_profile.consent_accepted_at is None
+    assert result_profile.user.email == 'brandnew@example.com'
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +178,7 @@ def test_google_login_view_verified_email_links_existing():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_google_login_view_unverified_email_signup_required():
+def test_google_login_view_unverified_email_creates_separate():
     """GoogleLoginView: unverified Google email → 404 signup_required (no create).
 
     LOGIN-ONBOARD-1: create-new branch removed. Unverified email no longer
@@ -206,13 +207,10 @@ def test_google_login_view_unverified_email_signup_required():
             format='json',
         )
 
-    # LOGIN-ONBOARD-1: no new account → signup_required
-    assert resp.status_code == 404
-    data = resp.json()
-    assert data['detail'] == 'signup_required'
-
-    # Victim untouched; no new account created
-    assert UserProfile.objects.count() == 1
+    # New separate account created; victim untouched
+    assert resp.status_code == 200
+    assert resp.json()['user']['onboarding_required'] is True
+    assert UserProfile.objects.count() == 2
     existing_user.refresh_from_db()
     assert existing_user.email == 'victim2@example.com'
 
@@ -222,7 +220,7 @@ def test_google_login_view_unverified_email_signup_required():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_google_login_view_brand_new_signup_required():
+def test_google_login_view_brand_new_creates():
     """GoogleLoginView: completely new Google user (no existing account) → 404 signup_required."""
     userinfo_response = MagicMock()
     userinfo_response.status_code = 200
@@ -242,13 +240,9 @@ def test_google_login_view_brand_new_signup_required():
             format='json',
         )
 
-    assert resp.status_code == 404
-    data = resp.json()
-    assert data['detail'] == 'signup_required'
-    assert data['reason'] == 'no_account'
-
-    # No accounts created
-    assert UserProfile.objects.count() == 0
+    assert resp.status_code == 200
+    assert resp.json()['user']['onboarding_required'] is True
+    assert UserProfile.objects.count() == 1
 
 
 # ---------------------------------------------------------------------------

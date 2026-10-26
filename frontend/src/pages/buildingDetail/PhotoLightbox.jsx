@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import FloatingIconButton from '../../components/FloatingIconButton.jsx'
+import { useTranslation } from '../../i18n/index.js'
 
 async function downloadImage(url, fallbackName = 'image') {
   try {
@@ -24,6 +25,7 @@ async function downloadImage(url, fallbackName = 'image') {
 
 export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate }) {
   // images: [{ url, alt }]
+  const { t } = useTranslation()
   const total = images.length
   const current = images[activeIndex] || images[0]
   const [downloading, setDownloading] = useState(false)
@@ -102,7 +104,7 @@ export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate
             type="button"
             onClick={handleDownload}
             disabled={downloading}
-            aria-label="Download image"
+            aria-label={t('buildingDetail.downloadImage')}
             style={{ ...btnStyle, opacity: downloading ? 0.55 : 1 }}
           >
             {downloading ? (
@@ -144,7 +146,7 @@ export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate
           <button
             type="button"
             onClick={() => onNavigate(activeIndex - 1)}
-            aria-label="Previous"
+            aria-label={t('buildingDetail.previousImage')}
             style={{ ...btnStyle, position: 'absolute', left: 12, zIndex: 2 }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -174,7 +176,7 @@ export default function PhotoLightbox({ images, activeIndex, onClose, onNavigate
           <button
             type="button"
             onClick={() => onNavigate(activeIndex + 1)}
-            aria-label="Next"
+            aria-label={t('buildingDetail.nextImage')}
             style={{ ...btnStyle, position: 'absolute', right: 12, zIndex: 2 }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

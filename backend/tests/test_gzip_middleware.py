@@ -48,7 +48,7 @@ class TestApiGZipMiddleware:
                 (f'event: x\ndata: {"y" * 2000}\n\n'.encode() for _ in range(3)),
                 content_type='text/event-stream',
             )
-        resp = _run(_sse, path='/api/v1/parse-query/stream/')
+        resp = _run(_sse, path='/api/v1/some-sse-stream/')
         assert not resp.has_header('Content-Encoding')
         assert resp['Content-Type'] == 'text/event-stream'
         # still incremental: the three chunks come through unmodified

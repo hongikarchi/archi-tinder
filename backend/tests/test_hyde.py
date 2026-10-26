@@ -207,7 +207,6 @@ class TestHydeFlagGating:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -222,8 +221,8 @@ class TestHydeFlagGating:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN) as mock_embed, \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',
@@ -331,7 +330,6 @@ class TestHydeFlagOnFailure:
         import numpy as np
 
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -346,8 +344,8 @@ class TestHydeFlagOnFailure:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN, return_value=None), \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',
@@ -367,56 +365,6 @@ class TestHydeFlagOnFailure:
         session_id = resp.data['session_id']
         session = AnalysisSession.objects.get(session_id=session_id)
         assert session.v_initial is None
-
-
-# ---------------------------------------------------------------------------
-# TestRefreshPoolIfLowPreservesVInitial
-# ---------------------------------------------------------------------------
-
-class TestRefreshPoolIfLowPreservesVInitial:
-    """refresh_pool_if_low passes session.v_initial through to create_pool_with_relaxation."""
-
-    @pytest.mark.django_db
-    def test_v_initial_forwarded_on_escalation(self, user_profile, monkeypatch):
-        """When pool is low, refresh_pool_if_low passes v_initial from session."""
-        from apps.recommendation.models import AnalysisSession, Project
-        from apps.recommendation.engine import refresh_pool_if_low
-
-        project = Project.objects.create(user=user_profile, name='Test')
-        pool = [f'B{str(i).zfill(5)}' for i in range(1, 6)]
-        session = AnalysisSession.objects.create(
-            user=user_profile,
-            project=project,
-            phase='exploring',
-            pool_ids=pool,
-            pool_scores={},
-            current_round=0,
-            preference_vector=[],
-            exposed_ids=pool,  # all exposed => remaining=0 => escalation fires
-            initial_batch=pool[:1],
-            like_vectors=[],
-            convergence_history=[],
-            previous_pref_vector=[],
-            original_filters={'program': 'Museum'},
-            original_filter_priority=['program'],
-            original_seed_ids=[],
-            current_pool_tier=1,
-            v_initial=_FAKE_VEC,
-        )
-
-        new_pool = ['B00010', 'B00011']
-        captured_kwargs = {}
-
-        def _mock_relaxation(*args, **kwargs):
-            captured_kwargs.update(kwargs)
-            return new_pool, {}, 2
-
-        with patch('apps.recommendation.engine.create_pool_with_relaxation',
-                   side_effect=_mock_relaxation):
-            refresh_pool_if_low(session, threshold=5)
-
-        assert 'v_initial' in captured_kwargs
-        assert captured_kwargs['v_initial'] == _FAKE_VEC
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +447,6 @@ class TestVisualDescriptionInputValidation:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -514,8 +461,8 @@ class TestVisualDescriptionInputValidation:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN) as mock_embed, \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',
@@ -541,7 +488,6 @@ class TestVisualDescriptionInputValidation:
 
         import numpy as np
         fake_pool = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-        fake_scores = {bid: 10 - i for i, bid in enumerate(fake_pool)}
         fake_embeddings = {bid: np.random.RandomState(i).randn(384) for i, bid in enumerate(fake_pool)}
         for bid in fake_embeddings:
             v = fake_embeddings[bid]
@@ -556,8 +502,8 @@ class TestVisualDescriptionInputValidation:
 
         _V = 'apps.recommendation.views.engine'
         with patch(_EMBED_FN) as mock_embed, \
-             patch(f'{_V}.create_pool_with_relaxation',
-                   return_value=(fake_pool, fake_scores, 1)), \
+             patch(f'{_V}.get_diverse_random',
+                   side_effect=lambda n=10, **kw: [{'canonical_bld_id': b} for b in fake_pool[:n]]),              patch(f'{_V}._random_pool', side_effect=lambda t: fake_pool[:t]), \
              patch(f'{_V}.get_pool_embeddings',
                    return_value=fake_embeddings), \
              patch(f'{_V}.farthest_point_from_pool',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getBoardBuildings, getProject } from '../api/projects.js'
 import { getResult } from '../api/sessions.js'
 import { getRecommendedArchitects } from '../api/architects.js'
@@ -13,7 +13,6 @@ function collectBoardBuildingIds(project) {
     ids.push(id)
   }
   for (const item of project?.liked_ids || []) add(item)
-  for (const item of project?.saved_ids || []) add(item)
   return ids
 }
 
@@ -27,13 +26,18 @@ function adaptProjectToBoard(project, buildings) {
   }
 }
 
-export function useBoard(projectId) {
+// `fetchResult: false` skips the owner-only session-result fetch (the persona
+// report page loads recommendations itself via getProjectRecommendations, which
+// also works for viewers).
+export function useBoard(projectId, { fetchResult = true } = {}) {
   const [board, setBoard] = useState(null)
   const [recommended, setRecommended] = useState([])
   const [recommendedArchitects, setRecommendedArchitects] = useState([])
   const [buildingsLoading, setBuildingsLoading] = useState(true)
   const [resultLoading, setResultLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = useCallback(() => setReloadKey(k => k + 1), [])
 
   useEffect(() => {
     if (!projectId) {
@@ -77,7 +81,7 @@ export function useBoard(projectId) {
 
         // Fetch result independently — recommended section populates when it arrives.
         // Uses separate `recommended` state so setBoard is never called again.
-        if (project.latest_session_id) {
+        if (fetchResult && project.latest_session_id) {
           setResultLoading(true)
           getResult({ session_id: project.latest_session_id })
             .then(resultData => {
@@ -107,10 +111,10 @@ export function useBoard(projectId) {
       })
 
     return () => { cancelled = true }
-  }, [projectId])
+  }, [projectId, fetchResult, reloadKey])
 
   // Expose a combined `loading` alias so existing consumers continue to work.
   const loading = buildingsLoading
 
-  return { board, recommended, recommendedArchitects, loading, buildingsLoading, resultLoading, error }
+  return { board, recommended, recommendedArchitects, loading, buildingsLoading, resultLoading, error, reload }
 }

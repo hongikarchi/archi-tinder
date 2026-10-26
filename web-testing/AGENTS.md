@@ -168,7 +168,7 @@ FULL.
 
 | Mode | When to run | Behavior |
 |---|---|---|
-| **FULL** (default) | Recommendation / swipe path touched — `backend/apps/recommendation/**`, RECOMMENDATION dict in `backend/config/settings.py`, session lifecycle, `SwipePage.jsx` / `LLMSearchPage.jsx`, swipe / session logic in `App.jsx`. Always required before a develop → main deploy. | 3 personas × 25 swipes × 3-run TTFC p50, spec-aligned latency budgets (Brutalist / Sustainable Korean TTFC < 4s; Bare Query < 5s; per-swipe outer < 1500 ms / backend < 1000 ms), edge-case coverage (refresh-resume, action card, network failure), zero-tolerance console/network error gates. No retries on flake. |
+| **FULL** (default) | Recommendation / swipe path touched — `backend/apps/recommendation/**`, RECOMMENDATION dict in `backend/config/settings.py`, session lifecycle, `SwipePage.jsx` / `TasteStartPage.jsx`, swipe / session logic in `App.jsx`. Always required before a develop → main deploy. | 3 personas × 25 swipes × 3-run TTFC p50, spec-aligned latency budgets (Brutalist / Sustainable Korean TTFC < 4s; Bare Query < 5s; per-swipe outer < 1500 ms / backend < 1000 ms), edge-case coverage (refresh-resume, action card, network failure), zero-tolerance console/network error gates. No retries on flake. |
 | **FEATURE-SCOPED** | Changes that do not touch the recommendation / swipe path — e.g. profile, theme/font, boards, social, accounts, settings UI. | Preflight (dev-login, migrations, console baseline) + caller-supplied feature checklist + light regression smoke (1 AI search, ~5 swipes, no latency gate). The dispatch MUST include a feature-verification checklist or the agent fails the run. |
 
 Both modes end with an `origin/develop` drift check. The legacy

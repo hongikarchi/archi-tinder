@@ -8,6 +8,7 @@ the SQLite test database.
 import pytest
 import numpy as np
 from unittest.mock import patch
+from django.conf import settings
 from apps.recommendation.models import Project, AnalysisSession, SwipeEvent
 
 
@@ -59,7 +60,7 @@ def _mock_farthest_point(pool_ids, exposed_ids, pool_embeddings):
     return None
 
 
-def _mock_get_card(bid, image_focus=None):
+def _mock_get_card(bid):
     """Return fake card or None."""
     if bid is None:
         return None
@@ -83,15 +84,6 @@ def _mock_compute_centroids(like_vectors, round_num, multimodal_floor=None):
     c = np.random.RandomState(42).randn(384)
     c = c / np.linalg.norm(c)
     return ([c], c)
-
-
-def _mock_mmr_next(pool_ids, exposed_ids, pool_embeddings, like_vectors, round_num, **kwargs):
-    """Return first available building_id."""
-    exposed_set = set(exposed_ids)
-    for bid in pool_ids:
-        if bid not in exposed_set:
-            return bid
-    return None
 
 
 # Shared patch decorator for engine functions used in session creation
@@ -124,16 +116,35 @@ def _sync_emit_telemetry(swipe_kwargs, confidence_kwargs):
 
 _SESSION_PATCHES = {
     f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
+    # Taste-start v2 create path (legacy-filters create now goes through it): the
+    # buildings-DB boundary (tag matching + diverse start cards) is mocked.
+    'apps.recommendation.taste_start.matching.top_matches': (
+        lambda tags, exclude_ids=(), limit=3: [
+            {'canonical_bld_id': b, 'score': 1.0, 'matched_keys': [], 'hit': 1, 'total': 1}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.ranked_pool': (
+        lambda tags, limit=None, exclude_ids=(): [
+            {'canonical_bld_id': b, 'score': 1.0}
+            for b in _FAKE_POOL if b not in set(exclude_ids)][:limit]
+    ),
+    'apps.recommendation.taste_start.matching.score_ids': (
+        lambda tags, ids: {i: 1.0 for i in ids}
+    ),
+    # off-tag pool top-up (v2 refresh_if_low) must not hit the buildings DB
+    f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+    f'{_ENGINE}.get_diverse_random': (
+        lambda n=10, filters=None: [
+            {'canonical_bld_id': b} for b in _FAKE_POOL[:n]]
+    ),
     f'{_ENGINE}.get_pool_embeddings': lambda pool_ids: {bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids},
     f'{_ENGINE}.farthest_point_from_pool': _mock_farthest_point,
     f'{_ENGINE}.get_building_card': _mock_get_card,
     f'{_ENGINE}.get_building_embedding': _mock_get_embedding,
     f'{_ENGINE}.update_preference_vector': _mock_update_pref,
     f'{_ENGINE}.compute_taste_centroids': _mock_compute_centroids,
-    f'{_ENGINE}.compute_mmr_next': _mock_mmr_next,
     f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
     f'{_ENGINE}.check_convergence': lambda *a: False,
-    f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
     f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
     f'{_SWIPE_VIEW}.threading.Thread': _SyncThread,
     f'{_SWIPE_VIEW}._emit_telemetry_thread': _sync_emit_telemetry,
@@ -277,104 +288,6 @@ class TestSessionRawQueryPersistence:
         project.refresh_from_db()
         assert project.raw_query == 'original'
 
-    def test_raw_query_threaded_to_rrf_q_text(self, auth_client, user_profile, monkeypatch):
-        """Codex audit #1.1: raw_query is threaded to RRF q_text when hybrid_retrieval_enabled.
-
-        Sends raw_query='test query' (the FE key), enables hybrid_retrieval_enabled,
-        and asserts that create_pool_with_relaxation receives q_text='test query' (not None).
-        """
-        from django.conf import settings
-
-        monkeypatch.setitem(settings.RECOMMENDATION, 'hybrid_retrieval_enabled', True)
-
-        captured_q_text = []
-
-        def _mock_create_pool(filters, filter_priority, seed_ids, v_initial=None, q_text=None):
-            captured_q_text.append(q_text)
-            return _FAKE_POOL[:], dict(_FAKE_SCORES), 1
-
-        # Build custom patches: start from base set, then add create_pool_with_relaxation
-        # so the view-level call is intercepted directly (capturing q_text kwarg).
-        custom_patches = {
-            k: v for k, v in _SESSION_PATCHES.items()
-            if k != f'{_ENGINE}.create_bounded_pool'
-        }
-        custom_patches[f'{_ENGINE}.create_pool_with_relaxation'] = _mock_create_pool
-
-        patchers = []
-        for target, side_effect in custom_patches.items():
-            p = patch(target, side_effect=side_effect)
-            p.start()
-            patchers.append(p)
-
-        try:
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'filters': {}, 'raw_query': 'test query'},
-                format='json',
-            )
-        finally:
-            for p in reversed(patchers):
-                p.stop()
-
-        assert resp.status_code == 201
-        assert len(captured_q_text) == 1
-        assert captured_q_text[0] == 'test query', (
-            f"q_text was {captured_q_text[0]!r}, expected 'test query' -- "
-            f"Fix #1.1 regression: _raw_query_early must read 'raw_query' key"
-        )
-
-    def test_raw_query_threaded_to_vinitial_cache(self, auth_client, user_profile, monkeypatch):
-        """Codex audit #1.1: raw_query is passed to services.get_cached_v_initial when stage_decouple_enabled.
-
-        Sends raw_query='test query' (the FE key), enables stage_decouple_enabled,
-        and asserts that services.get_cached_v_initial receives 'test query' as
-        the second positional argument (raw_query / cache key parameter).
-        """
-        from django.conf import settings
-
-        monkeypatch.setitem(settings.RECOMMENDATION, 'stage_decouple_enabled', True)
-
-        cache_call_args = []
-
-        def _mock_get_cached_v_initial(user_id, raw_query):
-            cache_call_args.append((user_id, raw_query))
-            return None  # simulate cache miss
-
-        custom_patches = dict(_SESSION_PATCHES)
-
-        patchers = []
-        for target, side_effect in custom_patches.items():
-            p = patch(target, side_effect=side_effect)
-            p.start()
-            patchers.append(p)
-
-        services_patch = patch(
-            'apps.recommendation.views.services.get_cached_v_initial',
-            side_effect=_mock_get_cached_v_initial,
-        )
-        services_patch.start()
-        patchers.append(services_patch)
-
-        try:
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'filters': {}, 'raw_query': 'test query'},
-                format='json',
-            )
-        finally:
-            for p in reversed(patchers):
-                p.stop()
-
-        assert resp.status_code == 201
-        assert len(cache_call_args) == 1, (
-            f"Expected 1 call to get_cached_v_initial, got {len(cache_call_args)}"
-        )
-        assert cache_call_args[0][1] == 'test query', (
-            f"get_cached_v_initial received raw_query={cache_call_args[0][1]!r}, "
-            f"expected 'test query' -- Fix #1.1 regression"
-        )
-
 
 @pytest.mark.django_db
 class TestSwipeRecording:
@@ -493,7 +406,7 @@ class TestSwipeRecording:
 class TestPhaseTransitions:
 
     def test_exploring_to_analyzing(self, auth_client, user_profile):
-        """After min_likes_for_clustering likes, phase becomes analyzing."""
+        """taste_v2: the first like moves the session exploring -> analyzing."""
         project = Project.objects.create(
             user=user_profile, name='Phase Test', filters={},
         )
@@ -508,7 +421,7 @@ class TestPhaseTransitions:
             )
             session_id = resp.json()['session_id']
 
-            # Record 4 likes (min_likes_for_clustering = 4, Spec v1.8 Topic 06 N>=4 mitigation)
+            # Record 4 likes (analyzing from the first like on; taste_v2_analyzing_min_likes=1)
             last_resp = None
             for i in range(4):
                 last_resp = auth_client.post(
@@ -548,6 +461,11 @@ class TestPhaseTransitions:
             p = patch(target, side_effect=side_effect)
             p.start()
             patchers.append(p)
+        # taste_v2 needs >= taste_v2_convergence_min_swipes swipes in the session
+        # before it may declare convergence; lower it so 6 swipes are enough here.
+        floor_patch = patch.dict(settings.RECOMMENDATION, {'taste_v2_convergence_min_swipes': 2})
+        floor_patch.start()
+        patchers.append(floor_patch)
 
         try:
             resp = auth_client.post(
@@ -579,99 +497,51 @@ class TestPhaseTransitions:
 
 
 @pytest.mark.django_db
-class TestSpecV18Topic06N4Mitigation:
-    """Spec v1.8 Topic 06 N>=4 activation-cliff mitigation tests.
+class TestV2AnalyzingThreshold:
+    """taste_v2 replaced the N>=4 K-Means activation rule: a session enters
+    'analyzing' on the FIRST like (taste_v2_analyzing_min_likes=1); dislikes alone
+    keep it 'exploring'."""
 
-    Verifies that raising min_likes_for_clustering from 3 to 4 correctly defers
-    the exploring->analyzing phase transition (and therefore K-Means invocation)
-    until N=4 likes, avoiding the Investigation 09 worst-case window
-    (1 Love + 2 Likes, k=2 forces centroid collapse onto Love).
-    """
+    def _start(self, auth_client, user_profile, name):
+        project = Project.objects.create(user=user_profile, name=name, filters={})
+        resp = auth_client.post(
+            '/api/v1/analysis/sessions/',
+            {'project_id': str(project.project_id), 'filters': {}},
+            format='json',
+        )
+        return resp.json()['session_id']
 
-    def test_n3_skips_kmeans_per_v18_mitigation(self, auth_client, user_profile):
-        """Spec v1.8 Topic 06 N>=4 mitigation: at N=3 likes K-Means is SKIPPED.
-
-        With min_likes_for_clustering=4, after exactly 3 likes the session phase
-        must remain 'exploring' -- the phase transition to 'analyzing' is deferred,
-        so compute_taste_centroids (K-Means) is never called during swipe processing.
-        This avoids the Investigation 09 worst-case window (1 Love + 2 Likes,
-        k=2 forces centroid collapse onto Love due to love_weight asymmetry).
-        """
-        project = Project.objects.create(
-            user=user_profile, name='V18 N3 Mitigation Test', filters={},
+    def _swipe(self, auth_client, session_id, bid, action, key):
+        return auth_client.post(
+            f'/api/v1/analysis/sessions/{session_id}/swipes/',
+            {'building_id': bid, 'action': action, 'idempotency_key': key},
+            format='json',
         )
 
+    def test_dislikes_alone_stay_exploring(self, auth_client, user_profile):
         patchers = _apply_patches()
         try:
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'project_id': str(project.project_id), 'filters': {}},
-                format='json',
-            )
-            session_id = resp.json()['session_id']
-
-            # Record exactly 3 likes -- must NOT trigger phase transition with new threshold
+            session_id = self._start(auth_client, user_profile, 'V2 dislikes only')
             last_resp = None
             for i in range(3):
-                last_resp = auth_client.post(
-                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
-                    {
-                        'building_id': f'B{str(i+1).zfill(5)}',
-                        'action': 'like',
-                        'idempotency_key': f'v18_n3_like_{i}',
-                    },
-                    format='json',
-                )
+                last_resp = self._swipe(
+                    auth_client, session_id, f'B{str(i+1).zfill(5)}', 'dislike', f'v2_dis_{i}')
         finally:
             _stop_patches(patchers)
 
         assert last_resp.status_code == 200
-        # N=3: phase must stay 'exploring' -- K-Means deferred per Spec v1.8 Topic 06
-        assert last_resp.json()['progress']['phase'] == 'exploring', (
-            "Spec v1.8 Topic 06 mitigation: phase must remain 'exploring' at N=3 "
-            "(min_likes_for_clustering=4 defers K-Means activation)"
-        )
+        assert last_resp.json()['progress']['phase'] == 'exploring'
 
-    def test_n4_triggers_kmeans_per_v18_threshold(self, auth_client, user_profile):
-        """Spec v1.8 Topic 06: at N=4 K-Means resumes (threshold verified).
-
-        After exactly 4 likes the session transitions to 'analyzing', confirming
-        the 3->4 retune didn't break K-Means activation at the correct boundary.
-        """
-        project = Project.objects.create(
-            user=user_profile, name='V18 N4 Threshold Test', filters={},
-        )
-
+    def test_first_like_enters_analyzing(self, auth_client, user_profile):
         patchers = _apply_patches()
         try:
-            resp = auth_client.post(
-                '/api/v1/analysis/sessions/',
-                {'project_id': str(project.project_id), 'filters': {}},
-                format='json',
-            )
-            session_id = resp.json()['session_id']
-
-            # Record exactly 4 likes -- must trigger phase transition at the new threshold
-            last_resp = None
-            for i in range(4):
-                last_resp = auth_client.post(
-                    f'/api/v1/analysis/sessions/{session_id}/swipes/',
-                    {
-                        'building_id': f'B{str(i+1).zfill(5)}',
-                        'action': 'like',
-                        'idempotency_key': f'v18_n4_like_{i}',
-                    },
-                    format='json',
-                )
+            session_id = self._start(auth_client, user_profile, 'V2 first like')
+            last_resp = self._swipe(auth_client, session_id, 'B00001', 'like', 'v2_like_0')
         finally:
             _stop_patches(patchers)
 
         assert last_resp.status_code == 200
-        # N=4: phase must become 'analyzing' -- K-Means activated per Spec v1.8 Topic 06
-        assert last_resp.json()['progress']['phase'] == 'analyzing', (
-            "Spec v1.8 Topic 06: phase must become 'analyzing' at N=4 "
-            "(min_likes_for_clustering=4 threshold must activate K-Means)"
-        )
+        assert last_resp.json()['progress']['phase'] == 'analyzing'
 
 
 @pytest.mark.django_db
@@ -696,9 +566,9 @@ class TestConvergenceSignalIntegrity:
     """
 
     def test_phase_transition_resets_convergence_state(self, auth_client, user_profile):
-        """Bug 1: after 4 likes trigger exploring -> analyzing, convergence_history
+        """Bug 1: when the first like triggers exploring -> analyzing, convergence_history
         and previous_pref_vector must be cleared to the empty list.
-        (Spec v1.8 Topic 06 N>=4 mitigation: threshold raised 3->4.)
+        (taste_v2: the transition happens at the first like.)
 
         Pre-fix: after exploring likes, convergence_history accumulates entries
         and previous_pref_vector holds a 384-dim exploring-phase pref_vector.
@@ -722,9 +592,9 @@ class TestConvergenceSignalIntegrity:
             )
             session_id = resp.json()['session_id']
 
-            # 4 likes = min_likes_for_clustering -> exploring to analyzing
-            # (Spec v1.8 Topic 06 N>=4 mitigation: threshold raised 3->4)
-            for i in range(4):
+            # 1 like = taste_v2_analyzing_min_likes -> exploring to analyzing
+            # (later analyzing swipes would append Delta-V, so stop right at the transition)
+            for i in range(1):
                 auth_client.post(
                     f'/api/v1/analysis/sessions/{session_id}/swipes/',
                     {
@@ -1385,130 +1255,6 @@ class TestPoolExhaustionGuard:
             current_pool_tier=current_pool_tier,
         )
 
-    def test_no_op_when_pool_above_threshold(self, user_profile):
-        """Remaining pool >= threshold -> no escalation, pool_ids unchanged."""
-        from apps.recommendation import engine
-
-        project = Project.objects.create(user=user_profile, name='A4 no-op test')
-        # pool=15, exposed=5 -> remaining=10 >= threshold=5
-        session = self._make_session(
-            user_profile, project,
-            pool_ids=list(_FAKE_POOL),
-            exposed_ids=list(_FAKE_POOL[:5]),
-            current_pool_tier=1,
-        )
-        original_pool = list(session.pool_ids)
-        original_tier = session.current_pool_tier
-
-        engine.refresh_pool_if_low(session, threshold=5)
-
-        assert session.pool_ids == original_pool, 'pool_ids should not change when remaining >= threshold'
-        assert session.current_pool_tier == original_tier, 'current_pool_tier should not change'
-
-    def test_escalates_tier_1_to_tier_2_when_low(self, user_profile, monkeypatch):
-        """Remaining < 5 AND tier=1 -> fetch tier-2 candidates, merge, bump tier to 2."""
-        from apps.recommendation import engine
-
-        project = Project.objects.create(user=user_profile, name='A4 tier-1-to-2 test')
-        # pool=8 IDs, exposed=6 -> remaining=2 < threshold=5
-        pool = [f'A{str(i).zfill(5)}' for i in range(1, 9)]
-        exposed = pool[:6]
-        session = self._make_session(
-            user_profile, project,
-            pool_ids=pool,
-            exposed_ids=exposed,
-            current_pool_tier=1,
-            original_filters={'program': 'Museum', 'location_country': 'Korea'},
-        )
-
-        new_buildings = [f'B{str(i).zfill(5)}' for i in range(1, 11)]
-
-        def mock_create_bounded_pool(filters, priority, seeds, target=None, **kwargs):
-            # Tier 2: relaxed filters (no location_country) -> return new buildings
-            if 'location_country' not in (filters or {}):
-                return new_buildings[:], {bid: 0.5 for bid in new_buildings}
-            return [], {}
-
-        monkeypatch.setattr('apps.recommendation.engine.create_bounded_pool', mock_create_bounded_pool)
-
-        engine.refresh_pool_if_low(session, threshold=5)
-
-        # All new buildings appended (they are disjoint from pool by construction)
-        for bid in new_buildings:
-            assert bid in session.pool_ids, f'{bid} should be in merged pool'
-        assert session.current_pool_tier == 2, f'Expected tier 2, got {session.current_pool_tier}'
-        # Old pool IDs still present
-        for bid in pool:
-            assert bid in session.pool_ids, f'Original pool ID {bid} should still be present'
-
-    def test_no_escalation_when_already_tier_3(self, user_profile):
-        """Session at tier 3, low pool -> no further escalation, pool_ids unchanged."""
-        from apps.recommendation import engine
-
-        project = Project.objects.create(user=user_profile, name='A4 tier-3 no-op test')
-        pool = list(_FAKE_POOL[:3])   # only 3 total
-        exposed = pool[:2]            # remaining=1 < threshold=5
-        session = self._make_session(
-            user_profile, project,
-            pool_ids=pool,
-            exposed_ids=exposed,
-            current_pool_tier=3,
-        )
-        original_pool = list(session.pool_ids)
-
-        engine.refresh_pool_if_low(session, threshold=5)
-
-        assert session.pool_ids == original_pool, 'pool_ids must not change when already at tier 3'
-        assert session.current_pool_tier == 3
-
-    def test_new_pool_excludes_already_exposed(self, user_profile, monkeypatch):
-        """New pool from higher tier must NOT include already-exposed building_ids.
-
-        Session has original_filters with a geo key (location_country) so that tier-2
-        relaxation is attempted. The mocked create_bounded_pool returns IDs that overlap
-        with exposed — the helper must filter them out via exclude_set before merging.
-        _random_pool is also mocked to prevent hitting architecture_vectors in test DB.
-        """
-        from apps.recommendation import engine
-
-        project = Project.objects.create(user=user_profile, name='A4 exclude-exposed test')
-        pool = [f'A{str(i).zfill(5)}' for i in range(1, 9)]
-        exposed = pool[:6]
-        session = self._make_session(
-            user_profile, project,
-            pool_ids=pool,
-            exposed_ids=exposed,
-            current_pool_tier=1,
-            original_filters={'program': 'Museum', 'location_country': 'Korea'},
-        )
-
-        # create_bounded_pool returns IDs that overlap with exposed — helper must filter them out
-        overlap_ids = exposed[:3] + [f'C{str(i).zfill(5)}' for i in range(1, 6)]
-
-        def mock_create_bounded_pool(filters, priority, seeds, target=None, **kwargs):
-            # Tier-2 call: location_country dropped, returns overlap_ids (some exposed)
-            return list(overlap_ids), {bid: 0.5 for bid in overlap_ids}
-
-        def mock_random_pool(target):
-            return [f'R{str(i).zfill(5)}' for i in range(1, 6)]
-
-        monkeypatch.setattr('apps.recommendation.engine.create_bounded_pool', mock_create_bounded_pool)
-        monkeypatch.setattr('apps.recommendation.engine._random_pool', mock_random_pool)
-
-        engine.refresh_pool_if_low(session, threshold=5)
-
-        pool_set = set(session.pool_ids)
-        # Original pool IDs still present exactly once
-        for bid in pool:
-            assert session.pool_ids.count(bid) == 1, (
-                f'Original pool ID {bid} appears more than once in pool_ids'
-            )
-        # Exposed-only IDs (those in exposed but NOT in pool after escalation new segment)
-        # must not be duplicated; clean new IDs should be present
-        new_clean = [bid for bid in overlap_ids if bid not in set(pool)]
-        for bid in new_clean:
-            assert bid in pool_set, f'Clean new ID {bid} should be in merged pool'
-
     def test_create_pool_with_relaxation_falls_through_to_random(self, monkeypatch):
         """Tier 1 + tier 2 both return empty -> tier 3 random pool, tier_used=3."""
         from apps.recommendation import engine
@@ -1763,7 +1509,7 @@ class TestSessionResultLikedImagesFromProject:
 
         captured_ids = []
 
-        def _fake_get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+        def _fake_get_buildings_by_ids(canonical_bld_ids):
             captured_ids.append(list(canonical_bld_ids))
             return [_make_card(bid) for bid in canonical_bld_ids]
 
@@ -1807,7 +1553,7 @@ class TestSessionResultLikedImagesFromProject:
             current_pool_tier=1,
         )
 
-        def _fake_get_buildings_by_ids(canonical_bld_ids, image_focus=None):
+        def _fake_get_buildings_by_ids(canonical_bld_ids):
             return [_make_card(bid) for bid in canonical_bld_ids]
 
         with patch(f'{_ENGINE}.get_buildings_by_ids', side_effect=_fake_get_buildings_by_ids):

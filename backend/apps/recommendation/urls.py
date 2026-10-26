@@ -1,15 +1,15 @@
 from django.urls import path, re_path
 from .views import (
-    ProjectListCreateView, ProjectDetailView, UserProjectsListView,
+    ProjectListCreateView, ProjectDetailView, ProjectRecommendationsView, UserProjectsListView,
     SessionCreateView, SessionStateView, SwipeView, SessionResultView,
     DiscoveryFeedView, DiscoveryFeedbackView, DiscoveryPromoteView,
     DiverseRandomView, BuildingBatchView,
-    ParseQueryView, ParseQueryStreamView,
     ProjectReportGenerateView, ProjectReportImageView,
     ProjectReportImageFetchView,
     ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
     RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
     InspectBuildingsListView, InspectBuildingDetailView, InspectSearchView,
+    TasteRecognizeView, TasteCardsView,
 )
 
 urlpatterns = [
@@ -17,7 +17,8 @@ urlpatterns = [
     path('projects/',                                         ProjectListCreateView.as_view()),
     # Project detail — GET (public/visibility-gated) + PATCH + DELETE
     path('projects/<uuid:pk>/',                               ProjectDetailView.as_view()),
-    path('projects/<uuid:pk>/report/generate-image/',         ProjectReportImageView.as_view()),
+    path('projects/<uuid:pk>/recommendations/',               ProjectRecommendationsView.as_view()),
+    path('projects/<uuid:pk>/report/generate-image/',        ProjectReportImageView.as_view()),
     path('projects/<uuid:pk>/report-image/',                  ProjectReportImageFetchView.as_view(), name='project-report-image'),
     path('projects/<uuid:pk>/report/generate/',               ProjectReportGenerateView.as_view()),
     path('projects/<uuid:project_id>/bookmark/',              ProjectBookmarkView.as_view()),
@@ -36,10 +37,6 @@ urlpatterns = [
     path('images/batch/',                                BuildingBatchView.as_view()),
     # Surprise board
     path('recommendations/board-surprise/',              BoardSurpriseView.as_view()),
-    # LLM query parsing
-    path('parse-query/',                                 ParseQueryView.as_view()),
-    # PERF-SEARCH-1: SSE streaming variant (filters early, reply deltas, final == parse-query body)
-    path('parse-query/stream/',                          ParseQueryStreamView.as_view()),
     # Telemetry
     path('telemetry/image-load/',                        ImageLoadTelemetryView.as_view(), name='telemetry_image_load'),
     # Architect recommendation
@@ -50,5 +47,8 @@ urlpatterns = [
     # ADMIN-DBCHECK-1: internal DB-quality inspection API (list must come before detail).
     path('inspect/buildings/',                                InspectBuildingsListView.as_view()),
     re_path(r'^inspect/buildings/(?P<canonical_bld_id>bld_[0-9]{6})/$', InspectBuildingDetailView.as_view()),
+    # Taste-start: tag recognition + top-3 tag-match cards
+    path('taste/recognize/',                                  TasteRecognizeView.as_view()),
+    path('taste/cards/',                                      TasteCardsView.as_view()),
     path('inspect/search/',                                   InspectSearchView.as_view()),
 ]

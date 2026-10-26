@@ -59,7 +59,7 @@ class TestGuestRoleAffiliation:
         assert data['user']['role'] == 'Architecture Student'
         assert data['user']['affiliation'] == 'Korea University'
         # Confirm DB persistence
-        profile = UserProfile.objects.get(is_guest=True, display_name='Test Guest')
+        profile = UserProfile.objects.get(is_guest=True, display_name='TestGuest')
         assert profile.role == 'Architecture Student'
         assert profile.affiliation == 'Korea University'
 
@@ -72,7 +72,7 @@ class TestGuestRoleAffiliation:
         response = client.post('/api/v1/auth/guest/', payload, format='json')
 
         assert response.status_code == 200
-        profile = UserProfile.objects.get(is_guest=True, display_name='Test Guest')
+        profile = UserProfile.objects.get(is_guest=True, display_name='TestGuest')
         assert profile.role == 'R' * 50
         assert len(profile.role) == 50
 
@@ -85,7 +85,7 @@ class TestGuestRoleAffiliation:
         response = client.post('/api/v1/auth/guest/', payload, format='json')
 
         assert response.status_code == 200
-        profile = UserProfile.objects.get(is_guest=True, display_name='Test Guest')
+        profile = UserProfile.objects.get(is_guest=True, display_name='TestGuest')
         assert profile.affiliation == 'A' * 100
         assert len(profile.affiliation) == 100
 
@@ -97,7 +97,7 @@ class TestGuestRoleAffiliation:
         response = client.post('/api/v1/auth/guest/', payload, format='json')
 
         assert response.status_code == 200
-        profile = UserProfile.objects.get(is_guest=True, display_name='Test Guest')
+        profile = UserProfile.objects.get(is_guest=True, display_name='TestGuest')
         assert profile.role == ''
         assert profile.affiliation == ''
 
@@ -109,6 +109,6 @@ class TestGuestRoleAffiliation:
         response = client.post('/api/v1/auth/guest/', payload, format='json')
 
         assert response.status_code == 200
-        profile = UserProfile.objects.get(is_guest=True, display_name='Test Guest')
+        profile = UserProfile.objects.get(is_guest=True, display_name='TestGuest')
         assert profile.role == ''
         assert profile.affiliation == ''

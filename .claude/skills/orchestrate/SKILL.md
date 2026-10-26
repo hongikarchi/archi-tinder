@@ -139,9 +139,9 @@ Once open: run the **`git-publish` skill** (base=`develop` only). Escalate to th
 Summarize: what was implemented, the commit/PR, the app-test verdict, the workflow's `confirmedFindings` (if any shipped as medium/low), open follow-ups. STOP.
 
 ## Algorithm work — externally owned
-Per `CLAUDE.md` `## Rules`, algorithm-side work (`engine.py`, `services/embeddings.py`, `services/rerank.py`, `services/_caches.py`, Topic 01-12 in `docs/algorithm.md`, IMP-1/7/8, A2 hyperparameter optimization) is owned by a separate collaborator — this skill does NOT decompose algorithm tuning into the workflow. Surface the ownership boundary and decline.
+Per `CLAUDE.md` `## Rules`, algorithm-side work (`engine.py`, `services/embeddings.py`, `services/rerank.py`, `taste_start/`, Topic 01-12 in `docs/algorithm.md`, IMP-1/7/8, A2 hyperparameter optimization) is owned by a separate collaborator — this skill does NOT decompose algorithm tuning into the workflow. Surface the ownership boundary and decline.
 
-LLM-chat-module work (`services/parse_query.py`, `services/generation.py`, `services/_gemini.py`, chat-phase Gemini latency IMP-4/5/6, Phase 17 reverse-Q + persona) stays in scope — decompose as a normal feature.
+LLM-module work (`services/generation.py`, `services/_gemini.py`, persona report, `taste_start/jev_client.py` JEV tag recognition) stays in scope — decompose as a normal feature.
 
 ## Rules
 - **Never write source code yourself.** Launch the `feature` workflow. If `Workflow` appears unavailable, STOP and report — do not edit `backend/`/`frontend/` directly.

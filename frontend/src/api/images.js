@@ -102,9 +102,8 @@ export function normalizeCard(card) {
     // cover_full_url: raw un-resized URL passthrough (no transformation).
     // Consumers that need full resolution (lightbox, download) use this field.
     cover_full_url: card.image_url || null,
-    // image_focus / image_kind: passthrough so SwipeCard's isDrawingKind check
+    // image_kind: passthrough so SwipeCard's isDrawingKind check
     // (drawing-vs-photo background/fit) actually has data to read.
-    image_focus: card.image_focus ?? null,
     image_kind:  card.image_kind ?? null,
     source_url:  card.url || null,
     // FRONT-UX-14: gallery images render full-bleed at CARD_WIDTH — right-size
@@ -121,7 +120,7 @@ export function normalizeCard(card) {
     gallery_meta: card.gallery_meta || [],
     gallery_drawing_start: card.gallery_drawing_start ?? card.metadata?.gallery_drawing_start ?? null,
     // covers_by_type: jsonb dict {exterior, interior, drawing, aerial, detail}
-    // passthrough so UI can render a focus selector (S2 image_focus feature).
+    // passthrough for SwipeCard's image-load fallback chain.
     covers_by_type: card.covers_by_type || {},
     metadata: {
       axis_typology:        card.metadata?.axis_typology        ?? card.program          ?? null,

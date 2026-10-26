@@ -1,7 +1,6 @@
 """
 generation.py -- Gemini-backed generation functions.
 
-IMP-6 Commit 2: generate_visual_description (Stage 2 background worker).
 Sprint 4 §8: generate_persona_report.
 Gemini-native image generation: generate_persona_image (replaces Imagen 3).
 TASTE-BOARD-NAME: generate_taste_board_name (auto-name Taste session boards).
@@ -19,179 +18,15 @@ from collections import Counter
 from django.conf import settings
 from google.genai import types
 
+from ._pattern_text import (
+    build_fallback_paragraph,
+    numbers_allowed,
+)
 from ._report_prompts import build_persona_prompt
 from .taste_facts import AXES as _TASTE_AXES
 from .taste_facts import compute_taste_facts, extract_axis_values
 
 logger = logging.getLogger('apps.recommendation')
-
-
-def generate_visual_description(filters, raw_query, user_id):
-    """IMP-6 Commit 2: Stage 2 worker -- generates visual_description + V_initial.
-
-    Runs in a background thread (daemon=True) spawned by ParseQueryView after
-    Stage 1 returns on a terminal turn (probe_needed=False).
-
-    Operation:
-        1. Single Gemini call producing ONLY visual_description text (~140-180 tokens).
-        2. embed_visual_description(visual_description) -> 384-dim float list.
-        3. set_cached_v_initial(user_id, raw_query, v_initial) for SessionCreate late-bind.
-        4. Emit 'stage2_timing' event with full telemetry.
-
-    Defensive: catches all exceptions; failures never bubble up to the user.
-    SessionCreate falls through to filter-only pool on cache miss (graceful degrade
-    per spec v1.5 Topic 01).
-
-    Args:
-        filters: dict of parsed filters from Stage 1 result.
-        raw_query: str, the verbatim first user message (V_initial cache key component).
-        user_id: int, request.user.id.
-
-    Returns:
-        visual_description string on success, None on failure.
-    """
-    # Late-bound package reference for cross-module symbol access.
-    from apps.recommendation import services as _svc  # noqa: PLC0415
-
-    t_stage2_start = time.perf_counter()
-    gemini_visual_description_ms = None
-    hf_inference_ms = None
-    input_tokens = None
-    output_tokens = None
-    v_initial_computed = False
-    v_initial_dim = None
-    success = False
-    error_class = None
-    # State-progression outcome: advances as each stage succeeds.
-    # Starts at 'gemini_failure' so any uncaught exception before HF is correctly classified.
-    outcome = 'gemini_failure'
-
-    try:
-        client = _svc._get_client()
-
-        # Build a concise prompt from filters + raw_query for visual description
-        filter_parts = []
-        if filters.get('program'):
-            filter_parts.append(f"program: {filters['program']}")
-        if filters.get('style'):
-            filter_parts.append(f"style: {filters['style']}")
-        if filters.get('material'):
-            filter_parts.append(f"material: {filters['material']}")
-        if filters.get('location_country'):
-            filter_parts.append(f"country: {filters['location_country']}")
-        filter_summary = ', '.join(filter_parts) if filter_parts else 'unspecified'
-
-        stage2_prompt = (
-            f"Write a vivid 2-4 sentence English architectural description for a building search. "
-            f"The user query was: {raw_query!r}. "
-            f"Inferred filters: {filter_summary}. "
-            f"Output ONLY the description text -- no JSON, no labels, no preamble."
-        )
-
-        t_gemini_start = time.perf_counter()
-        response = _svc.generate_content_with_fallback(
-            client,
-            contents=stage2_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.3,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        t_gemini_end = time.perf_counter()
-        gemini_visual_description_ms = round((t_gemini_end - t_gemini_start) * 1000, 2)
-
-        _usage = getattr(response, 'usage_metadata', None)
-        input_tokens = getattr(_usage, 'prompt_token_count', None) if _usage else None
-        output_tokens = getattr(_usage, 'candidates_token_count', None) if _usage else None
-
-        visual_description = (response.text or '').strip()
-        if not visual_description:
-            logger.warning('IMP-6 Stage 2: Gemini returned empty visual_description')
-            error_class = 'EmptyResponse'
-            return None
-
-        # Gemini succeeded -- advance outcome state; HF failure now owns the error label.
-        outcome = 'hf_failure'
-
-        # Compute V_initial via HuggingFace Inference API (existing embed_visual_description).
-        # Time the HF call regardless of its result (hf_inference_ms=None only when HF never fires).
-        t_hf_start = time.perf_counter()
-        v_initial = _svc.embed_visual_description(visual_description, session=None, user=None)
-        hf_inference_ms = round((time.perf_counter() - t_hf_start) * 1000, 2)
-
-        if v_initial is not None:
-            # Defensive: verify dimension + non-zero norm before caching
-            import numpy as _np
-            v_arr = _np.asarray(v_initial, dtype=_np.float32)
-            v_norm = _np.linalg.norm(v_arr)
-            if len(v_initial) == 384 and v_norm > 0:
-                # HF succeeded -- advance outcome state; cache failure now owns the error label.
-                outcome = 'cache_failure'
-                try:
-                    _svc.set_cached_v_initial(user_id, raw_query, v_initial)
-                except Exception as cache_exc:
-                    logger.warning(
-                        'IMP-6 Stage 2: set_cached_v_initial failed: %s: %s',
-                        type(cache_exc).__name__, str(cache_exc),
-                    )
-                    error_class = type(cache_exc).__name__
-                    return None
-                v_initial_computed = True
-                v_initial_dim = len(v_initial)
-                logger.debug(
-                    'IMP-6 Stage 2: V_initial cached for user=%s query_len=%d',
-                    user_id, len(raw_query or ''),
-                )
-                # All stages passed -- advance to success.
-                outcome = 'success'
-                success = True
-            else:
-                logger.warning(
-                    'IMP-6 Stage 2: V_initial dim=%d norm=%.4f -- skipping cache',
-                    len(v_initial), v_norm,
-                )
-                error_class = 'BadVInitialVector'
-                # outcome stays 'hf_failure' -- bad vector counts as HF-stage failure
-        else:
-            logger.warning('IMP-6 Stage 2: embed_visual_description returned None')
-            error_class = 'EmbedFailed'
-            # outcome stays 'hf_failure'
-
-        return visual_description
-
-    except Exception as e:
-        error_class = type(e).__name__
-        logger.warning(
-            'IMP-6 generate_visual_description failed: %s: %s',
-            type(e).__name__, str(e),
-        )
-        return None
-    finally:
-        # IMP-6 stage2_timing schema (per spec v1.7 §6):
-        #   - stage2_total_ms / gemini_visual_description_ms / hf_inference_ms /
-        #     pool_rerank_ms / outcome (in this commit)
-        #   - v_initial_ready_at_first_card / cards_exposed_when_ready (DEFERRED
-        #     to Commit 3 -- requires cross-request timing coordination between
-        #     this Stage 2 thread and SessionCreateView's first-card-sent timing)
-        # Extra non-spec fields (gemini_input/output_tokens, v_initial_computed/dim,
-        # success, error_class) preserved for richer diagnostic.
-        t_stage2_total = round((time.perf_counter() - t_stage2_start) * 1000, 2)
-        _svc.event_log.emit_event(
-            'stage2_timing',
-            session=None,
-            user=None,
-            gemini_visual_description_ms=gemini_visual_description_ms,
-            gemini_input_tokens=input_tokens,
-            gemini_output_tokens=output_tokens,
-            hf_inference_ms=hf_inference_ms,
-            pool_rerank_ms=None,
-            outcome=outcome,
-            v_initial_computed=v_initial_computed,
-            v_initial_dim=v_initial_dim,
-            success=success,
-            error_class=error_class,
-            stage2_total_ms=t_stage2_total,
-        )
 
 
 _REPORT_TEXT_FIELDS = ('persona_type', 'one_liner', 'pattern_paragraph', 'description')
@@ -287,6 +122,12 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
 
     taste_facts = compute_taste_facts(rows_by_id, liked_building_ids, disliked_building_ids, rc)
     facts = taste_facts.get('facts', [])
+    tier = taste_facts.get('tier', 'none')
+    # 'facts' = like/dislike facts (strict or relaxed), 'composition' = liked-only
+    # counts, 'interpretive' = no grounded fact -> number-free paragraph from tags.
+    pattern_mode = {
+        'strict': 'facts', 'relaxed': 'facts', 'composition': 'composition',
+    }.get(tier, 'interpretive')
 
     # Liked-only tag frequencies (for the interpretive `description` paragraph
     # -- NOT the shown-vs-not-shown ratio math that drives `pattern_paragraph`,
@@ -318,6 +159,7 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     payload = {
         'language': lang,
         'liked_count': len(liked_id_set),
+        'pattern_mode': pattern_mode,
         'facts': [
             {k: v for k, v in fact.items() if k != 'building_ids'}
             for fact in facts
@@ -410,13 +252,34 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
         'i18n': {'ko': ko_block, 'en': en_block},
     }
 
-    if not facts:
-        # No grounded facts (e.g. too few swipes to clear thresholds) --
-        # never let the model pad this in with an ungrounded sentence, in
-        # EITHER language.
-        report['pattern_paragraph'] = ''
-        report['i18n']['ko']['pattern_paragraph'] = ''
-        report['i18n']['en']['pattern_paragraph'] = ''
+    # 2026-10-25 product decision: pattern_paragraph is ALWAYS present. Every
+    # number must come from real data, so LLM text is guarded and blanks are
+    # filled deterministically (see _pattern_text.py).
+    pattern_source = {'strict': 'facts', 'relaxed': 'relaxed', 'composition': 'composition'}.get(
+        tier, 'interpretive',
+    )
+    used_fallback = False
+    for key in ('ko', 'en'):
+        block = report['i18n'][key]
+        text = (block.get('pattern_paragraph') or '').strip()
+        if text and not numbers_allowed(text, facts, pattern_mode):
+            logger.warning(
+                'generate_persona_report: %s pattern_paragraph has ungrounded numbers (mode=%s); using fallback',
+                key, pattern_mode,
+            )
+            text = ''
+        if not text:
+            text, kind = build_fallback_paragraph(facts, liked_tag_frequencies, key)
+            used_fallback = True
+            logger.warning(
+                'generate_persona_report: blank/rejected %s pattern_paragraph; deterministic fallback (%s)',
+                key, kind,
+            )
+        block['pattern_paragraph'] = text
+    if used_fallback:
+        pattern_source = 'fallback'
+    report['pattern_paragraph'] = report['i18n'][lang]['pattern_paragraph']
+    report['pattern_source'] = pattern_source
     # Backend-computed, not LLM. Not rendered directly by the frontend
     # (BACK-LLM-5 spec: "화면에는 표시하지 않습니다") -- but IS persisted on
     # project.final_report, which IS served by ProjectDetailView (AllowAny
@@ -429,8 +292,9 @@ def generate_persona_report(liked_building_ids, disliked_building_ids=None, lang
     # for future audit/debug UIs without re-deriving them).
     report['taste_facts'] = {
         'summary': taste_facts['summary'],
+        'tier': tier,
         'facts': [
-            fact if fact.get('polarity') == 'like'
+            fact if fact.get('polarity') in ('like', 'composition')
             else {k: v for k, v in fact.items() if k != 'building_ids'}
             for fact in facts
         ],
@@ -505,7 +369,7 @@ def _gemini_board_name_raw(filters, raw_query):
     this returns.
 
     Args:
-        filters:   dict — active_filters with image_focus already removed.
+        filters:   dict — active_filters (legacy image_focus key ignored).
         raw_query: str  — verbatim user search text.
 
     Returns:

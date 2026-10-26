@@ -1,144 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useResults } from '../hooks/useResults.js'
 import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.js'
-import PersonaReport from '../components/PersonaReport.jsx'
-import {
-  photoCardShellStyle,
-  photoCardImageStyle,
-  photoCardScrimStyle,
-  photoCardCaptionStyle,
-  photoCardTitleStyle,
-  photoCardSubtitleStyle,
-} from '../components/photoCardShell.js'
 import { useTranslation } from '../i18n/index.js'
-import { generateReport } from '../api/projects.js'
-import { localizeReport } from '../utils/reportText.js'
-import PageLogoHeader from '../components/PageLogoHeader.jsx'
-import PageTopControls from '../components/PageTopControls.jsx'
-import PageBackButton from '../components/PageBackButton.jsx'
-import SectionTitle from '../components/SectionTitle.jsx'
+import { generateReport, getProject } from '../api/projects.js'
+import ResultCards, { ResultsStage, ResultStateCard } from '../components/ResultCards.jsx'
 
-function cardId(card) {
-  return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
-}
-
-function personaFields(result, project, t, language) {
-  const rawReport = result?.analysis_report || project?.finalReport || {}
-  const report = localizeReport(rawReport, language)
-  return {
-    type: report.persona_type || report.title || t('results.personaFallbackType'),
-    line: report.one_liner || report.summary || t('results.personaFallbackLine'),
-    styles: report.dominant_styles || report.styles || report.style_tags || [],
-    programs: report.dominant_programs || report.programs || report.program_tags || [],
-  }
-}
-
-function ResultCard({ card, rank, saved, pending, onOpen, onToggle }) {
-  const title = card.image_title || card.name_en || `Recommendation ${rank}`
-  const architects = card.metadata?.axis_architects || card.architect
-  const country = card.metadata?.axis_country || card.location_country
-  const year = card.metadata?.axis_year || card.year
-
-  return (
-    <article
-      onClick={() => onOpen(card, rank)}
-      style={photoCardShellStyle}
-    >
-      <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
-      {card.image_url && (
-        <img
-          src={card.image_url}
-          alt={title}
-          loading={rank === 1 ? 'eager' : 'lazy'}
-          style={photoCardImageStyle}
-        />
-      )}
-      <div style={photoCardScrimStyle} />
-      <div style={{
-        position: 'absolute',
-        top: 14,
-        left: 14,
-        padding: '3px 5px',
-        borderRadius: 'var(--radius-pill)',
-        background: 'var(--color-scrim-soft)',
-        border: '1px solid rgba(255,255,255,0.12)',
-        color: '#fff',
-        fontSize: 'var(--fs-caption)',
-        fontWeight: 'var(--fw-bold)',
-      }}>
-        #{rank}
-      </div>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-          onToggle(card, rank)
-        }}
-        disabled={pending}
-        aria-label={saved ? 'Remove bookmark' : 'Save bookmark'}
-        style={{
-          position: 'absolute',
-          top: 10,
-          right: 10,
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          border: saved ? '1px solid color-mix(in srgb, var(--accent-3) 65%, transparent)' : '1px solid rgba(255,255,255,0.16)',
-          background: saved ? 'color-mix(in srgb, var(--accent-3) 18%, transparent)' : 'var(--color-scrim-soft)',
-          color: saved ? 'var(--accent-3)' : '#fff',
-          fontSize: 'var(--fs-body)',
-          cursor: pending ? 'default' : 'pointer',
-          opacity: pending ? 0.65 : 1,
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}
-      >
-        {saved ? '★' : '☆'}
-      </button>
-      <div style={photoCardCaptionStyle}>
-        <h2 style={photoCardTitleStyle}>
-          {title}
-        </h2>
-        {architects && (
-          <p style={photoCardSubtitleStyle}>
-            {architects}
-          </p>
-        )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {[country, year].filter(Boolean).map(value => (
-            <span key={value} style={{
-              color: 'rgba(255,255,255,0.72)',
-              fontSize: 'var(--fs-caption)',
-              fontWeight: 'var(--fw-bold)',
-              padding: '2px 4px',
-              borderRadius: 'var(--radius-pill)',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.10)',
-            }}>
-              {value}
-            </span>
-          ))}
-        </div>
-      </div>
-    </article>
-  )
-}
-
+// /result/:sessionId — 3 swipeable result cards (FULL-REPORT-UI-1 WP3, #445).
+// Liked buildings + recommendations live on the shared report page
+// (/board/:id/report), reached through the closing card's CTA.
 export default function ResultsPage({ projects, setProjects, onReportGenerated, onLogout, onRequestSave }) {
   const navigate = useNavigate()
-  const location = useLocation()
   const { sessionId } = useParams()
-  const { t, language } = useTranslation()
-  const { cards, error, loading, pendingIds, project, result, toggleBookmark } = useResults(sessionId, projects, setProjects)
-  const [loadedRank, setLoadedRank] = useState(10)
-  const observerRef = useRef(null)
-  const persona = personaFields(result, project, t, language)
-  const cappedTotal = Math.min(cards.length, 50)
-  const visibleCount = Math.min(loadedRank, cappedTotal)
-  const topCards = cards.slice(0, visibleCount)
-  const savedIds = project?.savedIds || []
+  const { t } = useTranslation()
+  const { error, loading, project } = useResults(sessionId, projects, setProjects)
   const backendId = resolveProjectBackendId(project)
+  const hasLikes = !!(project?.likedBuildings?.length)
 
   // Auto-repair: when the report is missing (e.g. a prior generation failure),
   // fire ONE generateReport call. Guarded by a ref so it fires at most once per
@@ -151,7 +28,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
   function attemptReportRepair() {
     // No liked buildings yet → backend always 400s ('No liked buildings yet');
     // retrying can never succeed, so skip generation and fall through to the
-    // neutral persona placeholder instead of a dead-end error+retry state.
+    // neutral zero-likes card instead of a dead-end error+retry state.
     if (!backendId || project?.finalReport || reportRepairRef.current) return
     if (!(project?.likedBuildings?.length)) return
     reportRepairRef.current = true
@@ -188,317 +65,98 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendId, project?.finalReport])
 
+  // Boards reloaded via the owner list endpoint carry finalReport but no
+  // axis_scores (the list defers it). Fetch the detail once and merge it in so
+  // the spectrum isn't rendered as all no-evidence.
+  const axisFetchedRef = useRef(null)
+  const needsAxisScores = !!(project?.finalReport && !project?.axisScores && backendId)
+  useEffect(() => {
+    if (!needsAxisScores || axisFetchedRef.current === backendId) return
+    axisFetchedRef.current = backendId
+    let cancelled = false
+    getProject(backendId).then(data => {
+      if (cancelled || !data?.axis_scores) return
+      setProjects(prev => prev.map(p => (
+        resolveProjectBackendId(p) === backendId && !p.axisScores
+          ? { ...p, axisScores: data.axis_scores }
+          : p
+      )))
+    })
+    return () => {
+      cancelled = true
+      // StrictMode/dep-change cleanup cancels the apply, so release the guard
+      // (only if still ours) to let the re-run fetch again.
+      if (axisFetchedRef.current === backendId) axisFetchedRef.current = null
+    }
+  }, [needsAxisScores, backendId, setProjects])
+
   function handleReportRetry() {
     reportRepairRef.current = false
     attemptReportRepair()
   }
 
-  function handleReportUpdate(data) {
-    if (!project || !data?.final_report) return
-    setProjects(prev => prev.map(p => (
-      p.id === project.id
-        ? {
-            ...p,
-            finalReport: data.final_report,
-            ...(data.axis_scores ? { axisScores: data.axis_scores } : {}),
-          }
-        : p
-    )))
-  }
+  // Taste/swipe tab — same destination the other "continue exploring" paths use.
+  const startExploring = () => navigate('/search')
 
-  // Reconcile bookmark state when navigating back from BuildingDetailPage
-  useEffect(() => {
-    const changed = location.state?.bookmarkChanged
-    if (!changed || !project) return
-    const { buildingId, action } = changed
-    if (!buildingId || !action) return
-    setProjects(prev => prev.map(p => {
-      if (p.sessionId !== sessionId) return p
-      const current = p.savedIds || []
-      const next = action === 'save'
-        ? [...new Set([...current, buildingId])]
-        : current.filter(id => id !== buildingId)
-      return { ...p, savedIds: next }
-    }))
-    // Clear signal so a further navigate(-1)/forward doesn't re-apply it
-    navigate(location.pathname, { replace: true, state: null })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    setLoadedRank(10)
-  }, [sessionId])
-
-  useEffect(() => {
-    const node = observerRef.current
-    if (!node || loadedRank >= cappedTotal) return
-    const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) {
-        setLoadedRank(prev => Math.min(prev + 10, cappedTotal))
-      }
-    }, { root: null, rootMargin: '160px' })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [loadedRank, cappedTotal])
-
-  function handleOpenBuilding(card, rank) {
-    const id = cardId(card)
-    const fromProjectId = resolveProjectBackendId(project)
-    if (!id) return
-    navigate(`/buildings/${id}`, {
-      state: {
-        fromProjectId,
-        fromSessionId: sessionId,
-        rank,
-        savedIds,
-        referrer: location.pathname,
-        fromRecommended: true,
-      },
-    })
+  let content
+  if (project?.finalReport && backendId) {
+    // CTA: a temp board opens the save sheet (→ shared report page after saving);
+    // an already-saved board goes straight to the shared report page.
+    content = (
+      <ResultCards
+        project={project}
+        backendId={backendId}
+        ctaLabel={project.isTemp ? t('results.saveAndProfile') : t('results.goToProfile')}
+        onCta={() => {
+          if (project.isTemp) onRequestSave?.(project)
+          else navigate(`/board/${backendId}/report`)
+        }}
+      />
+    )
+  } else if (!project) {
+    // Unknown / invalid session: nothing to show. While the lookup is still
+    // running show the skeleton; otherwise a neutral card that points back to exploring.
+    content = loading && !error
+      ? <ResultStateCard kind="loading" />
+      : (
+        <ResultStateCard
+          kind="fail"
+          title={t('results.reportError')}
+          body={error === 'invalid_session_id' ? t('results.invalidSession') : t('results.reportErrorBody')}
+          actionLabel={t('results.startExploring')}
+          onAction={startExploring}
+        />
+      )
+  } else if (reportRepairError || (hasLikes && !backendId && !loading)) {
+    // Without a backend id retry is a no-op, so that sub-case points back to exploring.
+    const canRetry = !!backendId
+    content = (
+      <ResultStateCard
+        kind="fail"
+        title={t('results.reportError')}
+        body={t('results.reportErrorBody')}
+        actionLabel={canRetry ? t('results.retry') : t('results.startExploring')}
+        onAction={canRetry ? (reportRepairing ? undefined : handleReportRetry) : startExploring}
+      />
+    )
+  } else if (!hasLikes) {
+    content = (
+      <ResultStateCard
+        kind="empty"
+        title={t('results.personaFallbackType')}
+        body={t('results.personaFallbackLine')}
+        hint={t('results.emptyHint')}
+        actionLabel={t('results.startExploring')}
+        onAction={startExploring}
+      />
+    )
+  } else {
+    content = <ResultStateCard kind="loading" />
   }
 
   return (
-    <div style={{
-      height: 'var(--page-height)',
-      overflowY: 'auto',
-      background: 'var(--color-bg)',
-      paddingBottom: 'var(--tabbar-clearance)',
-    }}>
-      <PageLogoHeader />
-      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate('/')} />} />
-
-      <div style={{ maxWidth: 680, margin: '0 auto' }}>
-      {/* FRONT-RESULTS-SAVE-1 — the run's closing action.
-          The save sheet no longer auto-opens over the report (it covered the
-          thing the user just waited for), so this is what ends the flow: it
-          opens the sheet for a temp board, or goes straight to the profile for
-          one that is already saved. Either way the user lands somewhere that
-          shows the result was kept, instead of having to press Back.
-          Gated on the report existing — there is nothing to save before it. */}
-      {project?.finalReport && backendId && (
-        <div style={{ padding: '0 18px 4px' }}>
-          <button
-            type="button"
-            onClick={() => onRequestSave?.(project)}
-            style={{
-              width: '100%',
-              minHeight: 44,
-              padding: '12px 24px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--accent-1)',
-              color: '#fff',
-              border: 'none',
-              fontSize: 'var(--fs-body)',
-              fontWeight: 'var(--fw-bold)',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            {project.isTemp ? t('results.saveAndProfile') : t('results.goToProfile')}
-          </button>
-        </div>
-      )}
-      {project?.finalReport && backendId ? (
-        // UI-CONSISTENCY-B3b-5: same padded centered column as
-        // BoardReportPage's .container (20px sides, 20px top) so
-        // PersonaReport renders at identical width/inset in both places.
-        <div style={{ padding: '20px 20px 24px' }}>
-          <PersonaReport
-            boardId={backendId}
-            finalReport={project.finalReport}
-            axisScores={project.axisScores || null}
-            reportImage={project.reportImage || null}
-            reportImageMime={project.reportImageMime || null}
-            onReportUpdate={handleReportUpdate}
-          />
-        </div>
-      ) : reportRepairError ? (
-        <section style={{ padding: '18px', borderBottom: '1px solid var(--color-border-soft)' }}>
-          <p style={{ color: 'var(--color-destructive, #D73A49)', fontSize: 13, fontWeight: 600, margin: '0 0 10px' }}>
-            {t('results.reportError')}
-          </p>
-          <button
-            type="button"
-            onClick={handleReportRetry}
-            disabled={reportRepairing}
-            style={{
-              padding: '8px 18px',
-              borderRadius: 999,
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-text)',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: reportRepairing ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            {t('results.retry')}
-          </button>
-        </section>
-      ) : (
-        <section style={{ padding: '18px', borderBottom: '1px solid var(--color-border-soft)' }}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 14, fontWeight: 600, margin: 0 }}>
-            {persona.type}
-          </p>
-          <p style={{ color: 'var(--color-text)', fontSize: 14, margin: '6px 0 0' }}>
-            {persona.line}
-          </p>
-        </section>
-      )}
-
-      {/* Liked buildings — 가로 스크롤, 큰 카드 */}
-      {result?.liked_images?.length > 0 && (
-        <section style={{ padding: '18px 0 24px', borderBottom: '1px solid var(--color-border-soft)' }}>
-          <div style={{ padding: '0 18px 14px' }}>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
-              {t('detailB3.myLikesEyebrow')}
-            </p>
-            <SectionTitle>{t('detailB3.buildingsYouLiked', { n: result.liked_images.length })}</SectionTitle>
-          </div>
-          <div className="hide-scrollbar" style={{
-            display: 'flex',
-            gap: 14,
-            overflowX: 'auto',
-            scrollSnapType: 'x mandatory',
-            padding: '0 18px 18px',
-          }}>
-            {result.liked_images.map((card, index) => {
-              const id = cardId(card)
-              const title = card.image_title || card.name_en || `Building ${index + 1}`
-              return (
-                <article
-                  key={id || index}
-                  onClick={() => {
-                    if (!id) return
-                    navigate(`/buildings/${id}`, {
-                      state: { fromSessionId: sessionId, referrer: location.pathname },
-                    })
-                  }}
-                  style={{
-                    position: 'relative',
-                    flex: '0 0 min(82vw, 320px)',
-                    height: 'min(58vh, 480px)',
-                    minHeight: 380,
-                    borderRadius: 'var(--radius-lg)',
-                    overflow: 'hidden',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border-soft)',
-                    boxShadow: '0 18px 42px rgba(0,0,0,0.35)',
-                    scrollSnapAlign: 'start',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
-                  {card.image_url && (
-                    <img
-                      src={card.image_url}
-                      alt={title}
-                      loading={index < 3 ? 'eager' : 'lazy'}
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  )}
-                  <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.0) 55%)',
-                  }} />
-                  <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 16px 16px' }}>
-                    <h3 style={{
-                      color: '#fff', fontSize: 'var(--fs-emphasis)', fontWeight: 'var(--fw-bold)', lineHeight: 1.2,
-                      margin: 0,
-                      display: '-webkit-box', WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                    }}>
-                      {title}
-                    </h3>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        </section>
-      )}
-
-      <section style={{
-        minHeight: '60vh',
-        padding: '18px 0 24px',
-      }}>
-        <div style={{ padding: '0 18px 14px' }}>
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 5px' }}>
-            {t('detailB3.topKEyebrow')}
-          </p>
-          <SectionTitle
-            right={
-              <span style={{ color: 'var(--color-text-dimmer)', fontSize: 'var(--fs-caption)', fontWeight: 'var(--fw-bold)' }}>
-                {topCards.length}/{Math.max(cappedTotal, 10)}
-              </span>
-            }
-          >
-            {t('results.rankRange', { n: Math.max(visibleCount, 10) })}
-          </SectionTitle>
-        </div>
-
-        {loading && topCards.length === 0 ? (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 8,
-            padding: '0 18px',
-          }}>
-            {[0, 1, 2, 3].map(i => (
-              <div key={i} className="skeleton-shimmer" style={{
-                aspectRatio: '2 / 3',
-                borderRadius: 12,
-              }} />
-            ))}
-          </div>
-        ) : error ? (
-          <p style={{ color: 'var(--color-text-dim)', fontSize: 14, padding: '20px 18px', margin: 0 }}>
-            {error === 'invalid_session_id' ? t('results.invalidSession') : error}
-          </p>
-        ) : (
-          <>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 8,
-              padding: '0 12px 18px',
-            }}>
-              {topCards.map((card, index) => {
-                const id = cardId(card)
-                return (
-                  <ResultCard
-                    key={id || index}
-                    card={card}
-                    rank={index + 1}
-                    saved={savedIds.includes(id)}
-                    pending={pendingIds.has(id)}
-                    onOpen={handleOpenBuilding}
-                    onToggle={toggleBookmark}
-                  />
-                )
-              })}
-              {loadedRank < cappedTotal && (
-                <div ref={observerRef} style={{ height: 1 }} />
-              )}
-            </div>
-            {loadedRank >= cards.length && cards.length > 0 && cards.length < 50 && (
-              <div style={{
-                margin: '10px 18px 0',
-                padding: '16px 0 0',
-                borderTop: '1px solid var(--color-border-soft)',
-                color: 'var(--color-text-dimmer)',
-                fontSize: 13,
-                fontWeight: 700,
-                textAlign: 'center',
-              }}>
-                {t('results.allLoaded')}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-      </div>
-    </div>
+    <ResultsStage onLogout={onLogout} onBack={() => navigate('/')}>
+      {content}
+    </ResultsStage>
   )
 }

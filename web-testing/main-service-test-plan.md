@@ -27,7 +27,7 @@ Global fail gates:
 
 Global warning gates:
 
-- Initial cold Discovery, AI search, or session creation takes more than 30s but recovers.
+- Initial cold Discovery, taste search, or session creation takes more than 30s but recovers.
 - Swipe response regularly feels above 1.5s after warm-up.
 - Image skeletons remain longer than 8s while API already returned usable image URLs.
 - Non-critical LLM image/report generation fails but text report/results remain usable.
@@ -110,16 +110,14 @@ Failure:
 - Promote starts a Taste session with missing/undefined building ID.
 - Deck empties while API still has cards.
 
-### 3. New Project And AI Search
+### 3. New Project And Taste Search
 
-Implemented:
+Implemented (Taste-start redesign — `docs/decisions/2026-10-11-taste-start-redesign.md`):
 
 - `/new` project setup with name, area range, and visibility.
-- `/search` conversational AI query parsing.
-- Preset query chips.
-- Multi-turn clarification support.
-- Structured filters, filter priority, visual description, image focus, and result preview strip.
-- Existing project chat persistence for update mode.
+- `/search`: type a query → send → JEV tag recognition (`/api/v1/taste/recognize/`) → tag chips + top-3 stacked cards with "N개 중 M개 일치".
+- Card stack navigation (swipe / arrow keys, clamped at 1 and 3), "다시 찾기" (`/api/v1/taste/cards/`), each new message is a fresh search (no tag carry-over); only the latest round shows the action buttons.
+- "이 세 장으로 스와이프 시작" starts a session whose first 3 cards are that round's cards.
 
 Primary scenario:
 
@@ -129,22 +127,22 @@ Primary scenario:
 4. Adjust area range, reset it.
 5. Continue to `/search`.
 6. Submit: `Modern museum in Japan with concrete and calm atmosphere`.
-7. If clarification appears, answer naturally.
-8. Confirm result strip and filter chips appear.
-9. Click `Start swiping`.
+7. Confirm tag chips and a 3-card stack appear; step through the cards; press "다시 찾기" once.
+8. Send a follow-up such as `일본일 필요는 없어` and confirm the Japan tag is dropped in the new round.
+9. Click "이 세 장으로 스와이프 시작" on a round.
 
 Success:
 
 - Cannot continue from `/new` without project name.
-- `/api/v1/parse-query/` returns either clarification or final results.
-- Final search state includes building previews and `Start swiping - N`.
-- Starting creates `/api/v1/analysis/sessions/` and navigates to `/swipe`.
+- `/api/v1/taste/recognize/` returns tags + up to 3 cards; chips show ✓/✕ per the front card.
+- Starting creates `/api/v1/analysis/sessions/` (with `taste_tags` + `start_ids`) and navigates to `/swipe`.
+- The first 3 swipe cards are the chosen round's cards, in order.
 - Project visibility setting persists after session/project creation.
 
 Failure:
 
-- AI message says results found but result strip is empty.
-- Search state disappears on refresh before starting.
+- A round shows tags but no cards while the DB has matching buildings.
+- Rounds disappear on refresh before starting.
 - Korean/CJK query is falsely rejected by byte limit.
 - Start button appears with zero usable results.
 
@@ -164,7 +162,7 @@ Implemented:
 
 Primary scenario:
 
-1. Enter `/swipe` from Discovery promotion or AI search.
+1. Enter `/swipe` from Discovery promotion or taste search.
 2. Dismiss tutorial if shown.
 3. Swipe 15-25 cards with mixed likes/dislikes.
 4. On first left swipe, confirm skip tutorial, then test cancel path in another run.
@@ -414,7 +412,7 @@ Use these as web-test warnings, not automatic hard fails unless repeated.
 
 - App shell first meaningful render: under 3s warm, under 8s cold.
 - Discovery first card: under 8s warm, under 30s cold.
-- AI parse query: under 60s hard timeout; warning above 15s.
+- Taste recognize (tags + 3 cards): under 8s hard timeout; warning above 3s.
 - Session create first Taste card: under 30s hard timeout; warning above 10s.
 - Swipe API: target p50 under 500ms and p95 under 1500ms after warm-up.
 - Result fetch: under 8s.
@@ -438,5 +436,5 @@ For deployed main testing, update or wrap the runner before relying on it:
 Recommended minimum production smoke:
 
 1. Guest onboarding -> Discovery -> 10 likes -> promote -> 12 Taste swipes -> result.
-2. Handle/password register -> new project -> AI search -> swipe -> bookmark -> board detail/report.
+2. Handle/password register -> new project -> taste search -> swipe -> bookmark -> board detail/report.
 3. Profile/settings -> edit profile -> theme/font/language -> public board -> second-account reaction/follow.

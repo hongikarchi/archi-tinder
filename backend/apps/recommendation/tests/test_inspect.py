@@ -8,8 +8,8 @@ Coverage:
   - InspectBuildingDetailView: 401 unauthenticated, 404 on missing/non-publishable
     row, 200 flat shape with embedding_present/embedding_dim and no raw embedding.
   - InspectSearchView: 401 unauthenticated, 400 on missing/oversized query,
-    mocked services.parse_query + engine.search_by_filters_scored (no live
-    Gemini/DB), fallback path when search returns empty.
+    mocked engine.search_by_filters_scored (no LLM parsing, no live
+    DB), fallback path when search returns empty.
 
 No real DB round-trip against canonical_v2_buildings — all raw-SQL cursor use
 is mocked via patch('apps.recommendation.views.inspect.connections').
@@ -265,16 +265,7 @@ class TestInspectSearch:
         assert resp.status_code == 400
 
     def test_search_success_mocked(self, admin_client):
-        parsed = {
-            'filters': {'program': 'Museum'},
-            'filter_priority': ['program'],
-            'raw_query': 'brutalist museum',
-            'image_focus': None,
-            'visual_description': 'A raw concrete museum.',
-        }
-        with patch('apps.recommendation.views.inspect.services.parse_query',
-                   return_value=parsed) as mock_parse, \
-             patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
+        with patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
                    return_value=[_MOCK_CARD]) as mock_search:
             resp = admin_client.post(
                 '/api/v1/inspect/search/',
@@ -285,28 +276,20 @@ class TestInspectSearch:
         assert resp.status_code == 200, resp.json()
         data = resp.json()
         assert data['results'] == [_MOCK_CARD]
-        assert data['structured_filters'] == {'program': 'Museum'}
-        assert data['filter_priority'] == ['program']
-        assert data['visual_description'] == 'A raw concrete museum.'
+        # No LLM parsing: filters are empty, raw query text drives ranking.
+        assert data['structured_filters'] == {}
+        assert data['filter_priority'] == []
+        assert data['visual_description'] is None
         assert data['is_fallback'] is False
 
-        # parse_query called with single-turn conversation history (mirrors ParseQueryView).
-        args, kwargs = mock_parse.call_args
-        conversation_history = args[0] if args else kwargs.get('conversation_history')
-        assert conversation_history == [{'role': 'user', 'text': 'brutalist museum'}]
-
-        # search_by_filters_scored called with capped limit + parsed filters.
-        _, search_kwargs = mock_search.call_args
+        args, search_kwargs = mock_search.call_args
+        assert args[0] == {}
+        assert search_kwargs['raw_query'] == 'brutalist museum'
         assert search_kwargs['limit'] == 50
-        assert search_kwargs['filter_priority'] == ['program']
+        assert search_kwargs['filter_priority'] == []
 
     def test_limit_capped_at_100(self, admin_client):
-        parsed = {
-            'filters': {'program': 'Museum'}, 'filter_priority': ['program'],
-            'raw_query': 'q', 'image_focus': None, 'visual_description': None,
-        }
-        with patch('apps.recommendation.views.inspect.services.parse_query', return_value=parsed), \
-             patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
+        with patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
                    return_value=[_MOCK_CARD]) as mock_search:
             resp = admin_client.post(
                 '/api/v1/inspect/search/', {'query': 'q', 'limit': 5000}, format='json',
@@ -316,15 +299,15 @@ class TestInspectSearch:
         assert search_kwargs['limit'] == 100
 
     def test_fallback_when_search_returns_empty(self, admin_client):
-        parsed = {
-            'filters': {}, 'filter_priority': [], 'raw_query': 'zzz nonsense',
-            'image_focus': None, 'visual_description': None,
-        }
-        with patch('apps.recommendation.views.inspect.services.parse_query', return_value=parsed), \
-             patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
-                   return_value=[]), \
-             patch('apps.recommendation.views.inspect.engine.get_diverse_random',
-                   return_value=[_MOCK_CARD]) as mock_random:
+        search_patch = patch(
+            'apps.recommendation.views.inspect.engine.search_by_filters_scored',
+            return_value=[],
+        )
+        random_patch = patch(
+            'apps.recommendation.views.inspect.engine.get_diverse_random',
+            return_value=[_MOCK_CARD],
+        )
+        with search_patch, random_patch as mock_random:
             resp = admin_client.post(
                 '/api/v1/inspect/search/', {'query': 'zzz nonsense'}, format='json',
             )
@@ -333,42 +316,3 @@ class TestInspectSearch:
         assert data['is_fallback'] is True
         assert data['results'] == [_MOCK_CARD]
         mock_random.assert_called_once()
-
-    def test_blank_parsed_raw_query_falls_back_to_request_query(self, admin_client):
-        """parse_query returning a blank raw_query -> view falls back to the
-        request's own query string (still has signal, search IS invoked)."""
-        parsed = {
-            'filters': {}, 'filter_priority': [], 'raw_query': '',
-            'image_focus': None, 'visual_description': None,
-        }
-        with patch('apps.recommendation.views.inspect.services.parse_query', return_value=parsed), \
-             patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
-                   return_value=[_MOCK_CARD]) as mock_search, \
-             patch('apps.recommendation.views.inspect.engine.get_diverse_random') as mock_random:
-            resp = admin_client.post(
-                '/api/v1/inspect/search/', {'query': 'q'}, format='json',
-            )
-        assert resp.status_code == 200, resp.json()
-        _, search_kwargs = mock_search.call_args
-        assert search_kwargs['raw_query'] == 'q'
-        mock_random.assert_not_called()
-        assert resp.json()['is_fallback'] is False
-
-    def test_truly_no_signal_when_search_empty_falls_back(self, admin_client):
-        """Empty filters + search_by_filters_scored returns [] -> fallback fires
-        even when has_signal was True (mirrors ParseQueryView's last-resort path)."""
-        parsed = {
-            'filters': {}, 'filter_priority': [], 'raw_query': '',
-            'image_focus': None, 'visual_description': None,
-        }
-        with patch('apps.recommendation.views.inspect.services.parse_query', return_value=parsed), \
-             patch('apps.recommendation.views.inspect.engine.search_by_filters_scored',
-                   return_value=[]), \
-             patch('apps.recommendation.views.inspect.engine.get_diverse_random',
-                   return_value=[_MOCK_CARD]) as mock_random:
-            resp = admin_client.post(
-                '/api/v1/inspect/search/', {'query': 'q'}, format='json',
-            )
-        assert resp.status_code == 200
-        mock_random.assert_called_once()
-        assert resp.json()['is_fallback'] is True

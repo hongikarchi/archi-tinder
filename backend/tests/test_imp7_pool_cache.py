@@ -436,7 +436,6 @@ class TestSessionCreateViewWarmsCacheNaturally:
         """
         _ENGINE = 'apps.recommendation.views.engine'
         _FAKE_POOL = [f'B{str(i).zfill(5)}' for i in range(1, 16)]
-        _FAKE_SCORES = {bid: 15 - i for i, bid in enumerate(_FAKE_POOL)}
         _FAKE_EMBEDDINGS = {
             bid: np.random.RandomState(i).randn(384).astype(np.float32) / np.linalg.norm(np.random.RandomState(i).randn(384))
             for i, bid in enumerate(_FAKE_POOL)
@@ -459,7 +458,10 @@ class TestSessionCreateViewWarmsCacheNaturally:
             return {bid: _FAKE_EMBEDDINGS.get(bid, np.zeros(384)) for bid in pool_ids}
 
         patches = {
-            f'{_ENGINE}.create_bounded_pool': lambda *a, **kw: (_FAKE_POOL[:], dict(_FAKE_SCORES)),
+            # legacy-filters create goes through the taste_v2 path (buildings DB mocked)
+            f'{_ENGINE}.get_diverse_random': lambda n=10, **kw: [
+                {'canonical_bld_id': b} for b in _FAKE_POOL[:n]],
+            f'{_ENGINE}._random_pool': lambda target: _FAKE_POOL[:target],
             f'{_ENGINE}.get_pool_embeddings': _mock_pool_embeddings,
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
@@ -470,11 +472,8 @@ class TestSessionCreateViewWarmsCacheNaturally:
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: 'B00001',
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: 'B00010',
-            f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
         }
         patchers = []
         for target, side_effect in patches.items():
@@ -578,11 +577,11 @@ class TestSwipeEventPayload:
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
-            f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
+            # v2 pool top-up must not reach the buildings DB
+            f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+            f'{_ENGINE}._random_pool': lambda target: [],
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: 0.5,
@@ -681,11 +680,11 @@ class TestSwipeEventPayload:
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
-            f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,
+            # v2 pool top-up must not reach the buildings DB
+            f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+            f'{_ENGINE}._random_pool': lambda target: [],
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
@@ -769,11 +768,11 @@ class TestPoolEscalationFiredFlag:
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
-            f'{_ENGINE}.refresh_pool_if_low': lambda *a, **kw: None,  # no-op: no escalation
+            # v2 pool top-up must not reach the buildings DB
+            f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+            f'{_ENGINE}._random_pool': lambda target: [],
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,
@@ -819,14 +818,15 @@ class TestPoolEscalationFiredFlag:
                                  'axis_atmosphere': 'calm', 'axis_color_tone': None, 'axis_material': None,
                                  'axis_material_visual': [], 'axis_tags': []}}
 
-        def _escalating_refresh(session, threshold=5):
-            """Simulate escalation: increment current_pool_tier."""
+        def _escalating_refresh(session, like_vectors=None, force=False):
+            """Simulate a v2 pool top-up: increment current_pool_tier, grow the pool."""
             session.current_pool_tier = session.current_pool_tier + 1
             # Also add some new pool IDs to avoid the pool-exhausted-before-card-select path
             new_ids = [f'B{str(i).zfill(5)}' for i in range(90, 100)]
             session.pool_ids = list(session.pool_ids) + new_ids
             for bid in new_ids:
                 _fake_embs[bid] = np.ones(384) / np.linalg.norm(np.ones(384))
+            return True
 
         project = Project.objects.create(user=user_profile, name='P4', filters={})
         pool_ids = _FAKE_POOL[:6]  # small pool triggers escalation check
@@ -849,11 +849,12 @@ class TestPoolEscalationFiredFlag:
                 [np.ones(384) / np.linalg.norm(np.ones(384))],
                 np.ones(384) / np.linalg.norm(np.ones(384)),
             ),
-            f'{_ENGINE}.compute_mmr_next': lambda *a, **kw: pool_ids[1],
             f'{_ENGINE}.compute_convergence': lambda *a: 0.05,
             f'{_ENGINE}.check_convergence': lambda *a: False,
-            f'{_ENGINE}.get_dislike_fallback': lambda *a, **kw: pool_ids[2],
-            f'{_ENGINE}.refresh_pool_if_low': _escalating_refresh,  # fires escalation
+            # v2 pool top-up must not reach the buildings DB
+            f'{_ENGINE}.taste_ranked_page': lambda *a, **kw: [],
+            f'{_ENGINE}._random_pool': lambda target: [],
+            'apps.recommendation.taste_start.session_pool.refresh_if_low': _escalating_refresh,  # fires escalation
             f'{_ENGINE}.farthest_point_from_pool': lambda pool_ids, exposed, embs: next(
                 (b for b in pool_ids if b not in set(exposed)), None),
             f'{_ENGINE}.compute_confidence': lambda *a, **kw: None,

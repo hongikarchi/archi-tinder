@@ -7,9 +7,8 @@ taken as function arguments — no RC reads, no DB, no engine imports.
 import math
 
 # F3: required-slate fields are user-explicit intent — must be hard WHERE constraints,
-# not soft CASE WHEN scoring. Mirrors parse_query.REQUIRED_SLATE_FIELDS (no import to
+# not soft CASE WHEN scoring. Former parse_query.REQUIRED_SLATE_FIELDS (no import to
 # avoid circular-import risk between services and engine).
-# Cross-ref: services/parse_query.REQUIRED_SLATE_FIELDS — keep in sync; divergence breaks hard-WHERE silently.
 _REQUIRED_SLATE_FIELDS_SET = frozenset(('program', 'material', 'style', 'location_country'))
 
 # LLM-SEARCH-RANK-1: allowlist of axis names recognised by _build_idf_score_cases.
@@ -189,7 +188,7 @@ def _build_idf_score_cases(filters, base_weights, idf_map, filter_priority):
         and mapped to hardcoded column expressions — never interpolated from caller input.
 
     Args:
-        filters:          dict of filter key->value (same shape as parse_query output).
+        filters:          dict of filter key->value (same shape as the legacy parse output).
         base_weights:     dict axis->float (from RC['llm_search_base_weights']).
         idf_map:          dict from caches.get_corpus_tag_df() (may be {'_total':0}).
         filter_priority:  ordered list of axis names (highest priority first).

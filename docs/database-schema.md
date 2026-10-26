@@ -102,15 +102,11 @@ parameter (connection failures, or the scan silently off) -- keep the direct end
 The frontend renders one cover image per card. `_row_to_card()` resolves the
 cover with this fallback chain (highest preference first):
 
-1. `covers_by_type[image_focus]` — when `image_focus` is set on the request
-   and the variant is non-null. `image_focus ∈ {exterior, interior, drawing,
-   aerial, detail}`. Set by the LLM intake (`parse_query`) when the user
-   signals a preferred view ("외관/실내/도면/조감/디테일").
-2. `display_cover_url` — Make DB's preferred display cover.
-3. `cover_image_url_default` — Make DB's canonical default.
-4. `covers_by_type.exterior` — last covers_by_type try.
-5. `all_images[0].url` — first item in the deduped/sorted gallery.
-6. `''` (empty string) — when the building has no images at all; the
+1. `display_cover_url` — Make DB's preferred display cover.
+2. `cover_image_url_default` — Make DB's canonical default.
+3. `covers_by_type.exterior` — last covers_by_type try.
+4. `all_images[0].url` — first item in the deduped/sorted gallery.
+5. `''` (empty string) — when the building has no images at all; the
    frontend then renders a placeholder.
 
 Gallery is built from `all_images` sorted by `(kind: cover→gallery→drawing,

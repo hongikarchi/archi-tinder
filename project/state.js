@@ -23,69 +23,100 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-07 01:46 KST',
-    head: 'a642a4a',
-    branch: 'feature/claude-docs-restructure-S5',
+    updatedAt: '2026-10-25 10:58 KST',
+    head: '8635dee',
+    branch: 'feature/claude-flow-qa-2',
   },
   done: [
     {
-      id: 'PR #358',
-      title: 'docs(layout): S4 — docs/decisions + docs/archive + docs/README; shipped plans archived; citations retargeted',
-      completedAt: '2026-10-07',
-      prs: [358],
+      id: 'PR #450',
+      title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
+      completedAt: '2026-10-25',
+      prs: [450],
       note: '',
     },
     {
-      id: 'PR #357',
-      title: 'docs(algorithm): S3 — algorithm.md = design intent; hyperparameter table generated from code',
-      completedAt: '2026-10-07',
-      prs: [357],
+      id: 'PR #449',
+      title: 'feat(FULL-REPORT-UI-1): persona report redesign',
+      completedAt: '2026-10-25',
+      prs: [449],
       note: '',
     },
     {
-      id: 'PR #356',
-      title: 'chore(codex): S2b — Codex harness follows Claude copies, frozen tree removed, git guard ported',
-      completedAt: '2026-10-07',
-      prs: [356],
+      id: 'PR #444',
+      title: 'feat(FULL-AUTH-2): 소셜 전용 가입 — Google·카카오 원탭 + 온보딩 1화면',
+      completedAt: '2026-10-17',
+      prs: [444],
       note: '',
     },
     {
-      id: 'PR #355',
-      title: 'docs(harness): S2a — AGENTS.md shared rulebook, thin CLAUDE.md, nested path rules, harness dedupe',
-      completedAt: '2026-10-07',
-      prs: [355],
+      id: 'PR #441',
+      title: 'fix(taste-start): review follow-ups for #431/#437',
+      completedAt: '2026-10-17',
+      prs: [441],
       note: '',
     },
     {
-      id: 'PR #354',
-      title: 'docs(runbooks): S1 — single deploy + local-setup runbooks, pointers everywhere',
-      completedAt: '2026-10-07',
-      prs: [354],
+      id: 'PR #439',
+      title: 'docs(db): building DB cleanup handoff for Make DB owner + material_group rules',
+      completedAt: '2026-10-17',
+      prs: [439],
       note: '',
     },
     {
-      id: 'PR #352',
-      title: 'fix(MOBILE-FIX-2): 탭바 글래스·라벨·접힘 + 프로필/계정 정리',
-      completedAt: '2026-10-06',
-      prs: [352],
+      id: 'PR #437',
+      title: 'feat(feedback): taste-start card report + query-recognition report',
+      completedAt: '2026-10-17',
+      prs: [437],
       note: '',
     },
     {
-      id: 'PR #350',
-      title: 'feat(ADMIN-DASH-2a): admin external services panel — status / account / cost',
-      completedAt: '2026-10-06',
-      prs: [350],
+      id: 'PR #431',
+      title: 'feat(taste-start): Taste start redesign — JEV tags → top-3 cards → taste_v2 swipe',
+      completedAt: '2026-10-17',
+      prs: [431],
       note: '',
     },
     {
-      id: 'PR #348',
-      title: 'feat(ADMIN-DASH-1): admin dashboard PR1 — gate + deploy/migration/CI/flag/stats',
-      completedAt: '2026-10-06',
-      prs: [348],
+      id: 'PR #425',
+      title: 'fix(contests): guest verify gate on interest + control-char URL reject',
+      completedAt: '2026-10-11',
+      prs: [425],
       note: '',
     },
   ],
-  now: [],
+  now: [
+    {
+      id: 'FULL-AUTH-4',
+      title: '이름·ID 저장·표시 통일',
+      note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
+      issue: 455,
+    },
+    {
+      id: 'FRONT-UX-17',
+      title: '취향 시작 화면 겹침 정리',
+      note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
+      issue: 454,
+    },
+    {
+      id: 'FRONT-UX-16',
+      title: '한국어 화면 영어·문구 정리',
+      note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
+      issue: 453,
+    },
+    {
+      id: 'INFRA-QA-1',
+      title: '전체 흐름 캡처 검수 문서',
+      note: 'Flow QA doc: Playwright capture of every screen (iPhone 13 viewport, dev-login, localhost 5174/8001) + debug overlay shots + per-step API timing -> HTML doc published as artifact, republished each fix round.',
+      issue: 452,
+    },
+    {
+      id: 'FULL-REPORT-UI-1',
+      title: '페르소나 리포트 UI 개편',
+      note: '스와이프 종료 → 결과 카드 3장 → 저장 → 리포트 페이지로 이어지는 페르소나 리포트 경험을 개편한다. 확정된 시연(진입 5개 × 상황)과 설계는 `docs/decisions/2026-10-22-persona-report-redesign.md`, 실행 계획은 `.claude/plans/persona-report-redesign.md`.',
+      issue: 445,
+    },
+  ],
   next: {
     xhigh: [
       {
@@ -96,6 +127,54 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'FULL-REPORT-UI-1',
+        title: '페르소나 리포트 UI 개편',
+        note: '스와이프 종료 → 결과 카드 3장 → 저장 → 리포트 페이지로 이어지는 페르소나 리포트 경험을 개편한다. 확정된 시연(진입 5개 × 상황)과 설계는 `docs/decisions/2026-10-22-persona-report-redesign.md`, 실행 계획은 `.claude/plans/persona-report-redesign.md`.',
+        issue: 445,
+      },
+      {
+        id: '#PERF: measure taste-start tag matching ',
+        title: 'PERF: measure taste-start tag matching full scan before deploy',
+        note: 'Before the next develop->main deploy: matching.py evaluates every tag expr (incl. `~*` on visual_description) over all publishable rows on each recognize / cards / session create / pool refresh. Run tools/perf bench + prod_bench against Neon; if p95 is poor, pre-filter with OR…',
+        issue: 440,
+      },
+      {
+        id: 'TASTE-FEEDBACK-2',
+        title: '신고 테이블 운영 DB 적용',
+        note: 'feedback app migration (backend/apps/feedback/migrations/0001_initial.py, tables feedback_card_report / feedback_query_report) is applied locally only. Apply to production with `make migrate-prod` before the TASTE-FEEDBACK-1 code (#432) is deployed — otherwise the report endpo…',
+        issue: 433,
+      },
+      {
+        id: 'TASTE-FEEDBACK-1',
+        title: '취향 시작 카드 신고·문장 인식 신고',
+        note: 'Taste-start top-3 cards: card report (! button) + query-recognition report ("태그가 잘못 인식됐나요?").',
+        issue: 432,
+      },
+      {
+        id: 'FULL-CONTEST-2',
+        title: '공모전을 등록·수정할 화면이 없음',
+        note: '운영에 공모전을 넣고 고칠 수단이 터미널 커맨드(`contest_status`, `contest_poster`)뿐이고 목록은 비어 있음. 기존 관리자 페이지(`/admin`)에 공모전 섹션 추가: 전체 목록(hidden/pending/마감 포함), 등록, 수정, 상태 변경, 감사 로그. 같은 PR에서 두 커맨드 삭제(운영 수단 공백 방지). `import_contests`는 만들지 않음. 모델 저장 단계 규칙: published는 공식 `source_url` 필수 + 공모전 정보(목록) 사이…',
+        issue: 428,
+      },
+      {
+        id: 'FRONT-CONTEST-1',
+        title: '공모전 화면이 목 데이터·가짜 유저를 보여줌',
+        note: '`api/contests.js`, 목록·상세 화면(시안 B, 테마 토큰), 포스터 hotlink + 확대 오버레이 + 폴백 카드, D-day 유틸(가장 가까운 마감 + 라벨), i18n, `mockCompetitions.js`·localStorage 관심 제거. 추천·팀 섹션은 숨김. §4-4, D4·D9·D10·D11.',
+        issue: 416,
+      },
+      {
+        id: 'BACK-CONTEST-2',
+        title: '공모전 관심 등록이 계정에 저장 안 됨',
+        note: '`ContestInterest`(Reaction 동형, interest_count signal) + `POST/DELETE contests/<id>/interest/`, `ContestPosterReport` + `POST contests/<id>/poster-report/`(접수 즉시 poster_status=none), 스로틀, 관리 커맨드 `contest_status` / `contest_poster`, 테스트. §4-2, §4-3, D3·D5·D6.',
+        issue: 415,
+      },
+      {
+        id: 'BACK-CONTEST-1',
+        title: '공모전이 실제 데이터가 아님 (모델·조회 API)',
+        note: '새 앱 `apps.contests`: `Contest` 모델 + 마이그레이션(신규 테이블만), `GET contests/`(published·미마감·마감 임박순), `GET contests/<id>/`, 개발용 `seed_contests`(DEBUG 전용, 7건), 테스트. §4-1, §4-2, §4-5. #363 ①② 관련.',
+        issue: 414,
+      },
       {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
@@ -152,6 +231,90 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: 'FULL-AUTH-5',
+        title: 'ID 대소문자 중복·이름 일치 DB 규칙',
+        note: 'Follow-up of FULL-AUTH-4 (#455). Add functional unique index on Lower(handle) + CheckConstraint handle = display_name OR handle IS NULL (migration). Before: user runs read-only prod audit (divergent rows, null handles, reserved handles e.g. \'user\' produced by old suggest_handl…',
+        issue: 457,
+      },
+      {
+        id: 'FRONT-UX-18',
+        title: '건물 상세 정보 이름표 한국어',
+        note: 'Flow QA (#452) issue 9. Building detail info labels ARCHITECT/YEAR/PROGRAM/STYLE/MATERIAL/LOCATION are hardcoded English on ko UI (pages/BuildingDetailPage*); liked empty-state copy still says \'Discovery에서 …\' (locales swipeToSave / swipeToSaveInline). Values (Museum, concrete)…',
+        issue: 456,
+      },
+      {
+        id: 'FULL-AUTH-4',
+        title: '이름·ID 저장·표시 통일',
+        note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
+        issue: 455,
+      },
+      {
+        id: 'FRONT-UX-17',
+        title: '취향 시작 화면 겹침 정리',
+        note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
+        issue: 454,
+      },
+      {
+        id: 'FRONT-UX-16',
+        title: '한국어 화면 영어·문구 정리',
+        note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
+        issue: 453,
+      },
+      {
+        id: 'INFRA-QA-1',
+        title: '전체 흐름 캡처 검수 문서',
+        note: 'Flow QA doc: Playwright capture of every screen (iPhone 13 viewport, dev-login, localhost 5174/8001) + debug overlay shots + per-step API timing -> HTML doc published as artifact, republished each fix round.',
+        issue: 452,
+      },
+      {
+        id: 'FULL-REPORT-UI-2',
+        title: 'discovery 임시 보드 이름 변경 부작용',
+        note: '리포트 생성 시 discovery_ 임시 보드 이름이 리포트 제목으로 바뀌면, 진행 중이던 discovery 세션에서 이어서 스와이프할 때 get_discovery_draft(discovery_feed.py:121)가 None을 돌려 views/discovery.py:264가 새 임시 보드를 만들어 좋아요가 두 보드로 나뉠 수 있음. 정상 흐름(promote 시 sessionStorage의 discovery_draft_id 삭제)에서는 발생하지 않는 드문 경로. 조치: 활성 draft면 이름…',
+        issue: 446,
+      },
+      {
+        id: 'FULL-AUTH-3',
+        title: '비밀번호·게스트 경로 제거 + is_guest 컬럼 삭제',
+        note: 'Deferred from FULL-AUTH-2 (plan radiant-mapping-rivest): delete Register/PasswordLogin/SetPassword/GuestLogin/GuestPromote/LinkEmail/Naver views + merge.py, remove is_guest caps (profile likes, projects, discovery, session_service, messaging, admin), drop UserProfile.is_guest…',
+        issue: 443,
+      },
+      {
+        id: 'TASTE-FEEDBACK-4',
+        title: '결정 문서 \'탭=다음 카드\' 갱신',
+        note: 'TASTE-FEEDBACK-1 changed the taste-start card stack: tap now opens SwipeCard-style detail (+ gallery flip); prev/next is drag ±40px or ←/→ only. docs/decisions/2026-10-11-taste-start-redesign.md §2 still says 탭 = 다음. Update the decision doc (owner edit). Also new: ! report but…',
+        issue: 435,
+      },
+      {
+        id: 'INFRA-CI-1',
+        title: '프론트 node 테스트가 CI에서 안 돎',
+        note: 'CI `Frontend (lint + build)` job과 `tools/front-validate.sh`가 lint + build만 실행. `npm test`(node --test, 추가 의존성 없음, ~0.2s)는 로컬에서만 돌아 회귀가 CI를 통과할 수 있음. 일부러 뺀 근거는 문서·이력에서 찾지 못함. job 이름은 branch protection 필수 체크라 유지.',
+        issue: 423,
+      },
+      {
+        id: 'BACK-CONTEST-3',
+        title: '공모전을 사람이 넣어야만 목록이 참',
+        note: 'Phase 2 수집기(설계만 확정). 게이트: 위비티 약관·robots 확인 보고 후 진행. 후보 수집(키워드 필터) → 공식 페이지 LLM 추출 + 근거 문장 → 교차검증(hidden) → 주최처 필터(pending) → Railway cron, 수집 로그. §6. 미결: Railway 플랜 cron 가용 여부, 운영용 JSON 임포트 커맨드.',
+        issue: 418,
+      },
+      {
+        id: 'FULL-CONTEST-1',
+        title: '공모전 상세에 실제 관심 등록자가 안 보임',
+        note: '`GET contests/<id>/interested/`(진단 완료 + discovery_opt_in, 본인·차단 제외, 성향 벡터) + 추천 섹션 재개(`utils/teamFit.js` 재사용, 0명이면 숨김). §4-2, D10.',
+        issue: 417,
+      },
+      {
+        id: 'FULL-MESSAGING-4',
+        title: 'account deletion cascades other participant\'s history + report evidence',
+        note: 'From #343 review. Conversation/ContactRequest/Block FK CASCADE on UserProfile → deleting one account deletes the OTHER participant\'s conversation history. `Report.reporter` CASCADE → reporter deletion destroys moderation evidence. `Message.sender` is SET_NULL (ok). Decide rete…',
+        issue: 412,
+      },
+      {
+        id: 'FULL-MESSAGING-3',
+        title: 'ignored request becomes detectable after 30 days (D10 leak)',
+        note: 'From #343 review (2026-10-03). `ContactRequestStatusView` maps pending and ignored-within-30d both to `sent` (D10), but `recent_ignore_exists()` expires at day 31 so an ignored request flips `sent → none` while a still-pending one stays `sent` forever. Sender can infer the ign…',
+        issue: 409,
+      },
       {
         id: 'FRONT-LAYOUT-1',
         title: 'Desktop wide-screen 레이아웃 어색함',
@@ -305,6 +468,84 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-UX-19',
+        title: '상단 버튼 바탕 띠 다른 화면 적용',
+        note: 'Follow-up of FRONT-UX-17 (#454). PageTopControls got opt-in \'band\' prop (only TasteStartPage uses it). Candidates where content scrolls under the transparent fixed top controls: UserProfilePage, BoardDetailPage, Settings screens, PeopleDiscoveryPage, BuildingDetailPage, compet…',
+        issue: 459,
+      },
+      {
+        id: 'INFRA-QA-2',
+        title: '흐름 캡처 전용 계정·WebKit·성능 회차',
+        note: 'Follow-up of INFRA-QA-1 (#452). (1) Dedicated QA account: each run adds a swipe board to TestUser (57 boards on dev); (2) WebKit run needs \'python -m playwright install webkit\' (~70MB, user approval); (3) --perf run (CPU 4x, longtasks) when nobody demos on 5174; (4) scenario 2…',
+        issue: 458,
+      },
+      {
+        id: 'FULL-REPORT-UI-2',
+        title: 'image regenerate retry can pay twice (job-scoped marker)',
+        note: 'Follow-up from #449 review (finding F13, low).',
+        issue: 451,
+      },
+      {
+        id: 'FULL-BOOKMARK-1',
+        title: '북마크 잔여 코드 정리',
+        note: '북마크 기능을 UI에서 제거했으나 코드가 남아 있음: BoardDetailPage(bookmarkChanged 신호, saved_ids 시드), BuildingTile, BuildingDetailPage, ArchitectProfilePage, SaveToBoardModal, SurpriseBoardModal, appHelpers, api/projects.bookmarkBuilding, App.jsx. 서버 saved_ids 필드는 다른 곳에서 쓰일 수 있어 사용처 확인 후 제거. 사용자가…',
+        issue: 448,
+      },
+      {
+        id: 'FULL-REPORT-UI-3',
+        title: '리포트 재생성 판단 마이너 보강',
+        note: '#445 리뷰 minor 모음. (1) App.jsx ~646: 임시 보드 첫 generateReport 응답을 못 받은 뒤 다음 완료 때 getProject를 건너뛰어 캐시된 리포트가 유지될 수 있음 → likesSinceResume>0 또는 resume된 세션이면 조회. (2) App.jsx ~691: 서버가 캐시 리포트를 돌려줄 때도 이름 갱신용 GET이 나감 → generating일 때만. (3) BoardDetailPage.handleToggleVisibility: 공개/비공개 칩…',
+        issue: 447,
+      },
+      {
+        id: 'INFRA-APPTEST-1',
+        title: 'app-test 문서 dev-login 응답 코드 수정',
+        note: 'app-test preflight expects POST /api/v1/auth/dev-login/ with no body to return 400; it returns 403 (Invalid secret). Spec drift in .claude/agents/app-test.md, not a code defect (seen twice during TASTE-FEEDBACK-1 app-test).',
+        issue: 436,
+      },
+      {
+        id: 'TASTE-FEEDBACK-3',
+        title: 'explain_tag SQL 대조 테스트 실행 경로',
+        note: 'backend/apps/feedback/tests/test_explain_tag.py parity test (explain_tag vs matching._tag_expr against real Postgres) is skipped unless FEEDBACK_PARITY_DSN is set, so it never runs in make test-local/CI. Wire it to the existing test DB or document how to run it.',
+        issue: 434,
+      },
+      {
+        id: '#Dead backend code already on develop (n',
+        title: 'Dead backend code already on develop (no non-test callers)',
+        note: 'Found while cleaning up `feature/algo-taste-start` (2026-10-13). These backend functions have no callers outside tests already on `develop` — not caused by the taste-start work. Found with an AST-based reachability scan of `backend/apps/recommendation` (framework entry points…',
+        issue: 430,
+      },
+      {
+        id: '#Unreachable features: code exists but n',
+        title: 'Unreachable features: code exists but no entry point in the app',
+        note: 'Found while testing `feature/algo-taste-start` (2026-10-12). These features have code but no entry point in the app (no route link, no import, or no frontend caller). Decide per item: delete, or wire up. Do it on a separate branch.',
+        issue: 429,
+      },
+      {
+        id: 'INFRA-TRACKING-1',
+        title: 'Project 보드 생성됨: 문서 2곳 갱신',
+        note: 'GitHub Project board created 2026-10-11: https://github.com/users/hongikarchi/projects/1',
+        issue: 427,
+      },
+      {
+        id: 'TEST-MESSAGING-PG',
+        title: 'messaging tests run on SQLite only',
+        note: 'From #343 review. `backend/apps/messaging/tests/conftest.py` forces SQLite in-memory. Partial unique index `uniq_pending_contact_request`, CheckConstraints, `select_for_update`, and the IntegrityError dup-race branch in `ContactRequestCreateView.post` never run against Postgre…',
+        issue: 413,
+      },
+      {
+        id: 'BACK-MESSAGING-INTID',
+        title: 'oversized integer ids return 500',
+        note: 'From #343 review. `users/<int:user_id>/block/`, `contact-requests/status/?user_id=`, report `target_id` (isdigit only) pass unbounded ints to filters; > 2^31-1 on auth_user.id → Postgres DataError → 500. Validate/clamp → 404/400. Same pre-existing pattern elsewhere (accounts/s…',
+        issue: 411,
+      },
+      {
+        id: 'BACK-MESSAGING-THROTTLE',
+        title: 'no throttle on messaging GET endpoints (incl. 4s poll)',
+        note: 'From #343 review. `ConversationMessagesView.get_throttles()` returns [] for GET; `ConversationListView`, `UnreadCountView`, `ContactRequestReceivedView`, `ContactRequestStatusView` have no throttle; no DEFAULT_THROTTLE_CLASSES. Authenticated client can poll at unlimited rate.…',
+        issue: 410,
+      },
+      {
         id: 'INFRA-QUEUE-1',
         title: 'corpus_rank telemetry 꺼져있음',
         note: 'Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) scan). PR #79 turned it off (`rank_corpus = None` + TODO in `swipe.py ProjectBookmarkView`). `engine.compute_corpus_rank()` still implemented (pgvector ROW_NUMBER); tests lock the None placeholder.…',
@@ -321,12 +562,6 @@ window.PROJECT_STATE = {
         title: 'Profile-tab 사무소/유저 추천 endpoint 없음',
         note: 'Re-scoped 2026-05-14 (REC1 already shipped as Push S3). REC2 (firm) + REC3 (user) target a single composite endpoint `GET /api/v1/recommendations/profile/` returning `{offices: [...], users: [...]}` for a Profile-tab button.',
         issue: 404,
-      },
-      {
-        id: 'FRONT-AUTH-1',
-        title: 'LoginPage에 Kakao/Naver 버튼 없음',
-        note: 'Backend Kakao + Naver implementation shipped: `apps/accounts/views/auth.py` KakaoLoginView + NaverLoginView, `apps/accounts/urls.py` `auth/social/kakao/` + `auth/social/naver/`, provider choices. Frontend `LoginPage.jsx` currently has Google button only (2026-06-28 grep: kakao…',
-        issue: 403,
       },
       {
         id: 'FRONT-UX-6',
@@ -386,60 +621,60 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
-      number: 358,
-      title: 'docs(layout): S4 — docs/decisions + docs/archive + docs/README; shipped plans archived; citations retargeted',
-      mergedAt: '2026-10-06T16:41:32Z',
-      mergedAtKST: '2026-10-07 01:41 KST',
-      sha: 'a642a4a',
+      number: 450,
+      title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
+      mergedAt: '2026-10-25T00:47:02Z',
+      mergedAtKST: '2026-10-25 09:47 KST',
+      sha: '8635dee',
     },
     {
-      number: 357,
-      title: 'docs(algorithm): S3 — algorithm.md = design intent; hyperparameter table generated from code',
-      mergedAt: '2026-10-06T16:32:36Z',
-      mergedAtKST: '2026-10-07 01:32 KST',
-      sha: '50474aa',
+      number: 449,
+      title: 'feat(FULL-REPORT-UI-1): persona report redesign',
+      mergedAt: '2026-10-25T00:16:00Z',
+      mergedAtKST: '2026-10-25 09:16 KST',
+      sha: '0947ed1',
     },
     {
-      number: 356,
-      title: 'chore(codex): S2b — Codex harness follows Claude copies, frozen tree removed, git guard ported',
-      mergedAt: '2026-10-06T16:22:26Z',
-      mergedAtKST: '2026-10-07 01:22 KST',
-      sha: 'a9e23f8',
+      number: 444,
+      title: 'feat(FULL-AUTH-2): 소셜 전용 가입 — Google·카카오 원탭 + 온보딩 1화면',
+      mergedAt: '2026-10-17T01:06:48Z',
+      mergedAtKST: '2026-10-17 10:06 KST',
+      sha: '9bfac90',
     },
     {
-      number: 355,
-      title: 'docs(harness): S2a — AGENTS.md shared rulebook, thin CLAUDE.md, nested path rules, harness dedupe',
-      mergedAt: '2026-10-06T16:13:13Z',
-      mergedAtKST: '2026-10-07 01:13 KST',
-      sha: '35e3676',
+      number: 441,
+      title: 'fix(taste-start): review follow-ups for #431/#437',
+      mergedAt: '2026-10-17T00:23:23Z',
+      mergedAtKST: '2026-10-17 09:23 KST',
+      sha: 'eaea1f9',
     },
     {
-      number: 354,
-      title: 'docs(runbooks): S1 — single deploy + local-setup runbooks, pointers everywhere',
-      mergedAt: '2026-10-06T15:59:24Z',
-      mergedAtKST: '2026-10-07 00:59 KST',
-      sha: 'e1377c2',
+      number: 439,
+      title: 'docs(db): building DB cleanup handoff for Make DB owner + material_group rules',
+      mergedAt: '2026-10-17T00:00:29Z',
+      mergedAtKST: '2026-10-17 09:00 KST',
+      sha: '9894cc1',
     },
     {
-      number: 352,
-      title: 'fix(MOBILE-FIX-2): 탭바 글래스·라벨·접힘 + 프로필/계정 정리',
-      mergedAt: '2026-10-06T13:23:05Z',
-      mergedAtKST: '2026-10-06 22:23 KST',
-      sha: '2b43bc9',
+      number: 437,
+      title: 'feat(feedback): taste-start card report + query-recognition report',
+      mergedAt: '2026-10-17T00:07:50Z',
+      mergedAtKST: '2026-10-17 09:07 KST',
+      sha: 'a37ee71',
     },
     {
-      number: 350,
-      title: 'feat(ADMIN-DASH-2a): admin external services panel — status / account / cost',
-      mergedAt: '2026-10-06T12:14:48Z',
-      mergedAtKST: '2026-10-06 21:14 KST',
-      sha: '04f166a',
+      number: 431,
+      title: 'feat(taste-start): Taste start redesign — JEV tags → top-3 cards → taste_v2 swipe',
+      mergedAt: '2026-10-17T00:00:40Z',
+      mergedAtKST: '2026-10-17 09:00 KST',
+      sha: 'f420b28',
     },
     {
-      number: 348,
-      title: 'feat(ADMIN-DASH-1): admin dashboard PR1 — gate + deploy/migration/CI/flag/stats',
-      mergedAt: '2026-10-06T09:05:35Z',
-      mergedAtKST: '2026-10-06 18:05 KST',
-      sha: '3284e70',
+      number: 425,
+      title: 'fix(contests): guest verify gate on interest + control-char URL reject',
+      mergedAt: '2026-10-11T00:46:32Z',
+      mergedAtKST: '2026-10-11 09:46 KST',
+      sha: 'a68131c',
     },
   ],
   agents: [
@@ -602,6 +837,10 @@ window.PROJECT_STATE = {
       role: '워크플로 스킬 흡수 플랜',
     },
     {
+      path: '.claude/plans/persona-report-redesign.md',
+      role: '',
+    },
+    {
       path: '.claude/rules/delegation.md',
       role: 'Claude 전용 경로 규칙: backend/frontend 수정은 위임',
     },
@@ -754,8 +993,24 @@ window.PROJECT_STATE = {
       role: 'JWT 유저 캐시 인증',
     },
     {
+      path: 'backend/apps/accounts/identity.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/jwt_serializers.py',
       role: 'JWT 토큰 직렬화기',
+    },
+    {
+      path: 'backend/apps/accounts/management/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/management/commands/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/management/commands/resync_identity.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/merge.py',
@@ -894,8 +1149,16 @@ window.PROJECT_STATE = {
       role: '핸들 & 알림 설정 테스트',
     },
     {
+      path: 'backend/apps/accounts/tests/test_social_signup.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/accounts/tests/test_theme_font.py',
       role: '테마·폰트 설정 테스트',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_unified_identity.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/tests/test_userserializer.py',
@@ -1023,6 +1286,154 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/admin_dashboard/views.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/management/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/management/commands/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/management/commands/contest_poster.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/management/commands/contest_status.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/management/commands/seed_contests.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/migrations/0002_contest_interest_and_url_checks.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/serializers.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/signals.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_contest_commands.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_contest_interest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_contest_urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_contests_api.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_next_deadline_jeongrim.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_seed_contests.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/validators.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/views.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/apps.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/migrations/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/models.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/tests/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/tests/conftest.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/tests/test_explain_tag.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/tests/test_feedback_api.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/throttling.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/urls.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/validation.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/feedback/views.py',
       role: '',
     },
     {
@@ -1414,6 +1825,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/report_name.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/report_signature.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/serializers.py',
       role: 'Project 보드 직렬화기',
     },
@@ -1426,24 +1845,12 @@ window.PROJECT_STATE = {
       role: '취향 축 기준 문장 정의',
     },
     {
-      path: 'backend/apps/recommendation/services/_caches.py',
-      role: 'Gemini·V_initial 캐시 헬퍼',
-    },
-    {
       path: 'backend/apps/recommendation/services/_gemini.py',
       role: 'Gemini 클라이언트·재시도 래퍼',
     },
     {
-      path: 'backend/apps/recommendation/services/_prompts.py',
-      role: '파싱 프롬프트·어휘 상수',
-    },
-    {
       path: 'backend/apps/recommendation/services/_report_prompts.py',
       role: '리포트 문장 규칙 프롬프트',
-    },
-    {
-      path: 'backend/apps/recommendation/services/_stream.py',
-      role: '',
     },
     {
       path: 'backend/apps/recommendation/services/axis_scores.py',
@@ -1460,10 +1867,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/services/hydration.py',
       role: '',
-    },
-    {
-      path: 'backend/apps/recommendation/services/parse_query.py',
-      role: 'Gemini 쿼리 파싱 서비스',
     },
     {
       path: 'backend/apps/recommendation/services/rerank.py',
@@ -1486,6 +1889,58 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/taste_start/__init__.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/jev_client.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/legacy_filters.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/matching.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/normalization.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/questions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/recognizer.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/session_pool.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/session_selector.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/swipe_rules.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/tag_io.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/vocab.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/taste_start/year_rule.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/__init__.py',
       role: '테스트 패키지 init',
     },
@@ -1504,6 +1959,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_back_recommend_4.py',
       role: 'Discovery 좋아요 테스트 (맛 벡터, 캐시)',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_board_name_follow.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_conversation_history.py',
@@ -1534,11 +1993,23 @@ window.PROJECT_STATE = {
       role: 'Phase13 보드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_project_recommendations.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_report_cache.py',
       role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_report_image_parallel.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_regen_dedupe.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
       role: '',
     },
     {
@@ -1556,6 +2027,46 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_taste_facts.py',
       role: '취향 사실 계산 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_legacy_filters.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_session_pool.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_start_matching.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_start_tags.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_start_trust_boundary.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_v2_ensure.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_v2_selector.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_v2_session.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_v2_swipe.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_taste_v2_swipe_unit.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_throttles.py',
@@ -1602,16 +2113,16 @@ window.PROJECT_STATE = {
       role: '페르소나 리포트 뷰',
     },
     {
-      path: 'backend/apps/recommendation/views/search.py',
-      role: '쿼리 파싱 검색 뷰',
-    },
-    {
       path: 'backend/apps/recommendation/views/sessions.py',
       role: '분석 세션 뷰',
     },
     {
       path: 'backend/apps/recommendation/views/swipe.py',
       role: '스와이프 처리 뷰',
+    },
+    {
+      path: 'backend/apps/recommendation/views/taste_start.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/views/telemetry.py',
@@ -1838,10 +2349,6 @@ window.PROJECT_STATE = {
       role: '인증 테스트',
     },
     {
-      path: 'backend/tests/test_back_llm1_required_slate.py',
-      role: 'LLM 필수 슬레이트 테스트',
-    },
-    {
       path: 'backend/tests/test_board_detail_perf.py',
       role: '보드 상세 성능 테스트',
     },
@@ -1852,10 +2359,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/tests/test_cache_backend.py',
       role: '캐시 백엔드 테스트',
-    },
-    {
-      path: 'backend/tests/test_chat_phase.py',
-      role: '채팅 단계 테스트',
     },
     {
       path: 'backend/tests/test_confidence.py',
@@ -1938,18 +2441,6 @@ window.PROJECT_STATE = {
       role: 'IMP10 텔레메트리 테스트',
     },
     {
-      path: 'backend/tests/test_imp5_context_caching.py',
-      role: 'IMP5 컨텍스트 캐싱 테스트',
-    },
-    {
-      path: 'backend/tests/test_imp6_late_binding_plumbing.py',
-      role: 'IMP6 지연 바인딩 테스트',
-    },
-    {
-      path: 'backend/tests/test_imp6_stage_decouple.py',
-      role: 'IMP6 스테이지 분리 테스트',
-    },
-    {
       path: 'backend/tests/test_imp7_pool_cache.py',
       role: 'IMP7 풀 캐시 테스트',
     },
@@ -1970,28 +2461,12 @@ window.PROJECT_STATE = {
       role: 'JWT 리프레시 블랙리스트 테스트',
     },
     {
-      path: 'backend/tests/test_language_directive.py',
-      role: 'parse_query 언어 지시자 테스트',
-    },
-    {
       path: 'backend/tests/test_llm_search_rank1.py',
       role: '',
     },
     {
-      path: 'backend/tests/test_m1_clarification_cap.py',
-      role: 'M1 질문 카드 상한 테스트',
-    },
-    {
-      path: 'backend/tests/test_m4_clarification_telemetry.py',
-      role: 'M4 질문 카드 텔레메트리 테스트',
-    },
-    {
       path: 'backend/tests/test_migrations_legacy_entries.py',
       role: '레거시 마이그레이션 항목 테스트',
-    },
-    {
-      path: 'backend/tests/test_perf_search_stream.py',
-      role: '',
     },
     {
       path: 'backend/tests/test_prewarm.py',
@@ -2054,10 +2529,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'backend/tests/test_taste_calibration.py',
-      role: '',
-    },
-    {
       path: 'backend/tests/test_top_k_mmr_equivalence.py',
       role: '',
     },
@@ -2114,8 +2585,24 @@ window.PROJECT_STATE = {
       role: 'DB 교체 대응 기록 (보관, 2026-05 완료)',
     },
     {
+      path: 'docs/archive/task-done-2026-04-to-10.md',
+      role: 'Task.md 완료 이력 동결 (2026-04~10-06, Issues 이전 전)',
+    },
+    {
       path: 'docs/database-schema.md',
       role: 'DB 스키마 문서',
+    },
+    {
+      path: 'docs/db-data-quality-handoff.md',
+      role: '',
+    },
+    {
+      path: 'docs/db-fixes/material_group_map.csv',
+      role: '',
+    },
+    {
+      path: 'docs/db-fixes/material_group_rules.py',
+      role: '',
     },
     {
       path: 'docs/db-index-handoff.md',
@@ -2135,6 +2622,18 @@ window.PROJECT_STATE = {
     },
     {
       path: 'docs/decisions/2026-10-02-contact-messaging-design.md',
+      role: '',
+    },
+    {
+      path: 'docs/decisions/2026-10-09-contest-real-data.md',
+      role: '',
+    },
+    {
+      path: 'docs/decisions/2026-10-11-taste-start-redesign.md',
+      role: '',
+    },
+    {
+      path: 'docs/decisions/2026-10-22-persona-report-redesign.md',
       role: '',
     },
     {
@@ -2298,12 +2797,20 @@ window.PROJECT_STATE = {
       role: 'API 클라이언트 facade',
     },
     {
+      path: 'frontend/src/api/contests.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/core.js',
       role: 'JWT 토큰·fetch 코어',
     },
     {
       path: 'frontend/src/api/discovery.js',
       role: '디스커버리 피드 API 클라이언트',
+    },
+    {
+      path: 'frontend/src/api/feedback.js',
+      role: '',
     },
     {
       path: 'frontend/src/api/getResult.test.mjs',
@@ -2370,11 +2877,7 @@ window.PROJECT_STATE = {
       role: '팔로우·리액션 소셜 API 클라이언트',
     },
     {
-      path: 'frontend/src/api/sse.js',
-      role: '',
-    },
-    {
-      path: 'frontend/src/api/sse.test.mjs',
+      path: 'frontend/src/api/taste.js',
       role: '',
     },
     {
@@ -2406,11 +2909,15 @@ window.PROJECT_STATE = {
       role: '버튼 스타일(CSS Module)',
     },
     {
-      path: 'frontend/src/components/CalibrationChat.module.css',
+      path: 'frontend/src/components/CardSkeleton.jsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/CardSkeleton.jsx',
+      path: 'frontend/src/components/ConfirmDialog.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/ConfirmDialog.module.css',
       role: '',
     },
     {
@@ -2426,8 +2933,20 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/EmptyState.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/ErrorBoundary.jsx',
       role: '에러 바운더리 컴포넌트',
+    },
+    {
+      path: 'frontend/src/components/FinishReportButton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/FinishReportButton.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/FloatingIconButton.jsx',
@@ -2446,8 +2965,12 @@ window.PROJECT_STATE = {
       role: '구글 계정 인증 버튼',
     },
     {
-      path: 'frontend/src/components/LLMSearchUpdateWrapper.jsx',
-      role: 'LLM 검색 업데이트 모드 래퍼',
+      path: 'frontend/src/components/KakaoLoginButton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/KakaoLoginButton.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/Modal.jsx',
@@ -2455,6 +2978,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/Modal.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/NotFoundRedirect.jsx',
       role: '',
     },
     {
@@ -2506,11 +3033,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/PersonaReport.jsx',
-      role: '페르소나 리포트 공용 컴포넌트 (Board/Results 공유, 이미지 저장 버튼)',
+      path: 'frontend/src/components/PersonaReportPage.jsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/PersonaReport.module.css',
+      path: 'frontend/src/components/PersonaReportPage.module.css',
       role: '',
     },
     {
@@ -2524,6 +3051,22 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/ProtectedRoute.jsx',
       role: '인증 보호 라우트 가드',
+    },
+    {
+      path: 'frontend/src/components/ReportReentryBanner.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/ReportReentryBanner.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/ResultCards.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/ResultCards.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/RouteFallback.jsx',
@@ -2602,11 +3145,35 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/TasteCardDetail.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/TasteCardGallery.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/TasteCardReport.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/TasteFeedback.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/TasteSpectrum.jsx',
       role: '취향 스펙트럼 SVG 시각화',
     },
     {
       path: 'frontend/src/components/ThemePreviewCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/Toast.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/Toast.module.css',
       role: '',
     },
     {
@@ -2639,6 +3206,22 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/cardShell.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/contests/DeadlineBadge.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/contests/DeadlineBadge.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/contests/PosterLightbox.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/contests/PosterLightbox.module.css',
       role: '',
     },
     {
@@ -2734,10 +3317,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/constants/mockCompetitions.js',
-      role: '',
-    },
-    {
       path: 'frontend/src/constants/personalityTypes.js',
       role: '',
     },
@@ -2794,11 +3373,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/hooks/useNow.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
     },
     {
+      path: 'frontend/src/hooks/useRegeneration.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useReportImageJob.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useReportJobs.js',
       role: '',
     },
     {
@@ -2886,10 +3477,6 @@ window.PROJECT_STATE = {
       role: '페르소나 리포트 페이지',
     },
     {
-      path: 'frontend/src/pages/BoardReportPage.module.css',
-      role: '리포트 페이지 스타일 (CSS Module)',
-    },
-    {
       path: 'frontend/src/pages/BuildingDetailPage.jsx',
       role: '건물 상세 페이지',
     },
@@ -2918,11 +3505,7 @@ window.PROJECT_STATE = {
       role: '디스커버리 스와이프 피드',
     },
     {
-      path: 'frontend/src/pages/LLMSearchPage.jsx',
-      role: 'LLM 검색 페이지',
-    },
-    {
-      path: 'frontend/src/pages/LLMSearchPage.module.css',
+      path: 'frontend/src/pages/KakaoCallbackPage.jsx',
       role: '',
     },
     {
@@ -2935,6 +3518,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/LoginPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/OnboardingPage.jsx',
       role: '',
     },
     {
@@ -2952,6 +3539,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/SwipePage.jsx',
       role: '취향 분석 스와이프 페이지',
+    },
+    {
+      path: 'frontend/src/pages/TasteStartPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/TasteStartPage.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/pages/UploadWorkPage.jsx',
@@ -3030,11 +3625,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/pages/boardDetail/BoardCover.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
       role: '보드 건물 타일 카드',
     },
     {
       path: 'frontend/src/pages/boardDetail/BuildingTile.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/CoverIconButton.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardDetail/CoverIconButton.module.css',
       role: '',
     },
     {
@@ -3142,6 +3749,14 @@ window.PROJECT_STATE = {
       role: '앱 필터·에러 헬퍼',
     },
     {
+      path: 'frontend/src/utils/assessmentDirection.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/assessmentDirection.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/assessmentDraft.js',
       role: '',
     },
@@ -3158,11 +3773,47 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/competitionInterest.js',
+      path: 'frontend/src/utils/boardCoverTitle.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/boardCoverTitle.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/boardDeleteRules.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/boardDeleteRules.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/boardEditPlan.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/boardEditPlan.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/contestDeadline.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/contestDeadline.test.mjs',
       role: '',
     },
     {
       path: 'frontend/src/utils/discoveryGuard.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/imageMime.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/imageMime.test.mjs',
       role: '',
     },
     {
@@ -3174,11 +3825,39 @@ window.PROJECT_STATE = {
       role: 'loginFlow 테스트',
     },
     {
+      path: 'frontend/src/utils/onboardingFlag.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/postUntilReady.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/postUntilReady.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/reportImageJobs.js',
       role: '',
     },
     {
       path: 'frontend/src/utils/reportImageJobs.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportJobs.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportJobs.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportStale.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/reportStale.test.mjs',
       role: '',
     },
     {
@@ -3198,6 +3877,22 @@ window.PROJECT_STATE = {
       role: '프로젝트 백엔드 ID 해석 유틸',
     },
     {
+      path: 'frontend/src/utils/safeUrl.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/safeUrl.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/tasteStart.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/tasteStart.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/teamFit.js',
       role: '',
     },
@@ -3207,6 +3902,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/timeAgo.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/userIdentity.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/userIdentity.test.mjs',
       role: '',
     },
     {
@@ -3344,6 +4047,22 @@ window.PROJECT_STATE = {
     {
       path: 'web-testing/dashboard/style.css',
       role: '테스트 대시보드 스타일',
+    },
+    {
+      path: 'web-testing/flow_capture.py',
+      role: '',
+    },
+    {
+      path: 'web-testing/flow_doc.py',
+      role: '',
+    },
+    {
+      path: 'web-testing/flow_issues.json',
+      role: '',
+    },
+    {
+      path: 'web-testing/flow_scenarios.py',
+      role: '',
     },
     {
       path: 'web-testing/main-service-test-plan.md',

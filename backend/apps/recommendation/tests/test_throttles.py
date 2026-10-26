@@ -10,18 +10,33 @@ import pytest
 class TestRecommendationThrottles:
 
     def test_llm_search_throttle_configured(self):
-        """ParseQueryView has LLMSearchThrottle; scope registered in settings."""
+        """TasteRecognizeView has LLMSearchThrottle; scope registered in settings."""
         from django.conf import settings
-        from apps.recommendation.views.search import ParseQueryView
+        from apps.recommendation.views.taste_start import TasteRecognizeView
         from apps.recommendation.throttles import LLMSearchThrottle
         from rest_framework.throttling import UserRateThrottle
 
         assert issubclass(LLMSearchThrottle, UserRateThrottle)
         assert LLMSearchThrottle.scope == 'llm_search'
-        assert LLMSearchThrottle in ParseQueryView.throttle_classes
+        assert LLMSearchThrottle in TasteRecognizeView.throttle_classes
 
         rates = settings.REST_FRAMEWORK.get('DEFAULT_THROTTLE_RATES', {})
         assert 'llm_search' in rates, "'llm_search' scope missing from DEFAULT_THROTTLE_RATES"
+
+    def test_taste_recognize_daily_throttle_attached(self):
+        """Paid JEV call: per-minute throttle kept, daily cap added."""
+        from django.conf import settings
+        from apps.recommendation.views.taste_start import TasteRecognizeView
+        from apps.recommendation.throttles import LLMSearchThrottle, TasteRecognizeDailyThrottle
+        from rest_framework.throttling import UserRateThrottle
+
+        assert issubclass(TasteRecognizeDailyThrottle, UserRateThrottle)
+        assert TasteRecognizeDailyThrottle.scope == 'taste_recognize_day'
+        assert TasteRecognizeDailyThrottle.rate == '200/day'
+        assert LLMSearchThrottle in TasteRecognizeView.throttle_classes
+        assert TasteRecognizeDailyThrottle in TasteRecognizeView.throttle_classes
+        rates = settings.REST_FRAMEWORK.get('DEFAULT_THROTTLE_RATES', {})
+        assert rates.get('taste_recognize_day') == '200/day'
 
     def test_report_generate_throttle_configured(self):
         """ProjectReportGenerateView has ReportGenerateThrottle; scope registered."""

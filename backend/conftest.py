@@ -106,7 +106,7 @@ def user_profile(db):
     user = User.objects.create_user(
         username='testuser', email='test@test.com', password='testpass123',
     )
-    profile = UserProfile.objects.create(user=user, display_name='Test User')
+    profile = UserProfile.objects.create(user=user, display_name='TestUser', handle='TestUser')
     return profile
 
 
@@ -126,3 +126,23 @@ def api_client():
     """Unauthenticated APIClient."""
     from rest_framework.test import APIClient
     return APIClient()
+
+
+@pytest.fixture(autouse=True)
+def _patch_last_liked_renderable_count():
+    """Default the PATCH last-liked guard's buildings lookup to 'every id renders'.
+
+    views.projects._count_renderable queries canonical_v2_buildings (owned by
+    Make DB, absent in the test DB) via connections['buildings']. Count every
+    queried id as publishable; tests needing other counts patch
+    _count_renderable or views.projects.connections themselves.
+    """
+    from unittest.mock import MagicMock, patch as _patch
+    cur = MagicMock()
+    state = {}
+    cur.execute.side_effect = lambda sql, params: state.__setitem__('n', len(params[0]))
+    cur.fetchone.side_effect = lambda: (state.get('n', 0),)
+    conn = MagicMock()
+    conn.__getitem__.return_value.cursor.return_value.__enter__.return_value = cur
+    with _patch('apps.recommendation.views.projects.connections', conn):
+        yield

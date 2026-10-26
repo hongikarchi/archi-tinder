@@ -1,0 +1,113 @@
+/* TasteStartPage — interactive states only; layout lives inline (DESIGN.md §4). */
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 10px 10px 14px;
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 18px;
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+.composer:focus-within { border-color: var(--accent-1); }
+
+.textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-2);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 2px 0;
+}
+.textarea::placeholder { color: var(--color-text-dim); }
+
+.sendBtn {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: var(--color-cta-neutral);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+}
+/* 44x44 touch target without changing the 34px visual size */
+.sendBtn::after { content: ''; position: absolute; inset: -5px; }
+.sendBtn:hover:not(:disabled) { opacity: 0.88; }
+.sendBtn:active:not(:disabled) { transform: scale(0.95); }
+.sendBtn:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.sendBtn:disabled { opacity: 0.35; cursor: default; }
+
+.ctaPrimary,
+.ctaSecondary {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+}
+.ctaPrimary {
+  border: none;
+  background: var(--color-cta-neutral);
+  color: #fff;
+}
+.ctaSecondary {
+  background: transparent;
+  border: 1px solid var(--color-border-soft);
+  color: var(--color-text-muted);
+}
+.ctaPrimary:hover:not(:disabled),
+.ctaSecondary:hover:not(:disabled) { opacity: 0.85; }
+.ctaPrimary:active:not(:disabled),
+.ctaSecondary:active:not(:disabled) { transform: scale(0.98); }
+.ctaPrimary:focus-visible,
+.ctaSecondary:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.ctaPrimary:disabled,
+.ctaSecondary:disabled { opacity: 0.4; cursor: default; }
+
+.stack {
+  position: relative;
+  touch-action: pan-y;
+  user-select: none;
+  cursor: grab;
+}
+.stack:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 4px; border-radius: var(--radius-lg); }
+
+.card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft);
+  transition: transform var(--motion-normal) var(--motion-ease-out), opacity var(--motion-normal) var(--motion-ease-out);
+  will-change: transform;
+  perspective: 1200px; /* gallery flip (rotateY) */
+}
+.cardDragging { transition: none; }
+
+.skelBlock {
+  background: var(--color-surface-3);
+  animation: tasteSkelPulse 1.6s var(--motion-ease) infinite;
+}
+@keyframes tasteSkelPulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}

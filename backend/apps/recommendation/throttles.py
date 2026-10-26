@@ -1,12 +1,12 @@
 """Custom DRF throttle classes for ArchiTinder recommendation app.
 
-HIGH-THROTTLE-1 (audit 2026-07-17): ParseQueryView, ProjectReportGenerateView,
+HIGH-THROTTLE-1 (audit 2026-07-17): TasteRecognizeView, ProjectReportGenerateView,
 and ProjectReportImageView had no throttle_classes, exposing unbounded LLM
 API spend per authenticated user.
 
 Throttles are endpoint-level, provider-agnostic — they cap requests per user
 regardless of which LLM serves the view. Current provider per seam (#290):
-search parsing = settings.LLM_PROVIDER (openai/gpt-5.4-mini in prod), persona
+taste tag recognition (LLMSearchThrottle) = settings.LLM_PROVIDER / JEV, persona
 report text = Gemini (code-pinned), persona image = settings.LLM_IMAGE_PROVIDER
 (default gemini). The class-level `rate` attr below is the EFFECTIVE value —
 DRF's SimpleRateThrottle ignores DEFAULT_THROTTLE_RATES when the class sets
@@ -26,6 +26,27 @@ class LLMSearchThrottle(UserRateThrottle):
     """
     scope = 'llm_search'
     rate  = '10/min'
+
+
+class TasteRecognizeDailyThrottle(UserRateThrottle):
+    """200 taste recognitions per day per authenticated user (paid JEV call cost cap).
+
+    Stacked with LLMSearchThrottle (10/min) on TasteRecognizeView.
+    """
+    scope = 'taste_recognize_day'
+    rate  = '200/day'
+
+
+class ProjectRecommendationsThrottle(UserRateThrottle):
+    """30 board-recommendation reads per minute per authenticated user.
+
+    The endpoint runs the recommendation engine on a cache miss (responses are
+    cached per project for 10 min), so the cap guards DB/embedding cost. There
+    is no LLM spend while RECOMMENDATION['gemini_rerank_enabled'] is False
+    (build_predicted_cards would call the Gemini rerank if it were enabled).
+    """
+    scope = 'project_recommendations'
+    rate  = '30/min'
 
 
 class ReportGenerateThrottle(UserRateThrottle):
