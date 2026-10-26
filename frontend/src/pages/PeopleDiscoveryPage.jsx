@@ -78,7 +78,6 @@ export default function PeopleDiscoveryPage({ onLogout }) {
   const flipRef = useRef(null)        // { before, risenId, scrollToId }
   const pendingLikes = useRef(new Set())
   const toastTimer = useRef(null)
-  const scrollTimer = useRef(null)
   const animsRef = useRef([])         // in-flight WAAPI animations
   const expandedRef = useRef(null)
   expandedRef.current = expanded
@@ -89,7 +88,6 @@ export default function PeopleDiscoveryPage({ onLogout }) {
     return () => {
       isMounted.current = false
       clearTimeout(toastTimer.current)
-      clearTimeout(scrollTimer.current)
       tiles.clear()
     }
   }, [])
@@ -225,6 +223,18 @@ export default function PeopleDiscoveryPage({ onLogout }) {
     // previous animation is cancelled now to avoid overlapping transforms.
     animsRef.current.forEach(a => { try { a.cancel() } catch { /* already gone */ } })
     animsRef.current = []
+    // Measure the scroll target NOW: animations are cancelled and none has been
+    // started yet, so rects are settled layout positions (no in-flight transform).
+    let scrollTarget = null
+    if (flip.scrollToId != null) {
+      const el = tileRefs.current.get(flip.scrollToId)
+      const sc = contentRef.current
+      if (el && sc) {
+        const raw = sc.scrollTop + (el.getBoundingClientRect().top - sc.getBoundingClientRect().top) - 20
+        const max = Math.max(0, sc.scrollHeight - sc.clientHeight)
+        scrollTarget = Math.min(max, Math.max(0, raw))
+      }
+    }
     if (!reduce) {
       const run = (el, frames) => {
         const anim = el.animate(frames, { duration: FLIP_MS, easing: FLIP_EASE })
@@ -247,15 +257,8 @@ export default function PeopleDiscoveryPage({ onLogout }) {
         run(el, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }])
       })
     }
-    if (flip.scrollToId != null) {
-      clearTimeout(scrollTimer.current)
-      scrollTimer.current = setTimeout(() => {
-        const el = tileRefs.current.get(flip.scrollToId)
-        const sc = contentRef.current
-        if (!el || !sc) return
-        const top = sc.scrollTop + (el.getBoundingClientRect().top - sc.getBoundingClientRect().top) - 20
-        sc.scrollTo({ top: Math.max(0, top), behavior: reduce ? 'auto' : 'smooth' })
-      }, 30)
+    if (scrollTarget != null && contentRef.current) {
+      contentRef.current.scrollTo({ top: scrollTarget, behavior: reduce ? 'auto' : 'smooth' })
     }
   }, [expanded])
 
