@@ -19,6 +19,9 @@ import adminStyles from './AdminPage.module.css'
 import styles from './ContestsSection.module.css'
 
 
+// Keep the panel (which scrolls internally) clear of the fixed TabBar / safe area.
+const MODAL_PANEL_STYLE = { '--modal-max-h': 'calc(100dvh - 24px)', maxHeight: 'calc(100dvh - 40px)' }
+
 const TEXT_FIELDS = [
   'title', 'organizer', 'theme', 'summary', 'eligibility', 'team_size',
   'source_url', 'listing_source', 'listing_url', 'poster_url', 'poster_credit',
@@ -33,7 +36,6 @@ function toForm(contest) {
     status: c.status || 'hidden',
     submission_deadline: isoToKstInputValue(c.submission_deadline),
     apply_deadline: isoToKstInputValue(c.apply_deadline),
-    notice_date: c.notice_date || '',
     theme: c.theme || '',
     summary: c.summary || '',
     eligibility: c.eligibility || '',
@@ -50,7 +52,7 @@ function toForm(contest) {
 function toApiValue(key, value) {
   if (key === 'submission_deadline') return kstInputValueToIso(value) ?? value
   if (key === 'apply_deadline') return value ? (kstInputValueToIso(value) ?? value) : null
-  if (key === 'notice_date' || key === 'team_size' || key === 'poster_url') return value.trim() === '' ? null : value.trim()
+  if (key === 'team_size' || key === 'poster_url') return value.trim() === '' ? null : value.trim()
   if (TEXT_FIELDS.includes(key)) return value.trim()
   return value
 }
@@ -202,6 +204,7 @@ export default function ContestFormModal({ contest, onClose, onSaved, onChanged 
       open
       portal
       zIndex={400}
+      panelStyle={MODAL_PANEL_STYLE}
       width={560}
       onClose={busy ? () => {} : onClose}
       closeLabel={t('admin.contests.form.close')}
@@ -218,17 +221,6 @@ export default function ContestFormModal({ contest, onClose, onSaved, onChanged 
           {dateTime('submission_deadline', t('admin.contests.form.submissionDeadline'), true)}
           {dateTime('apply_deadline', t('admin.contests.form.applyDeadline'), false)}
         </div>
-        {field('notice_date', t('admin.contests.form.noticeDate'), {
-          children: (
-            <input
-              className={`${styles.input} ${errors.notice_date ? styles.inputError : ''}`}
-              type="date"
-              value={form.notice_date}
-              onChange={set('notice_date')}
-              disabled={busy}
-            />
-          ),
-        })}
         {text('theme', t('admin.contests.form.theme'), { maxLength: 200 })}
         {field('summary', t('admin.contests.form.summary'), {
           children: (

@@ -114,7 +114,8 @@ export default function ContestsSection() {
       {rows.length === 0 ? (
         <p className={adminStyles.muted}>{t('admin.contests.empty')}</p>
       ) : (
-        <div className={adminStyles.tableScroll}>
+        <>
+        <div className={`${adminStyles.tableScroll} ${styles.desktopOnly}`}>
           <table className={`${adminStyles.table} ${styles.table}`}>
             <thead>
               <tr>
@@ -208,6 +209,79 @@ export default function ContestsSection() {
             </tbody>
           </table>
         </div>
+        <ul className={`${styles.cards} ${styles.mobileOnly}`}>
+          {rows.map(row => {
+            const rowBusy = busyId === row.id
+            return (
+              <li key={row.id} className={styles.card}>
+                <div className={styles.cardHead}>
+                  <div className={styles.titleCell}>
+                    <span className={styles.titleText}>{row.title}</span>
+                    <span className={adminStyles.muted}>{row.organizer}</span>
+                  </div>
+                  <span className={`${adminStyles.badge} ${STATUS_BADGE[row.status] || ''}`}>
+                    {t(`admin.contests.status.${row.status}`)}
+                  </span>
+                </div>
+                {rowErrors[row.id] && (
+                  <p className={adminStyles.errorText} role="alert">{rowErrors[row.id]}</p>
+                )}
+                <div className={styles.cardDates}>
+                  <span>
+                    <span className={styles.dateLabel}>{t('admin.contests.submission')} </span>
+                    {formatKstDateTime(row.submission_deadline, language) || '-'}
+                  </span>
+                  <span>
+                    <span className={styles.dateLabel}>{t('admin.contests.apply')} </span>
+                    {formatKstDateTime(row.apply_deadline, language) || '-'}
+                  </span>
+                </div>
+                <div className={styles.cardMeta}>
+                  <span className={`${adminStyles.badge} ${row.is_closed ? adminStyles.bad : ''}`}>
+                    {row.is_closed ? t('admin.contests.closed') : t('admin.contests.open')}
+                  </span>
+                  <span>
+                    <span className={styles.dateLabel}>{t('admin.contests.col.interest')} </span>
+                    {row.interest_count ?? 0}
+                  </span>
+                  <span>
+                    <span className={styles.dateLabel}>{t('admin.contests.col.poster')} </span>
+                    {row.poster_url ? t('admin.contests.posterSet') : t('admin.contests.posterNone')}
+                  </span>
+                </div>
+                <div className={styles.cardMeta}>
+                  <ExternalLink href={row.source_url} label={t('admin.contests.sourceLink')} />
+                  <ExternalLink href={row.listing_url} label={t('admin.contests.listingLink')} />
+                  {!safeHttpUrl(row.source_url) && !safeHttpUrl(row.listing_url) && <span className={styles.dim}>-</span>}
+                </div>
+                <div className={styles.rowActions}>
+                  {CONTEST_STATUSES.filter(s => s !== row.status).map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`${adminStyles.btn} ${adminStyles.btnSmall}`}
+                      disabled={busyId != null}
+                      onClick={() => changeStatus(row, s)}
+                      aria-label={t('admin.contests.setStatusAria', { title: row.title, status: t(`admin.contests.status.${s}`) })}
+                    >
+                      {rowBusy ? t('admin.contests.working') : t(`admin.contests.action.${s}`)}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`${adminStyles.btn} ${adminStyles.btnSmall}`}
+                    disabled={busyId != null}
+                    onClick={() => setFormTarget(row)}
+                    aria-label={t('admin.contests.editAria', { title: row.title })}
+                  >
+                    {t('admin.contests.edit')}
+                  </button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        </>
       )}
 
       {count > PAGE_SIZE && (
