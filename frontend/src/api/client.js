@@ -14,7 +14,7 @@ export { startSession, getSessionState, recordSwipe, getResult } from './session
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, generateReport, generateReportImage, getProjectRecommendations, createProject, VerifyRequiredError } from './projects.js'
 export { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste } from './discovery.js'
 export { getUserProfile, updateMyProfile } from './profiles.js'
-export { getProjectReactors, reactToProject, unreactToProject } from './social.js'
+export { getProjectReactors, reactToProject, unreactToProject, getLikedBoards } from './social.js'
 export { listContests, getContest, addContestInterest, removeContestInterest } from './contests.js'
 export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.js'
 export { listNotifications, getUnreadCount, markRead } from './notifications.js'

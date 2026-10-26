@@ -1,5 +1,6 @@
 import BoardCard from '../../components/profile/BoardCard'
 import { useTranslation } from '../../i18n/index.js'
+import { atHandle } from '../../utils/userIdentity.js'
 
 export default function BoardGrid({
   boards,
@@ -9,6 +10,7 @@ export default function BoardGrid({
   onSelectToggle,
   boardsHasMore,
   boardsLoading,
+  showOwner = false,
 }) {
   const { t } = useTranslation()
   return (
@@ -28,6 +30,7 @@ export default function BoardGrid({
               selectMode={selectMode}
               isSelected={selectedBoards.has(board.board_id)}
               onSelectToggle={onSelectToggle}
+              ownerLabel={showOwner ? atHandle(board.owner) : ''}
             />
           ))}
         </div>

@@ -7,7 +7,7 @@ import styles from './PhotoTile.module.css'
  *
  * One shared photo card for building tiles across surfaces. Deliberately NOT based on `photoCardShell.js` — that shell is a
  * different card (2:3 aspect, `--radius-sm`-scale 12px radius, 10/9px fonts
- * for ResultsPage/PersonCard's denser grid); retuning it to 4:5/radius-lg
+ * for ResultsPage/BoardSocialCard's denser grid); retuning it to 4:5/radius-lg
  * would restyle those two unrelated pages, which is out of this PR's scope.
  * Also NOT adopted by BoardDetail's `BuildingTile` (RICH PATTERN: architect/
  * year info grid + edit-mode select overlay) — that is a page-restructure

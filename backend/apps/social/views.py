@@ -3,7 +3,7 @@ views.py -- apps/social (Phase 15 SOC2)
 
 SOC2 — 2 endpoints for project reaction (single-tier):
   POST   /api/v1/projects/{project_id}/react/  -- 201/200/403/404
-  DELETE /api/v1/projects/{project_id}/react/  -- 204/403/404
+  DELETE /api/v1/projects/{project_id}/react/  -- 204/404
 
 Project.reaction_count is managed exclusively by signal receivers in
 models.py (post_save / post_delete on Reaction). This covers both explicit
@@ -23,7 +23,9 @@ from apps.accounts.models import UserProfile
 from apps.accounts.serializers import UserMiniSerializer
 from apps.social.models import Reaction
 from apps.recommendation.caches import evict_project_detail
+from apps.notifications.models import Notification
 from apps.notifications.services import notify_reaction
+from apps.messaging.services import is_blocked_between
 
 logger = logging.getLogger('apps.social')
 
@@ -73,7 +75,7 @@ class ReactionView(APIView):
     POST:
       201 {reaction_count, reacted: true} -- new reaction created
       200 {reaction_count, reacted: true} -- already reacted (idempotent)
-      403 {detail}                         -- private project + non-owner
+      403 {detail}                         -- own board, private project, or blocked either way
       404                                  -- project not found
 
     DELETE:
@@ -91,7 +93,17 @@ class ReactionView(APIView):
             return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
 
         project = get_object_or_404(Project, project_id=project_id)
-        if project.visibility != 'public' and project.user_id != requester.pk:
+        # Own board: reacting to yourself is meaningless (the social feed now
+        # shows your own boards too) — rejected for public AND private boards.
+        if project.user_id == requester.pk:
+            return Response(
+                {'detail': 'Cannot react to your own board.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if project.visibility != 'public':
+            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        # Block (either direction) — same helper messaging/people use.
+        if is_blocked_between(requester, project.user):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         _reaction, created = Reaction.objects.get_or_create(
@@ -134,6 +146,18 @@ class ReactionView(APIView):
 
         if deleted_count == 0:
             return Response({'detail': 'Not reacted.'}, status=status.HTTP_404_NOT_FOUND)
+        # Retract the owner's notification(s) for this reaction, read or unread.
+        # Same JSON lookup notify_reaction uses for its dedupe (works on both
+        # Postgres and the SQLite test DB). Other actors' rows are untouched.
+        try:
+            Notification.objects.filter(
+                recipient_id=project.user_id,
+                actor=requester,
+                type='reaction',
+                payload__project_id=str(project.project_id),
+            ).delete()
+        except Exception:
+            logger.exception('reaction notification cleanup failed (project=%s)', project_id)
         # reaction_count changed — evict project detail cache (BACK-BOARD-PERF-1)
         evict_project_detail(str(project_id))
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -1,6 +1,6 @@
 /**
  * api/social.js
- * Social graph: project reactors.
+ * Social graph: project reactors + the viewer's liked boards.
  *
  * User-to-user follow/unfollow (followUser, unfollowUser, getFollowers,
  * getFollowing) has been removed. Architect/firm follow is in api/architects.js.
@@ -18,4 +18,9 @@ export async function reactToProject(projectId) {
 
 export async function unreactToProject(projectId) {
   return await callApi('DELETE', `/projects/${projectId}/react/`)
+}
+
+/** Own liked boards, newest like first (profile 'Liked' tab). */
+export async function getLikedBoards({ page = 1, pageSize = 12 } = {}) {
+  return await callApi('GET', `/liked-boards/?page=${page}&page_size=${pageSize}`)
 }

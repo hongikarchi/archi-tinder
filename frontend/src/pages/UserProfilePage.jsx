@@ -7,6 +7,7 @@ import { updateProject, deleteProject } from '../api/projects.js'
 import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
+import { getLikedBoards } from '../api/social.js'
 import { getMyPersonality } from '../api/personality.js'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHero from './userProfile/ProfileHero'
@@ -33,6 +34,10 @@ import { userHandle } from '../utils/userIdentity.js'
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
 // entirely if no issue surfaces.
 const SHOW_BOARD_EDIT_BUTTON = false
+
+// Stable props for the read-only Liked grid (no select mode).
+const EMPTY_SELECTION = new Set()
+const noop = () => {}
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -80,8 +85,16 @@ export default function UserProfilePage({ onLogout }) {
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
-  // Tab state — 'boards' | 'studios' | 'created'
+  // Tab state — 'boards' | 'studios' | 'liked' (own profile only) | 'created'
   const [activeTab, setActiveTab] = useState('boards')
+  // Liked tab (own profile only): boards the viewer reacted to, newest like first.
+  const [likedBoards, setLikedBoards] = useState(null)  // null = not loaded yet
+  const [likedPage, setLikedPage] = useState(1)
+  const [likedHasMore, setLikedHasMore] = useState(false)
+  const [likedLoading, setLikedLoading] = useState(false)
+  const [likedError, setLikedError] = useState(false)
+  const likedSentinelRef = useRef(null)
+  const likedReqRef = useRef(0)
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
   const [studiosLoading, setStudiosLoading] = useState(false)
   const [buildingsMap, setBuildingsMap] = useState({}) // architect_id → buildings[]
@@ -167,6 +180,36 @@ export default function UserProfilePage({ onLogout }) {
     }
   }
 
+  const loadLiked = useCallback(async (page) => {
+    const req = ++likedReqRef.current
+    setLikedLoading(true)
+    setLikedError(false)
+    try {
+      const data = await getLikedBoards({ page, pageSize: 12 })
+      if (req !== likedReqRef.current) return
+      const items = (data?.items || []).map(b => ({ ...b, board_id: b.project_id, date: formatBoardDate(b.date) }))
+      setLikedBoards(prev => {
+        const base = page === 1 ? [] : (prev || [])
+        const seen = new Set(base.map(b => b.board_id))
+        return [...base, ...items.filter(b => !seen.has(b.board_id))]
+      })
+      setLikedPage(data?.page ?? page)
+      setLikedHasMore(!!data?.has_more)
+    } catch {
+      if (req !== likedReqRef.current) return
+      setLikedError(true)
+      setLikedBoards(prev => prev ?? [])
+    } finally {
+      if (req === likedReqRef.current) setLikedLoading(false)
+    }
+  }, [])
+
+  const handleLikedTab = () => {
+    setActiveTab('liked')
+    if (likedBoards !== null) return  // already loaded
+    loadLiked(1)
+  }
+
   const handleCreatedTab = async () => {
     setActiveTab('created')
     if (works !== null) return  // already loaded
@@ -222,6 +265,12 @@ export default function UserProfilePage({ onLogout }) {
     setSelectedBoards(new Set())
     setConfirmingBulkDelete(false)
     setSavedStudios(null)
+    likedReqRef.current++
+    setLikedBoards(null)
+    setLikedPage(1)
+    setLikedHasMore(false)
+    setLikedLoading(false)
+    setLikedError(false)
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     // Reset boards state on user change
     setBoards([])
@@ -282,6 +331,18 @@ export default function UserProfilePage({ onLogout }) {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [loadMoreBoards])
+
+  // Liked tab infinite scroll -- own sentinel, same 200px lead as the boards tab.
+  useEffect(() => {
+    const sentinel = likedSentinelRef.current
+    if (activeTab !== 'liked' || !sentinel || !likedHasMore || likedLoading || likedError) return
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadLiked(likedPage + 1) },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [activeTab, likedHasMore, likedLoading, likedError, likedPage, loadLiked, likedBoards])
 
   // Auto-dismiss board action error after 4s
   useEffect(() => {
@@ -607,11 +668,13 @@ export default function UserProfilePage({ onLogout }) {
           tabs={[
             { id: 'boards', label: t('profileB3.tabBoards') },
             { id: 'studios', label: t('profileB3.tabStudios') },
+            ...(isMe ? [{ id: 'liked', label: t('socialBoard.tabLiked') }] : []),
             { id: 'created', label: t('profileB3.tabCreated') },
           ]}
           value={activeTab}
           onChange={(id) => {
             if (id === 'studios') handleStudiosTab()
+            else if (id === 'liked') handleLikedTab()
             else if (id === 'created') handleCreatedTab()
             else setActiveTab('boards')
           }}
@@ -812,6 +875,54 @@ export default function UserProfilePage({ onLogout }) {
                     onClick={() => navigate('/architects/' + office.architect_id)}
                   />
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Liked tab — own profile only (the tab is not rendered for others). */}
+        {isMe && activeTab === 'liked' && (
+          <div style={{ padding: '0 0 16px' }}>
+            {likedBoards !== null && likedBoards.length > 0 && (
+              <BoardGrid
+                boards={likedBoards}
+                isMe={false}
+                selectMode={false}
+                selectedBoards={EMPTY_SELECTION}
+                onSelectToggle={noop}
+                boardsHasMore={likedHasMore}
+                boardsLoading={likedLoading}
+                showOwner
+              />
+            )}
+            {likedBoards !== null && likedBoards.length === 0 && !likedLoading && !likedError && (
+              <EmptyState
+                title={t('socialBoard.likedEmpty')}
+                actionLabel={t('socialBoard.likedEmptyCta')}
+                onAction={() => navigate('/people')}
+              />
+            )}
+            {likedError && (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-muted)', fontSize: 'var(--fs-body)' }}>
+                <p style={{ margin: '0 0 10px' }}>{t('socialBoard.likedError')}</p>
+                <button
+                  type="button"
+                  className={styles.cancelBtn}
+                  onClick={() => loadLiked(likedBoards && likedBoards.length > 0 ? likedPage + 1 : 1)}
+                >
+                  {t('socialBoard.retry')}
+                </button>
+              </div>
+            )}
+            <div ref={likedSentinelRef} style={{ height: 1 }} />
+            {likedLoading && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  border: '2px solid var(--color-border)',
+                  borderTopColor: 'var(--accent-1)',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
               </div>
             )}
           </div>

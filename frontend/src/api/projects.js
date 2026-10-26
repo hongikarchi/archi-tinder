@@ -171,7 +171,7 @@ export async function getBoardBuildings(buildingIds) {
  * Split from the board list on purpose: Project.report_image is base64 TEXT
  * (~200KB each) and the profile's board page holds up to 50, so the list ships
  * a `report_image_url` pointer and each card resolves it lazily. Same split the
- * /people feed uses (see api/people.js getPersonReportImage).
+ * /people feed uses (see api/people.js getBoardReportImage).
  *
  * Returns { image_data, mime_type }, or null when the board has none / is not
  * visible to the caller (backend answers 404). Callers must treat null as "no

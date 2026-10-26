@@ -22,60 +22,14 @@ logger = logging.getLogger('apps.accounts')
 
 # -- User Profile (Phase 13 PROF2 + BOARD1) --------------------------------
 
-def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
-    """Build boards pagination dict for UserProfileDetailView response.
+def _build_board_items(projects):
+    """Board card dicts for an already-paged list of Project rows.
 
-    Returns a dict with items + pagination metadata:
-      {
-        "items": [...],       # list of board dicts (same shape as before)
-        "page": <int>,
-        "page_size": <int>,
-        "total_count": <int>,
-        "has_more": <bool>,
-        "next_page": <int|null>,
-      }
-
-    Each board card contains: project_id, name, date (created_at), visibility,
-    building_count, cover_image_url, thumbnails (up to 6),
-    has_report_image + report_image_url (pointer to the persona report
-    image; the card prefers it over cover_image_url).
-
-    Liked buildings only: building_count, cover and thumbnails come from
-    liked_ids. Cover = first liked building
-    with an image → ''.
-    Image batch lookup is performed only for the paged slice to avoid N+1 at
-    scale.
+    Shared by the profile board list and GET /liked-boards/. Liked buildings
+    only: building_count, cover and thumbnails come from liked_ids. One batched
+    thumbnail lookup for the whole slice (no per-board query).
     """
-    from apps.recommendation.models import Project
     from apps.recommendation import engine
-
-    # Clamp pagination params
-    page_size = min(max(1, page_size), 50)
-    page = max(1, page)
-
-    # v3.2: discovery draft boards (name prefix 'discovery_') are now visible on
-    # the profile — they are normal boards and must appear in the board list.
-    qs = Project.objects.filter(user=target_profile).order_by('-updated_at')
-    if not is_owner:
-        qs = qs.filter(visibility='public')
-
-    total_count = qs.count()
-    offset = (page - 1) * page_size
-    paged_qs = qs[offset: offset + page_size]
-    projects = list(paged_qs)
-
-    has_more = offset + page_size < total_count
-    next_page = page + 1 if has_more else None
-
-    if not projects:
-        return {
-            'items': [],
-            'page': page,
-            'page_size': page_size,
-            'total_count': total_count,
-            'has_more': has_more,
-            'next_page': next_page,
-        }
 
     # Collect all building_ids needed for image resolution (cover + thumbnails).
     # Per project: take first 7 unique ids from liked_ids ONLY (boards show liked
@@ -134,6 +88,64 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
                 if p.report_image else ''
             ),
         })
+    return items
+
+
+def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
+    """Build boards pagination dict for UserProfileDetailView response.
+
+    Returns a dict with items + pagination metadata:
+      {
+        "items": [...],       # list of board dicts (same shape as before)
+        "page": <int>,
+        "page_size": <int>,
+        "total_count": <int>,
+        "has_more": <bool>,
+        "next_page": <int|null>,
+      }
+
+    Each board card contains: project_id, name, date (created_at), visibility,
+    building_count, cover_image_url, thumbnails (up to 6),
+    has_report_image + report_image_url (pointer to the persona report
+    image; the card prefers it over cover_image_url).
+
+    Liked buildings only: building_count, cover and thumbnails come from
+    liked_ids. Cover = first liked building
+    with an image → ''.
+    Image batch lookup is performed only for the paged slice to avoid N+1 at
+    scale.
+    """
+    from apps.recommendation.models import Project
+
+    # Clamp pagination params
+    page_size = min(max(1, page_size), 50)
+    page = max(1, page)
+
+    # v3.2: discovery draft boards (name prefix 'discovery_') are now visible on
+    # the profile — they are normal boards and must appear in the board list.
+    qs = Project.objects.filter(user=target_profile).order_by('-updated_at')
+    if not is_owner:
+        qs = qs.filter(visibility='public')
+
+    total_count = qs.count()
+    offset = (page - 1) * page_size
+    paged_qs = qs[offset: offset + page_size]
+    projects = list(paged_qs)
+
+    has_more = offset + page_size < total_count
+    next_page = page + 1 if has_more else None
+
+    if not projects:
+        return {
+            'items': [],
+            'page': page,
+            'page_size': page_size,
+            'total_count': total_count,
+            'has_more': has_more,
+            'next_page': next_page,
+        }
+
+    items = _build_board_items(projects)
 
     return {
         'items': items,

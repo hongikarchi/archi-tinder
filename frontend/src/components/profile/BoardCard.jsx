@@ -15,7 +15,9 @@ import s from './BoardCard.module.css'
  * Tap navigates to /board/<id>. In select mode (P6 bulk edit, owner) a tap
  * toggles selection instead and a selection circle shows top-right.
  *
- * Props: board, isOwner, selectMode, isSelected, onSelectToggle(board_id).
+ * Props: board, isOwner, selectMode, isSelected, onSelectToggle(board_id),
+ *   ownerLabel (optional '@handle' -- Liked tab: shown in place of the
+ *   public/private word, since every liked board is someone else's public one).
  */
 export default function BoardCard({
   board,
@@ -23,6 +25,7 @@ export default function BoardCard({
   selectMode = false,
   isSelected = false,
   onSelectToggle = () => {},
+  ownerLabel = '',
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -30,7 +33,7 @@ export default function BoardCard({
   const isPrivate = board.visibility === 'private'
   const count = board.building_count ?? 0
   const countText = t(count === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: count })
-  const meta = `${t(isPrivate ? 'board.private' : 'board.public')} · ${countText}`
+  const meta = `${ownerLabel || t(isPrivate ? 'board.private' : 'board.public')} · ${countText}`
 
   // FRONT-PEOPLE-THUMB-1: the cover is the board's PERSONA REPORT image when it
   // has one; the building cover stays as the fallback. Fetched lazily because

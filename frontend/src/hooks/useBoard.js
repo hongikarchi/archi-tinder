@@ -3,7 +3,7 @@ import { getBoardBuildings, getProject } from '../api/projects.js'
 import { getResult } from '../api/sessions.js'
 import { getRecommendedArchitects } from '../api/architects.js'
 
-function collectBoardBuildingIds(project) {
+export function collectBoardBuildingIds(project) {
   const ids = []
   const seen = new Set()
   const add = item => {
