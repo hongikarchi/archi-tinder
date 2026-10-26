@@ -28,13 +28,17 @@ export async function getPeopleDiscovery({ filter, cursor, pageSize } = {}) {
  * call this lazily.
  *
  * Returns { image_data, mime_type }, or null when the board has no public
- * report image (backend answers 404). Callers must treat null as "no image"
- * and stop — do not retry.
+ * report image (backend answers 404) or on any other error. Callers must treat
+ * null as "no image" and stop — do not retry.
+ *
+ * Throttled (HTTP 429) is NOT "no image": resolves { throttled: true,
+ * retryAfter } (seconds or undefined) so the caller can wait and retry once.
  */
 export async function getBoardReportImage(boardId) {
   try {
     return await callApi('GET', `/people/boards/${boardId}/report-image/`)
-  } catch {
+  } catch (err) {
+    if (err?.status === 429) return { throttled: true, retryAfter: err.retryAfter }
     return null
   }
 }

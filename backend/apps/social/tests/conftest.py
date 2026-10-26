@@ -50,6 +50,15 @@ def _auth_client(user):
     return client
 
 
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Feed candidate cache + throttle counters live in the cache; isolate tests."""
+    from django.core.cache import cache
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.fixture
 def user_a(db):
     user, profile = _make_user_and_profile('alice', 'alice@example.com')

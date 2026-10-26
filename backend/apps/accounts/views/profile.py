@@ -63,6 +63,11 @@ def _build_board_items(projects):
 
     items = []
     for p in projects:
+        # Callers that deferred report_image (GET /liked-boards/) attach a
+        # SQL-computed `_has_report_image`; otherwise read the loaded column.
+        has_image = getattr(p, '_has_report_image', None)
+        if has_image is None:
+            has_image = bool(p.report_image)
         bids = project_bid_lists[p.project_id]
         cover_url = next((image_map.get(bid, '') for bid in bids if image_map.get(bid)), '')
         thumbnails = [image_map[bid] for bid in bids if image_map.get(bid)][:6]
@@ -82,10 +87,10 @@ def _build_board_items(projects):
             # megabytes wide. Same split the /people feed uses.
             # `p.report_image` is already in memory (the queryset above loads
             # full rows), so this flag costs no extra query.
-            'has_report_image': bool(p.report_image),
+            'has_report_image': bool(has_image),
             'report_image_url': (
                 f'/api/v1/projects/{p.project_id}/report-image/'
-                if p.report_image else ''
+                if has_image else ''
             ),
         })
     return items

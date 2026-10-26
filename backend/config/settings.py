@@ -220,6 +220,11 @@ REST_FRAMEWORK = {
         'image_load_telemetry': '120/min',
         # React/unreact write throttle — prevents bulk-reaction abuse (SOC2).
         'reaction_write': '60/min',
+        # Social board feed: one feed call per page (infinite scroll) ...
+        'people_feed': '60/min',
+        # ... plus one lazy report-image call per card (<=30 per page), so a
+        # few fast pages stay under the cap while a scraper loop is bounded.
+        'people_board_image': '180/min',
         # BACK-CONTEST-2: contest interest toggle.
         'contest_interest': '60/min',
         # NOTE (BACK-THROTTLE-2): entries below whose throttle CLASS also sets a

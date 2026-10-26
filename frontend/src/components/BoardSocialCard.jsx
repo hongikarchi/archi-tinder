@@ -2,7 +2,9 @@
  * BoardSocialCard.jsx
  * One public board in the /people feed (mock: social-board-like.html).
  *
- * Collapsed — the app's 2:3 photo tile (photoCardShell.js): the board's report
+ * Collapsed — a non-interactive <article>; a stretched sibling <button> opens the
+ *   card and the heart is a separate sibling button above it (no nested controls).
+ *   The app's 2:3 photo tile (photoCardShell.js): the board's report
  *   image, bottom scrim + caption = board name only, a 28px glass heart top-right
  *   (hidden on the viewer's own board). The heart toggles the like and never
  *   expands the card.
@@ -31,6 +33,7 @@ import { useNearViewport } from '../hooks/useNearViewport.js'
 import BuildingTile from '../pages/boardDetail/BuildingTile.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { safeImageMime } from '../utils/imageMime.js'
+import { throttleRetryDelayMs } from '../utils/throttleRetry.js'
 import { atHandle } from '../utils/userIdentity.js'
 import {
   photoCardShellStyle,
@@ -61,6 +64,7 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
   const id = board.board_id
   const rootRef = useRef(null)
   const closeRef = useRef(null)
+  const openRef = useRef(null)
   const wasExpandedRef = useRef(false)
 
   // Report image (lazy, per board). null from the api = terminal "no image".
@@ -71,12 +75,24 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
   useEffect(() => {
     if (!near) return undefined
     let cancelled = false
-    getBoardReportImage(id).then(data => {
-      if (cancelled) return
-      if (data?.image_data) setImage(`data:${safeImageMime(data.mime_type)};base64,${data.image_data}`)
-      else setImageFailed(true)
-    })
-    return () => { cancelled = true }
+    let timer = null
+    // On 429 keep the shimmer, wait, retry exactly once; a second failure
+    // (including another 429) falls through to the normal placeholder.
+    const attempt = isRetry => {
+      getBoardReportImage(id).then(data => {
+        if (cancelled) return
+        if (data?.image_data) {
+          setImage(`data:${safeImageMime(data.mime_type)};base64,${data.image_data}`)
+        } else if (data?.throttled && !isRetry) {
+          timer = setTimeout(() => { timer = null; if (!cancelled) attempt(true) },
+            throttleRetryDelayMs(data.retryAfter))
+        } else {
+          setImageFailed(true)
+        }
+      })
+    }
+    attempt(false)
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
   }, [id, near])
 
   // Buildings: loaded the first time the card is expanded.
@@ -109,7 +125,7 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
     } else if (wasExpandedRef.current) {
       const active = document.activeElement
       if (!active || active === document.body || rootRef.current?.contains(active)) {
-        rootRef.current?.focus({ preventScroll: true })
+        openRef.current?.focus({ preventScroll: true })
       }
     }
     wasExpandedRef.current = expanded
@@ -130,14 +146,6 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
     onLike?.(board)
   }
 
-  function handleKeyDown(e) {
-    if (expanded || e.target !== e.currentTarget) return
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onToggle(id)
-    }
-  }
-
   const heartLabel = isMe ? t('socialBoard.likeOwn') : t(liked ? 'socialBoard.unlike' : 'socialBoard.like')
   const ownerLabel = atHandle(board)
   const date = formatDate(board.updated_at, language)
@@ -148,12 +156,9 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
       data-board-id={id}
       className={`${styles.tile} ${expanded ? styles.exp : ''}`}
       style={expanded ? undefined : photoCardShellStyle}
-      role={expanded ? 'group' : 'button'}
-      tabIndex={expanded ? -1 : 0}
-      aria-expanded={expanded ? undefined : false}
-      aria-label={expanded ? title : t('socialBoard.openCard', { title })}
-      onClick={() => { if (!expanded) onToggle(id) }}
-      onKeyDown={handleKeyDown}
+      role={expanded ? 'group' : undefined}
+      tabIndex={expanded ? -1 : undefined}
+      aria-label={expanded ? title : undefined}
     >
       <div className={styles.frame}>
         {image ? (
@@ -170,6 +175,17 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
           </div>
         )}
         <div style={photoCardScrimStyle} className={styles.scrim} />
+
+        {!expanded && (
+          <button
+            ref={openRef}
+            type="button"
+            className={styles.open}
+            onClick={() => onToggle(id)}
+            aria-label={t('socialBoard.openCard', { title })}
+            aria-expanded="false"
+          />
+        )}
 
         {!expanded && !isMe && (
           <button

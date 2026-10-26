@@ -214,7 +214,6 @@ export default function BoardReportPage({ onLogout }) {
     <>
     <PersonaReportPage
       state={state}
-      role="owner"
       onLogout={onLogout}
       onBack={() => (state === 'ready' ? navigate(`/board/${boardId}`) : navigate(-1))}
       backLabel={t('board.backToDetail')}
@@ -229,7 +228,6 @@ export default function BoardReportPage({ onLogout }) {
         visibility: board?.visibility,
         buildingCount: buildings.length,
         reactionCount: board?.reaction_count ?? 0,
-        user: board?.user || board?.owner || null,
       }}
       likedBuildings={likedBuildings}
       recommendations={recommendations}

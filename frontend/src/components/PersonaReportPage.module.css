@@ -67,14 +67,6 @@
   color: var(--color-text-muted);
   font-size: var(--fs-caption);
 }
-.metaAvatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--color-surface-2);
-  display: inline-block;
-}
 
 .eyebrow {
   margin: 0 0 8px;
@@ -430,16 +422,6 @@
 @keyframes pulseBtn {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-1) 45%, transparent); }
   100% { box-shadow: 0 0 0 14px transparent; }
-}
-
-.footerViewer {
-  margin: 22px var(--rp-gutter) 0;
-  padding: 16px 0 0;
-  border-top: 1px solid var(--color-border-soft);
-  color: var(--color-text-dimmer);
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
 }
 
 /* ── Loading skeleton + state slot ──────────────────────────────────────── */

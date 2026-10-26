@@ -324,6 +324,197 @@ class TestLikedBoards:
         self._like(mp, _board(o2))
         assert _client(mu).get(LIKED).data['items'] == []
 
+    def test_has_report_image_flag_without_loading_column(self, me):
+        mu, mp = me
+        _, o = _person('o')
+        with_img = _board(o, 'with', image='BIGBASE64')
+        empty = _board(o, 'empty', image='')
+        none_img = _board(o, 'none', image=None)
+        self._like(mp, with_img, 1)
+        self._like(mp, empty, 2)
+        self._like(mp, none_img, 3)
+        r = _client(mu).get(LIKED)
+        by_id = {i['project_id']: i for i in r.data['items']}
+        a = by_id[str(with_img.pk)]
+        assert a['has_report_image'] is True
+        assert a['report_image_url'] == f'/api/v1/projects/{with_img.pk}/report-image/'
+        for b in (empty, none_img):
+            item = by_id[str(b.pk)]
+            assert item['has_report_image'] is False
+            assert item['report_image_url'] == ''
+
+    def test_query_count_independent_of_page_rows(self, me):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        mu, mp = me
+        _, o = _person('o')
+        c = _client(mu)
+        self._like(mp, _board(o, 'first'))
+        c.get(LIKED)  # warm auth/profile lookups
+        with CaptureQueriesContext(connection) as one:
+            c.get(LIKED)
+        for i in range(5):
+            self._like(mp, _board(o, f'more{i}', image='' if i % 2 else 'x'))
+        with CaptureQueriesContext(connection) as many:
+            c.get(LIKED)
+        assert len(many) == len(one)
+
+
+# ---------------------------------------------------------------------------
+# Feed cache + throttles
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def loader_spy(monkeypatch):
+    from apps.social import views_people
+    calls = []
+    real = views_people._load_sorted_entries
+
+    def spy(*a, **kw):
+        calls.append(a)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(views_people, '_load_sorted_entries', spy)
+    return calls
+
+
+@pytest.mark.django_db
+class TestFeedCache:
+    def test_second_page_served_from_cached_list(self, me, loader_spy):
+        mu, mp = me
+        for i in range(5):
+            _board(mp, f'b{i}', i)
+        c = _client(mu)
+        r1 = c.get(FEED, {'page_size': 2})
+        r2 = c.get(FEED, {'page_size': 2, 'cursor': r1.data['next_cursor']})
+        r3 = c.get(FEED, {'page_size': 2, 'cursor': r2.data['next_cursor']})
+        assert len(loader_spy) == 1
+        assert len(_ids(r1) + _ids(r2) + _ids(r3)) == 5
+        assert r3.data['has_more'] is False
+
+    def test_cache_isolated_by_filter_and_requester(self, me, loader_spy):
+        mu, mp = me
+        ou, other = _person('other', vec=(2, 0, 0, 0, 0), type_code='RSDT')
+        _board(mp, 'mine', 1)
+        _board(other, 'theirs', 2)
+        c, oc = _client(mu), _client(ou)
+        c.get(FEED)
+        c.get(FEED, {'filter': 'inspired'})
+        c.get(FEED, {'filter': 'rsdt'})
+        assert len(loader_spy) == 3          # one per filter
+        oc.get(FEED)
+        assert len(loader_spy) == 4          # other requester: own entry
+        c.get(FEED)
+        c.get(FEED, {'filter': 'inspired'})
+        oc.get(FEED)
+        assert len(loader_spy) == 4          # all hits now
+        # distance differs per requester (cached lists are not shared)
+        mine_for_other = next(
+            i for i in oc.get(FEED).data['results'] if i['board_name'] == 'mine')
+        mine_for_me = next(
+            i for i in c.get(FEED).data['results'] if i['board_name'] == 'mine')
+        assert mine_for_me['distance'] == 0.0 and mine_for_other['distance'] == 2.0
+
+    def test_revalidation_drops_board_made_private_after_caching(self, me):
+        mu, _ = me
+        _, o = _person('o')
+        keep = _board(o, 'keep', 5)
+        gone = _board(o, 'gone', 1)
+        c = _client(mu)
+        assert set(_ids(c.get(FEED))) == {str(keep.pk), str(gone.pk)}
+        from apps.recommendation.models import Project
+        Project.objects.filter(pk=gone.pk).update(visibility='private')
+        assert _ids(c.get(FEED)) == [str(keep.pk)]
+
+    def test_revalidation_drops_newly_blocked_owner_and_opted_out(self, me):
+        mu, mp = me
+        _, o = _person('o')
+        _, o2 = _person('o2')
+        _board(o, 'b1', 1)
+        _board(o2, 'b2', 2)
+        c = _client(mu)
+        assert len(_ids(c.get(FEED))) == 2
+        from apps.accounts.models import PersonalityProfile
+        from apps.messaging.models import Block
+        Block.objects.create(blocker=mp, blocked=o)
+        PersonalityProfile.objects.filter(user=o2).update(discovery_opt_in=False)
+        assert _ids(c.get(FEED)) == []
+
+    def test_volatile_fields_are_fresh_within_ttl(self, me):
+        mu, _ = me
+        _, o = _person('o')
+        b = _board(o, 'old name')
+        c = _client(mu)
+        c.get(FEED)
+        from apps.recommendation.models import Project
+        Project.objects.filter(pk=b.pk).update(name='new name', reaction_count=7)
+        item = c.get(FEED).data['results'][0]
+        assert item['board_name'] == 'new name' and item['reaction_count'] == 7
+        from apps.social.models import Reaction
+        Reaction.objects.create(user=me[1], project=b)
+        assert c.get(FEED).data['results'][0]['is_reacted'] is True
+
+    def test_cached_entries_hold_only_ordering_data(self, me):
+        from django.core.cache import cache
+        from apps.social import views_people
+        mu, mp = me
+        _, o = _person('o', vec=(1, 0, 0, 0, 0))
+        b = _board(o, 'secret name', 1)
+        _client(mu).get(FEED, {'filter': 'inspired'})
+        key = views_people._cache_key(mp.pk, 'inspired', None)
+        assert key.startswith('people_feed:v2:')
+        entries = cache.get(key)
+        assert entries and len(entries) == 1
+        sort_key, pid, dist = entries[0]
+        assert pid == str(b.pk) and dist == 1.0
+        assert isinstance(sort_key, tuple) and len(sort_key) == 3
+        blob = repr(entries)
+        assert 'secret name' not in blob and 'display_name' not in blob
+
+    def test_owner_display_fields_fresh_on_cached_page(self, me, loader_spy):
+        from apps.accounts.models import UserProfile
+        mu, _ = me
+        _, o = _person('o')
+        _board(o, 'b', 1)
+        c = _client(mu)
+        assert c.get(FEED).data['results'][0]['display_name'] == 'O'
+        UserProfile.objects.filter(pk=o.pk).update(display_name='Renamed')
+        item = c.get(FEED).data['results'][0]
+        assert item['display_name'] == 'Renamed'
+        assert len(loader_spy) == 1          # served from cache, still fresh
+
+
+class TestThrottleConfig:
+    def test_scopes_registered_and_wired(self):
+        from django.conf import settings
+        from rest_framework.throttling import UserRateThrottle
+        from apps.social.views_people import (
+            PeopleBoardImageThrottle, PeopleBoardReportImageView,
+            PeopleDiscoveryView, PeopleFeedThrottle,
+        )
+        rates = settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']
+        assert issubclass(PeopleFeedThrottle, UserRateThrottle)
+        assert issubclass(PeopleBoardImageThrottle, UserRateThrottle)
+        assert PeopleFeedThrottle.scope == 'people_feed' and 'people_feed' in rates
+        assert PeopleBoardImageThrottle.scope == 'people_board_image'
+        assert 'people_board_image' in rates
+        assert PeopleFeedThrottle in PeopleDiscoveryView.throttle_classes
+        assert PeopleBoardImageThrottle in PeopleBoardReportImageView.throttle_classes
+
+    @pytest.mark.django_db
+    def test_image_endpoint_is_throttled(self, me, monkeypatch):
+        from rest_framework.throttling import SimpleRateThrottle
+        from apps.social.views_people import PeopleBoardImageThrottle
+        monkeypatch.setitem(SimpleRateThrottle.THROTTLE_RATES, 'people_board_image', '2/min')
+        _, o = _person('o')
+        b = _board(o)
+        c = _client(me[0])
+        url = f'/api/v1/people/boards/{b.pk}/report-image/'
+        assert c.get(url).status_code == 200
+        assert c.get(url).status_code == 200
+        assert c.get(url).status_code == 429
+        assert PeopleBoardImageThrottle.scope == 'people_board_image'
+
 
 # ---------------------------------------------------------------------------
 # Reaction hardening

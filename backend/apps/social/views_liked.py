@@ -9,11 +9,13 @@ Newest reaction first (Reaction.created_at DESC). Boards whose owner is blocked
 by / blocking the requester are excluded. Not cached: it is per-requester and
 must reflect a react/unreact immediately.
 """
+from django.db.models import Exists, OuterRef
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.messaging.services import blocked_profile_ids
+from apps.recommendation.models import Project
 from apps.social.models import Reaction
 
 _PAGE_DEFAULT = 1
@@ -49,6 +51,15 @@ class LikedBoardsView(APIView):
             Reaction.objects
             .filter(user=requester, project__visibility='public', project__is_temp=False)
             .select_related('project', 'project__user')
+            # report_image is base64 TEXT (~200KB/row); only a has-image flag is
+            # needed, so compute it in SQL and never load the column.
+            .defer('project__report_image')
+            .annotate(_has_image=Exists(
+                Project.objects
+                .filter(pk=OuterRef('project_id'))
+                .exclude(report_image__isnull=True)
+                .exclude(report_image='')
+            ))
             .order_by('-created_at', '-id')
         )
         blocked_ids = blocked_profile_ids(requester)
@@ -60,7 +71,10 @@ class LikedBoardsView(APIView):
         reactions = list(qs[offset: offset + page_size])
         has_more = offset + page_size < total_count
 
-        projects = [r.project for r in reactions]
+        projects = []
+        for r in reactions:
+            r.project._has_report_image = bool(r._has_image)
+            projects.append(r.project)
         items = _build_board_items(projects) if projects else []
         for item, project in zip(items, projects):
             owner = project.user

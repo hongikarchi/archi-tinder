@@ -43,6 +43,15 @@ cap are simply not part of the feed (for 'inspired'/'opposite' that means the
 oldest boards can never surface). Only metadata columns are fetched (never the
 base64 image), so the cap is cheap.
 
+CACHING: the sorted candidate list is cached _FEED_CACHE_TTL seconds per
+(requester, filter); cursor pages slice it. The cache holds ONLY ordering data
+per entry: (sort_key, project_id, distance) -- no names, avatars or vectors.
+Each page is re-validated with one query (still public/non-temp/imaged/opted-in,
+owner not blocked) that also fetches every displayed field fresh (board name,
+reaction_count, updated_at, owner user_id/display_name/handle/avatar_url/
+type_code) plus is_reacted, so owner edits show immediately and a page may
+return fewer than page_size rows when boards were hidden inside the TTL.
+
 Errors: 404 no UserProfile, 403 {detail:'assessment_required'} when the
 requester has no PersonalityProfile, 400 on bad params / cursor.
 
@@ -60,9 +69,11 @@ import logging
 import math
 from datetime import datetime, timedelta, timezone as dt_timezone
 
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import PersonalityProfile, UserProfile
@@ -89,6 +100,21 @@ _VALID_TYPE_CODES = frozenset({
 })
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+# The sorted candidate list is cached per (requester, filter) for this long so
+# cursor pages do not re-query + re-sort up to _CANDIDATE_CAP rows. Staleness
+# window: a board published / re-ordered / newly opted-in appears up to this
+# many seconds late; a board made private, deleted, opted-out or whose owner is
+# blocked is dropped immediately by the per-page re-validation query.
+_FEED_CACHE_TTL = 40
+
+
+class PeopleFeedThrottle(UserRateThrottle):
+    scope = 'people_feed'
+
+
+class PeopleBoardImageThrottle(UserRateThrottle):
+    scope = 'people_board_image'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -133,6 +159,59 @@ def _decode_cursor(token, key_len):
     return tuple(key)
 
 
+def _cache_key(profile_pk, filter_param, type_code_filter):
+    return f'people_feed:v2:{profile_pk}:{filter_param or type_code_filter or "-"}'
+
+
+def _load_sorted_entries(my_vec, filter_param, type_code_filter, blocked_ids):
+    """Fetch up to _CANDIDATE_CAP candidate rows and return them sorted as
+    [(sort_key, project_id_str, distance), ...]. This is the expensive part that
+    is cached per (requester, filter) for _FEED_CACHE_TTL seconds; display fields
+    are deliberately NOT kept (they are re-read fresh per page)."""
+    qs = (
+        Project.objects
+        .filter(
+            visibility='public',
+            is_temp=False,
+            user__personality__discovery_opt_in=True,
+        )
+        .exclude(report_image__isnull=True)
+        .exclude(report_image='')
+    )
+    if blocked_ids:
+        qs = qs.exclude(user_id__in=blocked_ids)
+    if type_code_filter is not None:
+        qs = qs.filter(user__personality__type_code=type_code_filter)
+
+    # values() = no model hydration and, crucially, never loads the base64
+    # report_image column.
+    rows = list(
+        qs.order_by('-updated_at', '-project_id')
+        .values(
+            'project_id', 'updated_at',
+            'user__personality__axis_1', 'user__personality__axis_2',
+            'user__personality__axis_3', 'user__personality__axis_4',
+            'user__personality__axis_5',
+        )[:_CANDIDATE_CAP]
+    )
+
+    entries = []
+    for r in rows:
+        their_vec = [r[f'user__personality__axis_{i}'] for i in range(1, 6)]
+        dist = round(_euclidean(my_vec, their_vec), 4)
+        neg_ts = -_micros(r['updated_at'])
+        pid = str(r['project_id'])
+        if filter_param == 'inspired':
+            key = (dist, neg_ts, pid)
+        elif filter_param == 'opposite':
+            key = (-dist, neg_ts, pid)
+        else:
+            key = (neg_ts, pid)
+        entries.append((key, pid, dist))
+    entries.sort(key=lambda e: e[0])
+    return entries
+
+
 def _parse_page_size(raw):
     if raw is None:
         return _PAGE_SIZE_DEFAULT
@@ -153,6 +232,7 @@ class PeopleDiscoveryView(APIView):
     """GET /api/v1/people/ — per-board social feed."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PeopleFeedThrottle]
 
     def get(self, request):
         # -- Guard: requester must have completed assessment ------------------
@@ -212,55 +292,18 @@ class PeopleDiscoveryView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # -- Candidate pool ---------------------------------------------------
-        qs = (
-            Project.objects
-            .filter(
-                visibility='public',
-                is_temp=False,
-                user__personality__discovery_opt_in=True,
-            )
-            .exclude(report_image__isnull=True)
-            .exclude(report_image='')
-        )
-        # Block exclusion (either direction) — ALWAYS applied, independent of
-        # MESSAGING_ENABLED, so blocks survive the flag being turned OFF.
+        # Block set (either direction) — fetched fresh on EVERY request and
+        # independent of MESSAGING_ENABLED, so blocks survive the flag being OFF
+        # and a new block takes effect immediately even on a cached list.
         blocked_ids = blocked_profile_ids(requester_profile)
-        if blocked_ids:
-            qs = qs.exclude(user_id__in=blocked_ids)
-        if type_code_filter is not None:
-            qs = qs.filter(user__personality__type_code=type_code_filter)
 
-        # values() = no model hydration and, crucially, never loads the base64
-        # report_image column.
-        rows = list(
-            qs.order_by('-updated_at', '-project_id')
-            .values(
-                'project_id', 'name', 'updated_at', 'reaction_count',
-                'user_id',
-                'user__user_id', 'user__display_name', 'user__handle',
-                'user__avatar_url',
-                'user__personality__axis_1', 'user__personality__axis_2',
-                'user__personality__axis_3', 'user__personality__axis_4',
-                'user__personality__axis_5', 'user__personality__type_code',
-            )[:_CANDIDATE_CAP]
-        )
-
-        # -- Distance + sort key ----------------------------------------------
-        entries = []
-        for r in rows:
-            their_vec = [r[f'user__personality__axis_{i}'] for i in range(1, 6)]
-            dist = round(_euclidean(my_vec, their_vec), 4)
-            neg_ts = -_micros(r['updated_at'])
-            pid = str(r['project_id'])
-            if filter_param == 'inspired':
-                key = (dist, neg_ts, pid)
-            elif filter_param == 'opposite':
-                key = (-dist, neg_ts, pid)
-            else:
-                key = (neg_ts, pid)
-            entries.append((key, dist, r))
-        entries.sort(key=lambda e: e[0])
+        # -- Sorted candidate list (cached for _FEED_CACHE_TTL seconds) -------
+        cache_key = _cache_key(requester_profile.pk, filter_param, type_code_filter)
+        entries = cache.get(cache_key)
+        if entries is None:
+            entries = _load_sorted_entries(
+                my_vec, filter_param, type_code_filter, blocked_ids)
+            cache.set(cache_key, entries, _FEED_CACHE_TTL)
 
         if cursor_key is not None:
             entries = [e for e in entries if e[0] > cursor_key]
@@ -269,19 +312,53 @@ class PeopleDiscoveryView(APIView):
         has_more = len(entries) > page_size
         next_cursor = _encode_cursor(page[-1][0]) if (has_more and page) else None
 
+        # -- Re-validate the page against live data: ONE cheap query ----------
+        # Drops boards that went private / temp / image-less / opted-out or
+        # whose owner got blocked since the list was cached, and refreshes the
+        # volatile fields (name, reaction_count). Metadata columns only.
+        page_pids = [e[1] for e in page]
+        fresh = {}
+        if page_pids:
+            fresh_qs = (
+                Project.objects
+                .filter(
+                    project_id__in=page_pids,
+                    visibility='public',
+                    is_temp=False,
+                    user__personality__discovery_opt_in=True,
+                )
+                .exclude(report_image__isnull=True)
+                .exclude(report_image='')
+            )
+            if blocked_ids:
+                fresh_qs = fresh_qs.exclude(user_id__in=blocked_ids)
+            fresh = {
+                str(f['project_id']): f
+                for f in fresh_qs.values(
+                    'project_id', 'name', 'updated_at', 'reaction_count',
+                    'user_id', 'user__user_id', 'user__display_name',
+                    'user__handle', 'user__avatar_url',
+                    'user__personality__type_code',
+                )
+            }
+            page = [e for e in page if e[1] in fresh]
+            page_pids = [e[1] for e in page]
+
         # -- Reaction state: ONE query for the whole page ---------------------
         from apps.social.models import Reaction
-        page_pids = [e[2]['project_id'] for e in page]
-        reacted = set(
-            Reaction.objects
-            .filter(user=requester_profile, project_id__in=page_pids)
-            .values_list('project_id', flat=True)
-        ) if page_pids else set()
+        reacted = {
+            str(pid) for pid in (
+                Reaction.objects
+                .filter(user=requester_profile, project_id__in=page_pids)
+                .values_list('project_id', flat=True)
+            )
+        } if page_pids else set()
 
         results = []
-        for _key, dist, r in page:
+        for _key, pid, dist in page:
+            r = fresh[pid]
             results.append({
-                'board_id': str(r['project_id']),
+                'board_id': pid,
                 'board_name': r['name'],
                 'user_id': r['user__user_id'],
                 'display_name': r['user__display_name'],
@@ -290,7 +367,7 @@ class PeopleDiscoveryView(APIView):
                 'type_code': r['user__personality__type_code'],
                 'distance': dist,
                 'is_me': r['user_id'] == requester_profile.pk,
-                'is_reacted': r['project_id'] in reacted,
+                'is_reacted': pid in reacted,
                 'reaction_count': r['reaction_count'],
                 'updated_at': r['updated_at'].isoformat(),
             })
@@ -315,6 +392,7 @@ class PeopleBoardReportImageView(APIView):
     single DB column read; HTTP/CDN caching is the client's concern).
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PeopleBoardImageThrottle]
 
     def get(self, request, project_id):
         project = (

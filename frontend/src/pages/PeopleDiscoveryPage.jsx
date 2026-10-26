@@ -115,6 +115,8 @@ export default function PeopleDiscoveryPage({ onLogout }) {
         setMoreError(true)
       } else if (err.status === 403 && err.data?.detail === 'assessment_required') {
         setError('assessment_required')
+      } else if (err.status === 429) {
+        setError(t('socialBoard.throttled'))
       } else {
         setError(err.message || t('socialBoard.feedError'))
       }

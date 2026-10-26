@@ -9,7 +9,6 @@ import EmptyState from './EmptyState.jsx'
 import PageLogoHeader from './PageLogoHeader.jsx'
 import PageTopControls from './PageTopControls.jsx'
 import PageBackButton from './PageBackButton.jsx'
-import { atHandle } from '../utils/userIdentity.js'
 import s from './PersonaReportPage.module.css'
 
 /**
@@ -119,22 +118,14 @@ function IconDownload() {
   )
 }
 
-function MetaRow({ role, meta, t }) {
+function MetaRow({ meta, t }) {
   const count = meta?.buildingCount ?? 0
   const parts = []
   if (meta?.visibility) parts.push(meta.visibility === 'public' ? t('board.public') : t('board.private'))
   parts.push(t(count === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: count }))
   if (typeof meta?.reactionCount === 'number') parts.push(`♥ ${meta.reactionCount}`)
-  const user = meta?.user
   return (
     <p className={s.meta}>
-      {role === 'viewer' && user && (
-        <>
-          <img className={s.metaAvatar} src={user.avatar_url || ''} alt="" />
-          <span>{atHandle(user)}</span>
-          <span aria-hidden="true">·</span>
-        </>
-      )}
       <span>{parts.join(' · ')}</span>
     </p>
   )
@@ -157,10 +148,9 @@ function RefreshButton({ busy, failed, onClick, t }) {
 }
 
 /** Image slot: generating / failed / none / loaded (DESIGN.md §8.8 skeleton, no shimmer). */
-export function ImageSlot({ role, boardId, personaName, imageData, imageMime, jobStatus, onRegenerateImage, imageRegenerating, imageRegenFailed, fill = false, t }) {
+export function ImageSlot({ boardId, personaName, imageData, imageMime, jobStatus, onRegenerateImage, imageRegenerating, imageRegenFailed, fill = false, t }) {
   const box = fill ? `${s.imgBox} ${s.imgBoxFill}` : s.imgBox   // fill: flex-grow slot inside a result card
-  const owner = role === 'owner'
-  const showRefresh = owner && !!onRegenerateImage
+  const showRefresh = !!onRegenerateImage
   const mime = safeImageMime(imageMime)
   const src = imageData ? `data:${mime};base64,${imageData}` : null
 
@@ -192,7 +182,7 @@ export function ImageSlot({ role, boardId, personaName, imageData, imageMime, jo
       <div className={box}>
         <div className={`${s.imgState} ${s.imgFail}`} role="alert">
           <span className={s.imgFailText}>{t('persona.imgError')}</span>
-          {owner && boardId && (
+          {boardId && (
             <button type="button" className={s.imgRetry} onClick={() => reportImageJobs.start(boardId)}>
               {t('persona.imgRetry')}
             </button>
@@ -240,14 +230,11 @@ function BuildingCard({ card, rank, big, onOpen }) {
 /* ── Body ───────────────────────────────────────────────────────────────── */
 /**
  * Props:
- *   role              'owner' | 'viewer' (the report is owner-only now: the server
- *                     nulls report data for non-owners and BoardReportPage redirects
- *                     them away, so 'viewer' is a defensive fallback only)
  *   boardId           string|null  - project UUID (image job + download name)
  *   finalReport       object       - { persona_type, one_liner, description, pattern_paragraph, dominant_* }
  *   axisScores        object|null  - see TasteSpectrum
  *   reportImage / reportImageMime  - stored base64 image (or null)
- *   meta              { visibility, buildingCount, reactionCount, user }
+ *   meta              { visibility, buildingCount, reactionCount }
  *   likedBuildings    ImageCard[]  - liked-buildings row (hidden when empty)
  *   recommendations   ImageCard[]  - recommendation rows (hidden when empty)
  *   onOpenBuilding    (card, rank?) => void
@@ -258,13 +245,12 @@ function BuildingCard({ card, rank, big, onOpen }) {
  *   imageRegenerating / imageRegenFailed  bool
  */
 export function PersonaReportBody({
-  role = 'viewer', boardId = null, finalReport, axisScores, reportImage, reportImageMime,
+  boardId = null, finalReport, axisScores, reportImage, reportImageMime,
   meta, likedBuildings = [], recommendations = [], onOpenBuilding,
   onRegenerateReport, regenerating = false, regenMessage = '',
   onRegenerateImage, imageRegenerating = false, imageRegenFailed = false,
 }) {
   const { t, language } = useTranslation()
-  const owner = role === 'owner'
   const rootRef = useRef(null)
   const footerRef = useRef(null)
   const linkRef = useRef(null)
@@ -278,10 +264,10 @@ export function PersonaReportBody({
   // Owner-only auto-start for legacy / previously failed boards. Fires only
   // while the job is 'idle' (never after 'error'/'done'); viewers never write.
   useEffect(() => {
-    if (owner && boardId && !imageData && imageJob.status === 'idle') {
+    if (boardId && !imageData && imageJob.status === 'idle') {
       reportImageJobs.start(boardId)
     }
-  }, [owner, boardId, imageData, imageJob.status])
+  }, [boardId, imageData, imageJob.status])
 
   const onReveal = useCallback(node => {
     if (node.dataset.spec) setSpecPlay(true)
@@ -290,8 +276,8 @@ export function PersonaReportBody({
 
   const report = localizeReport(finalReport || {}, language)
   const scores = axisScores || {}
-  const legacy = owner && isLegacyAxisScores(axisScores)
-  const canRegenerate = owner && !!onRegenerateReport
+  const legacy = isLegacyAxisScores(axisScores)
+  const canRegenerate = !!onRegenerateReport
 
   const tags = [
     ...(report.dominant_programs || []).map(x => [x, s.tagP]),
@@ -315,7 +301,7 @@ export function PersonaReportBody({
     <div ref={rootRef} className={s.body}>
       {/* Persona */}
       <section className={s.hero}>
-        <MetaRow role={role} meta={meta} t={t} />
+        <MetaRow meta={meta} t={t} />
         <p data-rv className={`${s.rv} ${s.eyebrow} ${s.eyebrowLead}`}>
           <span className={s.eyebrowLine} />{t('detailB3.personaReportEyebrow')}
         </p>
@@ -323,7 +309,6 @@ export function PersonaReportBody({
         <p data-rv className={`${s.rv} ${s.oneLiner}`} style={delay(0.3)}>{report.one_liner}</p>
         <div data-rv className={s.rv} style={delay(0.5)}>
           <ImageSlot
-            role={role}
             boardId={boardId}
             personaName={report.persona_type}
             imageData={imageData}
@@ -341,15 +326,12 @@ export function PersonaReportBody({
       </section>
 
       {/* Pattern analysis */}
-      {(owner || report.pattern_paragraph || tags.length > 0) && (
       <section className={s.section}>
         <p data-rv className={`${s.rv} ${s.eyebrow}`}>{t('persona.whyLabel')}</p>
         <h2 data-rv className={`${s.rv} ${s.h2}`} style={delay(0.05)}>{t('persona.patternTitle')}</h2>
-        {(report.pattern_paragraph || owner) && (
-          <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
-            {report.pattern_paragraph || t('persona.patternEmpty')}
-          </p>
-        )}
+        <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
+          {report.pattern_paragraph || t('persona.patternEmpty')}
+        </p>
         <div className={s.tags}>
           {tags.map(([tag, cls], i) => (
             <span
@@ -363,7 +345,6 @@ export function PersonaReportBody({
           ))}
         </div>
       </section>
-      )}
 
       {/* Taste analysis */}
       <section className={s.section}>
@@ -424,25 +405,21 @@ export function PersonaReportBody({
         </section>
       )}
 
-      {/* Footer — owner: "리포트 재생성" text link (WP2 wires it); viewer: end marker */}
-      {owner ? (
-        canRegenerate && (
-          <div ref={footerRef} className={s.footerOwner}>
-            {legacy && <p className={s.footerLegacy}>{t('persona.legacySpectrum')}</p>}
-            <button
-              ref={linkRef}
-              type="button"
-              className={`${s.regenLink} ${legacy ? s.regenLinkAccent : ''}`}
-              onClick={onRegenerateReport}
-              disabled={regenerating}
-            >
-              {regenerating ? t('persona.reportRegenerating') : t('persona.reportRegenerate')}
-            </button>
-            <p className={s.regenMsg} role="status">{regenMessage}</p>
-          </div>
-        )
-      ) : (
-        <div className={s.footerViewer}>{t('results.allLoaded')}</div>
+      {/* Footer — owner: "리포트 재생성" text link (WP2 wires it) */}
+      {canRegenerate && (
+        <div ref={footerRef} className={s.footerOwner}>
+          {legacy && <p className={s.footerLegacy}>{t('persona.legacySpectrum')}</p>}
+          <button
+            ref={linkRef}
+            type="button"
+            className={`${s.regenLink} ${legacy ? s.regenLinkAccent : ''}`}
+            onClick={onRegenerateReport}
+            disabled={regenerating}
+          >
+            {regenerating ? t('persona.reportRegenerating') : t('persona.reportRegenerate')}
+          </button>
+          <p className={s.regenMsg} role="status">{regenMessage}</p>
+        </div>
       )}
     </div>
   )
@@ -505,7 +482,7 @@ export default function PersonaReportPage({ state = 'ready', onLogout, onBack, b
           neutral
           icon={<IconDoc />}
           title={t('persona.noReportTitle')}
-          body={t(bodyProps.role === 'owner' ? 'persona.noReportOwner' : 'persona.noReportViewer')}
+          body={t('persona.noReportOwner')}
           actionLabel={t('board.back')}
           onAction={onBack}
         />
