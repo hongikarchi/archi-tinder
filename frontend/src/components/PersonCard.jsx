@@ -26,7 +26,6 @@
  *   person      {object}    { user_id, display_name, handle, avatar_url, type_code, vector, highlight_axis, reason }
  *   myVector    {number[]|null}  caller's own 5-axis vector for overlay comparison
  *   onClick     {Function}  optional override for name/profile navigation
- *   onInterest  {Function}  called when the interest button is pressed
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -45,7 +44,7 @@ import {
 import styles from './PersonCard.module.css'
 import { userHandle } from '../utils/userIdentity.js'
 
-export default function PersonCard({ person, myVector, onClick, onInterest }) {
+export default function PersonCard({ person, myVector, onClick }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
@@ -96,11 +95,6 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
     flipTimerRef.current = setTimeout(() => {
       flippingRef.current = false
     }, flipDurationMs())
-  }
-
-  function handleInterestClick(e) {
-    e.stopPropagation()
-    onInterest?.(person)
   }
 
   // The feed marks the requester's own card (views_people.py). Undefined on
@@ -161,20 +155,6 @@ export default function PersonCard({ person, myVector, onClick, onInterest }) {
           {person.type_code && (
             <div className={styles.typeBadge}>{person.type_code}</div>
           )}
-          {/* Top-right circular control — same placement and treatment as the
-              recommendation tile's bookmark star (ResultsPage ResultCard). */}
-          <button
-            type="button"
-            data-no-flip="true"
-            className={styles.interestBtn}
-            onClick={handleInterestClick}
-            aria-label={t('personCard.interest', { name: userHandle(person) })}
-            title={t('personCard.interestTitle')}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.2l7.8-7.7 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
-            </svg>
-          </button>
           <div style={photoCardCaptionStyle}>
             <h2 style={photoCardTitleStyle}>{userHandle(person)}</h2>
           </div>

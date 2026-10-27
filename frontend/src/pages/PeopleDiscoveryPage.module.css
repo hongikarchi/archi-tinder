@@ -225,27 +225,6 @@
   transform: translateY(-2px);
 }
 
-/* Toast (DESIGN.md §8.11 — bottom-center, glassmorphic) */
-.toast {
-  position: fixed;
-  bottom: var(--tabbar-clearance);
-  left: 50%;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 10px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text);
-  white-space: nowrap;
-  z-index: 200;
-  pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
 /* Skeleton — one block matching the tile footprint from photoCardShell.js
    (2:3, radius 12). */
 .skeleton {

@@ -16,7 +16,6 @@ import SocialSegment from '../components/SocialSegment.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
-import { userHandle } from '../utils/userIdentity.js'
 import { useTranslation } from '../i18n/index.js'
 import styles from './PeopleDiscoveryPage.module.css'
 
@@ -37,20 +36,6 @@ function vectorFrom(p) {
   return [p.axis_1, p.axis_2, p.axis_3, p.axis_4, p.axis_5]
 }
 
-// Simple inline toast
-function Toast({ message, onDismiss }) {
-  useEffect(() => {
-    const t = setTimeout(onDismiss, 3000)
-    return () => clearTimeout(t)
-  }, [onDismiss])
-
-  return (
-    <div className={styles.toast} role="status" aria-live="polite">
-      {message}
-    </div>
-  )
-}
-
 // Skeleton card placeholder — one image-shaped block, matching the card's
 // report-image front face (FRONT-PEOPLE-CARD-1).
 function PersonCardSkeleton() {
@@ -68,7 +53,6 @@ export default function PeopleDiscoveryPage({ onLogout }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
-  const [toast, setToast] = useState(null)
   const [meDiscoverable, setMeDiscoverable] = useState(null) // null = unknown (older backend)
   const [meHint, setMeHint] = useState(null)
   const filterScrollRef = useRef(null)
@@ -126,14 +110,6 @@ export default function PeopleDiscoveryPage({ onLogout }) {
     }
     fetchPeople({ filter: activeFilter })
   }, [activeFilter, fetchPeople])
-
-  function handleInterest(person) {
-    setToast(`${userHandle(person)}에게 관심을 보냈어요.`)
-  }
-
-  function dismissToast() {
-    setToast(null)
-  }
 
   const myVector = myPersonality ? vectorFrom(myPersonality) : null
 
@@ -250,15 +226,11 @@ export default function PeopleDiscoveryPage({ onLogout }) {
                 key={person.user_id}
                 person={person}
                 myVector={myVector}
-                onInterest={handleInterest}
               />
             ))}
           </div>
         )}
       </div>
-
-      {/* Toast */}
-      {toast && <Toast message={toast} onDismiss={dismissToast} />}
     </div>
   )
 }

@@ -135,44 +135,6 @@
   outline-offset: 2px;
 }
 
-/* Interest control — mirrors ResultCard's bookmark button (position, size,
-   circular shape, dark translucent fill, blur) so the two tiles read as one
-   family. Slightly smaller (28px vs 32px) because this tile also carries a
-   caption in the same corner region at narrow column counts. */
-.interestBtn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition:
-    border-color var(--motion-fast) var(--motion-ease),
-    background var(--motion-fast) var(--motion-ease),
-    color var(--motion-fast) var(--motion-ease);
-}
-
-.interestBtn:hover {
-  border-color: color-mix(in srgb, var(--accent-1) 65%, transparent);
-  background: color-mix(in srgb, var(--accent-1) 18%, rgba(0, 0, 0, 0.45));
-  color: var(--accent-1);
-}
-
-.interestBtn:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: 2px;
-}
-
 /* Name row — holds the profile link plus the "나" marker on the viewer's own
    card. Kept as a row so the badge sits beside the name instead of pushing the
    chart up. */
