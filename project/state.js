@@ -23,11 +23,32 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-25 10:58 KST',
-    head: '8635dee',
-    branch: 'feature/claude-flow-qa-2',
+    updatedAt: '2026-10-28 03:36 KST',
+    head: 'ecc0577',
+    branch: 'feature/sns-social-visibility',
   },
   done: [
+    {
+      id: 'PR #462',
+      title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
+      completedAt: '2026-10-25',
+      prs: [462],
+      note: '',
+    },
+    {
+      id: 'PR #461',
+      title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
+      completedAt: '2026-10-25',
+      prs: [461],
+      note: '',
+    },
+    {
+      id: 'PR #460',
+      title: 'fix(FRONT-UX-16): 흐름 검수 1차 — 한국어 문구·취향 시작 겹침·이름 ID 통일',
+      completedAt: '2026-10-25',
+      prs: [460],
+      note: '',
+    },
     {
       id: 'PR #450',
       title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
@@ -63,58 +84,13 @@ window.PROJECT_STATE = {
       prs: [439],
       note: '',
     },
-    {
-      id: 'PR #437',
-      title: 'feat(feedback): taste-start card report + query-recognition report',
-      completedAt: '2026-10-17',
-      prs: [437],
-      note: '',
-    },
-    {
-      id: 'PR #431',
-      title: 'feat(taste-start): Taste start redesign — JEV tags → top-3 cards → taste_v2 swipe',
-      completedAt: '2026-10-17',
-      prs: [431],
-      note: '',
-    },
-    {
-      id: 'PR #425',
-      title: 'fix(contests): guest verify gate on interest + control-char URL reject',
-      completedAt: '2026-10-11',
-      prs: [425],
-      note: '',
-    },
   ],
   now: [
     {
-      id: 'FULL-AUTH-4',
-      title: '이름·ID 저장·표시 통일',
-      note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
-      issue: 455,
-    },
-    {
-      id: 'FRONT-UX-17',
-      title: '취향 시작 화면 겹침 정리',
-      note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
-      issue: 454,
-    },
-    {
-      id: 'FRONT-UX-16',
-      title: '한국어 화면 영어·문구 정리',
-      note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
-      issue: 453,
-    },
-    {
-      id: 'INFRA-QA-1',
-      title: '전체 흐름 캡처 검수 문서',
-      note: 'Flow QA doc: Playwright capture of every screen (iPhone 13 viewport, dev-login, localhost 5174/8001) + debug overlay shots + per-step API timing -> HTML doc published as artifact, republished each fix round.',
-      issue: 452,
-    },
-    {
-      id: 'FULL-REPORT-UI-1',
-      title: '페르소나 리포트 UI 개편',
-      note: '스와이프 종료 → 결과 카드 3장 → 저장 → 리포트 페이지로 이어지는 페르소나 리포트 경험을 개편한다. 확정된 시연(진입 5개 × 상황)과 설계는 `docs/decisions/2026-10-22-persona-report-redesign.md`, 실행 계획은 `.claude/plans/persona-report-redesign.md`.',
-      issue: 445,
+      id: 'FULL-MESSAGING-5',
+      title: '관심 버튼 미노출 + 보드 기본 공개',
+      note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
+      issue: 467,
     },
   ],
   next: {
@@ -127,6 +103,12 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'FULL-MESSAGING-5',
+        title: '관심 버튼 미노출 + 보드 기본 공개',
+        note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
+        issue: 467,
+      },
       {
         id: 'FULL-REPORT-UI-1',
         title: '페르소나 리포트 UI 개편',
@@ -468,6 +450,18 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: 'FRONT-TABBAR-MODAL-1',
+        title: 'TabBar unreachable while a modal is open (design decision)',
+        note: 'While a modal or overlay is open (e.g. `WorkDetailModal`, `SaveBoardModal`), the bottom TabBar',
+        issue: 464,
+      },
+      {
+        id: 'DB-BOOKMARK-1',
+        title: 'drop dead saved_ids column + bookmark telemetry (after code removal ships)',
+        note: 'Drop the dead bookmark storage from the database after the code stops using it.',
+        issue: 463,
+      },
+      {
         id: 'FRONT-UX-19',
         title: '상단 버튼 바탕 띠 다른 화면 적용',
         note: 'Follow-up of FRONT-UX-17 (#454). PageTopControls got opt-in \'band\' prop (only TasteStartPage uses it). Candidates where content scrolls under the transparent fixed top controls: UserProfilePage, BoardDetailPage, Settings screens, PeopleDiscoveryPage, BuildingDetailPage, compet…',
@@ -621,6 +615,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 462,
+      title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
+      mergedAt: '2026-10-25T03:01:42Z',
+      mergedAtKST: '2026-10-25 12:01 KST',
+      sha: 'ecc0577',
+    },
+    {
+      number: 461,
+      title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
+      mergedAt: '2026-10-25T03:01:37Z',
+      mergedAtKST: '2026-10-25 12:01 KST',
+      sha: '774616e',
+    },
+    {
+      number: 460,
+      title: 'fix(FRONT-UX-16): 흐름 검수 1차 — 한국어 문구·취향 시작 겹침·이름 ID 통일',
+      mergedAt: '2026-10-25T02:32:30Z',
+      mergedAtKST: '2026-10-25 11:32 KST',
+      sha: '9d46fb2',
+    },
+    {
       number: 450,
       title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
       mergedAt: '2026-10-25T00:47:02Z',
@@ -654,27 +669,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-17T00:00:29Z',
       mergedAtKST: '2026-10-17 09:00 KST',
       sha: '9894cc1',
-    },
-    {
-      number: 437,
-      title: 'feat(feedback): taste-start card report + query-recognition report',
-      mergedAt: '2026-10-17T00:07:50Z',
-      mergedAtKST: '2026-10-17 09:07 KST',
-      sha: 'a37ee71',
-    },
-    {
-      number: 431,
-      title: 'feat(taste-start): Taste start redesign — JEV tags → top-3 cards → taste_v2 swipe',
-      mergedAt: '2026-10-17T00:00:40Z',
-      mergedAtKST: '2026-10-17 09:00 KST',
-      sha: 'f420b28',
-    },
-    {
-      number: 425,
-      title: 'fix(contests): guest verify gate on interest + control-char URL reject',
-      mergedAt: '2026-10-11T00:46:32Z',
-      mergedAtKST: '2026-10-11 09:46 KST',
-      sha: 'a68131c',
     },
   ],
   agents: [
@@ -1106,6 +1100,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/accounts/tests/test_full_privacy_1_discovery_optout.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_guest_handle_retry.py',
       role: '',
     },
     {
@@ -1809,6 +1807,10 @@ window.PROJECT_STATE = {
       role: '마이그 0033: 태그-축 가중치 재조정',
     },
     {
+      path: 'backend/apps/recommendation/migrations/0034_project_visibility_default_public.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/migrations/__init__.py',
       role: '마이그레이션 패키지 init',
     },
@@ -1847,6 +1849,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/services/_gemini.py',
       role: 'Gemini 클라이언트·재시도 래퍼',
+    },
+    {
+      path: 'backend/apps/recommendation/services/_pattern_text.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/services/_report_prompts.py',
@@ -2195,6 +2201,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/tests/conftest.py',
       role: 'social 테스트 픽스처',
+    },
+    {
+      path: 'backend/apps/social/tests/test_people_temp_boards.py',
+      role: '',
     },
     {
       path: 'backend/apps/social/tests/test_reaction.py',
@@ -2634,6 +2644,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'docs/decisions/2026-10-22-persona-report-redesign.md',
+      role: '',
+    },
+    {
+      path: 'docs/decisions/2026-10-25-pattern-paragraph-always.md',
       role: '',
     },
     {
