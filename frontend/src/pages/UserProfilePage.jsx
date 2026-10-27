@@ -622,11 +622,11 @@ export default function UserProfilePage({ onLogout }) {
                 >
                   {t('profilePersonality.checkMine')}
                 </button>
-                <ContactCta
-                  userId={effectiveUserId}
-                  buttonClassName={styles.personalityCtaPrimary}
-                  hidden={blockedPeer}
-                />
+                {messagingEnabled && (
+                  <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
+                    {t('messaging.assessmentRequiredHint')}
+                  </p>
+                )}
               </div>
             )
           }

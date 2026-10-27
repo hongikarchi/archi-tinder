@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../../i18n/index.js'
 import { getContactStatus } from '../../api/messaging.js'
 import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
@@ -27,6 +28,7 @@ import MessagesSheet from './MessagesSheet.jsx'
 export default function ContactCta({ userId, buttonClassName, hidden = false }) {
   const { t } = useTranslation()
   const enabled = useMessagingEnabled()
+  const navigate = useNavigate()
   const [status, setStatus] = useState(null) // null = loading / unknown
   const [loadFailed, setLoadFailed] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -123,6 +125,12 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
     button = (
       <button type="button" className={buttonClassName} onClick={handleVerifyRequired}>
         {t('messaging.interest')}
+      </button>
+    )
+  } else if (state === 'none' && reason === 'assessment_required') {
+    button = (
+      <button type="button" className={buttonClassName} onClick={() => navigate('/assessment')}>
+        {t('messaging.assessmentRequiredCta')}
       </button>
     )
   } else if (state === 'none' && reason !== 'self') {

@@ -85,6 +85,9 @@ class ContactRequestCreateView(MessagingView):
             return _unavailable()
         if recipient.pk == sender.pk:
             return Response({'detail': 'self_request'}, status=status.HTTP_400_BAD_REQUEST)
+        if not services.sender_has_personality(sender):
+            # The sender's own state, so revealing it is not a privacy leak.
+            return Response({'detail': 'assessment_required'}, status=status.HTTP_400_BAD_REQUEST)
         if services.is_blocked_between(sender, recipient) or not services.recipient_eligible(recipient):
             return _unavailable()
 
@@ -166,6 +169,7 @@ class ContactRequestStatusView(MessagingView):
     reason: null unless (state == 'none' and can_request is false), then one of
       'self'            -- target is the viewer
       'verify_required' -- viewer is a guest
+      'assessment_required' -- viewer has not completed the personality assessment
       'unavailable'     -- everything else (blocked in either direction, recipient
                            guest / no personality / discovery opt-out). PRIVACY:
                            these are deliberately indistinguishable to the viewer.
@@ -185,6 +189,7 @@ class ContactRequestStatusView(MessagingView):
         blocked = (not is_self) and services.is_blocked_between(me, target)
         can_request = (
             not is_self and not blocked and not me.is_guest
+            and services.sender_has_personality(me)
             and services.recipient_eligible(target)
         )
 
@@ -206,6 +211,8 @@ class ContactRequestStatusView(MessagingView):
                 reason = 'self'
             elif me.is_guest:
                 reason = 'verify_required'
+            elif not services.sender_has_personality(me):
+                reason = 'assessment_required'
             else:
                 reason = 'unavailable'
         return Response({'state': state, 'can_request': can_request, 'reason': reason})

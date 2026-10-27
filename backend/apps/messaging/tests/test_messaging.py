@@ -115,6 +115,12 @@ class TestSendRequest:
         g = make_user('guesty', guest=True)
         assert send(client_for(g[0]), bob).status_code == 403
 
+    def test_sender_without_personality_rejected(self, bob):
+        s = make_user('nosender', personality=False)
+        r = send(client_for(s[0]), bob)
+        assert r.status_code == 400 and r.data == {'detail': 'assessment_required'}
+        assert not ContactRequest.objects.exists()
+
     def test_d11_no_personality(self, ca):
         t = make_user('nopers', personality=False)
         assert send(ca, t).status_code == 400
@@ -220,6 +226,16 @@ class TestStatusReason:
 
     def test_viewer_guest_verify_required(self, db, bob):
         g = make_user('guesty', guest=True)
+        d = self._get(client_for(g[0]), bob)
+        assert d['can_request'] is False and d['reason'] == 'verify_required'
+
+    def test_viewer_no_personality_assessment_required(self, bob):
+        s = make_user('nosender', personality=False)
+        d = self._get(client_for(s[0]), bob)
+        assert d['can_request'] is False and d['reason'] == 'assessment_required'
+
+    def test_guest_without_personality_verify_required(self, bob):
+        g = make_user('guestnop', guest=True, personality=False)
         d = self._get(client_for(g[0]), bob)
         assert d['can_request'] is False and d['reason'] == 'verify_required'
 
