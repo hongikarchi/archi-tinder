@@ -66,8 +66,8 @@ def test_create_discovery_draft_makes_new_board(user_profile):
     assert d1.project_id != d2.project_id
     assert d1.name.startswith(DISCOVERY_DRAFT_PREFIX)
     assert d2.name.startswith(DISCOVERY_DRAFT_PREFIX)
-    assert d1.visibility == 'private'
-    assert d2.visibility == 'private'
+    assert d1.visibility == 'public'
+    assert d2.visibility == 'public'
     # Both boards exist in DB
     assert Project.objects.filter(
         user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX

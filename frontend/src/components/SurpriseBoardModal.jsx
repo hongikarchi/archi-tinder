@@ -54,7 +54,7 @@ export default function SurpriseBoardModal({ onClose, onSaved }) {
     setPhase('saving')
 
     try {
-      const created = await createProject({ name: trimmedName, visibility: 'private' })
+      const created = await createProject({ name: trimmedName, visibility: 'public' })
       const projectId = created?.project_id || created?.id
       if (!projectId) throw new Error('No project_id in response')
 

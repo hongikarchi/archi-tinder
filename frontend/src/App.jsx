@@ -164,7 +164,7 @@ export default function App() {
         sessionId: result.session_id,
         createdAt: new Date().toISOString(),
         deckImages: null,
-        visibility: 'private',
+        visibility: 'public',
       }
       setProjects(prev => {
         // Avoid duplicating if re-triggered
@@ -897,7 +897,7 @@ export default function App() {
       id: localId, projectName: name, filters: { taste_tags: tags },
       likedBuildings: [], swipedIds: [], predictedLikes: [],
       sessionId: null, createdAt: new Date().toISOString(),
-      deckImages: null, visibility: 'private',
+      deckImages: null, visibility: 'public',
       isTemp: true, // backend creates project with is_temp=True; saved on board save
     }])
     setActiveProjectId(localId)
@@ -952,7 +952,7 @@ export default function App() {
           id: String(p.project_id),
           backendId: String(p.project_id),
           projectName: p.name,
-          visibility: p.visibility || 'private',
+          visibility: p.visibility || 'public',
           isTemp: p.is_temp ?? false,
           filters: p.filters || {},
           likedBuildings: extractLikedIds(p.liked_ids).map(bid => cardMap[bid]).filter(Boolean),
@@ -1038,7 +1038,7 @@ export default function App() {
         sessionId: fetched?.latest_session_id || null,
         createdAt: fetched?.created_at || new Date().toISOString(),
         deckImages: null,
-        visibility: fetched?.visibility || 'private',
+        visibility: fetched?.visibility || 'public',
         isTemp: fetched?.is_temp ?? false,
         // Seed the existing report/image so the session-complete guards know a
         // report already exists (regenerate only if new likes arrive).
@@ -1311,6 +1311,7 @@ export default function App() {
               // Branch 1: guest deleted, merged into existing verified account.
               // Re-run full login flow to re-sync userId, projects, localStorage.
               if (user) await handleLogin(user)
+              window.dispatchEvent(new CustomEvent('archithon:verified'))
               setGlobalToast({ message: t('auth.toastVerifiedMerged'), type: 'success' })
               setPendingBoardCreate(null)
               setPendingLike(null)
@@ -1325,6 +1326,8 @@ export default function App() {
               if (id) sessionStorage.setItem('archithon_user', String(id))
               if (user.access) api.setTokens(user.access, user.refresh)
             }
+            // Let status-dependent UI (ContactCta) refetch now that is_guest is false.
+            window.dispatchEvent(new CustomEvent('archithon:verified'))
 
             // Retry pending SaveToBoardModal board-create (Fix 3 Option A).
             if (pendingBoardCreate) {

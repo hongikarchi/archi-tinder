@@ -38,9 +38,10 @@ class Project(models.Model):
     visibility     = models.CharField(
         max_length=10,
         choices=VISIBILITY_CHOICES,
-        default='private',
-        # Conservative default: user must opt-in to publish.
-        # Existing rows backfilled via migration DEFAULT.
+        default='public',
+        # Boards are public by default (FULL-MESSAGING-5). State-only change:
+        # existing rows keep their stored value (no backfill); owners can
+        # still flip a board to private via PATCH.
     )
     reaction_count = models.IntegerField(
         default=0,

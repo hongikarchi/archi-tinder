@@ -91,7 +91,7 @@ class ReactionView(APIView):
             return Response({'detail': 'Profile not found.'}, status=status.HTTP_403_FORBIDDEN)
 
         project = get_object_or_404(Project, project_id=project_id)
-        if project.visibility != 'public' and project.user_id != requester.pk:
+        if (project.visibility != 'public' or project.is_temp) and project.user_id != requester.pk:
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         _reaction, created = Reaction.objects.get_or_create(
@@ -163,7 +163,7 @@ class ProjectReactorsListView(APIView):
         project = get_object_or_404(Project, project_id=project_id)
 
         # Visibility gate mirrors POST in ReactionView.
-        if project.visibility != 'public':
+        if project.visibility != 'public' or project.is_temp:
             if request.user.is_authenticated:
                 requester = getattr(request.user, 'profile', None)
             else:

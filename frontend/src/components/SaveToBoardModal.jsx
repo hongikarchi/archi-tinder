@@ -98,7 +98,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
     try {
       const created = await createProject({
         name: trimmedName,
-        visibility: 'private',
+        visibility: 'public',
       })
       setBoards(prev => [created, ...prev])
       setNewBoardName('')
@@ -109,7 +109,7 @@ export default function SaveToBoardModal({ card, onClose, onSaved }) {
         // the user verifies. archithon:verify-required is already dispatched by
         // createProject; we dispatch a companion event with the payload here.
         window.dispatchEvent(new CustomEvent('archithon:pending-board-create', {
-          detail: { name: trimmedName, visibility: 'private' },
+          detail: { name: trimmedName, visibility: 'public' },
         }))
         onClose()
         return

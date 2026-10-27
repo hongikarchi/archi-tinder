@@ -199,7 +199,7 @@ class ProjectDetailView(APIView):
 
         project = get_object_or_404(Project.objects.select_related('user__user'), project_id=pk)
         is_owner = profile and project.user_id == profile.pk
-        if not is_owner and project.visibility != 'public':
+        if not is_owner and (project.visibility != 'public' or project.is_temp):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         # 2026-09-28: stop recomputing axis_scores on read. Detail GET must not
         # touch connections['buildings'] or write -- a legacy-format stored
@@ -358,9 +358,9 @@ class ProjectRecommendationsView(APIView):
         from django.core.cache import cache as _cache
 
         profile = _get_profile(request)
-        project = get_object_or_404(Project.objects.only('project_id', 'user_id', 'visibility'), project_id=pk)
+        project = get_object_or_404(Project.objects.only('project_id', 'user_id', 'visibility', 'is_temp'), project_id=pk)
         is_owner = profile and project.user_id == profile.pk
-        if not is_owner and project.visibility != 'public':
+        if not is_owner and (project.visibility != 'public' or project.is_temp):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         cache_key = get_project_recommendations_cache_key(str(pk))

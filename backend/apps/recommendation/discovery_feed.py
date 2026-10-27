@@ -98,7 +98,6 @@ def create_discovery_draft(profile, tz_offset_minutes=0):
     draft = Project.objects.create(
         user=profile,
         name=name,
-        visibility='private',
     )
     return draft
 

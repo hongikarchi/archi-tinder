@@ -158,10 +158,17 @@ class ContactRequestReceivedView(MessagingView):
 
 
 class ContactRequestStatusView(MessagingView):
-    """GET /api/v1/contact-requests/status/?user_id= -> {state, can_request}.
+    """GET /api/v1/contact-requests/status/?user_id= -> {state, can_request, reason}.
 
     state: 'none' | 'sent' | 'connected'. Ignored (within the 30-day cooldown)
     maps to 'sent' — the sender is never told.
+
+    reason: null unless (state == 'none' and can_request is false), then one of
+      'self'            -- target is the viewer
+      'verify_required' -- viewer is a guest
+      'unavailable'     -- everything else (blocked in either direction, recipient
+                           guest / no personality / discovery opt-out). PRIVACY:
+                           these are deliberately indistinguishable to the viewer.
     """
 
     def get(self, request):
@@ -193,7 +200,15 @@ class ContactRequestStatusView(MessagingView):
                 or services.recent_ignore_exists(me, target)
             ):
                 state = 'sent'
-        return Response({'state': state, 'can_request': can_request})
+        reason = None
+        if state == 'none' and not can_request:
+            if is_self:
+                reason = 'self'
+            elif me.is_guest:
+                reason = 'verify_required'
+            else:
+                reason = 'unavailable'
+        return Response({'state': state, 'can_request': can_request, 'reason': reason})
 
 
 class ContactRequestAcceptView(MessagingView):

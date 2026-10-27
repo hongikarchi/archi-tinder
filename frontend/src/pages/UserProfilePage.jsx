@@ -622,6 +622,11 @@ export default function UserProfilePage({ onLogout }) {
                 >
                   {t('profilePersonality.checkMine')}
                 </button>
+                <ContactCta
+                  userId={effectiveUserId}
+                  buttonClassName={styles.personalityCtaPrimary}
+                  hidden={blockedPeer}
+                />
               </div>
             )
           }

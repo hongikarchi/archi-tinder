@@ -2,7 +2,7 @@
 test_phase13_board.py — Phase 13 BOARD1: Project visibility + library merge.
 
 Coverage:
-  - Project model: visibility default 'private', reaction_count default 0
+  - Project model: visibility default 'public', reaction_count default 0
   - ProjectSerializer: disliked_ids NEVER in response (owner, public, admin)
   - GET /api/v1/projects/{id}/ — own→200, public→200 anon, private non-owner→403
   - PATCH /api/v1/projects/{id}/ — owner updates name+visibility; follower_count/
@@ -22,9 +22,9 @@ from apps.recommendation.models import Project
 @pytest.mark.django_db
 class TestProjectExtensionModel:
 
-    def test_visibility_default_private(self, user_profile):
+    def test_visibility_default_public(self, user_profile):
         p = Project.objects.create(user=user_profile, name='P1')
-        assert p.visibility == 'private'
+        assert p.visibility == 'public'
 
     def test_reaction_count_default_zero(self, user_profile):
         p = Project.objects.create(user=user_profile, name='P1')
@@ -526,7 +526,7 @@ class TestBackwardCompatSmoke:
         assert data['name'] == 'SmokePrj'
         assert 'project_id' in data
         # New fields present with safe defaults
-        assert data['visibility'] == 'private'
+        assert data['visibility'] == 'public'
         assert data['reaction_count'] == 0
 
     def test_project_delete_still_works(self, auth_client, user_profile):

@@ -18,7 +18,8 @@ Candidate pool construction (ORDER MATTERS — do not reorder):
               because it is the user's own hide-me switch, not a completeness
               gate.
   2. Report-image filter: restrict to users who have at least one
-              visibility='public' Project carrying a report_image. The feed
+              visibility='public', confirmed (is_temp=False) Project
+              carrying a report_image. The feed
               card's front face IS that image, so this is the one hard
               requirement; visibility='public' keeps private taste reports
               from leaking.
@@ -209,9 +210,12 @@ class PeopleDiscoveryView(APIView):
         #
         # visibility='public' stays: report_image lives on Project alongside
         # private taste reports, and serving those would leak them.
+        # is_temp=False: boards now default to public, so an unconfirmed
+        # in-progress (is_temp) board must not make its owner discoverable or
+        # be served as their card before the save-confirm step.
         report_image_owner_ids = set(
             Project.objects
-            .filter(visibility='public')
+            .filter(visibility='public', is_temp=False)
             .exclude(report_image__isnull=True)
             .exclude(report_image='')
             .values_list('user_id', flat=True)
@@ -271,8 +275,8 @@ class PeopleDiscoveryView(APIView):
 class PeopleReportImageView(APIView):
     """GET /api/v1/people/<user_id>/report-image/ — one candidate's report image.
 
-    Returns the most recently updated PUBLIC project's report image for that
-    user. 404 when the user has none public — callers treat that as "no image"
+    Returns the most recently updated PUBLIC, confirmed (non-temp) project's
+    report image for that user. 404 when the user has none public — callers treat that as "no image"
     and fall back, they do not retry.
 
     `user_id` is the auth User id — the same id `/api/v1/users/<user_id>/`
@@ -286,7 +290,7 @@ class PeopleReportImageView(APIView):
     def get(self, request, user_id):
         project = (
             Project.objects
-            .filter(user__user_id=user_id, visibility='public')
+            .filter(user__user_id=user_id, visibility='public', is_temp=False)
             .exclude(report_image__isnull=True)
             .exclude(report_image='')
             .order_by('-updated_at')
