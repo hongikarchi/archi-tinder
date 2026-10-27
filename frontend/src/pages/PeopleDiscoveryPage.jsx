@@ -17,6 +17,7 @@ import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import { userHandle } from '../utils/userIdentity.js'
+import { useTranslation } from '../i18n/index.js'
 import styles from './PeopleDiscoveryPage.module.css'
 
 const PRESET_FILTERS = [
@@ -58,6 +59,7 @@ function PersonCardSkeleton() {
 
 export default function PeopleDiscoveryPage({ onLogout }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const axisParam = searchParams.get('axis')
 
@@ -67,6 +69,8 @@ export default function PeopleDiscoveryPage({ onLogout }) {
   const [error, setError] = useState(null)
   const [activeFilter, setActiveFilter] = useState('all')
   const [toast, setToast] = useState(null)
+  const [meDiscoverable, setMeDiscoverable] = useState(null) // null = unknown (older backend)
+  const [meHint, setMeHint] = useState(null)
   const filterScrollRef = useRef(null)
   const isMounted = useRef(true)
 
@@ -92,6 +96,8 @@ export default function PeopleDiscoveryPage({ onLogout }) {
       const data = await getPeopleDiscovery(params)
       if (isMounted.current) {
         setPeople(Array.isArray(data) ? data : (data?.results ?? []))
+        setMeDiscoverable(typeof data?.me_discoverable === 'boolean' ? data.me_discoverable : null)
+        setMeHint(data?.me_hint ?? null)
       }
     } catch (err) {
       if (!isMounted.current) return
@@ -174,6 +180,23 @@ export default function PeopleDiscoveryPage({ onLogout }) {
 
       {/* Content */}
       <div className={styles.content}>
+
+        {/* Self-hidden notice (FULL-MESSAGING-5) */}
+        {!loading && !error && meDiscoverable === false
+          && (meHint === 'no_public_report_image' || meHint === 'opted_out') && (
+          <div className={styles.selfHiddenBanner} role="note">
+            <p className={styles.selfHiddenText}>
+              {meHint === 'opted_out' ? t('people.selfHiddenOptedOut') : t('people.selfHiddenNoImage')}
+            </p>
+            <button
+              type="button"
+              className={styles.selfHiddenCta}
+              onClick={() => navigate(meHint === 'opted_out' ? '/settings/account' : '/user/me')}
+            >
+              {meHint === 'opted_out' ? t('people.selfHiddenOptedOutCta') : t('people.selfHiddenNoImageCta')}
+            </button>
+          </div>
+        )}
 
         {/* assessment_required error */}
         {error === 'assessment_required' && (

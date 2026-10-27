@@ -111,3 +111,49 @@ class TestTempBoardPerObjectGates:
         temp = _board(profile_b, is_temp=True)
         resp = auth_client_a.post(f'/api/v1/projects/{temp.project_id}/react/')
         assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+class TestMeDiscoverable:
+    def _me(self, client):
+        resp = client.get('/api/v1/people/')
+        assert resp.status_code == 200, resp.content
+        body = resp.json()
+        return body['me_discoverable'], body['me_hint']
+
+    def test_public_saved_board_with_image(self, user_a, auth_client_a):
+        _, profile_a = user_a
+        _personality(profile_a)
+        _board(profile_a, is_temp=False)
+        assert self._me(auth_client_a) == (True, None)
+
+    def test_only_private_board_image(self, user_a, auth_client_a):
+        _, profile_a = user_a
+        _personality(profile_a)
+        _board(profile_a, visibility='private', is_temp=False)
+        assert self._me(auth_client_a) == (False, 'no_public_report_image')
+
+    def test_only_temp_public_board_image(self, user_a, auth_client_a):
+        _, profile_a = user_a
+        _personality(profile_a)
+        _board(profile_a, is_temp=True)
+        assert self._me(auth_client_a) == (False, 'no_public_report_image')
+
+    def test_opted_out(self, user_a, auth_client_a):
+        _, profile_a = user_a
+        p = _personality(profile_a)
+        p.discovery_opt_in = False
+        p.save()
+        _board(profile_a, is_temp=False)
+        assert self._me(auth_client_a) == (False, 'opted_out')
+
+    def test_type_code_filter_excluding_me_still_true(self, user_a, auth_client_a):
+        _, profile_a = user_a
+        _personality(profile_a)  # type_code 'ABCD'
+        _board(profile_a, is_temp=False)
+        resp = auth_client_a.get('/api/v1/people/?filter=CLON')
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['results'] == []
+        assert body['me_discoverable'] is True
+        assert body['me_hint'] is None

@@ -30,6 +30,14 @@ Candidate pool construction (ORDER MATTERS — do not reorder):
 
 403 is returned when the requester has no PersonalityProfile yet.
 
+Response: {results, my_vector, me_discoverable, me_hint}. The last two describe
+ONLY the requester (never other users), independent of the type_code/axis
+filters and the top-N cut:
+  me_discoverable — discovery_opt_in is True AND the requester owns a public,
+                    confirmed (is_temp=False) Project with a report_image.
+  me_hint         — None when discoverable; 'opted_out' when discovery_opt_in
+                    is False, else 'no_public_report_image'.
+
 GET /api/v1/people/<user_id>/report-image/
 
 Serves one candidate's taste-report image. Split off the feed response on
@@ -266,9 +274,22 @@ class PeopleDiscoveryView(APIView):
                 'report_image_url': f'/api/v1/people/{user_profile.user_id}/report-image/',
             })
 
+        # Requester's own discoverability (computed from the same owner set,
+        # unaffected by filters / top-N). Only about the requester.
+        has_public_image = requester_profile.id in report_image_owner_ids
+        me_discoverable = bool(my_personality.discovery_opt_in and has_public_image)
+        if me_discoverable:
+            me_hint = None
+        elif not my_personality.discovery_opt_in:
+            me_hint = 'opted_out'
+        else:
+            me_hint = 'no_public_report_image'
+
         return Response({
             'results': results,
             'my_vector': my_vec,
+            'me_discoverable': me_discoverable,
+            'me_hint': me_hint,
         })
 
 

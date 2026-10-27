@@ -303,6 +303,12 @@ export const locales = {
       rankRange: '순위 1-{n}',
       invalidSession: '유효하지 않은 세션 ID입니다.',
     },
+    people: {
+      selfHiddenNoImage: '아직 소셜 탭에 내 카드가 없어요. 페르소나 리포트 이미지를 만들고 그 보드를 공개하면 내 카드가 떠서, 다른 사람이 나를 찾아 관심과 메시지를 보낼 수 있어요.',
+      selfHiddenNoImageCta: '내 보드로 가기',
+      selfHiddenOptedOut: '발견 피드 노출이 꺼져 있어서 내 카드가 보이지 않아요. 켜면 다른 사람이 나를 찾아 관심과 메시지를 보낼 수 있어요.',
+      selfHiddenOptedOutCta: '설정으로 가기',
+    },
     account: {
       title:                  '계정',
       infoSection:            '계정 정보',
@@ -1425,6 +1431,12 @@ export const locales = {
       personaFallbackLine: 'A compact read of the forms, programs, and atmospheres you kept choosing.',
       rankRange: 'Rank 1-{n}',
       invalidSession: 'Invalid session ID.',
+    },
+    people: {
+      selfHiddenNoImage: 'Your card isn\'t in the social tab yet. Generate a persona report image and make that board public — then others can find you and send interest and messages.',
+      selfHiddenNoImageCta: 'Go to my boards',
+      selfHiddenOptedOut: 'Discovery visibility is off, so your card is hidden. Turn it on so others can find you and send interest and messages.',
+      selfHiddenOptedOutCta: 'Open settings',
     },
     account: {
       title:                  'Account',
