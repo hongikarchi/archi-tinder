@@ -45,6 +45,15 @@ const PRESET_LABEL_KEY = {
 }
 const FILTER_IDS = [...PRESET_IDS, ...TYPE_CODES]
 
+// me_hint -> banner copy + destination. 'opted_out' = discovery toggle is off.
+const SELF_HIDDEN = {
+  opted_out: { text: 'people.selfHiddenOptedOut', cta: 'people.selfHiddenOptedOutCta', to: '/settings/account' },
+  no_public_report_image: { text: 'people.selfHiddenNoImage', cta: 'people.selfHiddenNoImageCta', to: '/user/me' },
+  // /search re-entry banner depends on local state (temp boards are not in GET /projects/), so it
+  // dead-ends after re-login. Own profile lists temp boards; opening one resumes it into local state.
+  unsaved_board: { text: 'people.selfHiddenUnsavedBoard', cta: 'people.selfHiddenUnsavedBoardCta', to: '/user/me' },
+}
+
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 }
@@ -68,6 +77,10 @@ export default function PeopleDiscoveryPage({ onLogout }) {
   const [activeFilter, setActiveFilter] = useState('all')
   const [expanded, setExpanded] = useState(null) // { id, cols } | null
   const [toast, setToast] = useState(null) // { text, key }
+  // Own-card visibility (FULL-MESSAGING-5), taken from the FIRST page only and
+  // kept across filter changes / later pages so the banner never flickers.
+  const [meDiscoverable, setMeDiscoverable] = useState(null) // null = unknown
+  const [meHint, setMeHint] = useState(null)
 
   const isMounted = useRef(true)
   const reqRef = useRef(0)            // stale-response guard across filter changes
@@ -107,6 +120,10 @@ export default function PeopleDiscoveryPage({ onLogout }) {
       if (!isMounted.current || req !== reqRef.current) return
       const results = Array.isArray(data) ? data : (data?.results ?? [])
       setBoards(prev => (cursor ? mergePages(prev, results) : mergePages([], results)))
+      if (!cursor && typeof data?.me_discoverable === 'boolean') {
+        setMeDiscoverable(data.me_discoverable)
+        setMeHint(data.me_hint ?? null)
+      }
       setNextCursor(data?.next_cursor ?? null)
       setHasMore(!!data?.has_more && !!data?.next_cursor)
     } catch (err) {
@@ -319,6 +336,20 @@ export default function PeopleDiscoveryPage({ onLogout }) {
             onClick={() => navigate('/assessment')}
           >
             {t('socialBoard.needAssessmentBannerCta')}
+          </button>
+        </div>
+      )}
+
+      {/* Self-hidden notice (FULL-MESSAGING-5) */}
+      {meDiscoverable === false && SELF_HIDDEN[meHint] && (
+        <div className={styles.selfHiddenBanner} role="note">
+          <p className={styles.selfHiddenText}>{t(SELF_HIDDEN[meHint].text)}</p>
+          <button
+            type="button"
+            className={styles.selfHiddenCta}
+            onClick={() => navigate(SELF_HIDDEN[meHint].to)}
+          >
+            {t(SELF_HIDDEN[meHint].cta)}
           </button>
         </div>
       )}

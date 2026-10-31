@@ -100,7 +100,7 @@ class ReactionView(APIView):
                 {'detail': 'Cannot react to your own board.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if project.visibility != 'public':
+        if project.visibility != 'public' or project.is_temp:
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         # Block (either direction) — same helper messaging/people use.
         if is_blocked_between(requester, project.user):
@@ -187,7 +187,7 @@ class ProjectReactorsListView(APIView):
         project = get_object_or_404(Project, project_id=project_id)
 
         # Visibility gate mirrors POST in ReactionView.
-        if project.visibility != 'public':
+        if project.visibility != 'public' or project.is_temp:
             if request.user.is_authenticated:
                 requester = getattr(request.user, 'profile', None)
             else:

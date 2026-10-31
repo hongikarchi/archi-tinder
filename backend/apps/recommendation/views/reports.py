@@ -247,7 +247,8 @@ class ProjectReportImageFetchView(APIView):
         project = (
             Project.objects
             .filter(project_id=pk)
-            .values('report_image', 'report_image_mime', 'visibility', 'user_id')
+            .values('report_image', 'report_image_mime', 'visibility', 'user_id',
+                    'is_temp')
             .first()
         )
         if not project:
@@ -255,7 +256,9 @@ class ProjectReportImageFetchView(APIView):
 
         profile = _get_profile(request)
         is_owner = profile is not None and profile.pk == project['user_id']
-        if not is_owner and project['visibility'] != 'public':
+        # is_temp: an unconfirmed in-progress board is never public to others,
+        # even though new boards default to visibility='public'.
+        if not is_owner and (project['visibility'] != 'public' or project['is_temp']):
             # Same shape as "missing" so the endpoint never confirms that a
             # private board exists.
             return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)

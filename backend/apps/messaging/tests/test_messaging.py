@@ -115,6 +115,12 @@ class TestSendRequest:
         g = make_user('guesty', guest=True)
         assert send(client_for(g[0]), bob).status_code == 403
 
+    def test_sender_without_personality_rejected(self, bob):
+        s = make_user('nosender', personality=False)
+        r = send(client_for(s[0]), bob)
+        assert r.status_code == 400 and r.data == {'detail': 'assessment_required'}
+        assert not ContactRequest.objects.exists()
+
     def test_d11_no_personality(self, ca):
         t = make_user('nopers', personality=False)
         assert send(ca, t).status_code == 400
@@ -190,7 +196,7 @@ class TestIgnoreAndCooldown:
 class TestStatus:
     def test_transitions(self, ca, cb, alice, bob):
         url = f'/api/v1/contact-requests/status/?user_id={bob[0].id}'
-        assert ca.get(url).data == {'state': 'none', 'can_request': True}
+        assert ca.get(url).data == {'state': 'none', 'can_request': True, 'reason': None}
         send(ca, bob)
         assert ca.get(url).data['state'] == 'sent'
         cr = ContactRequest.objects.get()
@@ -207,6 +213,81 @@ class TestStatus:
 
     def test_bad_param(self, ca):
         assert ca.get('/api/v1/contact-requests/status/').status_code == 400
+
+
+class TestStatusReason:
+    @staticmethod
+    def _get(client, target):
+        return client.get(f'/api/v1/contact-requests/status/?user_id={target[0].id}').data
+
+    def test_eligible_reason_null(self, ca, bob):
+        d = self._get(ca, bob)
+        assert d['can_request'] is True and d['reason'] is None
+
+    def test_viewer_guest_verify_required(self, db, bob):
+        g = make_user('guesty', guest=True)
+        d = self._get(client_for(g[0]), bob)
+        assert d['can_request'] is False and d['reason'] == 'verify_required'
+
+    def test_viewer_no_personality_assessment_required(self, bob):
+        s = make_user('nosender', personality=False)
+        d = self._get(client_for(s[0]), bob)
+        assert d['can_request'] is False and d['reason'] == 'assessment_required'
+
+    def test_guest_without_personality_verify_required(self, bob):
+        g = make_user('guestnop', guest=True, personality=False)
+        d = self._get(client_for(g[0]), bob)
+        assert d['can_request'] is False and d['reason'] == 'verify_required'
+
+    def test_guest_viewer_opted_out_target_unavailable(self, db):
+        g = make_user('guestx', guest=True)
+        t = make_user('optoutx', opt_in=False)
+        assert self._get(client_for(g[0]), t)['reason'] == 'unavailable'
+
+    def test_nonassessed_viewer_blocked_target_no_block_leak(self, bob):
+        # A block must not be distinguishable from a reachable target for a
+        # viewer who can't request anyway: same viewer-side reason either way.
+        s = make_user('nosenderx', personality=False)
+        assert self._get(client_for(s[0]), bob)['reason'] == 'assessment_required'
+        client_for(bob[0]).post(f'/api/v1/users/{s[0].id}/block/')
+        assert self._get(client_for(s[0]), bob)['reason'] == 'assessment_required'
+
+    def test_guest_viewer_blocked_target_no_block_leak(self, db, bob):
+        g = make_user('guestblk', guest=True)
+        Block.objects.create(blocker=bob[1], blocked=g[1])
+        assert self._get(client_for(g[0]), bob)['reason'] == 'verify_required'
+
+    def test_recipient_blocked_viewer_unavailable(self, ca, cb, alice, bob):
+        cb.post(f'/api/v1/users/{alice[0].id}/block/')
+        d = self._get(ca, bob)
+        assert d['can_request'] is False and d['reason'] == 'unavailable'
+
+    def test_viewer_blocked_recipient_unavailable(self, ca, bob):
+        ca.post(f'/api/v1/users/{bob[0].id}/block/')
+        assert self._get(ca, bob)['reason'] == 'unavailable'
+
+    def test_recipient_opted_out_unavailable(self, ca):
+        t = make_user('optout', opt_in=False)
+        d = self._get(ca, t)
+        assert d['can_request'] is False and d['reason'] == 'unavailable'
+
+    def test_recipient_no_personality_unavailable(self, ca):
+        t = make_user('nopers', personality=False)
+        assert self._get(ca, t)['reason'] == 'unavailable'
+
+    def test_recipient_guest_unavailable(self, ca):
+        t = make_user('guestrec', guest=True)
+        d = self._get(ca, t)
+        assert d['can_request'] is False and d['reason'] == 'unavailable'
+
+    def test_self_reason_self(self, ca, alice):
+        d = self._get(ca, alice)
+        assert d['can_request'] is False and d['reason'] == 'self'
+
+    def test_state_sent_reason_null(self, ca, bob):
+        send(ca, bob)
+        d = self._get(ca, bob)
+        assert d['state'] == 'sent' and d['reason'] is None
 
 
 # -- Accept / unread ---------------------------------------------------------
