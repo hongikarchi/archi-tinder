@@ -44,6 +44,15 @@ def recipient_eligible(profile):
     return PersonalityProfile.objects.filter(user=profile, discovery_opt_in=True).exists()
 
 
+def sender_has_personality(profile):
+    """Product rule: the sender must have completed the personality assessment.
+
+    No discovery opt-in requirement for the sender. Guests are rejected earlier
+    (IsVerifiedUser on send; 'verify_required' in the status view).
+    """
+    return PersonalityProfile.objects.filter(user=profile).exists()
+
+
 def pair(a, b):
     """Normalized (user_a, user_b) with user_a.pk < user_b.pk."""
     return (a, b) if a.pk < b.pk else (b, a)

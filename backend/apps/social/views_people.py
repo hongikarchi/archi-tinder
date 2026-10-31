@@ -55,6 +55,14 @@ reaction_count, updated_at, owner user_id/display_name/handle/avatar_url/
 type_code) plus is_reacted, so owner edits show immediately and a page may
 return fewer than page_size rows when boards were hidden inside the TTL.
 
+Response: {results, has_more, next_cursor, me_discoverable, me_hint}. The last
+two describe ONLY the requester, independent of filter / cursor / page:
+  me_discoverable — discovery_opt_in is True AND the requester owns a public,
+                    confirmed (is_temp=False) board with a report image.
+  me_hint         — None when discoverable; else 'opted_out' (discovery_opt_in
+                    False) | 'unsaved_board' (opted in, only imaged public
+                    boards are unconfirmed is_temp) | 'no_public_report_image'.
+
 Errors: 404 no UserProfile, 403 {detail:'assessment_required'} when the
 requester has no PersonalityProfile, 400 on bad params / cursor.
 
@@ -234,6 +242,29 @@ def _parse_page_size(raw):
     return min(n, _PAGE_SIZE_MAX)
 
 
+def _me_discoverability(profile, personality):
+    """(me_discoverable, me_hint) for the requester only: one query.
+
+    Checks the requester's own public imaged boards (metadata only, never the
+    base64 column) and whether any is confirmed (is_temp=False).
+    """
+    if not personality.discovery_opt_in:
+        return False, 'opted_out'
+    temp_flags = set(
+        Project.objects
+        .filter(user=profile, visibility='public')
+        .exclude(report_image__isnull=True)
+        .exclude(report_image='')
+        .values_list('is_temp', flat=True)
+        .distinct()
+    )
+    if False in temp_flags:
+        return True, None
+    if True in temp_flags:
+        return False, 'unsaved_board'
+    return False, 'no_public_report_image'
+
+
 # ---------------------------------------------------------------------------
 # Views
 # ---------------------------------------------------------------------------
@@ -383,10 +414,14 @@ class PeopleDiscoveryView(APIView):
                 'updated_at': r['updated_at'].isoformat(),
             })
 
+        me_discoverable, me_hint = _me_discoverability(requester_profile, my_personality)
+
         return Response({
             'results': results,
             'has_more': has_more,
             'next_cursor': next_cursor,
+            'me_discoverable': me_discoverable,
+            'me_hint': me_hint,
         })
 
 

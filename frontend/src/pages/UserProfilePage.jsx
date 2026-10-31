@@ -112,6 +112,9 @@ export default function UserProfilePage({ onLogout }) {
 
   // Personality profile state (isMe: my personality; !isMe: for overlay comparison)
   const [myPersonality, setMyPersonality] = useState(null)
+  // 'loading' | 'ready' (myPersonality may be null = never assessed, i.e. 404)
+  // | 'error' (any non-404 failure — unknown, NOT treated as "no assessment").
+  const [myPersonalityState, setMyPersonalityState] = useState('loading')
 
   // Own-profile only — bell + unread badge (NOTIF-INAPP-1). Count fetch is
   // mount + visibilitychange only (no polling) per the hook's own contract.
@@ -141,8 +144,11 @@ export default function UserProfilePage({ onLogout }) {
   // Empty deps intentional: runs once on mount to load the caller's own personality.
   useEffect(() => {
     getMyPersonality()
-      .then(data => setMyPersonality(data))
-      .catch(() => setMyPersonality(null))
+      .then(data => { setMyPersonality(data); setMyPersonalityState('ready') })
+      .catch(err => {
+        setMyPersonality(null)
+        setMyPersonalityState(err?.status === 404 ? 'ready' : 'error')
+      })
   }, [])
 
   // Fetch architect profiles for buildingsMap whenever savedStudios changes
@@ -674,13 +680,39 @@ export default function UserProfilePage({ onLogout }) {
                   theirVector={vectorFrom(user.personality)}
                   size={180}
                 />
-                <button
-                  type="button"
-                  onClick={() => navigate('/assessment')}
-                  className={styles.personalityCtaPrimary}
-                >
-                  {t('profilePersonality.checkMine')}
-                </button>
+                {/* Only a confirmed 404 means "never assessed"; while loading or
+                    after a failed fetch, don't push assessed users to retake. */}
+                {myPersonalityState === 'ready' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/assessment')}
+                      className={styles.personalityCtaPrimary}
+                    >
+                      {t('profilePersonality.checkMine')}
+                    </button>
+                    {messagingEnabled && (
+                      <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
+                        {t('messaging.assessmentRequiredHint')}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          }
+
+          // !isMe + their personality is null/hidden (not assessed or opted
+          // out): never render nothing — ContactCta shows the neutral
+          // "unavailable" state (block vs opt-out is deliberately not revealed).
+          if (!isMe && !user?.personality && messagingEnabled) {
+            return (
+              <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <ContactCta
+                  userId={effectiveUserId}
+                  buttonClassName={styles.personalityCtaPrimary}
+                  hidden={blockedPeer}
+                />
               </div>
             )
           }

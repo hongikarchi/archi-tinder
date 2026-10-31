@@ -130,7 +130,9 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     # the profile — they are normal boards and must appear in the board list.
     qs = Project.objects.filter(user=target_profile).order_by('-updated_at')
     if not is_owner:
-        qs = qs.filter(visibility='public')
+        # is_temp=False: unconfirmed in-progress boards default to public now
+        # but must not appear on someone else's profile.
+        qs = qs.filter(visibility='public', is_temp=False)
 
     total_count = qs.count()
     offset = (page - 1) * page_size

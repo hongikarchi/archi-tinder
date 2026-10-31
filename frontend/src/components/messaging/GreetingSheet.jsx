@@ -36,6 +36,7 @@ export default function GreetingSheet({ recipientId, onClose, onSent }) {
       const detail = err?.data?.detail
       if (err?.status === 429) setError('messaging.requestRate')
       else if (detail === 'recipient_unavailable') setError('messaging.requestUnavailable')
+      else if (detail === 'assessment_required') setError('messaging.assessmentRequiredHint')
       else if (detail === 'self_request') setError('messaging.requestSelf')
       else setError('messaging.requestError')
       setSending(false)

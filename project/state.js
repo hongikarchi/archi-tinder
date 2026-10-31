@@ -23,11 +23,32 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-26 18:57 KST',
-    head: 'ecc0577',
-    branch: 'feature/claude-social-board-like',
+    updatedAt: '2026-10-31 11:17 KST',
+    head: '5bf2141',
+    branch: 'feature/claude-contact-reason-port',
   },
   done: [
+    {
+      id: 'PR #469',
+      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
+      completedAt: '2026-10-31',
+      prs: [469],
+      note: '',
+    },
+    {
+      id: 'PR #466',
+      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
+      completedAt: '2026-10-31',
+      prs: [466],
+      note: '',
+    },
+    {
+      id: 'PR #465',
+      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
+      completedAt: '2026-10-31',
+      prs: [465],
+      note: '',
+    },
     {
       id: 'PR #462',
       title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
@@ -63,34 +84,13 @@ window.PROJECT_STATE = {
       prs: [449],
       note: '',
     },
-    {
-      id: 'PR #444',
-      title: 'feat(FULL-AUTH-2): 소셜 전용 가입 — Google·카카오 원탭 + 온보딩 1화면',
-      completedAt: '2026-10-17',
-      prs: [444],
-      note: '',
-    },
-    {
-      id: 'PR #441',
-      title: 'fix(taste-start): review follow-ups for #431/#437',
-      completedAt: '2026-10-17',
-      prs: [441],
-      note: '',
-    },
-    {
-      id: 'PR #439',
-      title: 'docs(db): building DB cleanup handoff for Make DB owner + material_group rules',
-      completedAt: '2026-10-17',
-      prs: [439],
-      note: '',
-    },
   ],
   now: [
     {
-      id: 'FULL-BOOKMARK-1',
-      title: '북마크 잔여 코드 정리',
-      note: '북마크 기능을 UI에서 제거했으나 코드가 남아 있음: BoardDetailPage(bookmarkChanged 신호, saved_ids 시드), BuildingTile, BuildingDetailPage, ArchitectProfilePage, SaveToBoardModal, SurpriseBoardModal, appHelpers, api/projects.bookmarkBuilding, App.jsx. 서버 saved_ids 필드는 다른 곳에서 쓰일 수 있어 사용처 확인 후 제거. 사용자가…',
-      issue: 448,
+      id: 'FULL-MESSAGING-5',
+      title: '관심 버튼 미노출 + 보드 기본 공개',
+      note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
+      issue: 467,
     },
   ],
   next: {
@@ -103,6 +103,12 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: 'FULL-MESSAGING-5',
+        title: '관심 버튼 미노출 + 보드 기본 공개',
+        note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
+        issue: 467,
+      },
       {
         id: 'FULL-REPORT-UI-1',
         title: '페르소나 리포트 UI 개편',
@@ -444,6 +450,30 @@ window.PROJECT_STATE = {
     ],
     low: [
       {
+        id: '#fix(FULL-CONTEST-2): #466 review follow',
+        title: 'fix(FULL-CONTEST-2): #466 review follow-ups — Korean errors, PATCH lost update, upsert rule gap',
+        note: 'Review follow-ups from #466 (merged 5bf2141). Low severity, verified against PR head.',
+        issue: 473,
+      },
+      {
+        id: '#algo: legacy liked_building_ids pinned ',
+        title: 'algo: legacy liked_building_ids pinned to newest end of 50-like taste window',
+        note: 'Found in #465 review (design concern, algorithm owner call).',
+        issue: 472,
+      },
+      {
+        id: '#fix: expose Retry-After via CORS so 429',
+        title: 'fix: expose Retry-After via CORS so 429 backoff honors server',
+        note: 'Found in #465 review. `frontend/src/api/core.js:166` reads `Retry-After` on 429 to back off, but API is cross-origin (Vercel -> Railway, local 5174 -> 8001) and `backend/config/settings.py` `CORS_EXPOSE_HEADERS = [\'server-timing\']`. Browser hides header -> client always uses f…',
+        issue: 471,
+      },
+      {
+        id: '#fix(SOCIAL-BOARD-LIKE-1): #465 review f',
+        title: 'fix(SOCIAL-BOARD-LIKE-1): #465 review follow-ups — feed recheck, empty page, liked-boards perf',
+        note: 'Review follow-ups from #465 (merged 78008f4). All low severity, verified against PR head.',
+        issue: 470,
+      },
+      {
         id: 'FRONT-TABBAR-MODAL-1',
         title: 'TabBar unreachable while a modal is open (design decision)',
         note: 'While a modal or overlay is open (e.g. `WorkDetailModal`, `SaveBoardModal`), the bottom TabBar',
@@ -609,6 +639,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 469,
+      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
+      mergedAt: '2026-10-31T00:05:41Z',
+      mergedAtKST: '2026-10-31 09:05 KST',
+      sha: '5e27f53',
+    },
+    {
+      number: 466,
+      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
+      mergedAt: '2026-10-31T00:20:25Z',
+      mergedAtKST: '2026-10-31 09:20 KST',
+      sha: '5bf2141',
+    },
+    {
+      number: 465,
+      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
+      mergedAt: '2026-10-31T00:20:14Z',
+      mergedAtKST: '2026-10-31 09:20 KST',
+      sha: '78008f4',
+    },
+    {
       number: 462,
       title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
       mergedAt: '2026-10-25T03:01:42Z',
@@ -642,27 +693,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-25T00:16:00Z',
       mergedAtKST: '2026-10-25 09:16 KST',
       sha: '0947ed1',
-    },
-    {
-      number: 444,
-      title: 'feat(FULL-AUTH-2): 소셜 전용 가입 — Google·카카오 원탭 + 온보딩 1화면',
-      mergedAt: '2026-10-17T01:06:48Z',
-      mergedAtKST: '2026-10-17 10:06 KST',
-      sha: '9bfac90',
-    },
-    {
-      number: 441,
-      title: 'fix(taste-start): review follow-ups for #431/#437',
-      mergedAt: '2026-10-17T00:23:23Z',
-      mergedAtKST: '2026-10-17 09:23 KST',
-      sha: 'eaea1f9',
-    },
-    {
-      number: 439,
-      title: 'docs(db): building DB cleanup handoff for Make DB owner + material_group rules',
-      mergedAt: '2026-10-17T00:00:29Z',
-      mergedAtKST: '2026-10-17 09:00 KST',
-      sha: '9894cc1',
     },
   ],
   agents: [
@@ -1193,6 +1223,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/admin_dashboard/contests_views.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/admin_dashboard/flags.py',
       role: '',
     },
@@ -1249,6 +1283,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/admin_dashboard/tests/test_contests_admin.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/admin_dashboard/tests/test_endpoints.py',
       role: '',
     },
@@ -1293,14 +1331,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'backend/apps/contests/management/commands/contest_poster.py',
-      role: '',
-    },
-    {
-      path: 'backend/apps/contests/management/commands/contest_status.py',
-      role: '',
-    },
-    {
       path: 'backend/apps/contests/management/commands/seed_contests.py',
       role: '',
     },
@@ -1310,6 +1340,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/contests/migrations/0002_contest_interest_and_url_checks.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/migrations/0003_contest_published_has_source.py',
       role: '',
     },
     {
@@ -1337,10 +1371,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'backend/apps/contests/tests/test_contest_commands.py',
-      role: '',
-    },
-    {
       path: 'backend/apps/contests/tests/test_contest_interest.py',
       role: '',
     },
@@ -1354,6 +1384,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/contests/tests/test_next_deadline_jeongrim.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_publish_rule.py',
       role: '',
     },
     {
@@ -3577,6 +3611,18 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/pages/admin/ContestFormModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/ContestsSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/ContestsSection.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/admin/DeploySection.jsx',
       role: '',
     },
@@ -3598,6 +3644,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/admin/StatsSection.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/contestConstants.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/admin/contestErrors.js',
       role: '',
     },
     {

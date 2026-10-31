@@ -203,7 +203,7 @@ class ProjectDetailView(APIView):
 
         project = get_object_or_404(Project.objects.select_related('user__user'), project_id=pk)
         is_owner = profile and project.user_id == profile.pk
-        if not is_owner and project.visibility != 'public':
+        if not is_owner and (project.visibility != 'public' or project.is_temp):
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         # 2026-09-28: stop recomputing axis_scores on read. Detail GET must not
         # touch connections['buildings'] or write -- a legacy-format stored
