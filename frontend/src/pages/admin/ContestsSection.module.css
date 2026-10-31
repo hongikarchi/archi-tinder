@@ -1,0 +1,261 @@
+/*
+ * ContestsSection.module.css — FULL-CONTEST-2 admin contests section + form.
+ * Reuses AdminPage.module.css (card / badge / btn / table / pager) for the shared
+ * look; only contest-specific pieces live here. Tokens only, no literal colors.
+ * Form chrome follows DESIGN.md 8.5 (input focus: accent-1 border) and 8.10 (modal).
+ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filterTabs {
+  flex: 1 1 280px;
+  max-width: 420px;
+  min-width: 0;
+}
+
+.table {
+  min-width: 960px;
+}
+
+.titleCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.titleText {
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.dateCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+}
+
+.dateLabel {
+  color: var(--color-text-muted);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.linkCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.dim {
+  color: var(--color-text-dim);
+}
+
+/* -- Form ---------------------------------------------------------------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.req {
+  color: var(--color-destructive);
+}
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-1);
+}
+
+.input:disabled {
+  opacity: 0.6;
+}
+
+.inputError {
+  border-color: var(--color-destructive);
+}
+
+.area {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+}
+
+.counter {
+  align-self: flex-end;
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.posterRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.posterFields {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.thumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* -- Mobile card list (<=768px, DESIGN.md 7.3) ---------------------------- */
+
+.mobileOnly {
+  display: none;
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardHead .titleCell {
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+}
+
+.cardDates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-caption);
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: var(--fs-caption);
+}
+
+@media (max-width: 768px) {
+  .desktopOnly {
+    display: none;
+  }
+
+  .mobileOnly {
+    display: flex;
+  }
+
+  .card .rowActions {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .card .rowActions > button {
+    min-height: 44px;
+    padding: 0 14px;
+  }
+}

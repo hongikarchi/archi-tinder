@@ -21,6 +21,7 @@ import FlagsSection from './FlagsSection.jsx'
 import StatsSection from './StatsSection.jsx'
 import AuditSection from './AuditSection.jsx'
 import ServicesSection from './ServicesSection.jsx'
+import ContestsSection from './ContestsSection.jsx'
 import styles from './AdminPage.module.css'
 
 export default function AdminPage({ onLogout }) {
@@ -67,6 +68,9 @@ export default function AdminPage({ onLogout }) {
             <span className={styles.chevron} aria-hidden="true">›</span>
           </button>
         </section>
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <ContestsSection />
       </div>
       <div style={{ marginTop: 16 }}>
         <AuditSection />

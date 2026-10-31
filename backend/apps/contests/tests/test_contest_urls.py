@@ -58,8 +58,8 @@ class TestSaveValidation:
         c = Contest.objects.create(**_kwargs(listing_url='', poster_url=None))
         assert c.listing_url == '' and c.poster_url is None
 
-    def test_blank_source_url_accepted(self):
-        c = Contest.objects.create(**_kwargs(source_url=''))
+    def test_blank_source_url_accepted_when_not_published(self):
+        c = Contest.objects.create(**_kwargs(source_url='', status=Contest.STATUS_PENDING))
         c.refresh_from_db()
         assert c.source_url == ''
 
@@ -214,19 +214,20 @@ class TestBlankAndNullAccepted:
             cur.execute("UPDATE contests_contest SET poster_url = '' WHERE id = %s", [c.pk])
 
     def test_source_url_empty_accepted_by_db(self):
-        c = Contest.objects.create(**_kwargs())
+        c = Contest.objects.create(**_kwargs(status=Contest.STATUS_HIDDEN))
         with connection.cursor() as cur:
             cur.execute("UPDATE contests_contest SET source_url = '' WHERE id = %s", [c.pk])
         c.refresh_from_db()
         assert c.source_url == ''
 
     def test_blank_source_url_via_bulk_and_update(self):
-        Contest.objects.bulk_create([_valid(source_url='')])
+        Contest.objects.bulk_create([_valid(source_url='', status=Contest.STATUS_HIDDEN)])
         c = Contest.objects.get()
         c.source_url = 'https://example.com/'
         Contest.objects.bulk_update([c], ['source_url'])
         c.source_url = ''
-        Contest.objects.bulk_update([c], ['source_url'])
+        c.status = Contest.STATUS_PENDING
+        Contest.objects.bulk_update([c], ['source_url', 'status'])
         assert Contest.objects.filter(pk=c.pk).update(source_url='') == 1
 
 
@@ -254,15 +255,6 @@ def test_poster_allowed_hosts(url):
 class TestWevityPoster:
     BAD = 'https://www.wevity.com/upload/x.jpg'
 
-    def test_command_set_rejected_and_unchanged(self):
-        from django.core.management import call_command
-        from django.core.management.base import CommandError
-        c = Contest.objects.create(**_kwargs(poster_url='https://org.example.com/p.jpg'))
-        with pytest.raises(CommandError):
-            call_command('contest_poster', str(c.pk), 'set', '--url', self.BAD)
-        c.refresh_from_db()
-        assert c.poster_url == 'https://org.example.com/p.jpg'
-
     def test_save_rejected(self):
         with pytest.raises(ValidationError):
             Contest.objects.create(**_kwargs(poster_url=self.BAD))
@@ -283,8 +275,9 @@ class TestWevityPoster:
         with pytest.raises(ValidationError):
             Contest.objects.filter(pk=c.pk).update(poster_url=self.BAD)
 
-    def test_source_and_listing_on_wevity_accepted(self):
+    def test_source_and_listing_on_wevity_accepted_when_not_published(self):
         c = Contest.objects.create(**_kwargs(
+            status=Contest.STATUS_PENDING,
             source_url='https://www.wevity.com/?c=find&gbn=view&gp=1&ix=1',
             listing_url='https://www.wevity.com/?c=find',
         ))

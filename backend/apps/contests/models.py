@@ -8,10 +8,13 @@ Only the 'default' DB is used. The Make-DB building DB is never touched.
 interest_count is a denormalized column maintained by signals on ContestInterest
 (apps/contests/signals.py, BACK-CONTEST-2).
 """
-from django.db import models
+import contextvars
+
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
 from django.db.models import Q
 
-from .validators import validate_http_url, validate_poster_url
+from .validators import validate_http_url, validate_poster_url, validate_publishable
 
 URL_FIELDS = ('source_url', 'listing_url', 'poster_url')
 # DB-level scheme check (case-insensitive, matching validators.is_http_url which
@@ -24,20 +27,37 @@ def _validate_url_value(name, value):
     """Same semantics as Contest.save(): blank source/listing_url, null poster_url OK."""
     if value in (None, ''):
         return
-    if name == 'poster_url':
-        validate_poster_url(value)
-        return
-    validate_http_url(value)
+    try:
+        if name == 'poster_url':
+            validate_poster_url(value)
+        else:
+            validate_http_url(value)
+    except ValidationError as exc:
+        # Field-keyed so API callers see {"<field>": [...]} instead of non_field_errors.
+        raise ValidationError({name: exc.messages}, code=getattr(exc, 'code', None))
+
+
+# Django's bulk_update() issues an internal queryset.update() with Case/When
+# expressions; bulk_update() already validated every object, so that inner call
+# must skip the update() expression guard.
+_IN_BULK_UPDATE = contextvars.ContextVar('contest_in_bulk_update', default=False)
 
 
 class ContestQuerySet(models.QuerySet):
-    """Applies the http(s)-only URL guard to bulk paths that skip Contest.save()."""
+    """Applies the URL guard and the publish rule to bulk paths that skip Contest.save().
+
+    Publish rule (validators.validate_publishable): a 'published' contest needs a
+    non-empty official http(s) source_url that is not a listing-site domain.
+    All errors are field-keyed; publish-rule errors are keyed to 'source_url' (the
+    field the operator must fix), not 'status'.
+    """
 
     def bulk_create(self, objs, *args, **kwargs):
         objs = list(objs)
         for obj in objs:
             for name in URL_FIELDS:
                 _validate_url_value(name, getattr(obj, name))
+            validate_publishable(obj.status, obj.source_url)
         return super().bulk_create(objs, *args, **kwargs)
 
     def bulk_update(self, objs, fields, *args, **kwargs):
@@ -47,17 +67,54 @@ class ContestQuerySet(models.QuerySet):
             if name in fields:
                 for obj in objs:
                     _validate_url_value(name, getattr(obj, name))
-        return super().bulk_update(objs, fields, *args, **kwargs)
+        if 'status' in fields or 'source_url' in fields:
+            for obj in objs:
+                validate_publishable(obj.status, obj.source_url)
+        token = _IN_BULK_UPDATE.set(True)
+        try:
+            return super().bulk_update(objs, fields, *args, **kwargs)
+        finally:
+            _IN_BULK_UPDATE.reset(token)
 
     def update(self, **kwargs):
         for name in URL_FIELDS:
             if name in kwargs:
                 value = kwargs[name]
                 # Expressions (F(), Value(), ...) cannot be checked here; the
-                # DB CheckConstraint still covers them.
+                # DB CheckConstraint still covers them. (status/source_url
+                # expressions are rejected outright below.)
                 if value is None or isinstance(value, str):
                     _validate_url_value(name, value)
-        return super().update(**kwargs)
+        if _IN_BULK_UPDATE.get() or ('status' not in kwargs and 'source_url' not in kwargs):
+            return super().update(**kwargs)
+        for name in ('status', 'source_url'):
+            if name in kwargs and not (kwargs[name] is None or isinstance(kwargs[name], str)):
+                raise ValidationError(
+                    {name: 'Expressions are not supported when updating %s through '
+                           'Contest.objects.update(); use a plain value.' % name},
+                    code='unsupported_expression',
+                )
+        # Check + write in one transaction so the checked rows are the written rows
+        # (the DB CHECK constraint backstops the blank-source case under races).
+        with transaction.atomic(using=self.db):
+            self._check_publish_rule_for_update(kwargs)
+            return super().update(**kwargs)
+
+    def _check_publish_rule_for_update(self, kwargs):
+        new_status = kwargs.get('status')
+        if 'status' in kwargs:
+            if new_status != Contest.STATUS_PUBLISHED:
+                return  # nothing is published afterwards -> no requirement
+            if 'source_url' in kwargs:
+                validate_publishable(new_status, kwargs['source_url'] or '')
+            else:
+                # Every targeted row becomes published with its CURRENT source_url.
+                for value in self.values_list('source_url', flat=True).distinct():
+                    validate_publishable(new_status, value)
+            return
+        # Only source_url changes: rows that are currently published must stay valid.
+        if self.filter(status=Contest.STATUS_PUBLISHED).exists():
+            validate_publishable(Contest.STATUS_PUBLISHED, kwargs['source_url'] or '')
 
 
 def compute_next_deadline(apply_deadline, submission_deadline, now):
@@ -95,8 +152,8 @@ class Contest(models.Model):
         (STATUS_PENDING, 'pending'),
     ]
 
-    # Stable identifier used by the upcoming `import_contests` command to upsert
-    # rows idempotently (title/URL can change); NULL for rows created otherwise.
+    # Stable identifier a collector can use as an idempotent de-dup key (title/URL
+    # can change); NULL for rows created otherwise.
     # NULLs do not collide under the unique constraint.
     import_key = models.CharField(max_length=80, unique=True, null=True, blank=True)
 
@@ -163,6 +220,14 @@ class Contest(models.Model):
                 ),
                 name='contest_poster_url_http',
             ),
+            # Published needs a source URL. Only the blank case can live in the DB;
+            # the "not a listing-site domain" half of the publish rule is ORM-level
+            # (validators.validate_publishable) because a host list does not belong
+            # in a CHECK constraint.
+            models.CheckConstraint(
+                condition=~Q(status='published', source_url=''),
+                name='contest_published_has_source',
+            ),
         ]
 
     def __str__(self):
@@ -174,6 +239,7 @@ class Contest(models.Model):
         # Blank source_url / listing_url and null poster_url stay allowed.
         for name in URL_FIELDS:
             _validate_url_value(name, getattr(self, name))
+        validate_publishable(self.status, self.source_url)
         super().save(*args, **kwargs)
 
     def next_deadline(self, now):

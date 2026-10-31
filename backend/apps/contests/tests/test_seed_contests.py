@@ -34,9 +34,10 @@ class TestSeedContests:
     def test_creates_seven_with_statuses(self):
         _run()
         assert Contest.objects.count() == 7
-        assert Contest.objects.filter(status='published').count() == 6
-        pending = Contest.objects.get(status='pending')
-        assert pending.title.startswith('에어-비트 시티')
+        assert Contest.objects.filter(status='published').count() == 5
+        assert Contest.objects.filter(status='pending').count() == 2
+        pending = Contest.objects.get(title__startswith='에어-비트 시티')
+        assert pending.status == 'pending'
         assert pending.submission_deadline.isoformat() == '2026-11-19T14:59:00+00:00'
         assert not Contest.objects.filter(status='hidden').exists()
 
@@ -73,9 +74,10 @@ class TestSeedContests:
         assert list(Contest.objects.values_list('id', flat=True)) == [keep.id]
 
     @override_settings(DEBUG=True)
-    def test_hanok_has_blank_source_and_listing(self):
+    def test_hanok_has_blank_source_and_listing_and_is_pending(self):
         _run()
         c = Contest.objects.get(title='제14회 한옥디자인 국제공모')
+        assert c.status == 'pending'
         assert c.source_url == ''
         assert c.listing_url == 'https://lectus.kr/14th-hanok-design-int-competition/'
 
@@ -87,4 +89,4 @@ class TestSeedContests:
         assert c.source_url == 'https://airbeatcity.com/contest'
         assert c.import_key is None
         assert Contest.objects.count() == 7
-        assert Contest.objects.filter(status='published').count() == 6
+        assert Contest.objects.filter(status='published').count() == 5
