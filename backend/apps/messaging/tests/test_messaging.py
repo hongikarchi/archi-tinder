@@ -254,7 +254,7 @@ class TestStatusReason:
 
     def test_guest_viewer_blocked_target_no_block_leak(self, db, bob):
         g = make_user('guestblk', guest=True)
-        Block.objects.create(blocker=bob[0], blocked=g[0])
+        Block.objects.create(blocker=bob[1], blocked=g[1])
         assert self._get(client_for(g[0]), bob)['reason'] == 'verify_required'
 
     def test_recipient_blocked_viewer_unavailable(self, ca, cb, alice, bob):
