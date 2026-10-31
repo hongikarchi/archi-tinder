@@ -1,6 +1,6 @@
 /**
  * api/projects.js
- * Project (board) CRUD, building batch-fetch, bookmark, and report generation.
+ * Project (board) CRUD, building batch-fetch, and report generation.
  */
 
 import { callApi } from './core.js'
@@ -166,30 +166,12 @@ export async function getBoardBuildings(buildingIds) {
 }
 
 /**
- * Toggle bookmark (⭐) on a result-page card.
- * @param {string} projectId - backend project UUID
- * @param {string} cardId - building_id
- * @param {'save'|'unsave'} action
- * @param {number} rank - 1-indexed position in result page (1-50)
- * @param {string|null} sessionId - optional, for event association
- * @returns {Promise<{saved_ids: string[], count: number}>}
- */
-export async function bookmarkBuilding(projectId, cardId, action, rank, sessionId = null) {
-  return callApi('POST', `/projects/${projectId}/bookmark/`, {
-    card_id: cardId,
-    action,
-    rank,
-    ...(sessionId ? { session_id: sessionId } : {}),
-  })
-}
-
-/**
  * Fetch a board's persona report image.
  *
  * Split from the board list on purpose: Project.report_image is base64 TEXT
  * (~200KB each) and the profile's board page holds up to 50, so the list ships
  * a `report_image_url` pointer and each card resolves it lazily. Same split the
- * /people feed uses (see api/people.js getPersonReportImage).
+ * /people feed uses (see api/people.js getBoardReportImage).
  *
  * Returns { image_data, mime_type }, or null when the board has none / is not
  * visible to the caller (backend answers 404). Callers must treat null as "no

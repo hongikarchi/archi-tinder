@@ -16,7 +16,6 @@ from ..services.swipe_service import _merge_buffer_into_exposed  # noqa: F401 �
 from ..services.swipe_service import (
     _ACTION_CARD_ID,
     _build_action_card,
-    handle_bookmark,
     handle_swipe_extend,
     handle_swipe_normal,
     build_swipe_telemetry,
@@ -141,40 +140,6 @@ class BuildingBatchView(APIView):
             )
         cards = engine.get_buildings_by_ids(ids)
         return Response(cards)
-
-
-# ── Bookmark ──────────────────────────────────────────────────────────────────
-
-class ProjectBookmarkView(APIView):
-    """
-    POST /api/v1/projects/<project_id>/bookmark/
-
-    Toggle bookmark on a building in the result page top-K. Updates
-    Project.saved_ids (list[{id, saved_at}]) and emits a bookmark event
-    per spec §6 + §8 + Spec v1.2 SPEC-UPDATED.
-
-    Request body:
-        {
-          "card_id":    "<building_id>",          # required; string, max 20 chars
-          "action":     "save" | "unsave",        # required
-          "rank":       <int 1-100>,              # required; 1-indexed result-page position
-          "session_id": "<uuid>"                  # optional; for event association
-        }
-
-    Response 200:
-        {
-          "saved_ids": ["B00042", ...],   # full list of currently bookmarked building IDs
-          "count": <int>                  # length of saved_ids
-        }
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, project_id):
-        profile = _get_profile(request)
-        if profile is None:
-            from rest_framework import status
-            return Response({'detail': 'unauthenticated'}, status=status.HTTP_401_UNAUTHORIZED)
-        return handle_bookmark(request, profile, project_id)
 
 
 # ── Swipe ─────────────────────────────────────────────────────────────────────

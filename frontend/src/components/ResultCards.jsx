@@ -251,7 +251,6 @@ export default function ResultCards({ project, backendId, ctaLabel, onCta }) {
             <div className={`${s.rv} ${s.mainSlot}`} style={delay(0.6)}>
               <ImageSlot
                 fill
-                role="owner"
                 boardId={backendId}
                 personaName={report.persona_type}
                 imageData={imageData}

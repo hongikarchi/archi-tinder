@@ -6,14 +6,13 @@ Coverage:
   (1) Discovery-only profile → taste vector non-None  (cold→warm path)
   (2) exclude-set includes a liked_building_id in DiscoveryFeedView
   (3) exclude-set includes a liked_building_id in BoardSurpriseView
-  (4) LikedBuildingsView POST evicts taste + discovery-feed caches
 
 Discriminating setup for (1): profile has ZERO Project.liked_ids so the vector
 is non-None ONLY because of liked_building_ids — not a pre-existing Project path.
 """
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 # ---------------------------------------------------------------------------
@@ -181,86 +180,3 @@ def test_board_surprise_excludes_liked_building_ids(auth_client, user_profile):
     exclude_ids = list(mocked_trp.call_args.args[1])
     assert 'bld_s001' in exclude_ids, "bld_s001 must be in exclude_ids for BoardSurpriseView"
     assert 'bld_s002' in exclude_ids, "bld_s002 must be in exclude_ids for BoardSurpriseView"
-
-
-# ---------------------------------------------------------------------------
-# (4) LikedBuildingsView POST evicts taste + discovery-feed caches
-# ---------------------------------------------------------------------------
-
-def _make_buildings_cursor_mock(exists=True):
-    cur = MagicMock()
-    cur.fetchone.return_value = (1,) if exists else None
-    cm = MagicMock()
-    cm.__enter__ = MagicMock(return_value=cur)
-    cm.__exit__ = MagicMock(return_value=False)
-    conn = MagicMock()
-    conn.cursor.return_value = cm
-    return conn
-
-
-@pytest.fixture
-def lb_user_and_profile(db):
-    from django.contrib.auth.models import User
-    from apps.accounts.models import UserProfile
-    user = User.objects.create_user(
-        username='lb4user', email='lb4@example.com', password='pass123',
-    )
-    profile = UserProfile.objects.create(user=user, display_name='LB4 User')
-    return user, profile
-
-
-@pytest.fixture
-def lb_auth_client(lb_user_and_profile):
-    from rest_framework.test import APIClient
-    from rest_framework_simplejwt.tokens import RefreshToken
-    user, _ = lb_user_and_profile
-    client = APIClient()
-    refresh = RefreshToken.for_user(user)
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
-    return client
-
-
-@pytest.mark.django_db
-def test_post_like_evicts_taste_and_discovery_feed_cache(lb_user_and_profile, lb_auth_client):
-    """POST to /liked-buildings/ must call evict_taste and evict_discovery_feed
-    when a new building is actually added (i.e. not a duplicate).
-    """
-    _, profile = lb_user_and_profile
-    conn_mock = _make_buildings_cursor_mock(exists=True)
-
-    with patch('apps.accounts.views.profile._dj_connections', {'buildings': conn_mock}), \
-         patch('apps.recommendation.caches.evict_taste') as mock_evict_taste, \
-         patch('apps.recommendation.caches.evict_discovery_feed') as mock_evict_feed:
-        resp = lb_auth_client.post(
-            '/api/v1/liked-buildings/',
-            {'canonical_bld_id': 'bld_000999'},
-            format='json',
-        )
-
-    assert resp.status_code == 200
-    mock_evict_taste.assert_called_once_with(profile.id)
-    mock_evict_feed.assert_called_once_with(profile.id)
-
-
-@pytest.mark.django_db
-def test_post_duplicate_does_not_evict_cache(lb_user_and_profile, lb_auth_client):
-    """POSTing a duplicate bld_id (already in liked_building_ids) must NOT
-    call evict_taste or evict_discovery_feed — no write, no eviction.
-    """
-    _, profile = lb_user_and_profile
-    profile.liked_building_ids = ['bld_000999']
-    profile.save(update_fields=['liked_building_ids'])
-
-    conn_mock = _make_buildings_cursor_mock(exists=True)
-    with patch('apps.accounts.views.profile._dj_connections', {'buildings': conn_mock}), \
-         patch('apps.recommendation.caches.evict_taste') as mock_evict_taste, \
-         patch('apps.recommendation.caches.evict_discovery_feed') as mock_evict_feed:
-        resp = lb_auth_client.post(
-            '/api/v1/liked-buildings/',
-            {'canonical_bld_id': 'bld_000999'},
-            format='json',
-        )
-
-    assert resp.status_code == 200
-    mock_evict_taste.assert_not_called()
-    mock_evict_feed.assert_not_called()

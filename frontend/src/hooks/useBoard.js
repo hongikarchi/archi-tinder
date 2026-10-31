@@ -3,7 +3,7 @@ import { getBoardBuildings, getProject } from '../api/projects.js'
 import { getResult } from '../api/sessions.js'
 import { getRecommendedArchitects } from '../api/architects.js'
 
-function collectBoardBuildingIds(project) {
+export function collectBoardBuildingIds(project) {
   const ids = []
   const seen = new Set()
   const add = item => {
@@ -26,9 +26,12 @@ function adaptProjectToBoard(project, buildings) {
   }
 }
 
-// `fetchResult: false` skips the owner-only session-result fetch (the persona
+// Both the session-result and recommended-architects requests are gated to the
+// board owner. `fetchResult: false` skips the owner-only session-result fetch (the persona
 // report page loads recommendations itself via getProjectRecommendations, which
-// also works for viewers).
+// is owner-only too: the report is owner-only, and the server nulls
+// final_report / analysis_report / axis_scores for non-owners. Only the persona
+// IMAGE stays public).
 export function useBoard(projectId, { fetchResult = true } = {}) {
   const [board, setBoard] = useState(null)
   const [recommended, setRecommended] = useState([])
@@ -64,6 +67,13 @@ export function useBoard(projectId, { fetchResult = true } = {}) {
 
         const buildingIds = collectBoardBuildingIds(project)
 
+        // Session result + recommended architects are owner-only endpoints
+        // (a non-owner gets 404 and a console error), so only the board owner
+        // requests them. Same derivation as BoardDetailPage.
+        const viewerId = sessionStorage.getItem('archithon_user')
+        const ownerId = project.user?.user_id
+        const isOwner = !!viewerId && ownerId != null && String(ownerId) === String(viewerId)
+
         // Fetch buildings independently — show cards as soon as they arrive.
         // setBoard fires exactly once per board load so the BoardDetailPage
         // useEffect([board]) initializes local state only once.
@@ -81,7 +91,7 @@ export function useBoard(projectId, { fetchResult = true } = {}) {
 
         // Fetch result independently — recommended section populates when it arrives.
         // Uses separate `recommended` state so setBoard is never called again.
-        if (fetchResult && project.latest_session_id) {
+        if (isOwner && fetchResult && project.latest_session_id) {
           setResultLoading(true)
           getResult({ session_id: project.latest_session_id })
             .then(resultData => {
@@ -95,11 +105,13 @@ export function useBoard(projectId, { fetchResult = true } = {}) {
         }
 
         // Fetch recommended architects in parallel — graceful degradation on failure.
-        getRecommendedArchitects(project.project_id)
-          .then(architects => {
-            if (cancelled) return
-            setRecommendedArchitects(architects)
-          })
+        if (isOwner) {
+          getRecommendedArchitects(project.project_id)
+            .then(architects => {
+              if (cancelled) return
+              setRecommendedArchitects(architects)
+            })
+        }
       })
       .catch(err => {
         if (cancelled) return

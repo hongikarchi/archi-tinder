@@ -1,51 +1,82 @@
-"""apps.social.views_people — People Discovery feed.
+"""apps.social.views_people — Social feed (per-BOARD) + per-board report image.
 
 GET /api/v1/people/
 
-Returns a ranked + shuffled list of users whose personality vectors are
-closest (or most opposite) to the requester's own vector.
+A feed of BOARDS (Projects), not people. Each item is one public board with
+its persona report image, plus its owner's identity/type and the requester's
+reaction state.
 
 Query params:
-  filter — 'inspired' (closest), 'opposite' (furthest), or a 4-letter
-            type code (e.g. 'CLON') to see that specific type.
-  axis   — 0..4 integer; when supplied, sort by distance on that axis only
-            instead of the full 5-D Euclidean distance.
+  filter    — absent (newest first) | 'inspired' (owner closest to me) |
+              'opposite' (owner furthest from me) | a 4-letter type code
+              (e.g. 'CLON') = only owners of that type, newest first.
+  cursor    — opaque string from the previous response's `next_cursor`.
+  page_size — default 20, max 30.
 
-Candidate pool construction (ORDER MATTERS — do not reorder):
-  1. Filter:  discovery_opt_in=True. Nothing else — FRONT-PEOPLE-FEED-1
-              (2026-09-03) removed the self-exclusion, the guest exclusion and
-              the publishable-Work requirement. discovery_opt_in survives
-              because it is the user's own hide-me switch, not a completeness
-              gate.
-  2. Report-image filter: restrict to users who have at least one
-              visibility='public' Project carrying a report_image. The feed
-              card's front face IS that image, so this is the one hard
-              requirement; visibility='public' keeps private taste reports
-              from leaking.
-  3. Safety cap: [:500] applied BEFORE any Python-side calculation.
-  4. Distance:   Euclidean distance computed in Python for each candidate.
-  5. Sort:       ascending distance ('inspired') or descending ('opposite').
-  6. Top 15:     slice, then random.shuffle() for feed freshness.
+Candidate pool (every condition is a hard requirement):
+  * Project.visibility='public', is_temp=False, report_image non-empty (the
+    card's front face IS that image; public keeps private reports private).
+  * owner has a PersonalityProfile with discovery_opt_in=True (the user's own
+    hide-me switch; also what supplies the vector / type_code).
+  * owner is not blocked by / blocking the requester (blocked_profile_ids,
+    both directions, independent of MESSAGING_ENABLED).
+  * The requester's own boards are INCLUDED, except under the 'inspired' and
+    'opposite' filters where they are EXCLUDED (distance 0 to self would pin
+    them first / last). Own boards stay in the no-filter feed and appear in a
+    type-code filter only when the owner's type matches.
 
-403 is returned when the requester has no PersonalityProfile yet.
+Ordering (ties are broken deterministically, project_id last):
+  absent / type code : updated_at DESC, project_id
+  inspired           : owner distance ASC,  updated_at DESC, project_id
+  opposite           : owner distance DESC, updated_at DESC, project_id
+  Distance = 5-D Euclidean between the requester's and the owner's vectors,
+  rounded to 4 dp (the same rounded value is sorted on and returned, so the
+  cursor comparison is exact). It is computed for every row and every filter.
+  No top-N cap, no shuffle.
 
-GET /api/v1/people/<user_id>/report-image/
+Pagination — keyset cursor over the sort key of the last returned row
+(base64url JSON). It is stable under ties and does not skip/duplicate rows
+when the feed is unchanged between requests.
 
-Serves one candidate's taste-report image. Split off the feed response on
-purpose: Project.report_image is base64 TEXT in the DB, and inlining ~15 of
-them would balloon a single feed payload into megabytes. The feed returns a
-`report_image_url` pointer instead and each card fetches lazily.
+SAFETY CAP: the DB fetch is limited to the _CANDIDATE_CAP most recently updated
+matching boards (newest first), because distance sorting happens in Python and
+the pool must stay bounded. Everything — sorting, cursors, has_more — operates
+on that capped set, so has_more is honest about THAT set: boards older than the
+cap are simply not part of the feed (for 'inspired'/'opposite' that means the
+oldest boards can never surface). Only metadata columns are fetched (never the
+base64 image), so the cap is cheap.
 
-Only `visibility='public'` projects are eligible — private taste reports never
-leave their owner.
+CACHING: the sorted candidate list is cached _FEED_CACHE_TTL seconds per
+(requester, filter); cursor pages slice it. The cache holds ONLY ordering data
+per entry: (sort_key, project_id, distance) -- no names, avatars or vectors.
+Each page is re-validated with one query (still public/non-temp/imaged/opted-in,
+owner not blocked) that also fetches every displayed field fresh (board name,
+reaction_count, updated_at, owner user_id/display_name/handle/avatar_url/
+type_code) plus is_reacted, so owner edits show immediately and a page may
+return fewer than page_size rows when boards were hidden inside the TTL.
+
+Errors: 404 no UserProfile, 403 {detail:'assessment_required'} when the
+requester has no PersonalityProfile, 400 on bad params / cursor.
+
+GET /api/v1/people/boards/<project_id>/report-image/
+
+Serves one board's persona image. Split off the feed on purpose:
+Project.report_image is base64 TEXT, and inlining a page of them would make the
+feed megabytes wide; the client lazy-fetches per card. Only public, non-temp
+boards that actually have an image are served — everything else is a uniform
+404 so the endpoint never confirms that a private board exists.
 """
-import math
-import random
+import base64
+import json
 import logging
+import math
+from datetime import datetime, timedelta, timezone as dt_timezone
 
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import PersonalityProfile, UserProfile
@@ -58,10 +89,10 @@ logger = logging.getLogger('apps.social')
 # Constants
 # ---------------------------------------------------------------------------
 
-_FEED_SHUFFLE_TOP_N = 15
-_CANDIDATE_CAP = 500
-
-_AXIS_LABELS = ['작업 방식', '역할 성향', '협업 방식', '접근 태도', '결정 속도']
+# Max boards pulled from the DB per request (newest first). See module docstring.
+_CANDIDATE_CAP = 1000
+_PAGE_SIZE_DEFAULT = 20
+_PAGE_SIZE_MAX = 30
 
 # Valid explicit type codes (16 types from 4 binary axes).
 _VALID_TYPE_CODES = frozenset({
@@ -70,6 +101,23 @@ _VALID_TYPE_CODES = frozenset({
     'RLON', 'RLOT', 'RLDN', 'RLDT',
     'RSON', 'RSOT', 'RSDN', 'RSDT',
 })
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+# The sorted candidate list is cached per (requester, filter) for this long so
+# cursor pages do not re-query + re-sort up to _CANDIDATE_CAP rows. Staleness
+# window: a board published / re-ordered / newly opted-in appears up to this
+# many seconds late; a board made private, deleted, opted-out or whose owner is
+# blocked is dropped immediately by the per-page re-validation query.
+_FEED_CACHE_TTL = 40
+
+
+class PeopleFeedThrottle(UserRateThrottle):
+    scope = 'people_feed'
+
+
+class PeopleBoardImageThrottle(UserRateThrottle):
+    scope = 'people_board_image'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -86,39 +134,115 @@ def _euclidean(v1, v2):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(v1, v2)))
 
 
-def _axis_distance(v1, v2, axis_index):
-    """Absolute distance on a single axis (0-based index)."""
-    return abs(v1[axis_index] - v2[axis_index])
+def _micros(dt):
+    """Exact integer microseconds since epoch (no float precision loss)."""
+    return (dt - _EPOCH) // timedelta(microseconds=1)
 
 
-def _reason_copy(my_vec, their_vec):
-    """Generate a one-line reason string comparing two vectors.
-
-    If the maximum axis distance >= 1.5, reports the most-divergent axis.
-    Otherwise reports the most-similar axis.
-    """
-    diffs = [abs(m - t) for m, t in zip(my_vec, their_vec)]
-    max_i = diffs.index(max(diffs))
-    min_i = diffs.index(min(diffs))
-    if max(diffs) >= 1.5:
-        return f'{_AXIS_LABELS[max_i]} 축에서 정반대예요'
-    return f'{_AXIS_LABELS[min_i]} 측면에서 가장 닮았어요'
+def _encode_cursor(key):
+    raw = json.dumps(list(key), separators=(',', ':')).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip('=')
 
 
-def _highlight_axis(my_vec, their_vec):
-    """Return the 0-based index of the most divergent axis."""
-    diffs = [abs(m - t) for m, t in zip(my_vec, their_vec)]
-    return diffs.index(max(diffs))
+def _decode_cursor(token, key_len):
+    """Return the sort-key tuple encoded in `token`, or None when malformed."""
+    try:
+        raw = base64.urlsafe_b64decode(token + '=' * (-len(token) % 4))
+        key = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(key, list) or len(key) != key_len:
+        return None
+    *nums, pid = key
+    if not isinstance(pid, str):
+        return None
+    for n in nums:
+        if isinstance(n, bool) or not isinstance(n, (int, float)):
+            return None
+    return tuple(key)
+
+
+def _cache_key(profile_pk, filter_param, type_code_filter):
+    return f'people_feed:v3:{profile_pk}:{filter_param or type_code_filter or "-"}'
+
+
+def _load_sorted_entries(my_vec, filter_param, type_code_filter, blocked_ids,
+                         requester_pk=None):
+    """Fetch up to _CANDIDATE_CAP candidate rows and return them sorted as
+    [(sort_key, project_id_str, distance), ...]. This is the expensive part that
+    is cached per (requester, filter) for _FEED_CACHE_TTL seconds; display fields
+    are deliberately NOT kept (they are re-read fresh per page).
+
+    For 'inspired' / 'opposite' the requester's OWN boards are excluded here
+    (distance 0 to self would always sort first / last), so the cached list
+    never contains them. No-filter and type-code feeds keep own boards."""
+    qs = (
+        Project.objects
+        .filter(
+            visibility='public',
+            is_temp=False,
+            user__personality__discovery_opt_in=True,
+        )
+        .exclude(report_image__isnull=True)
+        .exclude(report_image='')
+    )
+    if blocked_ids:
+        qs = qs.exclude(user_id__in=blocked_ids)
+    if requester_pk is not None and filter_param in ('inspired', 'opposite'):
+        qs = qs.exclude(user_id=requester_pk)
+    if type_code_filter is not None:
+        qs = qs.filter(user__personality__type_code=type_code_filter)
+
+    # values() = no model hydration and, crucially, never loads the base64
+    # report_image column.
+    rows = list(
+        qs.order_by('-updated_at', '-project_id')
+        .values(
+            'project_id', 'updated_at',
+            'user__personality__axis_1', 'user__personality__axis_2',
+            'user__personality__axis_3', 'user__personality__axis_4',
+            'user__personality__axis_5',
+        )[:_CANDIDATE_CAP]
+    )
+
+    entries = []
+    for r in rows:
+        their_vec = [r[f'user__personality__axis_{i}'] for i in range(1, 6)]
+        dist = round(_euclidean(my_vec, their_vec), 4)
+        neg_ts = -_micros(r['updated_at'])
+        pid = str(r['project_id'])
+        if filter_param == 'inspired':
+            key = (dist, neg_ts, pid)
+        elif filter_param == 'opposite':
+            key = (-dist, neg_ts, pid)
+        else:
+            key = (neg_ts, pid)
+        entries.append((key, pid, dist))
+    entries.sort(key=lambda e: e[0])
+    return entries
+
+
+def _parse_page_size(raw):
+    if raw is None:
+        return _PAGE_SIZE_DEFAULT
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if n < 1:
+        return None
+    return min(n, _PAGE_SIZE_MAX)
 
 
 # ---------------------------------------------------------------------------
-# View
+# Views
 # ---------------------------------------------------------------------------
 
 class PeopleDiscoveryView(APIView):
-    """GET /api/v1/people/ — personality-based user discovery feed."""
+    """GET /api/v1/people/ — per-board social feed."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PeopleFeedThrottle]
 
     def get(self, request):
         # -- Guard: requester must have completed assessment ------------------
@@ -141,28 +265,9 @@ class PeopleDiscoveryView(APIView):
         my_vec = _get_vector(my_personality)
 
         # -- Parse query params -----------------------------------------------
-        filter_param = request.query_params.get('filter', 'inspired')
-        axis_param = request.query_params.get('axis', None)
-
-        # Validate axis param.
-        axis_index = None
-        if axis_param is not None:
-            try:
-                axis_index = int(axis_param)
-                if axis_index < 0 or axis_index > 4:
-                    return Response(
-                        {'detail': 'axis must be 0-4.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-            except (ValueError, TypeError):
-                return Response(
-                    {'detail': 'axis must be an integer 0-4.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # Validate filter param.
+        filter_param = (request.query_params.get('filter') or '').strip()
         type_code_filter = None
-        if filter_param not in ('inspired', 'opposite'):
+        if filter_param and filter_param not in ('inspired', 'opposite'):
             upper_filter = filter_param.upper()
             if upper_filter not in _VALID_TYPE_CODES:
                 return Response(
@@ -173,129 +278,156 @@ class PeopleDiscoveryView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             type_code_filter = upper_filter
+            filter_param = ''
 
-        # -- Step 1: candidate pool — opt-in only -----------------------------
-        # FRONT-PEOPLE-FEED-1 (2026-09-03, product decision): a generated
-        # persona report image is now the ONLY gate that matters. The
-        # self-exclusion and the guest exclusion are both gone — if someone has
-        # an image, they appear, themselves included.
-        #
-        # discovery_opt_in is DELIBERATELY still honoured: it is the user's own
-        # "hide me from discovery" switch, not a completeness requirement, so
-        # overriding it would publish someone against their stated choice. It
-        # currently filters nobody out (0 users have it False), so keeping it
-        # costs no candidates today while preserving the opt-out.
-        base_qs = (
-            PersonalityProfile.objects
-            .filter(discovery_opt_in=True)
-            .select_related('user')
-        )
+        page_size = _parse_page_size(request.query_params.get('page_size'))
+        if page_size is None:
+            return Response(
+                {'detail': 'page_size must be a positive integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Block exclusion (either direction) — ALWAYS applied, independent of
-        # MESSAGING_ENABLED, so blocks survive the flag being turned OFF.
+        by_distance = filter_param in ('inspired', 'opposite')
+        # Sort-key layout: distance filters -> (±dist, -updated_micros, pid);
+        # otherwise -> (-updated_micros, pid). All parts sort ascending.
+        key_len = 3 if by_distance else 2
+
+        cursor_key = None
+        cursor_raw = request.query_params.get('cursor')
+        if cursor_raw:
+            cursor_key = _decode_cursor(cursor_raw, key_len)
+            if cursor_key is None:
+                return Response(
+                    {'detail': 'Invalid cursor.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Block set (either direction) — fetched fresh on EVERY request and
+        # independent of MESSAGING_ENABLED, so blocks survive the flag being OFF
+        # and a new block takes effect immediately even on a cached list.
         blocked_ids = blocked_profile_ids(requester_profile)
-        if blocked_ids:
-            base_qs = base_qs.exclude(user_id__in=blocked_ids)
 
-        # Optional type_code filter.
-        if type_code_filter is not None:
-            base_qs = base_qs.filter(type_code=type_code_filter)
+        # -- Sorted candidate list (cached for _FEED_CACHE_TTL seconds) -------
+        cache_key = _cache_key(requester_profile.pk, filter_param, type_code_filter)
+        entries = cache.get(cache_key)
+        if entries is None:
+            entries = _load_sorted_entries(
+                my_vec, filter_param, type_code_filter, blocked_ids,
+                requester_pk=requester_profile.pk)
+            cache.set(cache_key, entries, _FEED_CACHE_TTL)
 
-        # -- Step 2: restrict to users with a public taste-report image -------
-        # The card's front face is this image, so it is the one hard
-        # requirement. The former "must own a publishable Work" gate was
-        # dropped with the same decision — a portfolio upload has nothing to do
-        # with whether a taste profile is worth discovering.
-        #
-        # visibility='public' stays: report_image lives on Project alongside
-        # private taste reports, and serving those would leak them.
-        report_image_owner_ids = set(
-            Project.objects
-            .filter(visibility='public')
-            .exclude(report_image__isnull=True)
-            .exclude(report_image='')
-            .values_list('user_id', flat=True)
-            .distinct()
-        )
-        base_qs = base_qs.filter(user_id__in=report_image_owner_ids)
+        if cursor_key is not None:
+            entries = [e for e in entries if e[0] > cursor_key]
 
-        # -- Step 3: safety cap BEFORE distance calculation -------------------
-        candidates = list(base_qs[:_CANDIDATE_CAP])
+        page = entries[:page_size]
+        has_more = len(entries) > page_size
+        next_cursor = _encode_cursor(page[-1][0]) if (has_more and page) else None
 
-        # -- Step 4 & 5: distance calculation + sort --------------------------
-        def _dist(p):
-            their_vec = _get_vector(p)
-            if axis_index is not None:
-                return _axis_distance(my_vec, their_vec, axis_index)
-            return _euclidean(my_vec, their_vec)
+        # -- Re-validate the page against live data: ONE cheap query ----------
+        # Drops boards that went private / temp / image-less / opted-out or
+        # whose owner got blocked since the list was cached, and refreshes the
+        # volatile fields (name, reaction_count). Metadata columns only.
+        page_pids = [e[1] for e in page]
+        fresh = {}
+        if page_pids:
+            fresh_qs = (
+                Project.objects
+                .filter(
+                    project_id__in=page_pids,
+                    visibility='public',
+                    is_temp=False,
+                    user__personality__discovery_opt_in=True,
+                )
+                .exclude(report_image__isnull=True)
+                .exclude(report_image='')
+            )
+            if blocked_ids:
+                fresh_qs = fresh_qs.exclude(user_id__in=blocked_ids)
+            fresh = {
+                str(f['project_id']): f
+                for f in fresh_qs.values(
+                    'project_id', 'name', 'updated_at', 'reaction_count',
+                    'user_id', 'user__user_id', 'user__display_name',
+                    'user__handle', 'user__avatar_url',
+                    'user__personality__type_code',
+                )
+            }
+            page = [e for e in page if e[1] in fresh]
+            page_pids = [e[1] for e in page]
 
-        candidates.sort(key=_dist, reverse=(filter_param == 'opposite'))
+        # -- Reaction state: ONE query for the whole page ---------------------
+        from apps.social.models import Reaction
+        reacted = {
+            str(pid) for pid in (
+                Reaction.objects
+                .filter(user=requester_profile, project_id__in=page_pids)
+                .values_list('project_id', flat=True)
+            )
+        } if page_pids else set()
 
-        # -- Step 6: top N then shuffle ---------------------------------------
-        top = candidates[:_FEED_SHUFFLE_TOP_N]
-        random.shuffle(top)
-
-        # -- Build response items ---------------------------------------------
         results = []
-        for p in top:
-            their_vec = _get_vector(p)
-            dist = _euclidean(my_vec, their_vec)
-            h_axis = _highlight_axis(my_vec, their_vec)
-            user_profile = p.user
-            # The requester now appears in their own feed (FRONT-PEOPLE-FEED-1).
-            # Their distance to themselves is 0, so a similarity reason would
-            # read "작업 방식 측면에서 가장 닮았어요" about the viewer — label the
-            # card instead, and let the client mark it via is_me.
-            is_me = p.user_id == requester_profile.id
+        for _key, pid, dist in page:
+            r = fresh[pid]
             results.append({
-                'user_id': user_profile.user_id,
-                'display_name': user_profile.display_name,
-                'handle': user_profile.handle,
-                'avatar_url': user_profile.avatar_url,
-                'type_code': p.type_code,
-                'vector': their_vec,
-                'highlight_axis': None if is_me else h_axis,
-                'reason': '나의 카드예요' if is_me else _reason_copy(my_vec, their_vec),
-                'is_me': is_me,
-                'distance': round(dist, 4),
-                # Pointer, not payload — see module docstring.
-                'report_image_url': f'/api/v1/people/{user_profile.user_id}/report-image/',
+                'board_id': pid,
+                'board_name': r['name'],
+                'user_id': r['user__user_id'],
+                'display_name': r['user__display_name'],
+                'handle': r['user__handle'],
+                'avatar_url': r['user__avatar_url'],
+                'type_code': r['user__personality__type_code'],
+                'distance': dist,
+                'is_me': r['user_id'] == requester_profile.pk,
+                'is_reacted': pid in reacted,
+                'reaction_count': r['reaction_count'],
+                'updated_at': r['updated_at'].isoformat(),
             })
 
         return Response({
             'results': results,
-            'my_vector': my_vec,
+            'has_more': has_more,
+            'next_cursor': next_cursor,
         })
 
 
-class PeopleReportImageView(APIView):
-    """GET /api/v1/people/<user_id>/report-image/ — one candidate's report image.
+class PeopleBoardReportImageView(APIView):
+    """GET /api/v1/people/boards/<project_id>/report-image/ — one board's image.
 
-    Returns the most recently updated PUBLIC project's report image for that
-    user. 404 when the user has none public — callers treat that as "no image"
-    and fall back, they do not retry.
-
-    `user_id` is the auth User id — the same id `/api/v1/users/<user_id>/`
-    takes and the feed emits. Project.user points at UserProfile, whose OWN
-    `user_id` column is the auth User FK, hence the `user__user_id` traversal.
-    Filtering on Project.user_id directly would silently match the wrong
-    person (that column holds UserProfile.id).
+    Public + non-temp + has image, else a uniform 404 (private / missing / no
+    image are indistinguishable on purpose). Mirrors the feed pool: the owner
+    must be discovery-opted-in and not blocked either way with the requester;
+    the requester's own board is always fetchable, even when opted out.
+    Callers treat 404 as "no image"
+    and fall back; they do not retry. Same {image_data, mime_type} shape and
+    no server-side caching as the per-project image endpoint (the payload is a
+    single DB column read; HTTP/CDN caching is the client's concern).
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PeopleBoardImageThrottle]
 
-    def get(self, request, user_id):
+    def get(self, request, project_id):
         project = (
             Project.objects
-            .filter(user__user_id=user_id, visibility='public')
+            .filter(project_id=project_id, visibility='public', is_temp=False)
             .exclude(report_image__isnull=True)
             .exclude(report_image='')
-            .order_by('-updated_at')
-            .values('report_image', 'report_image_mime')
+            .values('report_image', 'report_image_mime', 'user_id')
             .first()
         )
+        if project is not None:
+            requester_profile = getattr(request.user, 'profile', None)
+            if requester_profile is None:
+                project = None
+            elif project['user_id'] != requester_profile.pk:
+                opted_in = PersonalityProfile.objects.filter(
+                    user_id=project['user_id'], discovery_opt_in=True,
+                ).exists()
+                if (not opted_in
+                        or project['user_id'] in blocked_profile_ids(requester_profile)):
+                    project = None
         if project is None:
             return Response(
-                {'detail': 'No public report image for this user.'},
+                {'detail': 'No public report image for this board.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
         return Response({

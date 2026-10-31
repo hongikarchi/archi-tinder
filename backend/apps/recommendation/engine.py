@@ -1406,48 +1406,6 @@ def get_last_clustering_stats():
     return dict(stats) if stats else None
 
 
-def compute_corpus_rank(card_id, v_initial):
-    """
-    Topic 03 / IMP-10 sub-task A: corpus-wide cosine rank of a single card vs V_initial.
-
-    Uses pgvector ORDER BY <=> to rank the entire corpus once and extract the
-    bookmarked card's position.  Rank=1 means closest to v_initial.
-
-    Returns int (1-indexed rank), or None on any of:
-      - v_initial is None or wrong dimension
-      - card not found in corpus
-      - pgvector SQL exception (logs warning; does NOT crash caller)
-
-    Wraps in try/except per IMP-7 failure-cascade pattern: rank_corpus is
-    observability, not correctness -- bookmark must succeed even if this fails.
-    """
-    if v_initial is None or len(v_initial) != 384:
-        return None
-    try:
-        vec_str = _vec_to_pg(v_initial)
-        sql = (
-            'WITH ranked AS ('
-            '  SELECT canonical_bld_id,'
-            '         ROW_NUMBER() OVER (ORDER BY embedding <=> %s::vector ASC) AS rank'
-            '  FROM canonical_v2_buildings'
-            '  WHERE is_publishable = true'
-            ')'
-            ' SELECT rank FROM ranked WHERE canonical_bld_id = %s'
-        )
-        with connection.cursor() as cur:
-            cur.execute(sql, [vec_str, card_id])
-            row = cur.fetchone()
-        if row is None:
-            return None
-        return int(row[0])
-    except Exception as exc:
-        logger.warning(
-            'compute_corpus_rank: pgvector query failed for card %s (%s)',
-            card_id, exc,
-        )
-        return None
-
-
 def precompute_pool_embeddings(pool_ids):
     """
     IMP-7: Explicit precompute entry point for session-creation warming.

@@ -1,7 +1,3 @@
-export function isValidRank(value) {
-  return Number.isInteger(value) && value >= 1 && value <= 100
-}
-
 export function metadataItems(card) {
   const metadata = card?.metadata || {}
   const materialVisual = Array.isArray(metadata.axis_material_visual)

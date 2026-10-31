@@ -779,7 +779,6 @@ def test_surprise_warm_returns_taste_ranked(auth_client, user_profile):
             {'id': 'L002', 'intensity': 1.0},
         ],
         disliked_ids=['D001'],
-        saved_ids=[{'id': 'S001', 'saved_at': '2026-05-14T00:00:00Z'}],
     )
 
     cards = _make_cards(['R001', 'R002', 'R003', 'R004', 'R005',
@@ -794,7 +793,7 @@ def test_surprise_warm_returns_taste_ranked(auth_client, user_profile):
     assert resp.status_code == 200
     assert 'Curated' in payload['title']
     assert len(payload['cards']) == 10
-    blocked_ids = {'L001', 'L002', 'D001', 'S001'}
+    blocked_ids = {'L001', 'L002', 'D001'}
     assert blocked_ids.isdisjoint(card['canonical_bld_id'] for card in payload['cards'])
 
 
@@ -1090,7 +1089,7 @@ def test_guest_promote_blocked_at_board_limit(user_profile):
     assert data.get('reason') == 'board_limit_reached'
 
 
-# ── Security: swipe/bookmark non-existent building → 404 (fix ②) ────────────
+# ── Security: swipe non-existent building → 404 (fix ②) ────────────
 
 @pytest.mark.django_db
 def test_swipe_nonexistent_building_returns_404(auth_client, user_profile):
@@ -1133,34 +1132,6 @@ def test_swipe_nonexistent_building_returns_404(auth_client, user_profile):
                 'canonical_bld_id': 'bld_999999',
                 'action': 'like',
                 'idempotency_key': 'test-idem-1',
-            },
-            format='json',
-        )
-
-    assert resp.status_code == 404
-    assert resp.json().get('detail') == 'building not found'
-
-
-@pytest.mark.django_db
-def test_bookmark_nonexistent_building_returns_404(auth_client, user_profile):
-    """Bookmark with a card_id that does not exist in buildings DB → 404."""
-    from apps.recommendation.models import Project
-
-    project = Project.objects.create(user=user_profile, name='BookmarkProject')
-
-    with patch('apps.recommendation.services.swipe_service.connections') as mock_conns:
-        mock_cursor = MagicMock()
-        mock_cursor.__enter__ = lambda s: s
-        mock_cursor.__exit__ = MagicMock(return_value=False)
-        mock_cursor.fetchone.return_value = None  # building not found
-        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
-
-        resp = auth_client.post(
-            f'/api/v1/projects/{project.project_id}/bookmark/',
-            {
-                'card_id': 'bld_999999',
-                'action': 'save',
-                'rank': 5,
             },
             format='json',
         )

@@ -11,9 +11,9 @@ import s from './BuildingTile.module.css'
  *     reserved for binary status state. Matches the rationale used in FirmProfile
  *     ProjectCard (also drops program chip).
  */
-export default function BuildingTile({ building, fromProjectId, rank, savedIds, referrer, isEditMode, isSelected, onToggleSelect }) {
+export default function BuildingTile({ building, isEditMode, isSelected, onToggleSelect }) {
   const navigate = useNavigate()
-  // FIX F7 (Codex retest 2026-05-26): board saved_ids arrive from the API as
+  // FIX F7 (Codex retest 2026-05-26): board liked_ids arrive from the API as
   // {id: "bld_..."} objects. Added building.id as the final fallback so real
   // API items can navigate correctly. MOCK_BOARD uses building_id; new API shape
   // uses id; image_id / canonical_bld_id keep backwards compat.
@@ -28,10 +28,7 @@ export default function BuildingTile({ building, fromProjectId, rank, savedIds, 
       onClick={() => {
         if (isEditMode) { onToggleSelect?.(buildingId); return }
         if (!buildingId) return
-        const state = fromProjectId
-          ? { fromProjectId, rank, savedIds, referrer, fromBoard: true }
-          : { fromBoard: true }
-        navigate(`/buildings/${buildingId}`, { state })
+        navigate(`/buildings/${buildingId}`)
       }}
       className={s.tile}
       style={{

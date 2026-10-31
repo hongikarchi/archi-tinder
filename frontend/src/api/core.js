@@ -163,7 +163,12 @@ export async function callApi(method, path, body, retry = true, timeoutMs = FETC
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw Object.assign(new Error(err.detail || err.message || 'API error'), { status: res.status, data: err })
+    const retryAfter = Number(res.headers?.get?.('Retry-After'))
+    throw Object.assign(new Error(err.detail || err.message || 'API error'), {
+      status: res.status,
+      data: err,
+      ...(Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfter } : {}),
+    })
   }
   if (res.status === 204) return null
   return res.json()

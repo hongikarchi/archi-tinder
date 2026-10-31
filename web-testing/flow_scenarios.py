@@ -36,11 +36,12 @@ Action vocabulary (everything is optional-timeout, capped inside the runner)
 
 Placeholders
   Selector shortcuts used below:
-    PERSON = first people-card that is not the dev user
+    PERSON = first board card in the /people feed that is not the dev user's own (it has a like heart)
 """
 
-# A people-card (flip card) that is not the dev-login user ("TestUser").
-PERSON_CARD = 'article:has([aria-label$="프로필 보기"]):not(:has([aria-label^="TestUser"]))'
+# A board card in the /people feed that is not the dev-login user's own board
+# (own boards render no like heart, so the heart button is the discriminator).
+PERSON_CARD = 'article[data-board-id]:has(button[aria-pressed])'
 
 STAGES = [
     {"key": "login", "title_ko": "로그인·가입",
@@ -194,19 +195,19 @@ SCENARIOS = [
 
     # --------------------------------------------------------------- 7 social
     dict(id="34", slug="people", stage="social", title_ko="사람 찾기",
-         caption_ko="소셜 탭이에요. 취향이 비슷한 사람들이 카드로 보여요.",
+         caption_ko="소셜 탭이에요. 다른 사람들의 공개 보드가 카드로 보여요.",
          route="/people", actions=[{"wait": f'{PERSON_CARD} >> nth=0'}, {"wait": 1200}]),
-    dict(id="35", slug="people-flip", stage="social", title_ko="카드 뒤집기",
-         caption_ko="사람 카드를 눌렀더니 뒤집혀서 소개가 나왔어요.",
+    dict(id="35", slug="people-expand", stage="social", title_ko="보드 카드 펼치기",
+         caption_ko="보드 카드를 눌렀더니 그 자리에서 펼쳐지고 건물 목록이 나왔어요.",
          route=None, actions=[{"click": f'{PERSON_CARD} >> nth=0'}, {"wait": 900}]),
     dict(id="36", slug="people-filter", stage="social", title_ko="취향 유형 필터",
          caption_ko="‘영감 주는 사람’으로 바꿔봤어요.",
          route=None, actions=[{"click": "text=영감 주는 사람"}, {"wait": 1800}]),
-    dict(id="37", slug="user-profile", stage="social", title_ko="다른 사용자 프로필",
-         caption_ko="사람 카드의 이름을 눌러 프로필을 열었어요.",
-         route="/people", actions=[{"wait": f'{PERSON_CARD} >> nth=0'}, {"click": f'{PERSON_CARD} >> nth=0'},
-                                   {"wait": 700}, {"click": f'{PERSON_CARD} >> nth=0 >> [aria-label$="프로필 보기"]'},
-                                   {"wait": 2500}]),
+    dict(id="37", slug="people-like", stage="social", title_ko="보드 좋아요",
+         caption_ko="접힌 카드의 하트를 눌러 좋아요 했어요. 토스트가 잠깐 떠요.",
+         route="/people", actions=[{"wait": f'{PERSON_CARD} >> nth=0'},
+                                   {"click": f'{PERSON_CARD} >> nth=0 >> button[aria-pressed]'},
+                                   {"wait": 900}]),
     dict(id="38", slug="building-detail", stage="social", title_ko="건물 상세",
          caption_ko="보드에서 건물 하나를 열었어요. 사진과 정보가 보여요.",
          route=None, actions=[{"goto": "/board/{board_id}"}, {"wait": "div[class*=tile] >> nth=0", "timeout": 20000},
@@ -241,9 +242,6 @@ SCENARIOS = [
     dict(id="47", slug="notifications", stage="profile", title_ko="알림함",
          caption_ko="받은 알림이 시간순으로 쌓여 있어요.",
          route="/notifications", actions=[{"wait": 1500}]),
-    dict(id="48", slug="liked-projects", stage="profile", title_ko="좋아요한 프로젝트",
-         caption_ko="좋아요한 프로젝트를 모아 보는 화면이에요.",
-         route="/liked-projects", actions=[{"wait": 1500}]),
     dict(id="49", slug="assessment", stage="profile", title_ko="취향 진단",
          caption_ko="‘다시 진단받기’로 들어가는 취향 진단이에요. 문항마다 다섯 단계로 답해요.",
          route="/assessment", actions=[{"wait": 1500}]),
@@ -289,9 +287,6 @@ SCENARIOS = [
     dict(id="61", slug="empty-profile", stage="variants", title_ko="빈 상태 · 새 계정 프로필",
          caption_ko="방금 만든 새 계정의 프로필이에요. 보드와 좋아요가 하나도 없어요.",
          route="/user/me", account="fresh", actions=[{"wait": 2000}]),
-    dict(id="62", slug="empty-liked", stage="variants", title_ko="빈 상태 · 좋아요한 프로젝트",
-         caption_ko="새 계정의 좋아요한 프로젝트 화면이에요. 아직 비어 있어요.",
-         route="/liked-projects", account="fresh", actions=[{"wait": 1500}]),
     dict(id="63", slug="fresh-taste", stage="variants", title_ko="새 계정 · 취향 시작",
          caption_ko="이메일을 인증하지 않은 새 계정으로도 같은 문장을 보내봤어요. 인증 안내 없이 카드가 그대로 나와요.",
          route="/search", account="fresh",

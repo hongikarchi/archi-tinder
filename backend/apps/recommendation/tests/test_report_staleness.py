@@ -144,7 +144,9 @@ class TestReportStale:
         empty_plain = _make_project(user_profile, name='Empty2', liked_ids=[])
         assert _detail(auth_client, empty_plain)['report_stale'] is False
 
-    def test_non_owner_sees_same_boolean(self, auth_client, api_client, user_profile):
+    def test_non_owner_never_sees_stale_flag(self, auth_client, api_client, user_profile):
+        # Report content is owner-only: non-owners always get report_stale False
+        # (the flag would otherwise reveal that a report exists / changed).
         project = _make_project(user_profile)
         _generate(auth_client, project)
         assert _detail(api_client, project)['report_stale'] is False
@@ -152,7 +154,8 @@ class TestReportStale:
             f'/api/v1/projects/{project.project_id}/',
             {'remove_building_ids': ['B002']}, format='json',
         )
-        assert _detail(api_client, project)['report_stale'] is True
+        assert _detail(auth_client, project)['report_stale'] is True
+        assert _detail(api_client, project)['report_stale'] is False
 
 
 @pytest.mark.django_db

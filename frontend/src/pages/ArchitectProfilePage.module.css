@@ -77,13 +77,6 @@
   font-weight: var(--fw-medium);
 }
 
-/* ---- Save-to-board floating button, saved state tint ---- */
-
-.saveBtnActive {
-  background: color-mix(in srgb, var(--accent-1) 45%, transparent) !important;
-  color: var(--accent-1) !important;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .actionBtn {
     transition: none;

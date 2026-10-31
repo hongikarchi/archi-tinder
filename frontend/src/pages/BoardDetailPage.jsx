@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useBoard } from '../hooks/useBoard.js'
 import { updateProject, deleteProject, getProjectReportImage } from '../api/projects.js'
 import { useRegeneration } from '../hooks/useRegeneration.jsx'
@@ -34,7 +34,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export default function BoardDetailPage({ onResume, onLogout }) {
   const navigate = useNavigate()
-  const location = useLocation()
   const { t, language } = useTranslation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
@@ -44,7 +43,6 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const [reactionCount, setReactionCount] = useState(0)
   const [isReactionPending, setIsReactionPending] = useState(false)
   const [reactionError, setReactionError] = useState(null)
-  const [localSavedIds, setLocalSavedIds] = useState([])
   const [localName, setLocalName] = useState('')
   const [nameDraft, setNameDraft] = useState('')
   const [isEditMode, setIsEditMode] = useState(false)
@@ -52,8 +50,6 @@ export default function BoardDetailPage({ onResume, onLogout }) {
   const [localBuildings, setLocalBuildings] = useState(null)
   // True while a save/delete request is in flight (one lock for every edit action).
   const [busy, setBusy] = useState(null) // null | 'saving-name' | 'deleting'
-  // Capture bookmark signal once at mount so board-load effect can apply it
-  const bookmarkSignalRef = useRef(location.state?.bookmarkChanged || null)
   const [deletedLikedIds, setDeletedLikedIds] = useState([])
   const [lastMsgOn, setLastMsgOn] = useState(false)
   const [visibilityOverride, setVisibilityOverride] = useState(null)
@@ -75,28 +71,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     setLocalName(board.name || '')
     setNameDraft(board.name || '')
     setLocalBuildings(board.buildings || [])
-    // Seed from board data, then apply any pending bookmark signal
-    const base = (board.saved_ids || []).map(item => item?.id || item).filter(Boolean)
-    const signal = bookmarkSignalRef.current
-    if (signal?.buildingId && signal?.action) {
-      bookmarkSignalRef.current = null
-      const { buildingId: changedId, action } = signal
-      if (action === 'save') {
-        setLocalSavedIds([...new Set([...base, changedId])])
-      } else {
-        setLocalSavedIds(base.filter(id => id !== changedId))
-      }
-    } else {
-      setLocalSavedIds(base)
-    }
   }, [board])
-
-  // Clear bookmark signal from history on mount so forward/back doesn't re-apply it
-  useEffect(() => {
-    if (!location.state?.bookmarkChanged) return
-    navigate(location.pathname, { replace: true, state: null })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // Persona report image: inline on the project payload when present, else
   // lazily fetched (same chain as BoardCard). null -> building cover fallback.
@@ -222,7 +197,8 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         }))
         if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
         // No regeneration here: the server flags the report stale and the owner's
-        // next open of the report page regenerates it.
+        // next open of the report page regenerates it (the report is owner-only;
+        // non-owners never receive it).
       }
       setIsEditMode(false)
       setSelectedIds(new Set())
@@ -447,17 +423,17 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       ) : (
       <div>
         {/* Action row — owner: [report pill | continue exploring] (no report:
-            continue only); viewer: [report pill | reaction pill]. Owner edit +
+            continue only); viewer: reaction pill only (report is owner-only). Owner edit +
             share live on the cover. */}
         <div className={s.topActions}>
-          {board?.final_report && (
+          {isOwner && board?.final_report && (
             <button
               onClick={() => navigate(`/board/${board.board_id}/report`)}
               className={`${s.pill} ${s.pillPrimary}`}
-              style={isOwner ? {
+              style={{
                 flex: onResume ? '3 1 0' : '1 1 0', minWidth: 0, padding: '0 12px',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              } : undefined}
+              }}
             >
               {t('board.viewReport')}
             </button>
@@ -484,7 +460,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
               aria-label={isReacted ? t('board.loved', { r: reactionCount }) : t('board.loveThis')}
               aria-pressed={isReacted}
               className={`${s.pill} ${s.pillSecondary}${isReacted ? ` ${s.reacted}` : ''}`}
-              style={board?.final_report ? undefined : { marginLeft: 'auto' }}
+              style={{ marginLeft: 'auto' }}
             >
               <svg
                 width="16" height="16" viewBox="0 0 24 24"
@@ -572,16 +548,12 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         />
       ) : (
         <div className={tileStyles.grid} style={isEditMode ? { paddingBottom: 56 } : undefined}>
-          {buildings.map((building, index) => {
+          {buildings.map((building) => {
             const bid = building.image_id || building.canonical_bld_id || building.building_id || building.id
             return (
             <BuildingTile
               key={bid}
               building={building}
-              fromProjectId={isOwner ? boardId : null}
-              rank={index + 1}
-              savedIds={localSavedIds}
-              referrer={location.pathname}
               isEditMode={isEditMode}
               isSelected={selectedIds.has(bid)}
               onToggleSelect={handleToggleBuildingSelect}

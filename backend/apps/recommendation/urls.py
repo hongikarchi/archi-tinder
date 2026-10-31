@@ -6,7 +6,7 @@ from .views import (
     DiverseRandomView, BuildingBatchView,
     ProjectReportGenerateView, ProjectReportImageView,
     ProjectReportImageFetchView,
-    ProjectBookmarkView, ImageLoadTelemetryView, BoardSurpriseView,
+    ImageLoadTelemetryView, BoardSurpriseView,
     RecommendedArchitectsView, ArchitectDetailView, ArchitectFollowView,
     InspectBuildingsListView, InspectBuildingDetailView, InspectSearchView,
     TasteRecognizeView, TasteCardsView,
@@ -21,7 +21,6 @@ urlpatterns = [
     path('projects/<uuid:pk>/report/generate-image/',        ProjectReportImageView.as_view()),
     path('projects/<uuid:pk>/report-image/',                  ProjectReportImageFetchView.as_view(), name='project-report-image'),
     path('projects/<uuid:pk>/report/generate/',               ProjectReportGenerateView.as_view()),
-    path('projects/<uuid:project_id>/bookmark/',              ProjectBookmarkView.as_view()),
     # User-scoped project list — BOARD1 Phase 13
     path('users/<int:user_id>/projects/',                     UserProjectsListView.as_view()),
     # Analysis sessions

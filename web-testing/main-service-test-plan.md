@@ -81,7 +81,6 @@ Implemented:
 - Prefetch at low deck count, sessionStorage deck cache, seen-card shake on reappearance.
 - 10-like trigger card that can promote Discovery draft into Taste analysis.
 - 50-like hard cap forcing Taste handoff.
-- Discovery likes stored in profile-level liked building list.
 
 Primary scenario:
 
@@ -184,15 +183,14 @@ Failure:
 - Finish button opens report before last swipe write settles.
 - Refresh restarts taste from zero without explicit new-session action.
 
-### 5. Results, Bookmarks, And Report
+### 5. Results And Report
 
 Implemented:
 
 - `/result/:sessionId` persona report header.
 - Liked building carousel.
 - Top-K recommendation grid, lazy-loaded up to 50.
-- Bookmark toggle on result cards.
-- Building detail navigation with bookmark state reconciliation.
+- Building detail navigation from result cards.
 - Backend report generation on completion.
 
 Primary scenario:
@@ -200,25 +198,20 @@ Primary scenario:
 1. Complete Taste flow.
 2. Open persona report.
 3. Verify persona type, one-liner, liked buildings, top recommendations.
-4. Bookmark rank 1 and rank 8.
-5. Open bookmarked building detail, toggle bookmark there, go back.
-6. Save report/board and return to `/user/me`.
+4. Open a recommended building detail, go back.
+5. Save report/board and return to `/user/me`.
 
 Success:
 
 - `/api/v1/analysis/sessions/{id}/result/` returns liked and predicted images.
 - Top cards show image, title, rank, metadata.
-- Bookmark star updates optimistically and persists after refresh.
-- Detail page bookmark changes reconcile back to result grid.
 - Report page remains usable if persona image generation is slow or fails.
 
 Failure:
 
 - Results route says invalid session for a session just completed.
-- Bookmarked state differs between result grid, building detail, and board.
-- Saved IDs are duplicated after repeated toggles.
 
-### 6. User Profile, Boards, And Liked Buildings
+### 6. User Profile And Boards
 
 Implemented:
 
@@ -228,23 +221,20 @@ Implemented:
 - Board public/private visibility.
 - Owner-only board edit, delete, bulk visibility, bulk delete.
 - Follow/unfollow user, followers/following lists.
-- Liked Projects page from Discovery right swipes.
 - Saved Studios tab from architect follows.
 
 Primary scenario:
 
 1. Open `/user/me`.
 2. Confirm profile hero and board count.
-3. Open `Liked Projects`; verify Discovery likes appear.
-4. Return, open settings profile edit, update role/affiliation/bio, save.
-5. Upload avatar if test environment allows safe small image.
-6. Create or use at least two boards, toggle public/private, then refresh.
-7. Enter select mode, bulk-toggle visibility, then bulk-delete a disposable board.
+3. Open settings profile edit, update role/affiliation/bio, save.
+4. Upload avatar if test environment allows safe small image.
+5. Create or use at least two boards, toggle public/private, then refresh.
+6. Enter select mode, bulk-toggle visibility, then bulk-delete a disposable board.
 
 Success:
 
 - Profile fields persist after refresh and relogin.
-- Discovery liked buildings appear in `/liked-projects`.
 - Board visibility updates optimistically and persists.
 - Bulk action affects selected boards only.
 - Failed board action shows inline error and reverts UI.
@@ -295,16 +285,13 @@ Failure:
 - Radar chart fails when some axis score is missing.
 - React count goes negative or double-increments on repeated clicks.
 
-### 8. Building Detail And Save-To-Board
+### 8. Building Detail
 
 Implemented:
 
-- `/buildings/:buildingId` detail from result, board, liked, and architect surfaces.
+- `/buildings/:buildingId` detail from result, board, and architect surfaces.
 - Metadata cards, source link, visual description, atmosphere.
 - Gallery split by photos/drawings when metadata exists.
-- Bookmark when opened from recommendation result.
-- Save-to-board modal and new board creation from detail.
-- Guest verify gate when board limit requires promotion.
 
 Primary scenario:
 
@@ -312,22 +299,16 @@ Primary scenario:
 2. Verify title, architect, country/city/year/program/style/material metadata.
 3. Switch gallery filters: All, Photos, Drawings.
 4. Click source link in new tab if present.
-5. Save to an existing board.
-6. Create a new board from save modal, save building, then find board in profile.
 
 Success:
 
 - Invalid building ID shows error state, not crash.
 - Valid building loads through `/api/v1/images/batch/`.
 - Gallery filter buttons disable empty categories.
-- Save modal lists boards and creates new private board.
-- Saved building appears in chosen board after refresh.
 
 Failure:
 
 - Detail page cannot load a building that appeared in result/Discovery.
-- Save-to-board silently fails.
-- Modal creates board but does not save selected building.
 
 ### 9. Architect And Firm Profiles
 
@@ -436,5 +417,5 @@ For deployed main testing, update or wrap the runner before relying on it:
 Recommended minimum production smoke:
 
 1. Guest onboarding -> Discovery -> 10 likes -> promote -> 12 Taste swipes -> result.
-2. Handle/password register -> new project -> taste search -> swipe -> bookmark -> board detail/report.
+2. Handle/password register -> new project -> taste search -> swipe -> board detail/report.
 3. Profile/settings -> edit profile -> theme/font/language -> public board -> second-account reaction/follow.

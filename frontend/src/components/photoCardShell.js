@@ -4,7 +4,7 @@
  * Extracted (2026-08-29) from ResultsPage's `ResultCard` — the recommendation
  * tiles shown after a taste report is generated. That card was a LOCAL
  * function inside ResultsPage.jsx with no export, so it could not be reused by
- * import; pulling its measurements here lets /people's PersonCard render the
+ * import; pulling its measurements here lets /people's BoardSocialCard render the
  * same tile instead of a look-alike. ResultCard now consumes these constants
  * too, so a change here moves both surfaces together.
  *
@@ -18,7 +18,7 @@ export const PHOTO_GRID_PADDING = '0 12px 18px'
 /**
  * ResultsPage pins its grid at `repeat(4, 1fr)` with no breakpoints, which on a
  * 390px phone yields 86px-wide tiles. That is fine for a pure photo tile, but
- * /people's tile flips to a personality chart, which needs room to stay
+ * /people's tile carries a caption and a heart control, which need room to stay
  * legible — so the people feed steps its column count down on narrow screens
  * (4 / 3 / 2) via PeopleDiscoveryPage.module.css rather than reusing this
  * fixed value.

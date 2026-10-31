@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import styles from './UserProfilePage.module.css'
 import { useTranslation } from '../i18n/index.js'
-import { getUserProfile, getLikedBuildings, getArchitectProfile } from '../api/client.js'
+import { getUserProfile, getArchitectProfile } from '../api/client.js'
 import { updateProject, deleteProject } from '../api/projects.js'
 import { getMyWorks, getUserWorks } from '../api/works.js'
 import { purgeChatCache } from '../utils/appHelpers.js'
 import { getUserSavedStudios } from '../api/architects.js'
+import { getLikedBoards } from '../api/social.js'
 import { getMyPersonality } from '../api/personality.js'
 import WorkDetailModal from '../components/WorkDetailModal.jsx'
 import ProfileHero from './userProfile/ProfileHero'
@@ -33,6 +34,10 @@ import { userHandle } from '../utils/userIdentity.js'
 // Hidden 2026-09-26 per user (design noise); functionality kept, delete
 // entirely if no issue surfaces.
 const SHOW_BOARD_EDIT_BUTTON = false
+
+// Stable props for the read-only Liked grid (no select mode).
+const EMPTY_SELECTION = new Set()
+const noop = () => {}
 
 /**
  * formatBoardDate — converts ISO 8601 timestamp to "Month YYYY" display string.
@@ -80,14 +85,27 @@ export default function UserProfilePage({ onLogout }) {
   const [boardsLoading, setBoardsLoading] = useState(false)
   const sentinelRef = useRef(null)
 
-  // Tab state — 'boards' | 'studios' | 'liked'
+  // Tab state — 'boards' | 'studios' | 'liked' (own profile only) | 'created'
   const [activeTab, setActiveTab] = useState('boards')
+  // Liked tab (own profile only): boards the viewer reacted to, newest like first.
+  const [likedBoards, setLikedBoards] = useState(null)  // null = not loaded yet
+  const [likedPage, setLikedPage] = useState(1)
+  const [likedHasMore, setLikedHasMore] = useState(false)
+  const [likedLoading, setLikedLoading] = useState(false)
+  const [likedError, setLikedError] = useState(false)
+  const likedSentinelRef = useRef(null)
+  const likedReqRef = useRef(0)
+  const studiosReqRef = useRef(0)
+  const worksReqRef = useRef(0)
+  // Invalidate every in-flight lazy-tab fetch on unmount.
+  useEffect(() => () => {
+    likedReqRef.current++
+    studiosReqRef.current++
+    worksReqRef.current++
+  }, [])
   const [savedStudios, setSavedStudios] = useState(null)  // null = not loaded yet
   const [studiosLoading, setStudiosLoading] = useState(false)
   const [buildingsMap, setBuildingsMap] = useState({}) // architect_id → buildings[]
-  const [likedBuildings, setLikedBuildings] = useState(null) // null = not yet fetched
-  const [likedLoading, setLikedLoading] = useState(false)
-  const [likedCount, setLikedCount] = useState(0)
   const [works, setWorks] = useState(null)  // null = not loaded yet
   const [worksLoading, setWorksLoading] = useState(false)
   const [selectedWorkId, setSelectedWorkId] = useState(null)
@@ -119,15 +137,6 @@ export default function UserProfilePage({ onLogout }) {
   const bulkDeleteBtnRef = useRef(null)
   const bulkConfirmTimerRef = useRef(null)
 
-  // Fetch likedCount on mount for ProfileHero stat display — own list when
-  // isMe, otherwise the viewed user's liked list (design-parity, FRONT-*).
-  useEffect(() => {
-    if (!effectiveUserId) return
-    getLikedBuildings(isMe ? undefined : effectiveUserId)
-      .then(data => setLikedCount(data?.total ?? 0))
-      .catch(() => {})
-  }, [isMe, effectiveUserId, refreshKey])
-
   // Fetch my personality for overlay comparison (both isMe and !isMe paths)
   // Empty deps intentional: runs once on mount to load the caller's own personality.
   useEffect(() => {
@@ -139,35 +148,23 @@ export default function UserProfilePage({ onLogout }) {
   // Fetch architect profiles for buildingsMap whenever savedStudios changes
   useEffect(() => {
     if (!savedStudios?.length) return
+    const req = studiosReqRef.current
     savedStudios.forEach(office => {
       if (buildingsMap[office.architect_id] !== undefined) return
       getArchitectProfile(office.architect_id)
         .then(profile => {
+          if (req !== studiosReqRef.current) return
           setBuildingsMap(prev => ({
             ...prev,
             [office.architect_id]: profile?.buildings || [],
           }))
         })
         .catch(() => {
+          if (req !== studiosReqRef.current) return
           setBuildingsMap(prev => ({ ...prev, [office.architect_id]: [] }))
         })
     })
   }, [savedStudios]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleLikedTab() {
-    setActiveTab('liked')
-    if (likedBuildings !== null) return
-    setLikedLoading(true)
-    try {
-      const data = await getLikedBuildings(isMe ? undefined : effectiveUserId)
-      setLikedBuildings(data?.buildings || [])
-      setLikedCount(data?.total ?? 0)
-    } catch {
-      setLikedBuildings([])
-    } finally {
-      setLikedLoading(false)
-    }
-  }
 
   // Helper: exit select mode and reset all selection state.
   // NOTE: does NOT clear bulkPending — bulk handlers clear it themselves after
@@ -183,28 +180,64 @@ export default function UserProfilePage({ onLogout }) {
   const handleStudiosTab = async () => {
     setActiveTab('studios')
     if (savedStudios !== null) return  // already loaded
+    const req = ++studiosReqRef.current
     setStudiosLoading(true)
     try {
       const data = await getUserSavedStudios(effectiveUserId)
+      if (req !== studiosReqRef.current) return
       setSavedStudios(data)
     } catch {
+      if (req !== studiosReqRef.current) return
       setSavedStudios([])
     } finally {
-      setStudiosLoading(false)
+      if (req === studiosReqRef.current) setStudiosLoading(false)
     }
+  }
+
+  const loadLiked = useCallback(async (page) => {
+    const req = ++likedReqRef.current
+    setLikedLoading(true)
+    setLikedError(false)
+    try {
+      const data = await getLikedBoards({ page, pageSize: 12 })
+      if (req !== likedReqRef.current) return
+      const items = (data?.items || []).map(b => ({ ...b, board_id: b.project_id, date: formatBoardDate(b.date) }))
+      setLikedBoards(prev => {
+        const base = page === 1 ? [] : (prev || [])
+        const seen = new Set(base.map(b => b.board_id))
+        return [...base, ...items.filter(b => !seen.has(b.board_id))]
+      })
+      setLikedPage(data?.page ?? page)
+      setLikedHasMore(!!data?.has_more)
+    } catch {
+      if (req !== likedReqRef.current) return
+      setLikedError(true)
+      setLikedBoards(prev => prev ?? [])
+    } finally {
+      if (req === likedReqRef.current) setLikedLoading(false)
+    }
+  }, [])
+
+  const handleLikedTab = () => {
+    setActiveTab('liked')
+    if (likedBoards !== null) return  // already loaded
+    loadLiked(1)
   }
 
   const handleCreatedTab = async () => {
     setActiveTab('created')
     if (works !== null) return  // already loaded
+    const req = ++worksReqRef.current
     setWorksLoading(true)
     try {
       const data = isMe ? await getMyWorks() : await getUserWorks(effectiveUserId)
+      if (req !== worksReqRef.current) return
       setWorks(data?.works || [])
     } catch {
+      if (req !== worksReqRef.current) return
       setWorks([])
     } finally {
-      setWorksLoading(false)
+      if (req === worksReqRef.current) setWorksLoading(false)
     }
   }
 
@@ -248,17 +281,33 @@ export default function UserProfilePage({ onLogout }) {
     setSelectMode(false)
     setSelectedBoards(new Set())
     setConfirmingBulkDelete(false)
+    setBulkPending(false)
+    clearTimeout(bulkConfirmTimerRef.current)
+    setBoardActionError(null)
+    setBoardsLoading(false)
+    // Close the work-detail overlay and drop every lazily loaded tab so a
+    // profileRefresh really starts from a clean default profile.
+    setSelectedWorkId(null)
+    setWorksLoading(false)
+    setStudiosLoading(false)
+    setBuildingsMap({})
     setSavedStudios(null)
+    likedReqRef.current++
+    studiosReqRef.current++
+    worksReqRef.current++
+    setLikedBoards(null)
+    setLikedPage(1)
+    setLikedHasMore(false)
+    setLikedLoading(false)
+    setLikedError(false)
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     // Reset boards state on user change
     setBoards([])
     setBoardsPage(1)
     setBoardsHasMore(false)
-    // Reset Liked/Created tab caches on user change — both are now reachable
-    // for !isMe (design-parity), so navigating between two profiles without
-    // an unmount must not leak the previous user's likes/works/count.
-    setLikedBuildings(null)
-    setLikedCount(0)
+    // Reset Created tab cache on user change — reachable for !isMe, so
+    // navigating between two profiles without an unmount must not leak the
+    // previous user's works.
     setWorks(null)
     getUserProfile(effectiveUserId, { boardsPage: 1, boardsPageSize: 12 })
       .then(data => {
@@ -311,6 +360,18 @@ export default function UserProfilePage({ onLogout }) {
     observer.observe(sentinel)
     return () => observer.disconnect()
   }, [loadMoreBoards])
+
+  // Liked tab infinite scroll -- own sentinel, same 200px lead as the boards tab.
+  useEffect(() => {
+    const sentinel = likedSentinelRef.current
+    if (activeTab !== 'liked' || !sentinel || !likedHasMore || likedLoading || likedError) return
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) loadLiked(likedPage + 1) },
+      { rootMargin: '200px' },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [activeTab, likedHasMore, likedLoading, likedError, likedPage, loadLiked, likedBoards])
 
   // Auto-dismiss board action error after 4s
   useEffect(() => {
@@ -513,10 +574,8 @@ export default function UserProfilePage({ onLogout }) {
           user={user}
           boardsTotalCount={boardsTotalCount}
           savedStudiosCount={user.saved_studios_count ?? 0}
-          likedCount={likedCount}
           onSelectTab={(t) => {
             if (t === 'studios') handleStudiosTab()
-            else if (t === 'liked') handleLikedTab()
             else if (t === 'created') handleCreatedTab()
             else setActiveTab('boards')
           }}
@@ -630,7 +689,7 @@ export default function UserProfilePage({ onLogout }) {
         })()}
         {/* ── End personality section ────────────────────────────────────── */}
 
-        {/* Tab bar — Boards | Studios | Liked | Created (all 4 visible to any
+        {/* Tab bar — Boards | Studios | Created (all visible to any
             viewer, design-parity user-other.html; edit affordances inside
             each panel stay isMe-gated) */}
         <Tabs
@@ -638,7 +697,7 @@ export default function UserProfilePage({ onLogout }) {
           tabs={[
             { id: 'boards', label: t('profileB3.tabBoards') },
             { id: 'studios', label: t('profileB3.tabStudios') },
-            { id: 'liked', label: t('profileB3.tabLiked') },
+            ...(isMe ? [{ id: 'liked', label: t('socialBoard.tabLiked') }] : []),
             { id: 'created', label: t('profileB3.tabCreated') },
           ]}
           value={activeTab}
@@ -850,43 +909,49 @@ export default function UserProfilePage({ onLogout }) {
           </div>
         )}
 
-        {/* Liked tab content */}
-        {activeTab === 'liked' && (
+        {/* Liked tab — own profile only (the tab is not rendered for others). */}
+        {isMe && activeTab === 'liked' && (
           <div style={{ padding: '0 0 16px' }}>
-            <div style={{ marginBottom: 20 }}>
-              <SectionTitle as="h3">{t('profileB3.likedProjects')}</SectionTitle>
-            </div>
-            {likedLoading ? (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 20,
-              }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ aspectRatio: '4 / 5', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-2)' }} />
-                ))}
-              </div>
-            ) : !likedBuildings || likedBuildings.length === 0 ? (
-              <EmptyState
-                title={t('profile.noLikedProjectsInline')}
-                body={t('profile.swipeToSaveInline')}
+            {likedBoards !== null && likedBoards.length > 0 && (
+              <BoardGrid
+                boards={likedBoards}
+                isMe={false}
+                selectMode={false}
+                selectedBoards={EMPTY_SELECTION}
+                onSelectToggle={noop}
+                boardsHasMore={likedHasMore}
+                boardsLoading={likedLoading}
+                showOwner
               />
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                gap: 20,
-              }}>
-                {likedBuildings.map((bld, i) => (
-                  <PhotoTile
-                    key={bld.canonical_bld_id || i}
-                    imageUrl={bld.image_url || bld.display_cover_url}
-                    title={bld.name || bld.canonical_bld_id}
-                    subtitle={bld.architect_names?.length > 0 ? bld.architect_names.join(', ') : 'Building'}
-                    placeholder={<BuildingIconEmpty />}
-                    onClick={() => navigate('/buildings/' + bld.canonical_bld_id)}
-                  />
-                ))}
+            )}
+            {likedBoards !== null && likedBoards.length === 0 && !likedLoading && !likedError && (
+              <EmptyState
+                title={t('socialBoard.likedEmpty')}
+                actionLabel={t('socialBoard.likedEmptyCta')}
+                onAction={() => navigate('/people')}
+              />
+            )}
+            {likedError && (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-muted)', fontSize: 'var(--fs-body)' }}>
+                <p style={{ margin: '0 0 10px' }}>{t('socialBoard.likedError')}</p>
+                <button
+                  type="button"
+                  className={styles.cancelBtn}
+                  onClick={() => loadLiked(likedBoards && likedBoards.length > 0 ? likedPage + 1 : 1)}
+                >
+                  {t('socialBoard.retry')}
+                </button>
+              </div>
+            )}
+            <div ref={likedSentinelRef} style={{ height: 1 }} />
+            {likedLoading && (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  border: '2px solid var(--color-border)',
+                  borderTopColor: 'var(--accent-1)',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
               </div>
             )}
           </div>

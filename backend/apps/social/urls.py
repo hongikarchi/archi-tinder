@@ -4,7 +4,8 @@ from .views import (
     ReactionView,
     UserSavedStudiosView,
 )
-from .views_people import PeopleDiscoveryView, PeopleReportImageView
+from .views_liked import LikedBoardsView
+from .views_people import PeopleBoardReportImageView, PeopleDiscoveryView
 
 urlpatterns = [
     path('users/<int:user_id>/saved_studios/', UserSavedStudiosView.as_view(), name='user-saved-studios'),
@@ -18,8 +19,10 @@ urlpatterns = [
     # Personality-based people discovery
     path('people/', PeopleDiscoveryView.as_view(), name='people-discovery'),
     path(
-        'people/<int:user_id>/report-image/',
-        PeopleReportImageView.as_view(),
-        name='people-report-image',
+        'people/boards/<uuid:project_id>/report-image/',
+        PeopleBoardReportImageView.as_view(),
+        name='people-board-report-image',
     ),
+    # Boards the requester has reacted to
+    path('liked-boards/', LikedBoardsView.as_view(), name='liked-boards'),
 ]

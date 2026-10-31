@@ -100,15 +100,15 @@ class TestReactionCreate:
         assert project.reaction_count == 0
 
     @pytest.mark.django_db
-    def test_react_private_project_owner_returns_201(self, user_b, auth_client_b):
-        """POST to react on own private project returns 201 (owner can react)."""
+    def test_react_private_project_owner_returns_403(self, user_b, auth_client_b):
+        """POST to react on own private project is rejected (own board)."""
         _, b_profile = user_b
         project = _make_private_project(b_profile)
 
         response = auth_client_b.post(_react_url(project.project_id))
-        assert response.status_code == 201
+        assert response.status_code == 403
         project.refresh_from_db()
-        assert project.reaction_count == 1
+        assert project.reaction_count == 0
 
     @pytest.mark.django_db
     def test_react_nonexistent_project_returns_404(self, auth_client_a):
@@ -253,7 +253,8 @@ class TestIsReactedInjection:
         _, b_profile = user_b
         project = _make_private_project(b_profile)
 
-        auth_client_b.post(_react_url(project.project_id))
+        from apps.social.models import Reaction
+        Reaction.objects.create(user=b_profile, project=project)  # API now forbids self-react
         response = auth_client_b.get(_project_url(project.project_id))
         assert response.status_code == 200
         assert response.json()['is_reacted'] is True
@@ -415,8 +416,8 @@ class TestReactorsList:
         _, b_profile = user_b
         project = _make_private_project(b_profile)
 
-        response = auth_client_b.post(_react_url(project.project_id))
-        assert response.status_code == 201
+        from apps.social.models import Reaction
+        Reaction.objects.create(user=b_profile, project=project)  # API now forbids self-react
 
         response = auth_client_b.get(_reactors_url(project.project_id))
         assert response.status_code == 200

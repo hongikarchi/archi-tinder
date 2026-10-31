@@ -210,8 +210,8 @@ class ProjectReportGenerateView(APIView):
             if new_name is not None:
                 locked.name = new_name
                 update_fields.append('name')
-            # Write ONLY these columns (never a stale copy of liked_ids /
-            # saved_ids loaded before the slow LLM call).
+            # Write ONLY these columns (never a stale copy of liked_ids
+            # loaded before the slow LLM call).
             locked.save(update_fields=update_fields)
 
         # Evictions run after commit so readers never re-cache pre-commit state.

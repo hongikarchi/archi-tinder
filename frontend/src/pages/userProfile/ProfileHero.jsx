@@ -54,7 +54,6 @@ export default function ProfileHero({
   user,
   boardsTotalCount,
   savedStudiosCount,
-  likedCount,
   onSelectTab,
   // Avatar upload props (owner-only)
   isMe,
@@ -107,7 +106,6 @@ export default function ProfileHero({
   const stats = [
     { count: boardsTotalCount, label: t('profileB3.tabBoards'), onClick: () => onSelectTab('boards') },
     { count: savedStudiosCount ?? 0, label: t('profileB3.tabStudios'), onClick: () => onSelectTab('studios') },
-    { count: likedCount ?? 0, label: t('profileB3.tabLiked'), onClick: () => onSelectTab('liked') },
   ]
 
   // 2B: single data source for the external-link pills — map renders one

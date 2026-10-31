@@ -1,10 +1,8 @@
 import io
 import logging
-import re
 from uuid import uuid4
 
 from django.conf import settings
-from django.db import connections as _dj_connections
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -24,64 +22,18 @@ logger = logging.getLogger('apps.accounts')
 
 # -- User Profile (Phase 13 PROF2 + BOARD1) --------------------------------
 
-def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
-    """Build boards pagination dict for UserProfileDetailView response.
+def _build_board_items(projects):
+    """Board card dicts for an already-paged list of Project rows.
 
-    Returns a dict with items + pagination metadata:
-      {
-        "items": [...],       # list of board dicts (same shape as before)
-        "page": <int>,
-        "page_size": <int>,
-        "total_count": <int>,
-        "has_more": <bool>,
-        "next_page": <int|null>,
-      }
-
-    Each board card contains: project_id, name, date (created_at), visibility,
-    building_count, cover_image_url, thumbnails (up to 6),
-    has_report_image + report_image_url (pointer to the persona report
-    image; the card prefers it over cover_image_url).
-
-    Liked buildings only: building_count, cover and thumbnails come from
-    liked_ids (bookmarked saved_ids never count). Cover = first liked building
-    with an image → ''.
-    Image batch lookup is performed only for the paged slice to avoid N+1 at
-    scale.
+    Shared by the profile board list and GET /liked-boards/. Liked buildings
+    only: building_count, cover and thumbnails come from liked_ids. One batched
+    thumbnail lookup for the whole slice (no per-board query).
     """
-    from apps.recommendation.models import Project
     from apps.recommendation import engine
-
-    # Clamp pagination params
-    page_size = min(max(1, page_size), 50)
-    page = max(1, page)
-
-    # v3.2: discovery draft boards (name prefix 'discovery_') are now visible on
-    # the profile — they are normal boards and must appear in the board list.
-    qs = Project.objects.filter(user=target_profile).order_by('-updated_at')
-    if not is_owner:
-        qs = qs.filter(visibility='public')
-
-    total_count = qs.count()
-    offset = (page - 1) * page_size
-    paged_qs = qs[offset: offset + page_size]
-    projects = list(paged_qs)
-
-    has_more = offset + page_size < total_count
-    next_page = page + 1 if has_more else None
-
-    if not projects:
-        return {
-            'items': [],
-            'page': page,
-            'page_size': page_size,
-            'total_count': total_count,
-            'has_more': has_more,
-            'next_page': next_page,
-        }
 
     # Collect all building_ids needed for image resolution (cover + thumbnails).
     # Per project: take first 7 unique ids from liked_ids ONLY (boards show liked
-    # buildings; bookmarks never feed cover/thumbnails/count — 2026-10-23).
+    # buildings).
     # Cover uses first; thumbnails use up to 6 from the rest.
     def _extract_ids(project):
         liked = [
@@ -111,6 +63,11 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
 
     items = []
     for p in projects:
+        # Callers that deferred report_image (GET /liked-boards/) attach a
+        # SQL-computed `_has_report_image`; otherwise read the loaded column.
+        has_image = getattr(p, '_has_report_image', None)
+        if has_image is None:
+            has_image = bool(p.report_image)
         bids = project_bid_lists[p.project_id]
         cover_url = next((image_map.get(bid, '') for bid in bids if image_map.get(bid)), '')
         thumbnails = [image_map[bid] for bid in bids if image_map.get(bid)][:6]
@@ -130,12 +87,70 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
             # megabytes wide. Same split the /people feed uses.
             # `p.report_image` is already in memory (the queryset above loads
             # full rows), so this flag costs no extra query.
-            'has_report_image': bool(p.report_image),
+            'has_report_image': bool(has_image),
             'report_image_url': (
                 f'/api/v1/projects/{p.project_id}/report-image/'
-                if p.report_image else ''
+                if has_image else ''
             ),
         })
+    return items
+
+
+def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
+    """Build boards pagination dict for UserProfileDetailView response.
+
+    Returns a dict with items + pagination metadata:
+      {
+        "items": [...],       # list of board dicts (same shape as before)
+        "page": <int>,
+        "page_size": <int>,
+        "total_count": <int>,
+        "has_more": <bool>,
+        "next_page": <int|null>,
+      }
+
+    Each board card contains: project_id, name, date (created_at), visibility,
+    building_count, cover_image_url, thumbnails (up to 6),
+    has_report_image + report_image_url (pointer to the persona report
+    image; the card prefers it over cover_image_url).
+
+    Liked buildings only: building_count, cover and thumbnails come from
+    liked_ids. Cover = first liked building
+    with an image → ''.
+    Image batch lookup is performed only for the paged slice to avoid N+1 at
+    scale.
+    """
+    from apps.recommendation.models import Project
+
+    # Clamp pagination params
+    page_size = min(max(1, page_size), 50)
+    page = max(1, page)
+
+    # v3.2: discovery draft boards (name prefix 'discovery_') are now visible on
+    # the profile — they are normal boards and must appear in the board list.
+    qs = Project.objects.filter(user=target_profile).order_by('-updated_at')
+    if not is_owner:
+        qs = qs.filter(visibility='public')
+
+    total_count = qs.count()
+    offset = (page - 1) * page_size
+    paged_qs = qs[offset: offset + page_size]
+    projects = list(paged_qs)
+
+    has_more = offset + page_size < total_count
+    next_page = page + 1 if has_more else None
+
+    if not projects:
+        return {
+            'items': [],
+            'page': page,
+            'page_size': page_size,
+            'total_count': total_count,
+            'has_more': has_more,
+            'next_page': next_page,
+        }
+
+    items = _build_board_items(projects)
 
     return {
         'items': items,
@@ -452,143 +467,3 @@ class AvatarUploadView(APIView):
         # Return the same UserSerializer shape as /auth/me/ so the frontend
         # can update its auth-user state in one round-trip.
         return Response(UserSerializer(profile).data)
-
-
-# -- Liked Buildings (SNS-LIKED-PROJECTS) ----------------------------------
-
-_LIKED_BUILDINGS_CAP = 200
-# FULL-LOGIN-REDESIGN-1 (BACK-AUTH-3): guest users may add up to 50 liked
-# buildings.  The 51st attempt triggers the verify-gate — frontend catches
-# this 403 and opens VerifyGateModal to prompt Google OAuth promotion.
-# Mirrors the board-gate precedent in apps/recommendation/views/projects.py.
-# Gate is on the ADD path only (new bld_id not yet in the list); the remove
-# path and re-liking an already-present id are unaffected.
-_GUEST_LIKE_LIMIT = 50
-_BLD_ID_MAX_LEN = 20
-_BLD_ID_RE = re.compile(r'^bld_\d{6}$')
-
-
-class LikedBuildingsView(APIView):
-    """POST/GET /api/v1/liked-buildings/
-
-    POST — add a building to the authenticated user's liked list.
-      Body:   {"canonical_bld_id": "bld_000123"}
-      200:    {"liked_count": N}
-      400:    {"detail": "<reason>"}
-
-    GET — return a user's liked buildings as full card objects.
-      Query param: user_id (optional). Omitted -> caller's own liked list.
-        Provided -> that user's liked list (design-parity public-profile
-        tabs; any AUTHENTICATED user may view another user's likes — taste
-        sharing is the product concept, still no anonymous access). Unknown
-        user_id -> 404.
-      200:    {"buildings": [...], "total": N}
-
-    Ordering: newest first (prepend on POST). Deduped. Capped at
-    _LIKED_BUILDINGS_CAP entries; the cap is silently enforced on write.
-    get_building_card gates on is_publishable=true and returns None for
-    unpublished / missing buildings — those are silently filtered from GET.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        bld_id = request.data.get('canonical_bld_id', '')
-        if not bld_id or not isinstance(bld_id, str):
-            return Response(
-                {'detail': 'canonical_bld_id required'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        bld_id = bld_id.strip()
-        if not bld_id:
-            return Response(
-                {'detail': 'canonical_bld_id required'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if len(bld_id) > _BLD_ID_MAX_LEN:
-            return Response(
-                {'detail': 'canonical_bld_id too long'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not _BLD_ID_RE.match(bld_id):
-            return Response(
-                {'detail': 'invalid canonical_bld_id format'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        with _dj_connections['buildings'].cursor() as cur:
-            cur.execute(
-                'SELECT 1 FROM canonical_v2_buildings'
-                ' WHERE canonical_bld_id = %s AND is_publishable = true',
-                [bld_id],
-            )
-            if not cur.fetchone():
-                return Response(
-                    {'detail': 'building not found'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            return Response(
-                {'detail': 'Profile not found'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        current = list(profile.liked_building_ids or [])
-        if bld_id not in current:
-            # Guest verify-gate: block the add if the guest already has
-            # _GUEST_LIKE_LIMIT likes.  Verified users are not gated here.
-            if profile.is_guest and len(current) >= _GUEST_LIKE_LIMIT:
-                return Response(
-                    {
-                        'detail': 'verify_required',
-                        'reason': 'liked_limit_reached',
-                        'limit': _GUEST_LIKE_LIMIT,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            current.insert(0, bld_id)
-            # Enforce cap silently
-            current = current[:_LIKED_BUILDINGS_CAP]
-            profile.liked_building_ids = current
-            profile.save(update_fields=['liked_building_ids'])
-            # BACK-RECOMMEND-4: evict taste + discovery-feed caches so the new like
-            # shapes the vector and is excluded from future feed pages immediately.
-            # Local import avoids accounts→recommendation circular dependency.
-            from apps.recommendation.caches import evict_taste, evict_discovery_feed
-            evict_taste(profile.id)
-            evict_discovery_feed(profile.id)
-
-        return Response({'liked_count': len(profile.liked_building_ids)})
-
-    def get(self, request):
-        target_user_id_raw = request.query_params.get('user_id')
-        if target_user_id_raw is not None:
-            try:
-                target_user_id = int(target_user_id_raw)
-            except (ValueError, TypeError):
-                return Response(
-                    {'detail': 'user_id must be an integer.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            try:
-                profile = UserProfile.objects.get(user__id=target_user_id)
-            except UserProfile.DoesNotExist:
-                return Response(
-                    {'detail': 'Not found.'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        else:
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                return Response(
-                    {'detail': 'Profile not found'},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-        from apps.recommendation import engine
-
-        bld_ids = list(profile.liked_building_ids or [])[:_LIKED_BUILDINGS_CAP]
-        cards = engine.get_buildings_by_ids(bld_ids)
-        return Response({'buildings': cards, 'total': len(cards)})

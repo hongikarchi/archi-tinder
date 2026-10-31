@@ -5,8 +5,7 @@ management command (ANALYTICS-1).
 Covers:
   - Empty DB: all three sections report zero/empty in both text and --json
     modes; --json output parses as valid JSON.
-  - Seeded fixtures: bookmark provenance/rank-zone aggregates (incl. a
-    malformed row with no provenance dict), image_load per-domain outcome +
+  - Seeded fixtures: image_load per-domain outcome +
     load_ms percentiles, confidence_update distributions, swipe per-session
     distribution / direction mix / cache_hit rate / db_call_count.
   - --days window excludes events created outside the window.
@@ -44,7 +43,6 @@ def _run(*args):
 @pytest.mark.django_db
 def test_empty_db_text_mode_reports_warnings():
     output = _run()
-    assert 'no bookmark events in window' in output
     assert 'no image_load events in window' in output
     assert 'no confidence_update events in window' in output
     assert 'no swipe events in window' in output
@@ -55,8 +53,6 @@ def test_empty_db_json_mode_parses_and_zero():
     output = _run('--json')
     data = json.loads(output)
     assert data['window_days'] == 30
-    assert data['bookmarks']['total'] == 0
-    assert data['bookmarks']['malformed'] == 0
     assert data['image_load']['total'] == 0
     assert data['sessions']['confidence_update']['total'] == 0
     assert data['sessions']['swipe']['total'] == 0
@@ -82,57 +78,6 @@ def session_b(user_profile, project):
     return AnalysisSession.objects.create(
         user=user_profile, project=project, phase='exploring',
     )
-
-
-@pytest.mark.django_db
-def test_bookmarks_section_provenance_and_malformed(user_profile, session_a):
-    # Well-formed: all provenance True, rank 3 -> primary zone, rank<=10.
-    SessionEvent.objects.create(
-        user=user_profile, session=session_a, event_type='bookmark',
-        payload={
-            'card_id': 'bld_000001', 'action': 'save', 'rank': 3,
-            'rank_zone': 'primary',
-            'provenance': {
-                'in_cosine_top10': True, 'in_gemini_top10': True, 'in_dpp_top10': True,
-            },
-        },
-    )
-    # Well-formed: all provenance False, rank 40 -> secondary zone.
-    SessionEvent.objects.create(
-        user=user_profile, session=session_a, event_type='bookmark',
-        payload={
-            'card_id': 'bld_000002', 'action': 'save', 'rank': 40,
-            'rank_zone': 'secondary',
-            'provenance': {
-                'in_cosine_top10': False, 'in_gemini_top10': False, 'in_dpp_top10': False,
-            },
-        },
-    )
-    # Malformed: missing provenance dict entirely.
-    SessionEvent.objects.create(
-        user=user_profile, session=session_a, event_type='bookmark',
-        payload={'card_id': 'bld_000003', 'action': 'save', 'rank': 5},
-    )
-
-    data = json.loads(_run('--json'))
-    bookmarks = data['bookmarks']
-
-    assert bookmarks['total'] == 3
-    assert bookmarks['malformed'] == 1
-    assert bookmarks['with_provenance'] == 2
-    # Rates computed over the 2 well-formed events only: 1 true / 2 = 0.5 each.
-    assert bookmarks['provenance_top10_rate']['in_cosine_top10'] == 0.5
-    assert bookmarks['provenance_top10_rate']['in_gemini_top10'] == 0.5
-    assert bookmarks['provenance_top10_rate']['in_dpp_top10'] == 0.5
-    assert bookmarks['rank_zone']['primary'] == 1
-    assert bookmarks['rank_zone']['secondary'] == 1
-    # Malformed row has no rank_zone key -> counted unknown.
-    assert bookmarks['rank_zone']['unknown'] == 1
-    # rank<=10: rows with rank=3 and rank=5 (malformed still has a rank field).
-    assert bookmarks['rank_le_10_count'] == 2
-
-    text = _run()
-    assert '── bookmarks' in text
 
 
 @pytest.mark.django_db
@@ -248,32 +193,24 @@ def test_sessions_section_confidence_update_and_swipe(user_profile, session_a, s
 def test_days_window_excludes_old_events(user_profile, session_a):
     # In-window event.
     SessionEvent.objects.create(
-        user=user_profile, session=session_a, event_type='bookmark',
-        payload={
-            'card_id': 'bld_000001', 'action': 'save', 'rank': 1,
-            'rank_zone': 'primary',
-            'provenance': {'in_cosine_top10': True, 'in_gemini_top10': True, 'in_dpp_top10': True},
-        },
+        user=user_profile, session=session_a, event_type='image_load',
+        payload={'domain': 'cdn.example.com', 'outcome': 'success', 'load_ms': 100},
     )
     # Out-of-window event: auto_now_add ignores created_at kwarg at create time,
     # so push it into the past via a follow-up queryset.update().
     old_event = SessionEvent.objects.create(
-        user=user_profile, session=session_a, event_type='bookmark',
-        payload={
-            'card_id': 'bld_000002', 'action': 'save', 'rank': 2,
-            'rank_zone': 'primary',
-            'provenance': {'in_cosine_top10': True, 'in_gemini_top10': True, 'in_dpp_top10': True},
-        },
+        user=user_profile, session=session_a, event_type='image_load',
+        payload={'domain': 'cdn.example.com', 'outcome': 'success', 'load_ms': 100},
     )
     SessionEvent.objects.filter(pk=old_event.pk).update(
         created_at=timezone.now() - timedelta(days=60)
     )
 
     data = json.loads(_run('--days', '30', '--json'))
-    assert data['bookmarks']['total'] == 1
+    assert data['image_load']['total'] == 1
 
     data_wide = json.loads(_run('--days', '90', '--json'))
-    assert data_wide['bookmarks']['total'] == 2
+    assert data_wide['image_load']['total'] == 2
 
 
 @pytest.mark.django_db
@@ -281,7 +218,7 @@ def test_json_top_level_keys():
     output = _run('--json')
     data = json.loads(output)
     assert set(data.keys()) == {
-        'window_days', 'generated_for', 'bookmarks', 'image_load', 'sessions',
+        'window_days', 'generated_for', 'image_load', 'sessions',
     }
     assert set(data['sessions'].keys()) == {'confidence_update', 'swipe'}
 

@@ -34,7 +34,6 @@ ROUTES = {
     "profile": ("/user/me", True),
     "user-other": ("/user/2", True),
     "board-detail": ("/board/1", True),
-    "liked-projects": ("/liked-projects", True),
     "building-detail": ("/buildings/1", True),
     "architect": ("/architects/1", True),
     "office": ("/office/1", True),

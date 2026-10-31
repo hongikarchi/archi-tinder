@@ -1,3 +1,4 @@
+import copy
 import json
 from types import SimpleNamespace
 
@@ -15,6 +16,11 @@ _MAX_TEXT_LEN = 2000      # max chars per text string in either sub-list
 _MAX_BLOB_BYTES = 65536   # 64 KB total JSON size cap
 
 
+# Report-derived columns: visible to the board owner only. Structural fields
+# (name, liked_ids, visibility, reaction_count, user, report_image(_mime)) stay.
+_REPORT_ONLY_FIELDS = ('final_report', 'analysis_report', 'axis_scores')
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     """Public Project (Board) serializer — Phase 13 BOARD1.
 
@@ -23,6 +29,10 @@ class ProjectSerializer(serializers.ModelSerializer):
     Applies to owner, public, admin — all contexts.
 
     `user` is a nested minimal shape: user_id + display_name + avatar_url.
+
+    `final_report` / `analysis_report` / `axis_scores` (_REPORT_ONLY_FIELDS) are
+    OWNER-ONLY: non-owners (incl. anonymous) receive null for each and
+    `report_stale` is False. Structural fields and the report image stay public.
 
     `latest_session_meta` / `latest_session_id` are OWNER-ONLY fields.
     Non-owners (including anonymous callers) always receive null for both.
@@ -167,6 +177,21 @@ class ProjectSerializer(serializers.ModelSerializer):
             'created_at': session.created_at.isoformat() if session.created_at else None,
         }
 
+    def to_representation(self, instance):
+        """Persona report text is OWNER-ONLY (the report IMAGE stays public).
+
+        For a non-owner (incl. anonymous) the report-derived fields are nulled
+        on a shallow copy BEFORE serialising, so (a) the content never reaches
+        the payload and (b) deferred columns are never lazily loaded per row.
+        Applies to every subclass (detail, list, public list, patch response).
+        report_stale then evaluates to False (no report on the copy).
+        """
+        if not self._is_owner(instance):
+            instance = copy.copy(instance)
+            for name in _REPORT_ONLY_FIELDS:
+                instance.__dict__[name] = None
+        return super().to_representation(instance)
+
     def get_report_stale(self, obj):
         # True iff the stored report carries a source_signature that no longer
         # matches the board's current liked buildings. No report / no signature
@@ -182,7 +207,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             'visibility',
             'reaction_count',
             'liked_ids',
-            'saved_ids',
             'filters',
             'raw_query',
             'analysis_report',
@@ -202,7 +226,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             'project_id',
             'user',
             'liked_ids',
-            'saved_ids',
             'reaction_count',
             'analysis_report',
             'final_report',
@@ -299,7 +322,7 @@ class ProjectPatchResponseSerializer(ProjectSerializer):
 class ProjectSelfUpdateSerializer(serializers.ModelSerializer):
     """PATCH /api/v1/projects/{project_id}/ — owner updates name, visibility, conversation_history, is_temp.
 
-    All other fields (liked_ids, saved_ids, filters, reaction_count, etc.)
+    All other fields (liked_ids, filters, reaction_count, etc.)
     are managed by swipe flow or system — silently ignored on PATCH.
 
     FEAT-TASTE-FLOW-1 save-confirm action: PATCH {is_temp: false, name, visibility}

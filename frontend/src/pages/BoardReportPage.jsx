@@ -28,8 +28,8 @@ export default function BoardReportPage({ onLogout }) {
   const locationState = location.state
   const { t } = useTranslation()
 
-  // Recommendations come from the project-recommendations endpoint (owner AND
-  // public-board viewers), not the owner-only session result.
+  // Recommendations come from the project-recommendations endpoint (owner-only),
+  // not the session result.
   const { board, loading, error: boardError, reload: reloadBoard } = useBoard(boardId, { fetchResult: false })
 
   const [localReport, setLocalReport] = useState(null)
@@ -102,9 +102,16 @@ export default function BoardReportPage({ onLogout }) {
     // Retry is user-initiated (handleRetry resets the ref).
   }, [shouldAutoGenerate, boardId])
 
-  // Recommendations: fetched once the board is known to be viewable. A failed
+  // The report is owner-only. Once the board and viewer are known, a non-owner
+  // is sent back to the board detail (replace, so back doesn't loop).
+  const notOwner = !loading && !!board && !isOwner
+  useEffect(() => {
+    if (notOwner) navigate(`/board/${boardId}`, { replace: true })
+  }, [notOwner, boardId, navigate])
+
+  // Recommendations: owner only (the server 403s everyone else). A failed
   // or empty fetch just hides the section.
-  const hasBoard = !!board
+  const hasBoard = !!board && isOwner
   useEffect(() => {
     if (!boardId || !hasBoard) return
     let cancelled = false
@@ -184,7 +191,7 @@ export default function BoardReportPage({ onLogout }) {
   function handleOpenBuilding(card) {
     const id = cardId(card)
     if (!id) return
-    navigate(`/buildings/${id}`, { state: { referrer: location.pathname } })
+    navigate(`/buildings/${id}`)
   }
 
   let state = 'ready'
@@ -200,11 +207,13 @@ export default function BoardReportPage({ onLogout }) {
   const likedIdSet = new Set((board?.liked_ids || []).map(item => String(item?.id ?? item)))
   const likedBuildings = board?.liked_ids ? buildings.filter(b => likedIdSet.has(String(cardId(b)))) : buildings
 
+  // Non-owner: render nothing while the redirect effect runs (no report flash).
+  if (notOwner) return null
+
   return (
     <>
     <PersonaReportPage
       state={state}
-      role={isOwner ? 'owner' : 'viewer'}
       onLogout={onLogout}
       onBack={() => (state === 'ready' ? navigate(`/board/${boardId}`) : navigate(-1))}
       backLabel={t('board.backToDetail')}
@@ -219,7 +228,6 @@ export default function BoardReportPage({ onLogout }) {
         visibility: board?.visibility,
         buildingCount: buildings.length,
         reactionCount: board?.reaction_count ?? 0,
-        user: board?.user || board?.owner || null,
       }}
       likedBuildings={likedBuildings}
       recommendations={recommendations}

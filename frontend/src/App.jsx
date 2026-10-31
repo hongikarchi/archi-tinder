@@ -10,15 +10,15 @@ import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
   LoginPage, TasteStartPage, UserProfilePage, ResultsPage,
-  BuildingDetailPage, BoardDetailPage, BoardReportPage, LikedProjectsPage, UploadWorkPage,
+  BuildingDetailPage, BoardDetailPage, BoardReportPage, UploadWorkPage,
   ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, CompetitionListPage,
   CompetitionDetailPage, SettingsPage, AccountScreen, NotificationsScreen,
   NotificationInboxScreen, AppearanceScreen, EditProfileScreen, SaveBoardModal,
   VerifyGateModal, prefetchLikelyNextPages,
 } from './lazyPages.js'
 import * as api from './api/client.js'
-import { createProject, VerifyRequiredError } from './api/projects.js'
-import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, extractSavedIds, purgeChatCache } from './utils/appHelpers.js'
+import { VerifyRequiredError } from './api/projects.js'
+import { normalizeFilters, classifySwipeError, isActionCard, extractLikedIds, purgeChatCache } from './utils/appHelpers.js'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import NotFoundRedirect from './components/NotFoundRedirect.jsx'
 import ReportReentryBanner from './components/ReportReentryBanner.jsx'
@@ -83,15 +83,6 @@ export default function App() {
   // VerifyGateModal — shown when guest hits the 3-board limit
   const [verifyGateOpen, setVerifyGateOpen] = useState(false)
   const [verifyGateReason, setVerifyGateReason] = useState(null)
-  // Pending board-create payload from SaveToBoardModal (Fix 3 Option A).
-  // Stored when VerifyRequiredError fires during board creation; retried on promote.
-  const [pendingBoardCreate, setPendingBoardCreate] = useState(null)
-  // Pending like building id — stored when VerifyRequiredError fires during addLikedBuilding;
-  // retried on promote so the 51st like is not lost (Codex #193).
-  const [pendingLike, setPendingLike] = useState(null)
-  // Tracks whether a SurpriseBoardModal board-create was interrupted by verify gate.
-  // After promote we show a toast asking the user to re-open the modal (Fix 3 Option B).
-  const [surprisePending, setSurprisePending] = useState(false)
   // Global toast state (type: 'info' | 'success' | 'warning' | 'error')
   const [globalToast, setGlobalToast] = useState(null) // {message, type}
 
@@ -182,29 +173,6 @@ export default function App() {
     window.addEventListener('archithon:promote-to-taste', onPromoteToTaste)
     return () => window.removeEventListener('archithon:promote-to-taste', onPromoteToTaste)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Capture pending board-create payload from SaveToBoardModal (Fix 3 Option A)
-  useEffect(() => {
-    const onPendingCreate = (e) => {
-      if (e?.detail) setPendingBoardCreate(e.detail)
-    }
-    window.addEventListener('archithon:pending-board-create', onPendingCreate)
-    return () => window.removeEventListener('archithon:pending-board-create', onPendingCreate)
-  }, [])
-
-  // Capture pending like bldId — retried on promote (Codex #193)
-  useEffect(() => {
-    const onPendingLike = (e) => setPendingLike(e.detail?.bldId || null)
-    window.addEventListener('archithon:pending-like', onPendingLike)
-    return () => window.removeEventListener('archithon:pending-like', onPendingLike)
-  }, [])
-
-  // Capture surprise-board pending flag (Fix 3 Option B)
-  useEffect(() => {
-    const onSurprisePending = () => setSurprisePending(true)
-    window.addEventListener('archithon:verify-required:surprise-pending', onSurprisePending)
-    return () => window.removeEventListener('archithon:verify-required:surprise-pending', onSurprisePending)
-  }, [])
 
   // Auto-dismiss global toast after 3s (DESIGN.md §8.11 toast-duration default)
   useEffect(() => {
@@ -958,7 +926,6 @@ export default function App() {
           likedBuildings: extractLikedIds(p.liked_ids).map(bid => cardMap[bid]).filter(Boolean),
           swipedIds: [...extractLikedIds(p.liked_ids), ...(p.disliked_ids || [])],
           predictedLikes: [],
-          savedIds: extractSavedIds(p.saved_ids),
           finalReport: p.final_report || null,
           reportImage: p.report_image || null,
           reportImageMime: p.report_image_mime || null,
@@ -1215,7 +1182,6 @@ export default function App() {
           <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
           <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
           <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
-          <Route path="liked-projects" element={<LikedProjectsPage onLogout={handleLogout} />} />
           <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />
           <Route path="my/liked-offices" element={<Navigate to="/user/me" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage onLogout={handleLogout} />} />
@@ -1300,9 +1266,6 @@ export default function App() {
           reason={verifyGateReason}
           onClose={() => {
             setVerifyGateOpen(false)
-            setPendingBoardCreate(null)
-            setPendingLike(null)
-            setSurprisePending(false)
           }}
           onPromoted={async (user, merged) => {
             setVerifyGateOpen(false)
@@ -1312,9 +1275,6 @@ export default function App() {
               // Re-run full login flow to re-sync userId, projects, localStorage.
               if (user) await handleLogin(user)
               setGlobalToast({ message: t('auth.toastVerifiedMerged'), type: 'success' })
-              setPendingBoardCreate(null)
-              setPendingLike(null)
-              setSurprisePending(false)
               return
             }
 
@@ -1326,29 +1286,7 @@ export default function App() {
               if (user.access) api.setTokens(user.access, user.refresh)
             }
 
-            // Retry pending SaveToBoardModal board-create (Fix 3 Option A).
-            if (pendingBoardCreate) {
-              try {
-                await createProject(pendingBoardCreate)
-                setGlobalToast({ message: t('auth.toastBoardCreated'), type: 'success' })
-              } catch {
-                setGlobalToast({ message: t('auth.toastRetryCreateBoard'), type: 'info' })
-              } finally {
-                setPendingBoardCreate(null)
-              }
-            } else if (surprisePending) {
-              // Fix 3 Option B: fat payload — prompt user to re-open the surprise modal.
-              setGlobalToast({ message: t('auth.toastRetrySaveBoard'), type: 'success' })
-              setSurprisePending(false)
-            } else {
-              setGlobalToast({ message: t('auth.toastVerifiedCanCreate'), type: 'success' })
-            }
-
-            // Retry pending like after promote — guest is now verified, gate no longer fires (Codex #193).
-            if (pendingLike) {
-              try { await api.addLikedBuilding(pendingLike) } catch { /* best-effort; user can re-like */ }
-              setPendingLike(null)
-            }
+            setGlobalToast({ message: t('auth.toastVerifiedCanCreate'), type: 'success' })
           }}
         />
         </Suspense>

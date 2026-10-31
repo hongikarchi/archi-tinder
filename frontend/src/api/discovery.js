@@ -53,12 +53,3 @@ export async function promoteToTaste(draftId) {
     prefetch_image_2: normalizeCard(result.prefetch_image_2),
   }
 }
-
-export async function fetchBoardSurprise() {
-  const data = await callApi('GET', '/recommendations/board-surprise/')
-  return {
-    cards: (data.cards || []).map(normalizeCard),
-    title: data.title || 'Curated for you',
-    rationale: data.rationale || '',
-  }
-}

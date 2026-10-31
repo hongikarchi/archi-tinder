@@ -1,7 +1,6 @@
 /*
  * PhotoTile.module.css — shared 4:5 photo-overlay grid tile.
- * Hover lift + accent outline extracted verbatim from LikedProjectsPage's
- * `.card` / BoardDetail's BuildingTile `.tile` (identical rules in both).
+ * Hover lift + accent outline matches BoardDetail's BuildingTile `.tile`.
  */
 .tile {
   position: relative;

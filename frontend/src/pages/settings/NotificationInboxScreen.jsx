@@ -60,8 +60,12 @@ function SecurityBadge({ size = 40 }) {
 function sentenceFor(n, t) {
   const name = userHandle(n.actor)
   switch (n.type) {
-    case 'reaction':
-      return t('notifications.sentence.reaction', { name })
+    case 'reaction': {
+      const title = n.payload?.project_title
+      return title
+        ? t('notifications.sentence.reactionBoard', { name, title })
+        : t('notifications.sentence.reaction', { name })
+    }
     case 'password_changed':
       return t('notifications.sentence.passwordChanged')
     case 'new_login':
@@ -186,7 +190,6 @@ export default function NotificationInboxScreen({ onLogout }) {
             {items.map(n => {
               const isUnread = !n.read_at
               const sentence = sentenceFor(n, t)
-              const secondaryLine = n.type === 'reaction' ? (n.payload?.project_title || '') : ''
               return (
                 <button
                   key={n.id}
@@ -217,19 +220,6 @@ export default function NotificationInboxScreen({ onLogout }) {
                         {sentence}
                       </span>
                     </div>
-                    {secondaryLine && (
-                      <span style={{
-                        fontSize: 12,
-                        color: 'var(--color-text-muted)',
-                        lineHeight: 1.3,
-                        marginLeft: isUnread ? 13 : 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {secondaryLine}
-                      </span>
-                    )}
                     <span style={{
                       fontSize: 11,
                       color: 'var(--color-text-dim)',

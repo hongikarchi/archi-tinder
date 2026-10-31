@@ -479,7 +479,7 @@ def build_discovery_chunk(
     centroids: list of np.ndarray or list of list[float] (may be empty for cold).
     client_buffer_ids: optional iterable of building id strings already shown
         to the client but not yet acted on.
-    _project_rows: pre-fetched list of dicts (name/liked_ids/disliked_ids/saved_ids).
+    _project_rows: pre-fetched list of dicts (name/liked_ids/disliked_ids).
         Scoped to recent-cap boards. Pass from the view to avoid re-querying.
     _tier_info: pre-computed tier dict. If None, derived from _project_rows.
     """
@@ -495,7 +495,7 @@ def build_discovery_chunk(
         _project_rows = list(
             Project.objects.filter(user=profile, is_temp=False)
             .order_by('-created_at')[:cap]
-            .values('name', 'liked_ids', 'disliked_ids', 'saved_ids')
+            .values('name', 'liked_ids', 'disliked_ids')
         )
 
     # ── Compute tier split (from pre-fetched rows) ─────────────────────────
@@ -514,13 +514,6 @@ def build_discovery_chunk(
                 exclude_set.add(bid)
         for bid in (project.get('disliked_ids') or []):
             if isinstance(bid, str):
-                exclude_set.add(bid)
-        for entry in (project.get('saved_ids') or []):
-            if isinstance(entry, dict):
-                bid = entry.get('id')
-            else:
-                bid = entry
-            if isinstance(bid, str) and bid:
                 exclude_set.add(bid)
 
     # BACK-RECOMMEND-4: also exclude buildings liked via the Profile

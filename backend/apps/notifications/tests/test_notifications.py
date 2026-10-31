@@ -61,7 +61,7 @@ class TestReactionEmission:
         project = _make_project(a_profile)
 
         resp = auth_client_a.post(_react_url(project.project_id))
-        assert resp.status_code == 201
+        assert resp.status_code == 403  # own board: rejected outright
 
         assert Notification.objects.filter(recipient=a_profile, type='reaction').count() == 0
 
@@ -91,8 +91,10 @@ class TestReactionEmission:
         assert Notification.objects.filter(recipient=b_profile, type='reaction').count() == 1
 
     @pytest.mark.django_db
-    def test_repeated_react_unreact_react_no_duplicate_while_unread(self, user_a, user_b, auth_client_a):
-        """react -> unreact -> react on same project while first notif unread: no 2nd row."""
+    def test_unreact_retracts_notification_then_re_react_creates_fresh_one(
+        self, user_a, user_b, auth_client_a,
+    ):
+        """react -> unreact removes the owner's notification (unread) -> react again: exactly one row."""
         _, b_profile = user_b
         project = _make_project(b_profile)
 
@@ -102,18 +104,15 @@ class TestReactionEmission:
 
         resp2 = auth_client_a.delete(_react_url(project.project_id))
         assert resp2.status_code == 204
+        assert Notification.objects.filter(recipient=b_profile, type='reaction').count() == 0
 
         resp3 = auth_client_a.post(_react_url(project.project_id))
         assert resp3.status_code == 201
-
-        # Still just one row — dedupe checks for an UNREAD row with the same
-        # (recipient, actor, type, project_id); the first row is still unread.
         assert Notification.objects.filter(recipient=b_profile, type='reaction').count() == 1
 
     @pytest.mark.django_db
-    def test_read_notification_allows_new_one_on_re_react(self, user_a, user_b, auth_client_a):
-        """Once the existing notification is marked read, a fresh react creates a new row."""
-        _, a_profile = user_a
+    def test_unreact_retracts_read_notification_too(self, user_a, user_b, auth_client_a):
+        """A READ notification is also removed on unreact (no stale 'liked' entry)."""
         _, b_profile = user_b
         project = _make_project(b_profile)
 
@@ -122,9 +121,10 @@ class TestReactionEmission:
             read_at=timezone.now()
         )
         auth_client_a.delete(_react_url(project.project_id))
+        assert Notification.objects.filter(recipient=b_profile, type='reaction').count() == 0
         auth_client_a.post(_react_url(project.project_id))
 
-        assert Notification.objects.filter(recipient=b_profile, type='reaction').count() == 2
+        assert Notification.objects.filter(recipient=b_profile, type='reaction').count() == 1
 
     @pytest.mark.django_db
     def test_notify_reaction_service_directly(self, user_a, user_b):

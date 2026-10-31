@@ -40,20 +40,14 @@ logger = logging.getLogger('apps.recommendation')
 
 
 def _extract_ids_from_project(project):
-    """Return a flat list of unique canonical_bld_id strings from liked + saved.
+    """Return a flat list of unique canonical_bld_id strings from liked_ids.
 
-    saved_ids shape: list[{id: str, saved_at: ISO}]
     liked_ids shape: list[{id: str, intensity: float}] or legacy list[str]
     """
     liked = _liked_id_only(project.liked_ids)
-    saved = [
-        e.get('id')
-        for e in (project.saved_ids or [])
-        if isinstance(e, dict) and e.get('id')
-    ]
     seen = set()
     result = []
-    for bid in liked + saved:
+    for bid in liked:
         if isinstance(bid, str) and bid not in seen:
             result.append(bid)
             seen.add(bid)

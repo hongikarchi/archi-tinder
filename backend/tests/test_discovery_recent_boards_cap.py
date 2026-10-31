@@ -45,7 +45,6 @@ def _make_rows(n, liked_each=5, draft=False):
       name: 'real_board_{i}' or 'discovery_260601_0000'
       liked_ids: [{'id': 'bld_0000NN', 'intensity': 1.0}, ...]
       disliked_ids: ['bld_1000NN', ...]
-      saved_ids: [{'id': 'bld_2000NN'}, ...]
     """
     rows = []
     for i in range(n):
@@ -53,12 +52,10 @@ def _make_rows(n, liked_each=5, draft=False):
         liked = [{'id': f'bld_{i * 100 + j:06d}', 'intensity': 1.0}
                  for j in range(liked_each)]
         disliked = [f'bld_{100000 + i * 10 + j:06d}' for j in range(3)]
-        saved = [{'id': f'bld_{200000 + i * 10 + j:06d}'} for j in range(2)]
         rows.append({
             'name': name,
             'liked_ids': liked,
             'disliked_ids': disliked,
-            'saved_ids': saved,
         })
     return rows
 
@@ -256,12 +253,11 @@ class TestBuildDiscoveryChunkNoRequery:
         from apps.recommendation import discovery_feed
 
         profile = _make_profile()
-        # Single board with one liked, one disliked, one saved building
+        # Single board with one liked, one disliked building
         project_rows = [{
             'name': 'board_a',
             'liked_ids': [{'id': 'bld_000001', 'intensity': 1.0}],
             'disliked_ids': ['bld_000002'],
-            'saved_ids': [{'id': 'bld_000003'}],
         }]
 
         captured_exclude = []
@@ -283,7 +279,6 @@ class TestBuildDiscoveryChunkNoRequery:
         exclude_set = set(captured_exclude)
         assert 'bld_000001' in exclude_set
         assert 'bld_000002' in exclude_set
-        assert 'bld_000003' in exclude_set
 
     def test_profile_liked_building_ids_always_excluded(self):
         """profile.liked_building_ids are excluded regardless of board cap."""
@@ -510,9 +505,9 @@ class TestOlderBoardsNotScanned:
         old_board_building = 'bld_OLD001'
         recent_rows = [
             {'name': 'board_0', 'liked_ids': [{'id': 'bld_000001', 'intensity': 1.0}],
-             'disliked_ids': [], 'saved_ids': []},
+             'disliked_ids': []},
             {'name': 'board_1', 'liked_ids': [{'id': 'bld_000002', 'intensity': 1.0}],
-             'disliked_ids': [], 'saved_ids': []},
+             'disliked_ids': []},
             # This row should NOT appear because it's beyond the cap
         ]
         # Simulate the view: only recent_rows[:cap] are passed as _project_rows

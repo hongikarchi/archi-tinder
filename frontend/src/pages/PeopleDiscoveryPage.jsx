@@ -1,135 +1,301 @@
 /**
  * PeopleDiscoveryPage.jsx
- * People discovery feed — personality-based user matching.
+ * Social board feed — public boards (with a report image) of other people,
+ * filterable by taste relation / type code, with in-place expand + like.
  * Route: /people (ProtectedRoute) — tab root for the "소셜" (Social) TabBar tab.
  * As a tab root, this page has no back button (see DiscoveryPage for the same
  * tab-root convention). DiscoveryTriggerCard's push-navigation into this page
  * (from Discovery, after 10 draft likes) still works unchanged.
+ *
+ * Mock: social-board-like.html. Expand behaviour: the expanded card is moved to
+ * the START of its grid row (left sibling drops below), every tile animates with
+ * FLIP keyed by board_id (WAAPI), the toggled card rises from below, and the
+ * scroll container scrolls so the card sits at the top.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getMyPersonality } from '../api/personality.js'
 import { getPeopleDiscovery } from '../api/people.js'
-import PersonCard from '../components/PersonCard.jsx'
+import { reactToProject, unreactToProject } from '../api/social.js'
+import BoardSocialCard from '../components/BoardSocialCard.jsx'
 import SocialSegment from '../components/SocialSegment.jsx'
 import { TYPE_CODES } from '../constants/personalityTypes.js'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
+import { useTranslation } from '../i18n/index.js'
 import { userHandle } from '../utils/userIdentity.js'
+import {
+  reorderForExpanded, mergePages, patchReaction, toggledReaction,
+} from '../utils/socialFeed.js'
 import styles from './PeopleDiscoveryPage.module.css'
 
-const PRESET_FILTERS = [
-  { id: 'all', label: '전체' },
-  { id: 'inspired', label: '영감 주는 사람' },
-  { id: 'opposite', label: '정반대 성향' },
-]
+const PAGE_SIZE = 20
+const TOAST_MS = 3000 // DESIGN.md §8.11
+// Mirrors --motion-flip (500ms) / --motion-ease; WAAPI needs a literal.
+const FLIP_MS = 500
+const FLIP_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
+const RISE_PX = 56
 
-// All filter chips: presets + 16 type codes
-const ALL_FILTERS = [
-  ...PRESET_FILTERS,
-  ...TYPE_CODES.map(code => ({ id: code, label: code })),
-]
+const PRESET_IDS = ['all', 'inspired', 'opposite']
+const PRESET_LABEL_KEY = {
+  all: 'socialBoard.filterAll',
+  inspired: 'socialBoard.filterInspired',
+  opposite: 'socialBoard.filterOpposite',
+}
+const FILTER_IDS = [...PRESET_IDS, ...TYPE_CODES]
 
-function vectorFrom(p) {
-  if (!p) return null
-  return [p.axis_1, p.axis_2, p.axis_3, p.axis_4, p.axis_5]
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 }
 
-// Simple inline toast
-function Toast({ message, onDismiss }) {
-  useEffect(() => {
-    const t = setTimeout(onDismiss, 3000)
-    return () => clearTimeout(t)
-  }, [onDismiss])
-
-  return (
-    <div className={styles.toast} role="status" aria-live="polite">
-      {message}
-    </div>
-  )
-}
-
-// Skeleton card placeholder — one image-shaped block, matching the card's
-// report-image front face (FRONT-PEOPLE-CARD-1).
-function PersonCardSkeleton() {
+function SkeletonTile() {
   return <div className={`${styles.skeleton} skeleton-shimmer`} aria-hidden="true" />
 }
 
 export default function PeopleDiscoveryPage({ onLogout }) {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const axisParam = searchParams.get('axis')
+  const { t } = useTranslation()
 
   const [myPersonality, setMyPersonality] = useState(undefined) // undefined = loading
-  const [people, setPeople] = useState([])
+  const [boards, setBoards] = useState([])
+  const [nextCursor, setNextCursor] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error, setError] = useState(null) // 'assessment_required' | message
+  const [moreError, setMoreError] = useState(false)
   const [activeFilter, setActiveFilter] = useState('all')
-  const [toast, setToast] = useState(null)
-  const filterScrollRef = useRef(null)
+  const [expanded, setExpanded] = useState(null) // { id, cols } | null
+  const [toast, setToast] = useState(null) // { text, key }
+
   const isMounted = useRef(true)
+  const reqRef = useRef(0)            // stale-response guard across filter changes
+  const contentRef = useRef(null)
+  const gridRef = useRef(null)
+  const sentinelRef = useRef(null)
+  const tileRefs = useRef(new Map())  // board_id -> element (FLIP)
+  const flipRef = useRef(null)        // { before, risenId, scrollToId }
+  const pendingLikes = useRef(new Set())
+  const toastTimer = useRef(null)
+  const animsRef = useRef([])         // in-flight WAAPI animations
+  const expandedRef = useRef(null)
+  expandedRef.current = expanded
 
   useEffect(() => {
     isMounted.current = true
-    return () => { isMounted.current = false }
+    const tiles = tileRefs.current
+    return () => {
+      isMounted.current = false
+      clearTimeout(toastTimer.current)
+      tiles.clear()
+    }
   }, [])
 
-  // Fetch my personality on mount
   useEffect(() => {
     getMyPersonality()
       .then(data => { if (isMounted.current) setMyPersonality(data) })
       .catch(() => { if (isMounted.current) setMyPersonality(null) })
   }, [])
 
-  const fetchPeople = useCallback(async ({ filter, axis } = {}) => {
-    setLoading(true)
-    setError(null)
+  // ── Feed loading ──────────────────────────────────────────────────────────
+  const loadPage = useCallback(async (filter, cursor) => {
+    const req = cursor ? reqRef.current : ++reqRef.current
+    if (cursor) { setLoadingMore(true); setMoreError(false) } else { setLoading(true); setError(null) }
     try {
-      const params = {}
-      if (filter && filter !== 'all') params.filter = filter
-      if (axis !== undefined && axis !== null) params.axis = axis
-      const data = await getPeopleDiscovery(params)
-      if (isMounted.current) {
-        setPeople(Array.isArray(data) ? data : (data?.results ?? []))
-      }
+      const data = await getPeopleDiscovery({ filter, cursor, pageSize: PAGE_SIZE })
+      if (!isMounted.current || req !== reqRef.current) return
+      const results = Array.isArray(data) ? data : (data?.results ?? [])
+      setBoards(prev => (cursor ? mergePages(prev, results) : mergePages([], results)))
+      setNextCursor(data?.next_cursor ?? null)
+      setHasMore(!!data?.has_more && !!data?.next_cursor)
     } catch (err) {
-      if (!isMounted.current) return
-      if (err.status === 403 && err.data?.detail === 'assessment_required') {
+      if (!isMounted.current || req !== reqRef.current) return
+      if (cursor) {
+        setMoreError(true)
+      } else if (err.status === 403 && err.data?.detail === 'assessment_required') {
         setError('assessment_required')
+      } else if (err.status === 429) {
+        setError(t('socialBoard.throttled'))
       } else {
-        setError(err.message || '피드를 불러오지 못했어요.')
+        setError(err.message || t('socialBoard.feedError'))
       }
     } finally {
-      if (isMounted.current) setLoading(false)
+      if (isMounted.current && req === reqRef.current) {
+        if (cursor) setLoadingMore(false); else setLoading(false)
+      }
     }
+    // t is a fresh function every render; only used for a fallback string.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Initial load — respect ?axis= param
-  useEffect(() => {
-    const axis = axisParam !== null ? Number(axisParam) : undefined
-    fetchPeople({ filter: activeFilter, axis })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadPage('all', null) }, [loadPage])
 
-  // Refetch when filter changes (not on initial mount — covered above)
-  const isFirstFilterChange = useRef(true)
+  function selectFilter(id) {
+    if (id === activeFilter) return
+    setActiveFilter(id)
+    setExpanded(null)
+    setBoards([])
+    setNextCursor(null)
+    setHasMore(false)
+    setMoreError(false)
+    setLoadingMore(false)
+    loadPage(id, null)
+  }
+
+  // Infinite scroll — sentinel at the end of the feed.
   useEffect(() => {
-    if (isFirstFilterChange.current) {
-      isFirstFilterChange.current = false
-      return
+    const el = sentinelRef.current
+    if (!el || !hasMore || loading || loadingMore || moreError || error) return
+    const io = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) loadPage(activeFilter, nextCursor)
+    }, { root: contentRef.current, rootMargin: '300px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, loading, loadingMore, moreError, error, nextCursor, activeFilter, loadPage])
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  const showToast = useCallback(text => {
+    clearTimeout(toastTimer.current)
+    setToast({ text, key: Date.now() })
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS)
+  }, [])
+
+  // ── Like ──────────────────────────────────────────────────────────────────
+  const handleLike = useCallback(async board => {
+    const id = board.board_id
+    if (board.is_me || pendingLikes.current.has(id)) return
+    pendingLikes.current.add(id)
+    const wasReacted = !!board.is_reacted
+    const prev = { is_reacted: wasReacted, reaction_count: board.reaction_count ?? 0 }
+    setBoards(list => patchReaction(list, id, toggledReaction(board)))
+    showToast(wasReacted
+      ? t('socialBoard.unlikedToast')
+      : t('socialBoard.likedToast', { name: userHandle(board) }))
+    try {
+      if (wasReacted) {
+        await unreactToProject(id)
+      } else {
+        const res = await reactToProject(id)
+        if (isMounted.current && typeof res?.reaction_count === 'number') {
+          setBoards(list => patchReaction(list, id, { reaction_count: res.reaction_count }))
+        }
+      }
+    } catch {
+      if (isMounted.current) {
+        setBoards(list => patchReaction(list, id, prev))
+        showToast(t('socialBoard.likeFailed'))
+      }
+    } finally {
+      pendingLikes.current.delete(id)
     }
-    fetchPeople({ filter: activeFilter })
-  }, [activeFilter, fetchPeople])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showToast])
 
-  function handleInterest(person) {
-    setToast(`${userHandle(person)}에게 관심을 보냈어요.`)
-  }
+  // ── Expand / collapse with FLIP ───────────────────────────────────────────
+  const registerRef = useCallback((id, el) => {
+    if (el) tileRefs.current.set(id, el)
+    else tileRefs.current.delete(id)
+  }, [])
 
-  function dismissToast() {
-    setToast(null)
-  }
+  const toggleExpand = useCallback(id => {
+    // Cancel in-flight animations first so the "before" rects are the settled
+    // layout positions, not mid-transform ones.
+    animsRef.current.forEach(a => { try { a.cancel() } catch { /* already gone */ } })
+    animsRef.current = []
+    const cur = expandedRef.current
+    const opening = !cur || cur.id !== id
+    const before = new Map()
+    tileRefs.current.forEach((el, key) => before.set(key, el.getBoundingClientRect()))
+    flipRef.current = { before, risenId: opening ? id : cur.id, scrollToId: opening ? id : null }
+    let cols = 2
+    if (gridRef.current) {
+      const n = getComputedStyle(gridRef.current).gridTemplateColumns.split(' ').filter(Boolean).length
+      if (n > 0) cols = n
+    }
+    setExpanded(opening ? { id, cols } : null)
+  }, [])
 
-  const myVector = myPersonality ? vectorFrom(myPersonality) : null
+  useLayoutEffect(() => {
+    const flip = flipRef.current
+    if (!flip) return
+    flipRef.current = null
+    const reduce = prefersReducedMotion()
+    // `before` rects were taken at click time (possibly mid-animation), so any
+    // previous animation is cancelled now to avoid overlapping transforms.
+    animsRef.current.forEach(a => { try { a.cancel() } catch { /* already gone */ } })
+    animsRef.current = []
+    // Measure the scroll target NOW: animations are cancelled and none has been
+    // started yet, so rects are settled layout positions (no in-flight transform).
+    let scrollTarget = null
+    if (flip.scrollToId != null) {
+      const el = tileRefs.current.get(flip.scrollToId)
+      const sc = contentRef.current
+      if (el && sc) {
+        const raw = sc.scrollTop + (el.getBoundingClientRect().top - sc.getBoundingClientRect().top) - 20
+        const max = Math.max(0, sc.scrollHeight - sc.clientHeight)
+        scrollTarget = Math.min(max, Math.max(0, raw))
+      }
+    }
+    if (!reduce) {
+      const run = (el, frames) => {
+        const anim = el.animate(frames, { duration: FLIP_MS, easing: FLIP_EASE })
+        animsRef.current.push(anim)
+        anim.onfinish = () => { animsRef.current = animsRef.current.filter(x => x !== anim) }
+      }
+      tileRefs.current.forEach((el, key) => {
+        if (!el.animate) return
+        if (key === flip.risenId) {
+          // The toggled card never slides sideways: it rises from below.
+          run(el, [{ transform: `translateY(${RISE_PX}px)`, opacity: 0.55 }, { transform: 'none', opacity: 1 }])
+          return
+        }
+        const a = flip.before.get(key)
+        if (!a) return
+        const b = el.getBoundingClientRect()
+        const dx = a.left - b.left
+        const dy = a.top - b.top
+        if (!dx && !dy) return
+        run(el, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }])
+      })
+    }
+    if (scrollTarget != null && contentRef.current) {
+      contentRef.current.scrollTo({ top: scrollTarget, behavior: reduce ? 'auto' : 'smooth' })
+    }
+  }, [expanded])
+
+  // Column count is captured at open; collapse on resize so row-start can't go stale.
+  const isExpanded = expanded != null
+  useEffect(() => {
+    if (!isExpanded) return undefined
+    let timer = null
+    function onResize() {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        animsRef.current.forEach(a => { try { a.cancel() } catch { /* already gone */ } })
+        animsRef.current = []
+        flipRef.current = null
+        setExpanded(null)
+      }, 150)
+    }
+    window.addEventListener('resize', onResize)
+    return () => { clearTimeout(timer); window.removeEventListener('resize', onResize) }
+  }, [isExpanded])
+
+  // Escape closes the expanded card.
+  useEffect(() => {
+    if (!expanded) return
+    function onKey(e) {
+      if (e.key === 'Escape') toggleExpand(expanded.id)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [expanded, toggleExpand])
+
+  const displayed = useMemo(
+    () => reorderForExpanded(boards, expanded?.id ?? null, expanded?.cols ?? 2),
+    [boards, expanded],
+  )
 
   return (
     <div className={styles.page}>
@@ -146,96 +312,104 @@ export default function PeopleDiscoveryPage({ onLogout }) {
       {/* Assessment prompt (no personality yet) */}
       {myPersonality === null && (
         <div className={styles.assessmentBanner}>
-          <p className={styles.assessmentText}>성향 진단 후 발견 피드를 볼 수 있어요</p>
+          <p className={styles.assessmentText}>{t('socialBoard.needAssessmentBanner')}</p>
           <button
             type="button"
             className={styles.assessmentCta}
             onClick={() => navigate('/assessment')}
           >
-            진단 받기 →
+            {t('socialBoard.needAssessmentBannerCta')}
           </button>
         </div>
       )}
 
       {/* Filter chips */}
-      <div className={styles.filterBar} ref={filterScrollRef}>
-        {ALL_FILTERS.map(f => (
+      <div className={styles.filterBar}>
+        {FILTER_IDS.map(id => (
           <button
-            key={f.id}
+            key={id}
             type="button"
-            className={`${styles.filterChip} ${activeFilter === f.id ? styles.filterChipActive : ''}`}
-            onClick={() => setActiveFilter(f.id)}
-            aria-pressed={activeFilter === f.id}
+            className={`${styles.filterChip} ${activeFilter === id ? styles.filterChipActive : ''}`}
+            onClick={() => selectFilter(id)}
+            aria-pressed={activeFilter === id}
           >
-            {f.label}
+            {PRESET_LABEL_KEY[id] ? t(PRESET_LABEL_KEY[id]) : id}
           </button>
         ))}
       </div>
 
       {/* Content */}
-      <div className={styles.content}>
+      <div className={styles.content} ref={contentRef}>
 
-        {/* assessment_required error */}
         {error === 'assessment_required' && (
           <div className={styles.emptyState}>
-            <p className={styles.emptyTitle}>성향 진단이 필요해요</p>
-            <p className={styles.emptyDesc}>나의 건축 성향을 먼저 파악한 후 다른 사람들을 발견할 수 있어요.</p>
-            <button
-              type="button"
-              className={styles.ctaBtn}
-              onClick={() => navigate('/assessment')}
-            >
-              성향 진단 받기
+            <p className={styles.emptyTitle}>{t('socialBoard.needAssessmentTitle')}</p>
+            <p className={styles.emptyDesc}>{t('socialBoard.needAssessmentDesc')}</p>
+            <button type="button" className={styles.ctaBtn} onClick={() => navigate('/assessment')}>
+              {t('socialBoard.needAssessmentCta')}
             </button>
           </div>
         )}
 
-        {/* Generic error */}
         {error && error !== 'assessment_required' && (
           <div className={styles.inlineError}>
             <p>{error}</p>
-            <button
-              type="button"
-              className={styles.retryBtn}
-              onClick={() => fetchPeople({ filter: activeFilter })}
-            >
-              다시 시도
+            <button type="button" className={styles.retryBtn} onClick={() => loadPage(activeFilter, null)}>
+              {t('socialBoard.retry')}
             </button>
           </div>
         )}
 
-        {/* Loading skeletons */}
         {loading && !error && (
           <div className={styles.feed}>
-            {Array.from({ length: 8 }, (_, i) => <PersonCardSkeleton key={i} />)}
+            {Array.from({ length: 8 }, (_, i) => <SkeletonTile key={i} />)}
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && !error && people.length === 0 && (
+        {!loading && !error && boards.length === 0 && (
           <div className={styles.emptyState}>
-            <p className={styles.emptyTitle}>아직 발견할 사람이 없어요</p>
-            <p className={styles.emptyDesc}>다른 필터를 선택해보거나 나중에 다시 확인해보세요.</p>
+            <p className={styles.emptyTitle}>
+              {t(activeFilter === 'all' ? 'socialBoard.emptyAllTitle' : 'socialBoard.emptyFilterTitle')}
+            </p>
+            <p className={styles.emptyDesc}>
+              {t(activeFilter === 'all' ? 'socialBoard.emptyAllDesc' : 'socialBoard.emptyFilterDesc')}
+            </p>
           </div>
         )}
 
-        {/* Feed */}
-        {!loading && !error && people.length > 0 && (
-          <div className={styles.feed}>
-            {people.map(person => (
-              <PersonCard
-                key={person.user_id}
-                person={person}
-                myVector={myVector}
-                onInterest={handleInterest}
-              />
-            ))}
-          </div>
+        {!loading && !error && boards.length > 0 && (
+          <>
+            <div className={styles.feed} ref={gridRef}>
+              {displayed.map(board => (
+                <BoardSocialCard
+                  key={board.board_id}
+                  board={board}
+                  expanded={expanded?.id === board.board_id}
+                  onToggle={toggleExpand}
+                  onLike={handleLike}
+                  registerRef={registerRef}
+                />
+              ))}
+              {loadingMore && Array.from({ length: 4 }, (_, i) => <SkeletonTile key={`more-${i}`} />)}
+            </div>
+            {moreError && (
+              <div className={styles.inlineError}>
+                <p>{t('socialBoard.feedError')}</p>
+                <button type="button" className={styles.retryBtn} onClick={() => loadPage(activeFilter, nextCursor)}>
+                  {t('socialBoard.retry')}
+                </button>
+              </div>
+            )}
+            <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />
+          </>
         )}
       </div>
 
-      {/* Toast */}
-      {toast && <Toast message={toast} onDismiss={dismissToast} />}
+      {toast && (
+        <div key={toast.key} className={styles.toast} role="status" aria-live="polite">
+          {toast.text}
+        </div>
+      )}
     </div>
   )
 }
