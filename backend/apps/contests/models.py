@@ -34,7 +34,9 @@ def _validate_url_value(name, value):
             validate_http_url(value)
     except ValidationError as exc:
         # Field-keyed so API callers see {"<field>": [...]} instead of non_field_errors.
-        raise ValidationError({name: exc.messages}, code=getattr(exc, 'code', None))
+        # Pass the ValidationError itself (not .messages) so the stable error code
+        # (invalid_url_scheme / poster_host_blocked) survives the re-keying.
+        raise ValidationError({name: exc})
 
 
 # Django's bulk_update() issues an internal queryset.update() with Case/When

@@ -127,6 +127,38 @@ class TestBulkCreate:
             Contest.objects.bulk_create([Contest(**_kw(title='ok')), Contest(**_kw(source_url=url))])
         assert not Contest.objects.exists()
 
+    @pytest.mark.parametrize('url', ['', 'https://lectus.kr/x', 'https://sub.wevity.com/x'])
+    def test_upsert_rejects_bad_published_source(self, url):
+        """update_conflicts=True (upsert) must enforce the publish rule on every object."""
+        _make(title='existing', import_key='k1')
+        with pytest.raises(ValidationError):
+            Contest.objects.bulk_create(
+                [Contest(**_kw(title='changed', import_key='k1', source_url=url))],
+                update_conflicts=True, unique_fields=['import_key'],
+                update_fields=['title', 'source_url', 'status'],
+            )
+        assert Contest.objects.get(import_key='k1').title == 'existing'
+
+    def test_upsert_ok_updates_row(self):
+        _make(title='existing', import_key='k1')
+        Contest.objects.bulk_create(
+            [Contest(**_kw(title='changed', import_key='k1'))],
+            update_conflicts=True, unique_fields=['import_key'],
+            update_fields=['title'],
+        )
+        assert Contest.objects.get(import_key='k1').title == 'changed'
+
+    def test_error_codes_are_stable(self):
+        for url, code in [('', 'source_url_required'), ('ftp://x.kr/a', 'invalid_url_scheme'),
+                          ('https://lectus.kr/x', 'source_url_listing_site')]:
+            with pytest.raises(ValidationError) as ei:
+                Contest.objects.bulk_create([Contest(**_kw(source_url=url))])
+            assert [e.code for e in ei.value.error_dict['source_url']] == [code]
+        with pytest.raises(ValidationError) as ei:
+            Contest.objects.bulk_create([Contest(**_kw(
+                status='hidden', poster_url='https://wevity.com/p.png'))])
+        assert [e.code for e in ei.value.error_dict['poster_url']] == ['poster_host_blocked']
+
 
 @pytest.mark.django_db
 class TestBulkUpdate:

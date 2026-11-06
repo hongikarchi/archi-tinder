@@ -78,7 +78,7 @@ export default function ContestFormModal({ contest, onClose, onSaved, onChanged 
   const applyServerError = err => {
     const data = err?.data
     if (err?.status === 400 && data && typeof data === 'object') {
-      const { byField, general } = fieldErrorMap(data)
+      const { byField, general } = fieldErrorMap(data, t)
       // Errors on keys with no form field (e.g. a stray server-side field) still surface.
       const stray = Object.entries(byField).filter(([k]) => !(k in form)).map(([, m]) => m)
       setErrors(byField)
@@ -141,7 +141,7 @@ export default function ContestFormModal({ contest, onClose, onSaved, onChanged 
     } catch (err) {
       const data = err?.data
       if (err?.status === 400 && data && typeof data === 'object') {
-        setFormError(flattenApiErrors(data).join(' '))
+        setFormError(flattenApiErrors(data, t).join(' '))
       } else {
         setFormError(t('admin.contests.form.saveError'))
       }

@@ -31,6 +31,8 @@ import {
 import styles from './PeopleDiscoveryPage.module.css'
 
 const PAGE_SIZE = 20
+// Max consecutive empty-but-has_more pages followed automatically.
+const MAX_EMPTY_HOPS = 3
 const TOAST_MS = 3000 // DESIGN.md §8.11
 // Mirrors --motion-flip (500ms) / --motion-ease; WAAPI needs a literal.
 const FLIP_MS = 500
@@ -116,9 +118,21 @@ export default function PeopleDiscoveryPage({ onLogout }) {
     const req = cursor ? reqRef.current : ++reqRef.current
     if (cursor) { setLoadingMore(true); setMoreError(false) } else { setLoading(true); setError(null) }
     try {
-      const data = await getPeopleDiscovery({ filter, cursor, pageSize: PAGE_SIZE })
+      let data = await getPeopleDiscovery({ filter, cursor, pageSize: PAGE_SIZE })
       if (!isMounted.current || req !== reqRef.current) return
-      const results = Array.isArray(data) ? data : (data?.results ?? [])
+      let results = Array.isArray(data) ? data : (data?.results ?? [])
+      // An empty page can still carry has_more=true (the server skipped a run of
+      // dead slices). Follow the cursor instead of showing the empty state —
+      // bounded so a pathological feed cannot loop.
+      let emptyHops = 0
+      while (results.length === 0 && data?.has_more && data?.next_cursor && emptyHops < MAX_EMPTY_HOPS) {
+        emptyHops += 1
+        const next = await getPeopleDiscovery({ filter, cursor: data.next_cursor, pageSize: PAGE_SIZE })
+        if (!isMounted.current || req !== reqRef.current) return
+        // Keep the first page's me_* fields; only paging state comes from the latest page.
+        data = Array.isArray(next) ? { results: next } : { ...next, me_discoverable: data.me_discoverable, me_hint: data.me_hint }
+        results = Array.isArray(next) ? next : (next?.results ?? [])
+      }
       setBoards(prev => (cursor ? mergePages(prev, results) : mergePages([], results)))
       if (!cursor && typeof data?.me_discoverable === 'boolean') {
         setMeDiscoverable(data.me_discoverable)

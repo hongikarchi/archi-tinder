@@ -95,22 +95,27 @@ def validate_publishable(status, source_url):
     (Contest.save / ContestQuerySet) so every writer -- admin API, seed command,
     the future collector -- obeys it. The blank case is also a DB CHECK
     (contest_published_has_source); the listing-domain case is ORM-level only.
+
+    Each error is field-keyed AND carries a stable `code` on the inner
+    ValidationError (source_url_required / invalid_url_scheme /
+    source_url_listing_site). Passing `code=` to the dict-form constructor would
+    silently drop it, hence the nested ValidationError objects.
     """
     if status != 'published':
         return
     if not source_url:
-        raise ValidationError(
-            {'source_url': 'A published contest requires an official source URL.'},
+        raise ValidationError({'source_url': ValidationError(
+            'A published contest requires an official source URL.',
             code='source_url_required',
-        )
+        )})
     if not is_http_url(source_url):
-        raise ValidationError(
-            {'source_url': 'Enter a valid http:// or https:// URL.'}, code='invalid_url_scheme',
-        )
+        raise ValidationError({'source_url': ValidationError(
+            'Enter a valid http:// or https:// URL.', code='invalid_url_scheme',
+        )})
     blocked = matching_host(source_url, LISTING_SITE_HOSTS)
     if blocked:
-        raise ValidationError(
-            {'source_url': 'A published contest\'s source URL must be the official page, '
-                           'not a listing site (%s).' % blocked},
+        raise ValidationError({'source_url': ValidationError(
+            'A published contest\'s source URL must be the official page, '
+            'not a listing site (%s).' % blocked,
             code='source_url_listing_site',
-        )
+        )})

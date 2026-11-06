@@ -125,6 +125,7 @@
   - 필수 값, 선택지, 길이; 날짜는 오프셋 포함 ISO만(naive 거부); `verified_at` 필수; 파일 안 key 중복 거부.
   - URL은 `http`/`https`만(기존 검증기), 포스터는 목록 사이트 이미지 호스트 거부(기존 `validate_poster_url`).
   - **`status = published`인 항목은 `source_url`이 비어 있지 않아야 하고, 공모전 정보(목록) 사이트 도메인이면 거부**한다 — 위비티(`wevity.com`), 링크리어(`linkareer.com`), 씽유, 더팀스, 렉터스(`lectus.kr`), 씽굿(`thinkcontest.com`), 콘테스트코리아(`contestkorea.com`), 올콘(`all-con.co.kr`) 등. 목록은 코드 상수로 관리. 씽유·더팀스 도메인은 구현 시 확인. 목록 사이트 주소는 `listing_url`에만 둔다.
+  - 이미 `published`인 행의 `source_url`이 목록 사이트 도메인이면(현재 prod에는 없음) 저장 규칙에 걸려 다른 필드도 수정할 수 없으므로, 수정 전에 해당 행을 먼저 수동으로 `hidden`/`pending`으로 내려야 한다.
 - **동작**: 파일에 없는 기존 행은 건드리지 않는다(삭제 없음). `interest_count`는 덮어쓰지 않는다. `last_verified_at` ← `verified_at`. `--dry-run`은 생성/변경/동일 항목과 바뀌는 필드만 출력.
 - **개발용 시드와의 차이**: 시드의 한옥디자인 행은 `source_url`이 빈 채 published다(개발 전용 예외). 같은 값으로는 임포트의 published 검증을 통과하지 못한다 — 공식 주소를 찾기 전에는 운영에 올리지 않는다.
 

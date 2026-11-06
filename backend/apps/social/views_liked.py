@@ -51,9 +51,19 @@ class LikedBoardsView(APIView):
             Reaction.objects
             .filter(user=requester, project__visibility='public', project__is_temp=False)
             .select_related('project', 'project__user')
-            # report_image is base64 TEXT (~200KB/row); only a has-image flag is
-            # needed, so compute it in SQL and never load the column.
-            .defer('project__report_image')
+            # Load exactly what this view + accounts.views.profile._build_board_items
+            # read. In particular report_image (base64 TEXT, ~200KB/row) stays
+            # deferred: only a has-image flag is needed, computed in SQL below.
+            # Keep this list in sync when _build_board_items starts reading a
+            # new Project column (a missed one costs one query per row).
+            .only(
+                'id', 'created_at', 'project',
+                'project__project_id', 'project__name', 'project__liked_ids',
+                'project__created_at', 'project__visibility', 'project__user',
+                'project__user__id', 'project__user__user',
+                'project__user__display_name', 'project__user__handle',
+                'project__user__avatar_url',
+            )
             .annotate(_has_image=Exists(
                 Project.objects
                 .filter(pk=OuterRef('project_id'))
