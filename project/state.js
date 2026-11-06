@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-10-31 11:17 KST',
-    head: '5bf2141',
-    branch: 'feature/claude-contact-reason-port',
+    updatedAt: '2026-11-06 11:47 KST',
+    head: 'ead0dc2',
+    branch: 'feature/sns-contact-notifications',
   },
   done: [
+    {
+      id: 'PR #474',
+      title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
+      completedAt: '2026-10-31',
+      prs: [474],
+      note: '',
+    },
     {
       id: 'PR #469',
       title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
       completedAt: '2026-10-25',
       prs: [450],
-      note: '',
-    },
-    {
-      id: 'PR #449',
-      title: 'feat(FULL-REPORT-UI-1): persona report redesign',
-      completedAt: '2026-10-25',
-      prs: [449],
       note: '',
     },
   ],
@@ -639,6 +639,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 474,
+      title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
+      mergedAt: '2026-10-31T02:34:15Z',
+      mergedAtKST: '2026-10-31 11:34 KST',
+      sha: 'ead0dc2',
+    },
+    {
       number: 469,
       title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
       mergedAt: '2026-10-31T00:05:41Z',
@@ -686,13 +693,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-25T00:47:02Z',
       mergedAtKST: '2026-10-25 09:47 KST',
       sha: '8635dee',
-    },
-    {
-      number: 449,
-      title: 'feat(FULL-REPORT-UI-1): persona report redesign',
-      mergedAt: '2026-10-25T00:16:00Z',
-      mergedAtKST: '2026-10-25 09:16 KST',
-      sha: '0947ed1',
     },
   ],
   agents: [
@@ -1527,6 +1527,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/notifications/migrations/0002_contact_notification_types.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/notifications/migrations/__init__.py',
       role: '',
     },
@@ -1829,6 +1833,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/migrations/0033_retune_tag_axis_weights.py',
       role: '마이그 0033: 태그-축 가중치 재조정',
+    },
+    {
+      path: 'backend/apps/recommendation/migrations/0034_project_visibility_default_public.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/migrations/__init__.py',
@@ -2228,6 +2236,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/social/tests/test_board_feed.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/social/tests/test_people_temp_boards.py',
       role: '',
     },
     {

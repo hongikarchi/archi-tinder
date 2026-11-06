@@ -153,12 +153,38 @@ class TestSendRequest:
         ca.post(f'/api/v1/users/{bob[0].id}/block/')
         assert send(ca, bob).status_code == 400  # blocker themselves
 
-    def test_no_notification_rows(self, ca, cb, alice, bob):
-        connect_pair(ca, cb, alice, bob)
+    def test_request_notifies_recipient_once(self, ca, alice, bob):
+        send(ca, bob)
+        n = Notification.objects.get()
+        assert n.recipient_id == bob[1].pk and n.actor_id == alice[1].pk
+        assert n.type == 'contact_request' and n.category == 'social'
+        assert n.payload == {'request_id': ContactRequest.objects.get().id}
+        send(ca, bob)  # duplicate pending: silent
+        assert Notification.objects.count() == 1
+
+    def test_accept_notifies_sender(self, ca, cb, alice, bob):
+        conv = connect_pair(ca, cb, alice, bob)
+        n = Notification.objects.get(type='contact_accepted')
+        assert n.recipient_id == alice[1].pk and n.actor_id == bob[1].pk
+        assert n.payload == {'conversation_id': conv.id}
+        assert Notification.objects.filter(type='contact_request').count() == 1
+
+    def test_social_in_app_off_no_notification(self, ca, alice, bob):
+        bob[1].notifications = {'social': {'in_app': False}}
+        bob[1].save(update_fields=['notifications'])
+        send(ca, bob)
         assert Notification.objects.count() == 0
 
 
 class TestIgnoreAndCooldown:
+    def test_ignore_and_cooldown_do_not_notify_sender(self, ca, cb, alice, bob):
+        send(ca, bob)
+        cr = ContactRequest.objects.get()
+        cb.post(f'/api/v1/contact-requests/{cr.id}/ignore/')
+        send(ca, bob)  # cooldown silent sent
+        assert not Notification.objects.filter(recipient=alice[1]).exists()
+        assert Notification.objects.filter(recipient=bob[1]).count() == 1
+
     def test_ignore_then_cooldown_silent(self, ca, cb, alice, bob):
         send(ca, bob)
         cr = ContactRequest.objects.get()
@@ -353,6 +379,14 @@ class TestMutual:
         # earlier requester (alice): system message unread; actor (bob): 0
         assert unread(ca) == 1
         assert unread(cb) == 0
+
+    def test_mutual_notifies_both(self, ca, cb, alice, bob):
+        send(ca, bob)
+        r = send(cb, alice)
+        for me, other in ((alice, bob), (bob, alice)):
+            n = Notification.objects.get(recipient=me[1], type='contact_accepted')
+            assert n.actor_id == other[1].pk
+            assert n.payload == {'conversation_id': r.data['conversation_id']}
 
     def test_mutual_without_greetings(self, ca, cb, alice, bob):
         send(ca, bob)
