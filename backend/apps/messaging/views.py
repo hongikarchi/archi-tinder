@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import UserProfile
 from apps.accounts.permissions import IsVerifiedUser
+from apps.notifications.services import notify_contact_accepted, notify_contact_request
 
 from . import services
 from .models import Block, ContactRequest, Conversation, Message, Report
@@ -71,6 +72,10 @@ class ContactRequestCreateView(MessagingView):
     already / already connected / ignored within 30 days).
     201 {status: 'connected', conversation_id} when a reverse pending request
     existed (mutual interest -> auto-accept).
+
+    Notifications (FULL-NOTIF-CONTACT-1), emitted after the transaction commits:
+    a NEW pending request -> `contact_request` to the recipient; mutual connect
+    -> `contact_accepted` to both users. Silent no-ops emit nothing (D10).
     """
     throttle_classes = [ContactRequestThrottle]
 
@@ -92,6 +97,8 @@ class ContactRequestCreateView(MessagingView):
             return _unavailable()
 
         now = timezone.now()
+        connected_conv = None
+        new_pending = None
         with transaction.atomic():
             reverse = (
                 ContactRequest.objects.select_for_update()
@@ -109,29 +116,36 @@ class ContactRequestCreateView(MessagingView):
                 reverse.status = ContactRequest.STATUS_ACCEPTED
                 reverse.responded_at = now
                 reverse.save(update_fields=['status', 'responded_at'])
-                conv = services.connect([reverse, new_req], actor=sender, now=now)
-                return Response(
-                    {'status': 'connected', 'conversation_id': conv.pk},
-                    status=status.HTTP_201_CREATED,
-                )
+                connected_conv = services.connect([reverse, new_req], actor=sender, now=now)
+            else:
+                existing = services.find_conversation(sender, recipient)
+                if existing is not None and existing.closed_at is None:
+                    return _sent()
+                if ContactRequest.objects.filter(
+                    sender=sender, recipient=recipient, status=ContactRequest.STATUS_PENDING,
+                ).exists():
+                    return _sent()
+                if services.recent_ignore_exists(sender, recipient, now):
+                    return _sent()
+                try:
+                    with transaction.atomic():
+                        new_pending = ContactRequest.objects.create(
+                            sender=sender, recipient=recipient, greeting=greeting, created_at=now,
+                        )
+                except IntegrityError:
+                    # Concurrent duplicate pending request — same silent success.
+                    pass
 
-            existing = services.find_conversation(sender, recipient)
-            if existing is not None and existing.closed_at is None:
-                return _sent()
-            if ContactRequest.objects.filter(
-                sender=sender, recipient=recipient, status=ContactRequest.STATUS_PENDING,
-            ).exists():
-                return _sent()
-            if services.recent_ignore_exists(sender, recipient, now):
-                return _sent()
-            try:
-                with transaction.atomic():
-                    ContactRequest.objects.create(
-                        sender=sender, recipient=recipient, greeting=greeting, created_at=now,
-                    )
-            except IntegrityError:
-                # Concurrent duplicate pending request — same silent success.
-                pass
+        # After the atomic block: notify only once the write succeeded (never raises).
+        if connected_conv is not None:
+            notify_contact_accepted(recipient, sender, connected_conv)
+            notify_contact_accepted(sender, recipient, connected_conv)
+            return Response(
+                {'status': 'connected', 'conversation_id': connected_conv.pk},
+                status=status.HTTP_201_CREATED,
+            )
+        if new_pending is not None:
+            notify_contact_request(new_pending)
         return _sent()
 
 
@@ -250,6 +264,7 @@ class ContactRequestAcceptView(MessagingView):
             cr.responded_at = now
             cr.save(update_fields=['status', 'responded_at'])
             conv = services.connect([cr], actor=me, now=now)
+        notify_contact_accepted(cr.sender, me, conv)
         return Response({'status': 'accepted', 'conversation_id': conv.pk})
 
 

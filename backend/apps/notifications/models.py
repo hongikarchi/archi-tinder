@@ -13,11 +13,15 @@ class Notification(models.Model):
       reaction:          {project_id: str(uuid), project_title: str}
       password_changed:  {}
       new_login:         {}
+      contact_request:   {request_id: int}
+      contact_accepted:  {conversation_id: int}
     """
     TYPE_CHOICES = [
         ('reaction', 'Reaction'),
         ('password_changed', 'Password Changed'),
         ('new_login', 'New Login'),
+        ('contact_request', 'Contact Request'),
+        ('contact_accepted', 'Contact Accepted'),
     ]
     CATEGORY_CHOICES = [
         ('social', 'Social'),

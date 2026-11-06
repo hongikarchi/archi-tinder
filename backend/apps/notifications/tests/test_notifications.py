@@ -5,6 +5,9 @@ Coverage:
   TestReactionEmission      -- creates notification for owner; self-reaction
                                 skipped; prefs off skipped; absent prefs emit;
                                 unread dedupe on repeated react/unreact/react
+  TestContactEmission       -- contact_request / contact_accepted service gating:
+                                self skipped, prefs off skipped, unread dedupe,
+                                list endpoint exposes actor + payload
   TestSecurityEmission      -- password_changed always emitted regardless of
                                 prefs; first device silent, second notifies
   TestNotificationEndpoints -- list self-only + paginated, unread-count,
@@ -16,7 +19,7 @@ from django.utils import timezone
 
 from apps.notifications.models import Notification, KnownDevice
 from apps.notifications.services import (
-    notify_reaction, notify_security, record_device_and_maybe_notify, hash_user_agent,
+    notify_contact_accepted, notify_contact_request, notify_reaction, notify_security, record_device_and_maybe_notify, hash_user_agent,
 )
 
 
@@ -146,6 +149,110 @@ class TestReactionEmission:
             pass
         # Should not raise even though _Bogus() has no .project/.user attrs.
         notify_reaction(_Bogus())
+
+
+# ---------------------------------------------------------------------------
+# TestContactEmission (FULL-NOTIF-CONTACT-1)
+# ---------------------------------------------------------------------------
+
+def _make_contact_request(sender, recipient):
+    from apps.messaging.models import ContactRequest
+    return ContactRequest.objects.create(sender=sender, recipient=recipient)
+
+
+class TestContactEmission:
+
+    @pytest.mark.django_db
+    def test_contact_request_notifies_recipient(self, user_a, user_b):
+        _, a_profile = user_a
+        _, b_profile = user_b
+        cr = _make_contact_request(a_profile, b_profile)
+
+        notify_contact_request(cr)
+
+        n = Notification.objects.get()
+        assert n.recipient_id == b_profile.pk and n.actor_id == a_profile.pk
+        assert n.type == 'contact_request' and n.category == 'social'
+        assert n.payload == {'request_id': cr.pk}
+        assert n.read_at is None
+
+    @pytest.mark.django_db
+    def test_contact_request_deduped_while_unread_then_fresh_after_read(self, user_a, user_b):
+        _, a_profile = user_a
+        _, b_profile = user_b
+        cr = _make_contact_request(a_profile, b_profile)
+        notify_contact_request(cr)
+        notify_contact_request(cr)
+        assert Notification.objects.filter(type='contact_request').count() == 1
+
+        Notification.objects.update(read_at=timezone.now())
+        notify_contact_request(cr)
+        assert Notification.objects.filter(type='contact_request').count() == 2
+
+    @pytest.mark.django_db
+    def test_contact_request_social_in_app_false_skipped(self, user_a, user_b):
+        _, a_profile = user_a
+        _, b_profile = user_b
+        b_profile.notifications = {'social': {'in_app': False}}
+        b_profile.save(update_fields=['notifications'])
+
+        notify_contact_request(_make_contact_request(a_profile, b_profile))
+
+        assert Notification.objects.count() == 0
+
+    @pytest.mark.django_db
+    def test_contact_request_self_skipped(self, user_a):
+        _, a_profile = user_a
+        # The DB forbids self-requests (CHECK constraint); the service guard is
+        # defence in depth, so exercise it with an unsaved stand-in.
+        from types import SimpleNamespace
+        notify_contact_request(SimpleNamespace(pk=1, sender=a_profile, recipient=a_profile))
+        assert Notification.objects.count() == 0
+
+    @pytest.mark.django_db
+    def test_contact_accepted_notifies_recipient_with_conversation_id(self, user_a, user_b):
+        from apps.messaging.models import Conversation
+        _, a_profile = user_a
+        _, b_profile = user_b
+        lo, hi = sorted([a_profile, b_profile], key=lambda p: p.pk)
+        conv = Conversation.objects.create(user_a=lo, user_b=hi)
+
+        notify_contact_accepted(a_profile, b_profile, conv)
+
+        n = Notification.objects.get()
+        assert n.recipient_id == a_profile.pk and n.actor_id == b_profile.pk
+        assert n.type == 'contact_accepted' and n.category == 'social'
+        assert n.payload == {'conversation_id': conv.pk}
+
+    @pytest.mark.django_db
+    def test_contact_accepted_prefs_off_and_self_skipped(self, user_a, user_b):
+        from apps.messaging.models import Conversation
+        _, a_profile = user_a
+        _, b_profile = user_b
+        lo, hi = sorted([a_profile, b_profile], key=lambda p: p.pk)
+        conv = Conversation.objects.create(user_a=lo, user_b=hi)
+        a_profile.notifications = {'social': {'in_app': False}}
+        a_profile.save(update_fields=['notifications'])
+
+        notify_contact_accepted(a_profile, b_profile, conv)
+        notify_contact_accepted(b_profile, b_profile, conv)
+
+        assert Notification.objects.count() == 0
+
+    @pytest.mark.django_db
+    def test_list_endpoint_exposes_actor_for_contact_types(self, user_a, user_b, auth_client_b):
+        _, a_profile = user_a
+        _, b_profile = user_b
+        notify_contact_request(_make_contact_request(a_profile, b_profile))
+
+        resp = auth_client_b.get('/api/v1/notifications/')
+
+        assert resp.status_code == 200
+        item = resp.data['results'][0]
+        assert item['type'] == 'contact_request'
+        assert item['actor']['user_id'] == a_profile.user.id
+        assert item['actor']['display_name'] == a_profile.display_name
+        assert 'request_id' in item['payload']
 
 
 # ---------------------------------------------------------------------------

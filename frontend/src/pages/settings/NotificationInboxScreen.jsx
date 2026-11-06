@@ -10,11 +10,16 @@
  *   - reaction  -> /board/{payload.project_id}  (board/:boardId uses boardId
  *                  AS the project_id -- see BoardDetailPage.jsx react/unreact
  *                  calls which pass `board.project_id` straight through)
+ *   - contact_request  -> /user/me?messages=inbox  (MessagesEntry opens the
+ *                  messages sheet on the inbox, which lists received requests)
+ *   - contact_accepted -> /user/me?messages={payload.conversation_id}
+ *                  (falls back to the inbox view if the id is not a positive int)
  *   - password_changed / new_login (category 'security') -> /settings/account
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listNotifications, markRead } from '../../api/notifications.js'
+import { refreshUnreadNotifications } from '../../hooks/useUnreadNotifications.js'
 import { useTranslation } from '../../i18n/index.js'
 import { formatTimeAgo } from '../../utils/timeAgo.js'
 import Avatar from '../../components/Avatar.jsx'
@@ -66,6 +71,10 @@ function sentenceFor(n, t) {
         ? t('notifications.sentence.reactionBoard', { name, title })
         : t('notifications.sentence.reaction', { name })
     }
+    case 'contact_request':
+      return t('notifications.sentence.contactRequest', { name })
+    case 'contact_accepted':
+      return t('notifications.sentence.contactAccepted', { name })
     case 'password_changed':
       return t('notifications.sentence.passwordChanged')
     case 'new_login':
@@ -113,7 +122,9 @@ export default function NotificationInboxScreen({ onLogout }) {
         // clears the badge on open, regardless of what's on-screen).
         if (!markedAllRef.current) {
           markedAllRef.current = true
-          markRead({ all: true }).catch(() => { /* best-effort */ })
+          markRead({ all: true })
+            .then(() => refreshUnreadNotifications({ force: true }))
+            .catch(() => { /* best-effort */ })
         }
       })
       .catch(err => {
@@ -153,6 +164,17 @@ export default function NotificationInboxScreen({ onLogout }) {
     }
     if (n.type === 'reaction' && n.payload?.project_id) {
       navigate(`/board/${n.payload.project_id}`)
+      return
+    }
+    if (n.type === 'contact_request') {
+      navigate('/user/me?messages=inbox')
+      return
+    }
+    if (n.type === 'contact_accepted') {
+      const cid = n.payload?.conversation_id
+      navigate(Number.isInteger(cid) && cid > 0
+        ? `/user/me?messages=${cid}`
+        : '/user/me?messages=inbox')
     }
   }
 

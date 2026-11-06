@@ -67,6 +67,62 @@ def notify_reaction(reaction):
         logger.exception('notify_reaction failed (reaction pk=%s)', getattr(reaction, 'pk', None))
 
 
+def _social_in_app_enabled(recipient):
+    prefs = getattr(recipient, 'notifications', None) or {}
+    social_prefs = prefs.get('social', {}) if isinstance(prefs, dict) else {}
+    return not (isinstance(social_prefs, dict) and social_prefs.get('in_app', True) is False)
+
+
+def notify_contact_request(contact_request):
+    """Emit 'contact_request' to the recipient of a NEW pending ContactRequest.
+
+    Same gating as notify_reaction (skip self, social.in_app False opts out).
+    Deduped: skipped while an UNREAD contact_request from the same actor exists.
+    Never raises.
+    """
+    try:
+        recipient = contact_request.recipient
+        actor = contact_request.sender
+        if actor_id_equals_recipient(actor, recipient):
+            return
+        if not _social_in_app_enabled(recipient):
+            return
+        if Notification.objects.filter(
+            recipient=recipient, actor=actor, type='contact_request', read_at__isnull=True,
+        ).exists():
+            return
+        Notification.objects.create(
+            recipient=recipient,
+            actor=actor,
+            type='contact_request',
+            category='social',
+            payload={'request_id': contact_request.pk},
+        )
+    except Exception:
+        logger.exception('notify_contact_request failed (request pk=%s)', getattr(contact_request, 'pk', None))
+
+
+def notify_contact_accepted(recipient, actor, conversation):
+    """Emit 'contact_accepted' to `recipient` (actor = the other party).
+
+    Same gating as notify_reaction. Never raises.
+    """
+    try:
+        if actor_id_equals_recipient(actor, recipient):
+            return
+        if not _social_in_app_enabled(recipient):
+            return
+        Notification.objects.create(
+            recipient=recipient,
+            actor=actor,
+            type='contact_accepted',
+            category='social',
+            payload={'conversation_id': conversation.pk},
+        )
+    except Exception:
+        logger.exception('notify_contact_accepted failed (recipient pk=%s)', getattr(recipient, 'pk', None))
+
+
 def actor_id_equals_recipient(actor, recipient):
     """True when actor and recipient are the same UserProfile (self-reaction guard)."""
     return actor is not None and recipient is not None and actor.pk == recipient.pk

@@ -83,8 +83,8 @@ def connect(requests, actor, now=None):
 
     Read state: the actor sees everything (last_read = now). The other side keeps
     last_read at (at most) their view of the greetings, so the connected system
-    message counts as 1 unread for them — the only way the earlier requester can
-    learn of the accept, since no Notification row is created (D9).
+    message counts as 1 unread for them. The views also emit `contact_accepted`
+    notifications after commit (FULL-NOTIF-CONTACT-1).
     """
     now = now or timezone.now()
     requests = sorted(requests, key=lambda r: r.created_at)
