@@ -256,6 +256,7 @@ REST_FRAMEWORK = {
         # in apps/messaging/throttling.py (code-pinned).
         'contact_request': '20/day',
         'message_send':    '30/min',
+        'message_read':    '120/min',
         'report':          '10/hour',
         # ADMIN-DASH-1: admitted admin-dashboard calls (registry; effective value = class attr
         # in apps/admin_dashboard/throttling.py).

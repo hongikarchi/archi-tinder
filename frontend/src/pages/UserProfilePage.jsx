@@ -618,7 +618,7 @@ export default function UserProfilePage({ onLogout }) {
                 <PentagonChart
                   myVector={vectorFrom(user.personality)}
                   interactive={true}
-                  onAxisClick={(i) => navigate(`/people?axis=${i}`)}
+                  onAxisClick={() => navigate('/people')}
                   size={180}
                 />
                 <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0 }}>

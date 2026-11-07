@@ -52,6 +52,10 @@ import styles from './Modal.module.css'
  *    Default false: every other caller renders in place, unchanged. Escape /
  *    focus handling is unaffected (document listener + ref focus); React
  *    synthetic events still bubble through the portal to React ancestors.
+ *
+ * Focus restore (#394): the element focused when the Modal opens is remembered
+ * and re-focused when it closes/unmounts (skipped if it left the document or
+ * focus already moved to another element outside the panel).
  */
 export default function Modal({
   open,
@@ -82,8 +86,20 @@ export default function Modal({
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose, closeOnEscape])
 
+  // Focus: into the panel on open; back to the opener (the element that was
+  // focused before open) on close/unmount, if it is still in the document and
+  // focus has not been moved somewhere meaningful in the meantime.
   useEffect(() => {
-    if (open) panelRef.current?.focus()
+    if (!open) return undefined
+    const panel = panelRef.current
+    const active = document.activeElement
+    const opener = active && active !== document.body && !panel?.contains(active) ? active : null
+    panel?.focus()
+    return () => {
+      if (!opener || !opener.isConnected) return
+      const now = document.activeElement
+      if (!now || now === document.body || panel?.contains(now)) opener.focus({ preventScroll: true })
+    }
   }, [open])
 
   if (!open) return null

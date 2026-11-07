@@ -147,13 +147,22 @@ export async function getBuildings(buildingIds) {
  * Batch-fetch building cards for board detail.
  * Returns normalized ImageCard objects (same shape as swipe cards).
  * Preserves input order via Map lookup before normalizing.
+ * Chunked at 200 ids/request. `throwOnError` re-throws instead of returning [].
  */
-export async function getBoardBuildings(buildingIds) {
+export async function getBoardBuildings(buildingIds, { throwOnError = false } = {}) {
   if (!buildingIds?.length) return []
+  // Chunk at 200 per request (same backend limit as getBuildings).
+  const CHUNK = 200
+  const chunks = []
+  for (let i = 0; i < buildingIds.length; i += CHUNK) {
+    chunks.push(buildingIds.slice(i, i + CHUNK))
+  }
   try {
-    const result = await callApi('POST', '/images/batch/', { canonical_bld_ids: buildingIds })
+    const results = await Promise.all(
+      chunks.map(chunk => callApi('POST', '/images/batch/', { canonical_bld_ids: chunk }))
+    )
     const byId = new Map(
-      (result || []).map(card => [String(card.canonical_bld_id ?? card.building_id ?? card.id), card])
+      results.flat().map(card => [String(card.canonical_bld_id ?? card.building_id ?? card.id), card])
     )
     return buildingIds
       .map(id => byId.get(String(id)))
@@ -161,6 +170,8 @@ export async function getBoardBuildings(buildingIds) {
       .map(normalizeCard)
   } catch (err) {
     console.error('[api/client] getBoardBuildings failed:', err)
+    // Callers that can show an error + retry opt in; the rest keep the empty fallback.
+    if (throwOnError) throw err
     return []
   }
 }

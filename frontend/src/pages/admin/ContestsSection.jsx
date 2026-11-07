@@ -73,7 +73,7 @@ export default function ContestsSection() {
       await updateAdminContest(row.id, { status: next })
       reload()
     } catch (err) {
-      const messages = err?.status === 400 ? flattenApiErrors(err?.data) : []
+      const messages = err?.status === 400 ? flattenApiErrors(err?.data, t) : []
       setRowErrors(prev => ({
         ...prev,
         [row.id]: messages.length > 0 ? messages.join(' ') : t('admin.contests.statusError'),

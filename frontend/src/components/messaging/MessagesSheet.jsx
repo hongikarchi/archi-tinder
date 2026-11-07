@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Modal from '../Modal.jsx'
 import { useTranslation } from '../../i18n/index.js'
 import {
@@ -31,6 +32,8 @@ import { userHandle } from '../../utils/userIdentity.js'
 export default function MessagesSheet({ onClose, initialConversationId = null, initialPeerUserId = null }) {
   const { t } = useTranslation()
   const sheetStyle = useVisualViewportSheetStyle()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [loadState, setLoadState] = useState('loading') // 'loading' | 'ready' | 'error'
   const [requests, setRequests] = useState([])
@@ -87,6 +90,12 @@ export default function MessagesSheet({ onClose, initialConversationId = null, i
   function handleClose() {
     refreshUnreadMessages({ force: true })
     onClose()
+  }
+
+  function handleOpenProfile(userId) {
+    const path = `/user/${userId}`
+    handleClose()
+    if (location.pathname !== path) navigate(path)
   }
 
   function handleBack() {
@@ -165,6 +174,7 @@ export default function MessagesSheet({ onClose, initialConversationId = null, i
           conversation={active}
           onBack={handleBack}
           onOverlayChange={setOverlayOpen}
+          onOpenProfile={handleOpenProfile}
         />
       ) : (
         <InboxView

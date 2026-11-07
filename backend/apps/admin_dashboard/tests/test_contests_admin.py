@@ -394,3 +394,67 @@ class TestFieldKeyedErrors:
         c.refresh_from_db()
         assert c.status == Contest.STATUS_HIDDEN
         assert _audit().count() == 0
+
+
+@pytest.mark.django_db
+class TestPatchLostUpdate:
+    def test_concurrent_interest_count_not_overwritten(self, admin_client, monkeypatch):
+        """interest_count (signal-maintained) bumped between read and write must survive."""
+        from apps.admin_dashboard import contests_views
+
+        c = _make(title='orig')
+        real_is_valid = contests_views.AdminContestSerializer.is_valid
+
+        def is_valid_then_concurrent_bump(self, *a, **k):
+            ok = real_is_valid(self, *a, **k)
+            Contest.objects.filter(pk=c.pk).update(interest_count=7)  # another request
+            return ok
+
+        monkeypatch.setattr(
+            contests_views.AdminContestSerializer, 'is_valid', is_valid_then_concurrent_bump)
+        resp = admin_client.patch(detail_url(c.pk), {'title': 'edited'}, format='json')
+        assert resp.status_code == 200, resp.content
+        c.refresh_from_db()
+        assert c.title == 'edited'
+        assert c.interest_count == 7
+        assert resp.json()['interest_count'] == 7
+        assert c.last_verified_at is not None
+
+    def test_audit_rows_unchanged(self, admin_client):
+        c = _make(title='orig')
+        admin_client.patch(detail_url(c.pk), {'title': 'x', 'status': 'hidden'}, format='json')
+        assert _audit('contest_status_change').count() == 1
+        assert _audit('contest_update').count() == 1
+
+
+@pytest.mark.django_db
+class TestErrorCodes:
+    """400 body: {field: [messages], 'error_codes': {field: [codes]}}."""
+
+    def test_source_url_required(self, admin_client):
+        c = _make(status=Contest.STATUS_HIDDEN, source_url='')
+        resp = admin_client.patch(detail_url(c.pk), {'status': 'published'}, format='json')
+        assert resp.status_code == 400
+        assert resp.json()['error_codes']['source_url'] == ['source_url_required']
+        assert len(resp.json()['source_url']) == 1
+
+    def test_source_url_listing_site(self, admin_client):
+        c = _make(status=Contest.STATUS_HIDDEN, source_url='')
+        resp = admin_client.patch(
+            detail_url(c.pk),
+            {'status': 'published', 'source_url': 'https://www.wevity.com/x'}, format='json')
+        assert resp.status_code == 400
+        assert resp.json()['error_codes']['source_url'] == ['source_url_listing_site']
+
+    def test_invalid_url_scheme_via_serializer(self, admin_client):
+        c = _make()
+        resp = admin_client.patch(detail_url(c.pk), {'source_url': 'javascript:x'}, format='json')
+        assert resp.status_code == 400
+        assert 'invalid_url_scheme' in resp.json()['error_codes']['source_url']
+        assert len(resp.json()['error_codes']['source_url']) == len(resp.json()['source_url'])
+
+    def test_poster_host_blocked_on_create(self, admin_client):
+        resp = admin_client.post(
+            LIST_URL, _payload(poster_url='https://www.wevity.com/p.png'), format='json')
+        assert resp.status_code == 400
+        assert 'poster_host_blocked' in resp.json()['error_codes']['poster_url']

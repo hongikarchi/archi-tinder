@@ -10,10 +10,33 @@ from .models import Block, ContactRequest, Conversation, Message
 CONTACT_COOLDOWN_DAYS = 30
 
 
+# -- Id bounds --------------------------------------------------------------
+# An integer from the URL / query / body that exceeds its column type reaches
+# Postgres as a DataError ("integer out of range") -> HTTP 500. Bound it first so
+# the caller answers 404 / 400 instead. auth_user.id is int4; this app's own
+# BigAutoField pks (Conversation, ContactRequest, Message, ...) are int8.
+AUTH_USER_ID_MAX = 2**31 - 1
+BIGINT_ID_MAX = 2**63 - 1
+
+
+def id_in_range(value, max_value=BIGINT_ID_MAX):
+    """True when `value` is an int that fits a positive id column of max `max_value`.
+
+    Defaults to BigAutoField bounds; pass AUTH_USER_ID_MAX for auth_user.id.
+    bool is rejected (True == 1 would otherwise slip through).
+    """
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= max_value
+
+
 # -- Lookups ----------------------------------------------------------------
 
 def get_profile_by_auth_id(auth_user_id):
-    """API ids are auth User ids (== UserProfile.user_id); resolve to a UserProfile."""
+    """API ids are auth User ids (== UserProfile.user_id); resolve to a UserProfile.
+
+    None for an id that cannot exist (out of int4 range) without querying.
+    """
+    if not id_in_range(auth_user_id, AUTH_USER_ID_MAX):
+        return None
     return UserProfile.objects.filter(user_id=auth_user_id).first()
 
 

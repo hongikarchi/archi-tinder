@@ -29,7 +29,9 @@ from .serializers import (
     ContactRequestCreateSerializer, MessageCreateSerializer, ReportCreateSerializer,
     last_message_dict, message_dict, user_summary,
 )
-from .throttling import ContactRequestThrottle, MessageSendThrottle, ReportThrottle
+from .throttling import (
+    ContactRequestThrottle, MessageReadThrottle, MessageSendThrottle, ReportThrottle,
+)
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
 _MESSAGES_LIMIT_DEFAULT = 50
@@ -137,6 +139,7 @@ class ContactRequestCreateView(MessagingView):
 
 class ContactRequestReceivedView(MessagingView):
     """GET /api/v1/contact-requests/received/ — my pending requests, newest first."""
+    throttle_classes = [MessageReadThrottle]
 
     def get(self, request):
         me = self.my_profile(request)
@@ -174,6 +177,7 @@ class ContactRequestStatusView(MessagingView):
                                recipient guest / no personality / discovery
                                opt-out). PRIVACY: deliberately indistinguishable.
     """
+    throttle_classes = [MessageReadThrottle]
 
     def get(self, request):
         me = self.my_profile(request)
@@ -181,6 +185,7 @@ class ContactRequestStatusView(MessagingView):
             target_auth_id = int(request.query_params.get('user_id', ''))
         except (TypeError, ValueError):
             return Response({'detail': 'user_id required'}, status=status.HTTP_400_BAD_REQUEST)
+        # Out-of-range ids resolve to None in the helper (no query) -> 404.
         target = services.get_profile_by_auth_id(target_auth_id)
         if target is None:
             raise Http404()
@@ -232,6 +237,8 @@ class ContactRequestAcceptView(MessagingView):
 
     def post(self, request, request_id):
         me = self.my_profile(request)
+        if not services.id_in_range(request_id):
+            raise Http404()
         with transaction.atomic():
             cr = (
                 ContactRequest.objects.select_for_update()
@@ -258,6 +265,8 @@ class ContactRequestIgnoreView(MessagingView):
 
     def post(self, request, request_id):
         me = self.my_profile(request)
+        if not services.id_in_range(request_id):
+            raise Http404()
         with transaction.atomic():
             cr = (
                 ContactRequest.objects.select_for_update()
@@ -277,6 +286,8 @@ class ContactRequestIgnoreView(MessagingView):
 # -- Conversations ----------------------------------------------------------
 
 def _get_conversation_or_404(me, conversation_id):
+    if not services.id_in_range(conversation_id):
+        raise Http404()
     conv = Conversation.objects.filter(pk=conversation_id).first()
     if conv is None or not conv.is_participant(me):
         raise Http404()
@@ -285,6 +296,7 @@ def _get_conversation_or_404(me, conversation_id):
 
 class ConversationListView(MessagingView):
     """GET /api/v1/conversations/ — mine, last_message_at desc."""
+    throttle_classes = [MessageReadThrottle]
 
     def get(self, request):
         me = self.my_profile(request)
@@ -335,7 +347,7 @@ class ConversationMessagesView(MessagingView):
     def get_throttles(self):
         if self.request.method == 'POST':
             return [MessageSendThrottle()]
-        return []
+        return [MessageReadThrottle()]
 
     def get(self, request, conversation_id):
         me = self.my_profile(request)
@@ -353,6 +365,8 @@ class ConversationMessagesView(MessagingView):
                 after_id = int(after)
             except (TypeError, ValueError):
                 return Response({'detail': 'after must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+            # Clamp to the id column's range: an oversized cursor is "past the end".
+            after_id = max(0, min(after_id, services.BIGINT_ID_MAX))
             msgs = list(qs.filter(id__gt=after_id).order_by('id')[:limit])
         else:
             # Initial load: the latest `limit` messages, still returned ascending.
@@ -400,6 +414,7 @@ class ConversationReadView(MessagingView):
 
 class UnreadCountView(MessagingView):
     """GET /api/v1/messages/unread-count/ -> {count}: pending requests + unread messages."""
+    throttle_classes = [MessageReadThrottle]
 
     def get(self, request):
         me = self.my_profile(request)
@@ -452,9 +467,18 @@ class ReportView(MessagingView):
         target_id = ser.validated_data['target_id'].strip()
         reason = ser.validated_data.get('reason', '').strip()
 
+        # ASCII digits only (str.isdigit() also accepts e.g. '²', which int() rejects),
+        # and the value must fit the target's id column -> 400, never a DB DataError.
+        if not (target_id.isascii() and target_id.isdigit()):
+            return Response({'detail': 'invalid target_id'}, status=status.HTTP_400_BAD_REQUEST)
+        max_id = (
+            services.BIGINT_ID_MAX if target_type == Report.TARGET_MESSAGE
+            else services.AUTH_USER_ID_MAX
+        )
+        if not services.id_in_range(int(target_id), max_id):
+            return Response({'detail': 'invalid target_id'}, status=status.HTTP_400_BAD_REQUEST)
+
         if target_type == Report.TARGET_MESSAGE:
-            if not target_id.isdigit():
-                return Response({'detail': 'invalid target_id'}, status=status.HTTP_400_BAD_REQUEST)
             msg = Message.objects.select_related('conversation').filter(pk=int(target_id)).first()
             # Non-participants get 404 — message existence is not revealed.
             if msg is None or not msg.conversation.is_participant(me):
@@ -463,8 +487,6 @@ class ReportView(MessagingView):
                 return Response({'detail': 'system_message_not_reportable'},
                                 status=status.HTTP_400_BAD_REQUEST)
         else:
-            if not target_id.isdigit():
-                return Response({'detail': 'invalid target_id'}, status=status.HTTP_400_BAD_REQUEST)
             target = services.get_profile_by_auth_id(int(target_id))
             if target is None:
                 raise Http404()

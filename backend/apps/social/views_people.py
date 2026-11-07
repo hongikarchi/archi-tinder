@@ -50,10 +50,14 @@ CACHING: the sorted candidate list is cached _FEED_CACHE_TTL seconds per
 (requester, filter); cursor pages slice it. The cache holds ONLY ordering data
 per entry: (sort_key, project_id, distance) -- no names, avatars or vectors.
 Each page is re-validated with one query (still public/non-temp/imaged/opted-in,
-owner not blocked) that also fetches every displayed field fresh (board name,
-reaction_count, updated_at, owner user_id/display_name/handle/avatar_url/
-type_code) plus is_reacted, so owner edits show immediately and a page may
-return fewer than page_size rows when boards were hidden inside the TTL.
+owner not blocked, owner still of the filtered type) that also fetches every
+displayed field fresh (board name, reaction_count, updated_at, owner user_id/
+display_name/handle/avatar_url/type_code) plus is_reacted, so owner edits show
+immediately and a page may return fewer than page_size rows when boards were
+hidden inside the TTL. When EVERY row of a slice is dropped but more cursor rows
+remain, the next cached slice is examined (up to _MAX_EMPTY_SLICE_SKIPS extra
+slices), so results=[] with has_more=true only happens when that bound is hit;
+next_cursor follows the last examined row.
 
 Response: {results, has_more, next_cursor, me_discoverable, me_hint}. The last
 two describe ONLY the requester, independent of filter / cursor / page:
@@ -118,6 +122,10 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
 # many seconds late; a board made private, deleted, opted-out or whose owner is
 # blocked is dropped immediately by the per-page re-validation query.
 _FEED_CACHE_TTL = 40
+
+# Extra cached slices examined when a page's rows were ALL dropped by the live
+# re-check (bounds the worst case at 1 + this many validation queries).
+_MAX_EMPTY_SLICE_SKIPS = 4
 
 
 class PeopleFeedThrottle(UserRateThrottle):
@@ -275,6 +283,35 @@ class PeopleDiscoveryView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [PeopleFeedThrottle]
 
+    @staticmethod
+    def _fresh_rows(pids, blocked_ids, type_code_filter):
+        """{project_id_str: row} for the cached `pids` that still qualify (live data)."""
+        fresh_qs = (
+            Project.objects
+            .filter(
+                project_id__in=pids,
+                visibility='public',
+                is_temp=False,
+                user__personality__discovery_opt_in=True,
+            )
+            .exclude(report_image__isnull=True)
+            .exclude(report_image='')
+        )
+        if blocked_ids:
+            fresh_qs = fresh_qs.exclude(user_id__in=blocked_ids)
+        if type_code_filter is not None:
+            # The owner may have changed type inside the cache TTL.
+            fresh_qs = fresh_qs.filter(user__personality__type_code=type_code_filter)
+        return {
+            str(f['project_id']): f
+            for f in fresh_qs.values(
+                'project_id', 'name', 'updated_at', 'reaction_count',
+                'user_id', 'user__user_id', 'user__display_name',
+                'user__handle', 'user__avatar_url',
+                'user__personality__type_code',
+            )
+        }
+
     def get(self, request):
         # -- Guard: requester must have completed assessment ------------------
         try:
@@ -350,41 +387,31 @@ class PeopleDiscoveryView(APIView):
         if cursor_key is not None:
             entries = [e for e in entries if e[0] > cursor_key]
 
-        page = entries[:page_size]
-        has_more = len(entries) > page_size
-        next_cursor = _encode_cursor(page[-1][0]) if (has_more and page) else None
-
-        # -- Re-validate the page against live data: ONE cheap query ----------
-        # Drops boards that went private / temp / image-less / opted-out or
-        # whose owner got blocked since the list was cached, and refreshes the
-        # volatile fields (name, reaction_count). Metadata columns only.
-        page_pids = [e[1] for e in page]
+        # -- Re-validate against live data: ONE cheap query per slice ----------
+        # Drops boards that went private / temp / image-less / opted-out / no
+        # longer of the filtered type, or whose owner got blocked since the list
+        # was cached, and refreshes the volatile fields (name, reaction_count).
+        # Metadata columns only.
+        # If a whole slice is dropped but cursor rows remain, move on to the next
+        # cached slice (bounded) so the API does not answer results=[] with
+        # has_more=true while live rows exist further on. next_cursor always
+        # follows the LAST EXAMINED row, so pagination never skips or repeats.
+        page = []
         fresh = {}
-        if page_pids:
-            fresh_qs = (
-                Project.objects
-                .filter(
-                    project_id__in=page_pids,
-                    visibility='public',
-                    is_temp=False,
-                    user__personality__discovery_opt_in=True,
-                )
-                .exclude(report_image__isnull=True)
-                .exclude(report_image='')
-            )
-            if blocked_ids:
-                fresh_qs = fresh_qs.exclude(user_id__in=blocked_ids)
-            fresh = {
-                str(f['project_id']): f
-                for f in fresh_qs.values(
-                    'project_id', 'name', 'updated_at', 'reaction_count',
-                    'user_id', 'user__user_id', 'user__display_name',
-                    'user__handle', 'user__avatar_url',
-                    'user__personality__type_code',
-                )
-            }
-            page = [e for e in page if e[1] in fresh]
-            page_pids = [e[1] for e in page]
+        pos = 0
+        for _ in range(_MAX_EMPTY_SLICE_SKIPS + 1):
+            batch = entries[pos:pos + page_size]
+            if not batch:
+                break
+            pos += len(batch)
+            fresh = self._fresh_rows(
+                [e[1] for e in batch], blocked_ids, type_code_filter)
+            page = [e for e in batch if e[1] in fresh]
+            if page:
+                break
+        has_more = pos < len(entries)
+        next_cursor = _encode_cursor(entries[pos - 1][0]) if (has_more and pos) else None
+        page_pids = [e[1] for e in page]
 
         # -- Reaction state: ONE query for the whole page ---------------------
         from apps.social.models import Reaction

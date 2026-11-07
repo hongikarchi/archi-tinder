@@ -28,7 +28,7 @@ const STICK_THRESHOLD = 80
  * (no overlapping requests, no setInterval). Stops on unmount (back / close)
  * and while the tab is hidden; resumes immediately on becoming visible.
  */
-export default function ConversationView({ conversation, onBack, onOverlayChange }) {
+export default function ConversationView({ conversation, onBack, onOverlayChange, onOpenProfile }) {
   const { t, language } = useTranslation()
   const { id: conversationId, other } = conversation
   const otherName = userHandle(other) || t('messaging.unknownUser')
@@ -221,10 +221,24 @@ export default function ConversationView({ conversation, onBack, onOverlayChange
             <polyline points="12 19 5 12 12 5" />
           </svg>
         </FloatingIconButton>
-        <div className={styles.convTitle}>
-          <Avatar src={other?.avatar_url} name={userHandle(other)} size={32} />
-          <h3 className={styles.convName}>{otherName}</h3>
-        </div>
+        {other?.user_id != null && onOpenProfile ? (
+          <div className={styles.convTitle}>
+            <button
+              type="button"
+              className={styles.convTitleBtn}
+              aria-label={t('messaging.viewProfile', { name: otherName })}
+              onClick={() => onOpenProfile(other.user_id)}
+            >
+              <Avatar src={other?.avatar_url} name={userHandle(other)} size={32} />
+              <h3 className={styles.convName}>{otherName}</h3>
+            </button>
+          </div>
+        ) : (
+          <div className={styles.convTitle}>
+            <Avatar src={other?.avatar_url} name={userHandle(other)} size={32} />
+            <h3 className={styles.convName}>{otherName}</h3>
+          </div>
+        )}
         {other?.user_id != null && (
           <UserActionsMenu
             userId={other.user_id}

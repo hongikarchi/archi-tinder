@@ -572,3 +572,127 @@ class TestReports:
     def test_invalid_target_type(self, ca):
         assert ca.post('/api/v1/reports/', {
             'target_type': 'bogus', 'target_id': '1'}, format='json').status_code == 400
+
+
+# -- GET read throttle (#410) -------------------------------------------------
+
+class TestReadThrottle:
+    READ_URLS = [
+        '/api/v1/contact-requests/received/',
+        '/api/v1/contact-requests/status/?user_id=1',
+        '/api/v1/conversations/',
+        '/api/v1/conversations/1/messages/',
+        '/api/v1/messages/unread-count/',
+    ]
+
+    @pytest.fixture
+    def small_rate(self, monkeypatch):
+        from apps.messaging.throttling import MessageReadThrottle
+        monkeypatch.setattr(MessageReadThrottle, 'rate', '3/min')
+
+    def test_rate_is_code_pinned_120_per_min(self):
+        from apps.messaging.throttling import MessageReadThrottle
+        assert MessageReadThrottle.rate == '120/min'
+
+    @pytest.mark.parametrize('url', READ_URLS)
+    def test_get_429_after_rate(self, small_rate, ca, url):
+        codes = [ca.get(url).status_code for _ in range(4)]
+        assert 429 not in codes[:3]
+        assert codes[3] == 429
+
+    def test_scope_is_per_user(self, small_rate, ca, cb):
+        for _ in range(3):
+            assert ca.get('/api/v1/messages/unread-count/').status_code == 200
+        assert ca.get('/api/v1/messages/unread-count/').status_code == 429
+        assert cb.get('/api/v1/messages/unread-count/').status_code == 200
+
+    def test_writes_not_counted_against_read_throttle(self, small_rate, ca):
+        for _ in range(3):
+            assert ca.get('/api/v1/messages/unread-count/').status_code == 200
+        # Non-GET messaging endpoints keep their own (or no) throttle.
+        assert ca.post('/api/v1/conversations/1/read/').status_code == 404
+        assert ca.post('/api/v1/contact-requests/1/ignore/').status_code == 404
+
+    def test_normal_polling_not_throttled(self, ca):
+        codes = [ca.get('/api/v1/messages/unread-count/').status_code for _ in range(30)]
+        assert set(codes) == {200}
+
+
+# -- Oversized integer ids (#411) ----------------------------------------------
+
+HUGE = '99999999999999999999'
+
+
+class TestOversizedIds:
+    def test_id_in_range(self):
+        from apps.messaging import services
+        assert services.id_in_range(1)
+        assert services.id_in_range(services.BIGINT_ID_MAX)
+        assert not services.id_in_range(services.BIGINT_ID_MAX + 1)
+        assert services.id_in_range(services.AUTH_USER_ID_MAX, services.AUTH_USER_ID_MAX)
+        assert not services.id_in_range(services.AUTH_USER_ID_MAX + 1, services.AUTH_USER_ID_MAX)
+        assert not services.id_in_range(0)
+        assert not services.id_in_range(-5)
+        assert not services.id_in_range(True)
+        assert not services.id_in_range('1')
+
+    def test_int4_boundary_for_auth_user_id(self, ca):
+        from apps.messaging import services
+        assert services.get_profile_by_auth_id(services.AUTH_USER_ID_MAX + 1) is None
+        # 2**31 - 1 is in range for int4 -> valid lookup (no such user -> 404, not 500).
+        assert ca.get(
+            f'/api/v1/contact-requests/status/?user_id={services.AUTH_USER_ID_MAX}'
+        ).status_code == 404
+        assert ca.get(
+            f'/api/v1/contact-requests/status/?user_id={services.AUTH_USER_ID_MAX + 1}'
+        ).status_code == 404
+
+    def test_block_404(self, ca):
+        assert ca.post(f'/api/v1/users/{HUGE}/block/').status_code == 404
+        assert ca.delete(f'/api/v1/users/{HUGE}/block/').status_code == 404
+
+    def test_status_404(self, ca):
+        assert ca.get(f'/api/v1/contact-requests/status/?user_id={HUGE}').status_code == 404
+
+    @pytest.mark.parametrize('target_type', ['user', 'message', 'profile'])
+    def test_report_target_id_400(self, ca, target_type):
+        r = ca.post('/api/v1/reports/', {'target_type': target_type, 'target_id': HUGE}, format='json')
+        assert r.status_code == 400
+        assert not Report.objects.exists()
+
+    def test_report_int4_overflow_user_400_but_message_ok_range(self, ca):
+        big = str(2**31)  # > int4, valid int8
+        assert ca.post('/api/v1/reports/', {'target_type': 'user', 'target_id': big},
+                       format='json').status_code == 400
+        # Message pks are int8: in range, just does not exist -> 404.
+        assert ca.post('/api/v1/reports/', {'target_type': 'message', 'target_id': big},
+                       format='json').status_code == 404
+
+    def test_report_non_ascii_digit_400(self, ca):
+        r = ca.post('/api/v1/reports/', {'target_type': 'message', 'target_id': '²'}, format='json')
+        assert r.status_code == 400
+
+    @pytest.mark.parametrize('method,path', [
+        ('post', '/api/v1/contact-requests/{id}/accept/'),
+        ('post', '/api/v1/contact-requests/{id}/ignore/'),
+        ('post', '/api/v1/conversations/{id}/read/'),
+        ('get', '/api/v1/conversations/{id}/messages/'),
+        ('post', '/api/v1/conversations/{id}/messages/'),
+    ])
+    def test_path_params_404(self, ca, method, path):
+        r = getattr(ca, method)(path.format(id=HUGE), {'body': 'x'}, format='json') \
+            if method == 'post' else getattr(ca, method)(path.format(id=HUGE))
+        assert r.status_code == 404
+
+    def test_after_cursor_oversized_is_empty_not_500(self, ca, alice, bob):
+        conv = Conversation.objects.create(
+            user_a=min(alice[1], bob[1], key=lambda p: p.pk),
+            user_b=max(alice[1], bob[1], key=lambda p: p.pk),
+        )
+        r = ca.get(f'/api/v1/conversations/{conv.id}/messages/?after={HUGE}')
+        assert r.status_code == 200
+        assert r.data['results'] == []
+
+    def test_contact_request_recipient_oversized_400(self, ca):
+        r = ca.post('/api/v1/contact-requests/', {'recipient_id': int(HUGE)}, format='json')
+        assert r.status_code == 400

@@ -75,10 +75,43 @@ class AdminContestSerializer(serializers.ModelSerializer):
 
 
 def _validation_error_body(exc):
-    """Django ValidationError (raised by the model layer) -> DRF-style 400 body."""
+    """Django ValidationError (raised by the model layer) -> DRF-style 400 body.
+
+    Shape: `{<field>: [message, ...], "error_codes": {<field>: [code, ...]}}` where
+    `non_field_errors` is the key for errors not tied to a field. `error_codes[field][i]`
+    is the stable machine code of `<field>[i]` (e.g. source_url_required,
+    source_url_listing_site, invalid_url_scheme, poster_host_blocked) -- the frontend
+    maps codes to Korean copy instead of showing the English message.
+    """
     if hasattr(exc, 'error_dict'):
-        return {field: [str(m) for m in messages] for field, messages in exc.message_dict.items()}
-    return {'non_field_errors': [str(m) for m in exc.messages]}
+        pairs = exc.error_dict.items()
+    else:
+        pairs = [('non_field_errors', exc.error_list)]
+    body, codes = {}, {}
+    for field, errors in pairs:
+        body[field] = [m for e in errors for m in e.messages]
+        codes[field] = [e.code or 'invalid' for e in errors for _ in e.messages]
+    body['error_codes'] = codes
+    return body
+
+
+def _drf_error_body(exc):
+    """DRF serializers.ValidationError -> the same body shape as _validation_error_body."""
+    details = exc.get_full_details()
+    if not isinstance(details, dict):
+        details = {'non_field_errors': details}
+    body, codes = {}, {}
+    for field, items in details.items():
+        if not isinstance(items, list):
+            items = [items]
+        body[field] = [
+            str(i['message']) if isinstance(i, dict) and 'message' in i else str(i) for i in items
+        ]
+        codes[field] = [
+            i.get('code', 'invalid') if isinstance(i, dict) else 'invalid' for i in items
+        ]
+    body['error_codes'] = codes
+    return body
 
 
 def _snapshot(instance):
@@ -114,7 +147,11 @@ class ContestListCreateView(AdminDashboardView):
 
     def post(self, request):
         serializer = AdminContestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                _drf_error_body(serializers.ValidationError(serializer.errors)),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         try:
             with transaction.atomic():
                 contest = serializer.save(last_verified_at=timezone.now())
@@ -144,10 +181,21 @@ class ContestDetailView(AdminDashboardView):
 
         before = _snapshot(contest)
         serializer = AdminContestSerializer(contest, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                _drf_error_body(serializers.ValidationError(serializer.errors)),
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
         try:
             with transaction.atomic():
-                contest = serializer.save(last_verified_at=timezone.now())
+                # Write ONLY the validated fields (+ last_verified_at / updated_at):
+                # a full save() would write back the stale interest_count read above and
+                # clobber a concurrent ContestInterest signal update (lost update).
+                validated = serializer.validated_data
+                for attr, value in validated.items():
+                    setattr(contest, attr, value)
+                contest.last_verified_at = timezone.now()
+                contest.save(update_fields=[*validated.keys(), 'last_verified_at', 'updated_at'])
                 after = _snapshot(contest)
                 changed = [name for name in EDITABLE_FIELDS if before[name] != after[name]]
                 status_changed = 'status' in changed
@@ -166,4 +214,6 @@ class ContestDetailView(AdminDashboardView):
                     )
         except DjangoValidationError as exc:
             return Response(_validation_error_body(exc), status=http_status.HTTP_400_BAD_REQUEST)
+        # interest_count is signal-maintained and was not written; report the live value.
+        contest.refresh_from_db(fields=['interest_count'])
         return Response(AdminContestSerializer(contest).data)

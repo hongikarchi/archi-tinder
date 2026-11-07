@@ -104,7 +104,7 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
     getProject(id, { throwOnError: true })
       .then(project => {
         if (!project) throw new Error('not found')
-        return getBoardBuildings(collectBoardBuildingIds(project))
+        return getBoardBuildings(collectBoardBuildingIds(project), { throwOnError: true })
       })
       .then(items => {
         if (token === loadTokenRef.current) setBState({ status: 'ready', items })

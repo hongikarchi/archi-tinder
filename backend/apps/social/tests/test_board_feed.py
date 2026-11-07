@@ -206,6 +206,77 @@ class TestFeed:
         assert _ids(r) == [str(ba1.pk), str(ba2.pk)]
         assert {i['type_code'] for i in r.data['results']} == {'RSDT'}
 
+    def test_type_filter_rechecked_per_page(self, me):
+        """Owner changed type inside the cache TTL -> dropped from the filtered feed."""
+        mu, _ = me
+        _, a = _person('a', type_code='RSDT')
+        _, b = _person('b', type_code='RSDT')
+        ba = _board(a, 'a1', 1)
+        bb = _board(b, 'b1', 2)
+        c = _client(mu)
+        assert set(_ids(c.get(FEED, {'filter': 'RSDT'}))) == {str(ba.pk), str(bb.pk)}
+        from apps.accounts.models import PersonalityProfile
+        PersonalityProfile.objects.filter(user=b).update(type_code='CLON')
+        assert _ids(c.get(FEED, {'filter': 'RSDT'})) == [str(ba.pk)]
+
+    def test_no_empty_page_with_has_more(self, me):
+        """A slice fully dropped by the live re-check must not yield results=[] + has_more."""
+        mu, _ = me
+        _, o = _person('o')
+        _, gone_owner = _person('gone')
+        keep = [_board(o, f'keep{i}', 100 + i) for i in range(2)]
+        dead = [_board(gone_owner, f'dead{i}', i) for i in range(4)]  # newest 4 = first slice
+        c = _client(mu)
+        assert len(_ids(c.get(FEED, {'page_size': 4}))) == 4  # warm the cache
+        from apps.accounts.models import PersonalityProfile
+        PersonalityProfile.objects.filter(user=gone_owner).update(discovery_opt_in=False)
+        r = c.get(FEED, {'page_size': 4})
+        assert r.status_code == 200
+        assert set(_ids(r)) == {str(k.pk) for k in keep}
+        assert r.data['has_more'] is False and r.data['next_cursor'] is None
+        assert len(dead) == 4
+
+    def test_skip_slices_cursor_follows_last_examined(self, me):
+        """Dead slice, live slice, more rows after: has_more True, cursor continues past it."""
+        mu, _ = me
+        _, o = _person('o')
+        _, gone_owner = _person('gone')
+        dead = [_board(gone_owner, f'dead{i}', i) for i in range(2)]
+        live = [_board(o, f'live{i}', 10 + i) for i in range(2)]
+        tail = [_board(o, f'tail{i}', 50 + i) for i in range(2)]
+        c = _client(mu)
+        assert len(_ids(c.get(FEED, {'page_size': 2}))) == 2  # warm the cache
+        from apps.accounts.models import PersonalityProfile
+        PersonalityProfile.objects.filter(user=gone_owner).update(discovery_opt_in=False)
+        r = c.get(FEED, {'page_size': 2})
+        assert _ids(r) == [str(b.pk) for b in live]
+        assert r.data['has_more'] is True and r.data['next_cursor']
+        r2 = c.get(FEED, {'page_size': 2, 'cursor': r.data['next_cursor']})
+        assert _ids(r2) == [str(b.pk) for b in tail]
+        assert r2.data['has_more'] is False
+        assert len(dead) == 2
+
+    def test_skip_loop_is_bounded(self, me, monkeypatch):
+        from apps.social import views_people
+        monkeypatch.setattr(views_people, '_MAX_EMPTY_SLICE_SKIPS', 1)
+        mu, _ = me
+        _, o = _person('o')
+        _, gone_owner = _person('gone')
+        for i in range(3):  # three dead slices of one row each
+            _board(gone_owner, f'dead{i}', i)
+        _board(o, 'live', 99)
+        c = _client(mu)
+        assert len(_ids(c.get(FEED, {'page_size': 1}))) == 1  # warm the cache
+        from apps.accounts.models import PersonalityProfile
+        PersonalityProfile.objects.filter(user=gone_owner).update(discovery_opt_in=False)
+        r = c.get(FEED, {'page_size': 1})
+        # Examined 2 slices (1 + 1 skip), both dead; the live row is still ahead.
+        assert r.data['results'] == []
+        assert r.data['has_more'] is True and r.data['next_cursor']
+        # Next call resumes after the last examined row: 3rd dead row, then the live one.
+        r2 = c.get(FEED, {'page_size': 1, 'cursor': r.data['next_cursor']})
+        assert len(r2.data['results']) == 1 and r2.data['has_more'] is False
+
     def test_bad_params(self, me):
         c = _client(me[0])
         assert c.get(FEED, {'filter': 'nope'}).status_code == 400
@@ -392,7 +463,19 @@ class TestLikedBoards:
         self._like(mp, with_img, 1)
         self._like(mp, empty, 2)
         self._like(mp, none_img, 3)
-        r = _client(mu).get(LIKED)
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as ctx:
+            r = _client(mu).get(LIKED)
+        # The base64 column must never be SELECTed. The has-image flag is an EXISTS
+        # subquery that only *filters* on report_image (IS NOT NULL / <> ''), so
+        # ignore those comparison uses and flag any other reference (select list).
+        import re
+        selected = re.compile(r'"report_image"(?!\s*(?:IS\b|<>|!=|=))')
+        main = [q['sql'] for q in ctx.captured_queries if 'recommendation_project' in q['sql']]
+        assert main, 'expected the liked-boards query to hit recommendation_project'
+        for sql in main:
+            assert not selected.search(sql), sql
         by_id = {i['project_id']: i for i in r.data['items']}
         a = by_id[str(with_img.pk)]
         assert a['has_report_image'] is True

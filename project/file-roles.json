@@ -241,7 +241,6 @@
   "frontend/src/api/core.js": "JWT 토큰·fetch 코어",
   "frontend/src/api/discovery.js": "디스커버리 피드 API 클라이언트",
   "frontend/src/api/images.js": "이미지 카드 정규화·텔레메트리 헬퍼",
-  "frontend/src/api/liked.js": "좋아요 건물 API 클라이언트",
   "frontend/src/api/profiles.js": "사무소·유저 프로필 API 클라이언트",
   "frontend/src/api/projects.js": "프로젝트·보드 CRUD API 클라이언트",
   "frontend/src/api/sessions.js": "분석 세션·스와이프 API 클라이언트",
