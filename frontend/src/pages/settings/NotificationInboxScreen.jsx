@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listNotifications, markRead } from '../../api/notifications.js'
+import { refreshUnreadNotifications } from '../../hooks/useUnreadNotifications.js'
 import { useTranslation } from '../../i18n/index.js'
 import { formatTimeAgo } from '../../utils/timeAgo.js'
 import Avatar from '../../components/Avatar.jsx'
@@ -113,7 +114,9 @@ export default function NotificationInboxScreen({ onLogout }) {
         // clears the badge on open, regardless of what's on-screen).
         if (!markedAllRef.current) {
           markedAllRef.current = true
-          markRead({ all: true }).catch(() => { /* best-effort */ })
+          markRead({ all: true })
+            .then(() => refreshUnreadNotifications({ force: true }))
+            .catch(() => { /* best-effort */ })
         }
       })
       .catch(err => {

@@ -26,6 +26,7 @@ import { resolveProjectBackendId } from './utils/resolveProjectBackendId.js'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.js'
 import { clearBlocked } from './components/messaging/blockedUsers.js'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.js'
+import { resetUnreadNotifications, refreshUnreadNotifications } from './hooks/useUnreadNotifications.js'
 import { reportImageJobs } from './hooks/useReportImageJob.js'
 import { reportJobs } from './hooks/useReportJobs.js'
 import { shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './utils/reportStale.js'
@@ -106,6 +107,7 @@ export default function App() {
   // no messaging UI renders and no messaging endpoint is called.
   useEffect(() => {
     resetUnreadMessages()
+    resetUnreadNotifications()
     clearBlocked()
     if (!userId || !api.getToken()) {
       resetMessagingFeature()
@@ -115,6 +117,9 @@ export default function App() {
     // A->B with no null in between). No-op while the flag is OFF.
     // refreshUnreadMessages itself no-ops unless the flag is ON.
     loadMessagingFeature().then(() => refreshUnreadMessages({ force: true })).catch(() => {})
+    // TabBar (eager, child) fetches before this parent effect resets the
+    // store and its stale-epoch result is dropped — refetch after the reset.
+    refreshUnreadNotifications({ force: true })
   }, [userId])
 
   // Listen for session-expired event dispatched by api/client.js
