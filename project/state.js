@@ -23,11 +23,25 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-06 11:24 KST',
-    head: 'ead0dc2',
-    branch: 'feature/sns-small-fixes',
+    updatedAt: '2026-11-07 10:26 KST',
+    head: '998fb4d',
+    branch: 'sns-small-fixes',
   },
   done: [
+    {
+      id: 'PR #478',
+      title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
+      completedAt: '2026-11-07',
+      prs: [478],
+      note: '',
+    },
+    {
+      id: 'PR #475',
+      title: 'feat(FRONT-MESSAGE-ICON-1): 메시지 아이콘 겹친 말풍선 + 버튼 피드백',
+      completedAt: '2026-11-07',
+      prs: [475],
+      note: '',
+    },
     {
       id: 'PR #474',
       title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
@@ -68,20 +82,6 @@ window.PROJECT_STATE = {
       title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
       completedAt: '2026-10-25',
       prs: [461],
-      note: '',
-    },
-    {
-      id: 'PR #460',
-      title: 'fix(FRONT-UX-16): 흐름 검수 1차 — 한국어 문구·취향 시작 겹침·이름 ID 통일',
-      completedAt: '2026-10-25',
-      prs: [460],
-      note: '',
-    },
-    {
-      id: 'PR #450',
-      title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
-      completedAt: '2026-10-25',
-      prs: [450],
       note: '',
     },
   ],
@@ -639,6 +639,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 478,
+      title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
+      mergedAt: '2026-11-07T01:25:28Z',
+      mergedAtKST: '2026-11-07 10:25 KST',
+      sha: '6125ca5',
+    },
+    {
+      number: 475,
+      title: 'feat(FRONT-MESSAGE-ICON-1): 메시지 아이콘 겹친 말풍선 + 버튼 피드백',
+      mergedAt: '2026-11-07T01:25:33Z',
+      mergedAtKST: '2026-11-07 10:25 KST',
+      sha: '998fb4d',
+    },
+    {
       number: 474,
       title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
       mergedAt: '2026-10-31T02:34:15Z',
@@ -679,20 +693,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-25T03:01:37Z',
       mergedAtKST: '2026-10-25 12:01 KST',
       sha: '774616e',
-    },
-    {
-      number: 460,
-      title: 'fix(FRONT-UX-16): 흐름 검수 1차 — 한국어 문구·취향 시작 겹침·이름 ID 통일',
-      mergedAt: '2026-10-25T02:32:30Z',
-      mergedAtKST: '2026-10-25 11:32 KST',
-      sha: '9d46fb2',
-    },
-    {
-      number: 450,
-      title: 'fix(FULL-REPORT-UI-1): #449 review follow-ups — regen order, dedupe, name-follow lock',
-      mergedAt: '2026-10-25T00:47:02Z',
-      mergedAtKST: '2026-10-25 09:47 KST',
-      sha: '8635dee',
     },
   ],
   agents: [
@@ -4005,6 +4005,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
