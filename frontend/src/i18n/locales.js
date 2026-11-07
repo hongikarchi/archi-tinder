@@ -11,7 +11,7 @@ export const locales = {
       taste:     '검색',
       social:    '소셜',
       profile:   '프로필',
-      profileUnread: '프로필, 안 읽은 메시지 {n}건',
+      profileUnread: '프로필, 안 읽은 항목 {n}건',
     },
     discovery: {
       loading: '취향 탐색 중…',
@@ -71,7 +71,6 @@ export const locales = {
       rows: {
         editProfile:   { label: '프로필 편집', hint: '직업 · 소속 · 소개 · 링크' },
         account:       { label: '계정',        hint: 'ID · 로그인 정보' },
-        inbox:         { label: '알림함',      hint: '받은 알림 보기' },
         notifications: { label: '알림 설정',   hint: '푸시 · 이메일' },
         appearance:    { label: '화면 설정',   hint: '테마 · 폰트 · 언어' },
         admin:         { label: '관리자',      hint: '배포 · DB · 작업 기록' },
@@ -686,7 +685,7 @@ export const locales = {
       uploadingPhoto:  '업로드 중…',
       changePhoto:     '프로필 사진 변경',
       uploadPhoto:     '프로필 사진 업로드',
-      notifications:   '알림',
+      notifications:   '알림함',
       settings:        '설정',
       loginRequired:   '로그인이 필요해요.',
       loadError:       '데이터를 불러오지 못했어요.',
@@ -1210,7 +1209,7 @@ export const locales = {
       taste:     'Search',
       social:    'Social',
       profile:   'Profile',
-      profileUnread: 'Profile, {n} unread messages',
+      profileUnread: 'Profile, {n} unread items',
     },
     discovery: {
       loading: 'Exploring your taste…',
@@ -1270,7 +1269,6 @@ export const locales = {
       rows: {
         editProfile:   { label: 'Edit profile',  hint: 'Role · affiliation · bio · links' },
         account:       { label: 'Account',       hint: 'ID · login info' },
-        inbox:         { label: 'Notifications inbox', hint: 'View received notifications' },
         notifications: { label: 'Notification settings', hint: 'Push · email' },
         appearance:    { label: 'Appearance',    hint: 'Theme · font · language' },
         admin:         { label: 'Admin',         hint: 'Deploys · DB · audit log' },

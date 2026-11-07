@@ -4,6 +4,7 @@ import { useTranslation } from '../i18n/index.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import SegmentedControl from './SegmentedControl.jsx'
 import { useUnreadMessages } from '../hooks/useUnreadMessages.js'
+import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 
 /*
  * TAB_ICONS — { outline, active } SVG pair per tab.
@@ -138,6 +139,10 @@ export default function TabBar() {
   // only lives on /user/me, so other screens learn about new messages here.
   // Flag OFF -> count is always 0 and no request is made.
   const { count: unreadMessages } = useUnreadMessages()
+  // The notification bell also lives on /user/me, so the dot covers unread
+  // notifications too. Contact events are never notifications (D9) -> no double count.
+  const { count: unreadNotifications } = useUnreadNotifications()
+  const unreadTotal = unreadMessages + unreadNotifications
 
   // Collapse state: expanded (icon + label) on load / tab tap; compact
   // (icon only) after scrolling any scroller > 8px or a pointerdown outside
@@ -222,8 +227,8 @@ export default function TabBar() {
   const options = tabs.map(tab => ({
     value: tab.id,
     label: t(tab.labelKey),
-    ariaLabel: tab.id === 'profile' && unreadMessages > 0
-      ? t('tabbar.profileUnread', { n: unreadMessages })
+    ariaLabel: tab.id === 'profile' && unreadTotal > 0
+      ? t('tabbar.profileUnread', { n: unreadTotal })
       : t(tab.labelKey),
   }))
 
@@ -279,7 +284,7 @@ export default function TabBar() {
         highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
         renderOption={(opt, isActive) => {
           const baseIcon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
-          const icon = (opt.value !== 'profile' || unreadMessages <= 0) ? baseIcon : (
+          const icon = (opt.value !== 'profile' || unreadTotal <= 0) ? baseIcon : (
             <span style={{ position: 'relative', display: 'inline-flex' }}>
               {baseIcon}
               <span

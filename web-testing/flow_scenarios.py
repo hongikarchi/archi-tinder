@@ -225,7 +225,7 @@ SCENARIOS = [
          caption_ko="프로필의 ‘좋아요’ 탭을 눌렀어요.",
          route=None, actions=[{"click": "text=좋아요 >> nth=-1"}, {"wait": 1500}]),
     dict(id="42", slug="settings", stage="profile", title_ko="설정",
-         caption_ko="설정 화면이에요. 알림함, 프로필 편집, 계정, 알림 설정, 화면 설정으로 이동해요.",
+         caption_ko="설정 화면이에요. 프로필 편집, 계정, 알림 설정, 화면 설정으로 이동해요.",
          route="/settings", actions=[{"wait": "text=계정"}]),
     dict(id="43", slug="settings-edit-profile", stage="profile", title_ko="프로필 편집",
          caption_ko="‘프로필 편집’을 열었어요. 소속과 소개, 링크를 고칠 수 있어요.",

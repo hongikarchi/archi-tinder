@@ -32,6 +32,8 @@ P2(Person→Person, 최우선 페르소나) 흐름이 여기서 끊긴다. 2026-
 | D12 | **기능 플래그 `MESSAGING_ENABLED`** 하나로 메시지 기능 전체(요청·메시지·차단·신고 API + 모든 UI) on/off. 기본 OFF | 구현을 develop에 합치되 검증 전 prod 노출을 막고, 문제 시 재배포 없이 env만 바꿔 끌 수 있게 (§6) |
 | D13 | 수락 시 대화방에 **"연결됐어요" 시스템 메시지** 삽입, **보낸 사람 기준 안 읽음 1건**으로 카운트 | D9로 알림을 뺐기 때문에, 이것이 없으면 보낸 사람은 수락 사실을 알 방법이 없다. 메시지 버튼 배지·탭바 점으로 자연스럽게 인지 |
 
+_(2026-11-07: D9 re-confirmed by user when #477 was taken over — inbox moved to profile bell; contact events stay out of notifications.)_
+
 ## 3. 사용자 흐름
 
 1. A가 B의 프로필에서 **"관심 있어요"** → 작은 시트에 인사말(선택) 입력 → 보내기 → 버튼이 "보냄" 상태로 바뀜
