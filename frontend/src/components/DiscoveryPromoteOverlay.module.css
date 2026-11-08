@@ -7,6 +7,12 @@
   transform: scale(1.12);
 }
 
+/* Paper ChoiceCards (trigger / 50-cap) have no <img>: soften the whole card so
+   its text does not fight the overlay message. */
+.blurStack [data-choice-card] {
+  filter: blur(7px);
+}
+
 /* Photo overlay: white/black rgba literals are allowed here (cards are photos). */
 .overlay {
   position: absolute;

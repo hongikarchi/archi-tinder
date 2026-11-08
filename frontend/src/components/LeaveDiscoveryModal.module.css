@@ -1,0 +1,88 @@
+/* LeaveDiscoveryModal — choices block: two pills over blurred half-ellipses
+   centred on the block's left/right edges (same recipe as ChoiceCard). Static. */
+
+.choices {
+  position: relative;
+  margin: 26px -24px -4px;
+  padding: 0 24px;
+}
+
+/* The Modal panel has overflow-y:auto, so any decorative box poking out of its
+   padding box becomes SCROLLABLE overflow (the panel grew a scrollbar). Keep the
+   ellipse BOXES inside the panel: this layer spans the panel's width and ends at
+   the panel's bottom edge (-19px = panel padding-bottom 24 minus the block's -4
+   margin, 1px safety); the ellipses fill it (centred on the pill row). Only the
+   x axis is clipped (the ellipses are centred ON the side edges); do NOT use
+   overflow:hidden here — clipping a blurred shape leaves a hard straight edge.
+   The blur halo is ink overflow, which is not scrollable. */
+.moons {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -18px;
+  bottom: -19px;
+  overflow-x: clip;
+  pointer-events: none;
+}
+
+.moon {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 250px;
+  opacity: 0.7;
+}
+
+.moonLeft { left: -125px; --tone: 15%; }
+.moonRight { right: -125px; --tone: 22%; }
+
+.blob {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-text) var(--tone), transparent);
+  filter: blur(16px);
+}
+
+.row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 10px;
+}
+
+.pill {
+  flex: 1;
+  min-height: 48px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  word-break: keep-all;
+  cursor: pointer;
+}
+
+.pill:disabled { cursor: default; }
+
+.ghost {
+  border: 1px solid var(--color-border-soft);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.solid {
+  border: none;
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.solid:disabled { opacity: 0.5; }

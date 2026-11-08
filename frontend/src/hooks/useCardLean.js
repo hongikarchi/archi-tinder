@@ -1,7 +1,7 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react'
 
 /**
- * Drag "lean" of the Discovery trigger card ('left' | 'right' | null).
+ * Drag "lean" of a ChoiceCard ('left' | 'right' | null).
  *
  * Lives in a tiny external store instead of React state on purpose: the vendored
  * swipe lib re-runs its gesture effect whenever a callback prop changes identity
@@ -10,13 +10,13 @@ import { useCallback, useRef, useSyncExternalStore } from 'react'
  * therefore kill the drag. Here the owner only holds refs (no re-render); only
  * the card subscribes.
  *
- * Usage (owner):  const lean = useTriggerCardLeanSource()
+ * Usage (owner):  const lean = useCardLeanSource()
  *   <SwipeGestureFrame onSwipeRequirementFulfilled={lean.onFulfilled}
  *                      onSwipeRequirementUnfulfilled={lean.onUnfulfilled}>
- *     <DiscoveryTriggerCard leanStore={lean.store} />
- * Usage (card):   const lean = useTriggerCardLean(leanStore)
+ *     <ChoiceCard leanStore={lean.store} />
+ * Usage (card):   const lean = useCardLean(leanStore)
  */
-export function useTriggerCardLeanSource() {
+export function useCardLeanSource() {
   const ref = useRef(null)
   if (ref.current === null) {
     let value = null
@@ -46,7 +46,7 @@ export function useTriggerCardLeanSource() {
 
 const NOOP_STORE = { get: () => null, subscribe: () => () => {} }
 
-export function useTriggerCardLean(store) {
+export function useCardLean(store) {
   const s = store || NOOP_STORE
   return useSyncExternalStore(s.subscribe, s.get, s.get)
 }
