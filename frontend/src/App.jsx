@@ -81,6 +81,8 @@ export default function App() {
   const swipeSettlerRef = useRef(null)
   if (!swipeSettlerRef.current) swipeSettlerRef.current = createSwipeSettler()
   const awaitSwipesSettled = () => swipeSettlerRef.current.wait()
+  // For callers that are themselves inside a counted swipe (own unit excluded).
+  const awaitOtherSwipesSettled = () => swipeSettlerRef.current.wait({ excluding: 1 })
   // keepExploringChosen: true once the user LEFT-swipes the action card.
   // Gates the top "Finish & View Report" button so it only appears AFTER the
   // action card is passed, not the moment action_card_shown arrives from the backend.
@@ -712,7 +714,12 @@ export default function App() {
           resultPromise.catch(() => {}) // surfaced by the await below
           const [resultData] = await Promise.all([
             resultPromise,
-            ensureFreshReport(project, { extraLikes: action === 'like' ? 1 : 0, allowFirst: true }),
+            // Own swipe is still pending here; wait only for OTHER in-flight swipes
+            // so the report's liked set includes every committed like.
+            awaitOtherSwipesSettled().then(settled => {
+              if (!settled) console.warn('[swipe] report built before in-flight swipes settled')
+              return ensureFreshReport(project, { extraLikes: action === 'like' ? 1 : 0, allowFirst: true })
+            }),
           ])
           setProjects(prev => prev.map(p => p.id === activeProjectId
             ? { ...p, predictedLikes: resultData.predicted_like_images || [] } : p))

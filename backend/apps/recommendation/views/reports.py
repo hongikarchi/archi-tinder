@@ -153,6 +153,10 @@ class ProjectReportGenerateView(APIView):
         # the requesting profile's language preference (fallback 'ko').
         disliked_id_strings = list(project.disliked_ids or [])
         language = getattr(profile, 'language', 'ko') or 'ko'
+        logger.info(
+            'Persona report generation start: project=%s regenerate=%s liked_used=%d',
+            pk, bool(request.data.get('regenerate')), liked_count(liked_id_strings),
+        )
 
         try:
             report = services.generate_persona_report(liked_id_strings, disliked_id_strings, language)
@@ -221,7 +225,22 @@ class ProjectReportGenerateView(APIView):
         # final_report / report_stale appear in the profile boards serializers, so
         # always drop the cached profile card (not only when the name followed).
         evict_user_profile_detail(profile.user.id)
-        logger.info('Persona report generated for project %s', pk)
+        # Diagnostic: re-read the board's CURRENT liked set (one small query) so a
+        # like that landed during the LLM call shows as liked_now != liked_used.
+        liked_used = liked_count(liked_id_strings)
+        now_ids = Project.objects.filter(pk=project.pk).values_list('liked_ids', flat=True).first()
+        liked_now = liked_count(now_ids)
+        logger.info(
+            'Persona report generated: project=%s regenerate=%s liked_used=%d liked_now=%d '
+            'current_sig=%s prev_sig=%s now_sig=%s',
+            pk, bool(request.data.get('regenerate')), liked_used, liked_now,
+            current_sig, prev_sig, liked_signature(now_ids),
+        )
+        if liked_now != liked_used:
+            logger.warning(
+                'Report built from %d likes but board now has %d (project=%s)',
+                liked_used, liked_now, pk,
+            )
         return Response({'final_report': report, 'axis_scores': axis_scores})
 
 
