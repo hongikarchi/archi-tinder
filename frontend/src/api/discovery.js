@@ -39,13 +39,15 @@ export async function discoveryFeedback(canonicalBldId, action, draftId) {
   }
 }
 
-export async function promoteToTaste(draftId) {
+export async function promoteToTaste(draftId, { timeoutMs } = {}) {
   // Returns the session payload with card fields normalized (image_id set),
   // mirroring startSession in sessions.js so the first Taste swipe sends a
   // valid canonical_bld_id instead of undefined.
   const body = {}
   if (draftId) body.draft_id = draftId
-  const result = await callApi('POST', '/discovery/promote-to-taste/', body)
+  const result = await (timeoutMs
+    ? callApi('POST', '/discovery/promote-to-taste/', body, true, timeoutMs)
+    : callApi('POST', '/discovery/promote-to-taste/', body))
   return {
     ...result,
     next_image:       normalizeCard(result.next_image),

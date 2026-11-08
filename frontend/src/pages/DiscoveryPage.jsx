@@ -12,12 +12,15 @@ import SwipeDeck from '../components/SwipeDeck.jsx'
 import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
+import { useTriggerCardLeanSource } from '../hooks/useTriggerCardLean.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import Modal from '../components/Modal.jsx'
 import FinishReportButton from '../components/FinishReportButton.jsx'
+import DiscoveryPromoteOverlay from '../components/DiscoveryPromoteOverlay.jsx'
+import overlayStyles from '../components/DiscoveryPromoteOverlay.module.css'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -36,6 +39,34 @@ const SEEN_IDS_KEY = 'discovery_seen_ids'
 const CONTINUE_AFTER_TRIGGER_KEY = 'discovery_continue_after_trigger'
 
 const TRIGGER_CARD_ID = '__taste_trigger__'
+
+// Blocking promote (trigger-card right swipe): POST timeout and max wait for the
+// first Taste card image before navigating to /swipe.
+const PROMOTE_TIMEOUT_MS = 30000
+const FIRST_CARD_IMAGE_MAX_WAIT_MS = 3000
+
+// Resolves when the card's image is decoded/loaded, or after maxMs. Never rejects.
+function waitForCardImage(card, maxMs) {
+  const url = card?.image_url
+  if (!url) return Promise.resolve()
+  const ready = new Promise(resolve => {
+    try {
+      const img = new Image()
+      if (card.image_srcset) img.srcset = card.image_srcset
+      img.src = url
+      if (typeof img.decode === 'function') {
+        img.decode().then(resolve, resolve)
+      } else {
+        img.onload = img.onerror = () => resolve()
+      }
+    } catch {
+      resolve()
+    }
+  })
+  let timer
+  const timeout = new Promise(resolve => { timer = setTimeout(resolve, maxMs) })
+  return Promise.race([ready, timeout]).finally(() => clearTimeout(timer))
+}
 
 // Shake keyframes injected once per page mount
 const SHAKE_STYLE_ID = 'discovery-shake-style'
@@ -148,6 +179,26 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   // shakeCardId: the card id currently being shaken
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
+  // Blocking overlay for the trigger-card right-swipe promote: 'idle' | 'loading' | 'error'.
+  // The ref mirrors it synchronously for the navigation-guard closure.
+  const [promoteBlock, setPromoteBlockState] = useState('idle')
+  const promoteBlockRef = useRef('idle')
+  // False once the page is unmounted (browser back etc. during the blocking
+  // promote): the in-flight handler must not navigate to /swipe afterwards.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+  function setPromoteBlock(v) {
+    promoteBlockRef.current = v
+    setPromoteBlockState(v)
+  }
+  const promoteBlocking = promoteBlock !== 'idle'
+  // Drag lean of the trigger card (external store: no re-render mid-drag).
+  const triggerLean = useTriggerCardLeanSource()
+  const resetTriggerLean = triggerLean.reset
+  useEffect(() => { resetTriggerLean() }, [promoteBlocking, resetTriggerLean])
   const [capReached, setCapReached] = useState(false)
   // FRONT-FLOW-1: shown once on first Discovery entry for newly registered
   // accounts — flag set by LoginPage's register-success path. DiscoveryPage
@@ -253,6 +304,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   // Cleared on unmount so callers outside /discovery fall through immediately.
   useEffect(() => {
     discoveryNavigationGuard.check = (action, proceed) => {
+      // Promote call in flight: swallow the attempt (no modal, no proceed) so a
+      // tab/logout click does nothing and a second promote can never start.
+      if (promoteBlockRef.current === 'loading') return
       if (draftLikeCountRef.current < 1) {
         proceed()
         return
@@ -407,7 +461,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       if (isTriggerCard(card)) {
         if (action === 'like') {
           // RIGHT swipe → promote to Taste (기존 동작 유지)
-          handlePromoteToTaste()
+          handlePromoteToTaste({ blockUi: true })
         } else {
           // LEFT swipe → Discovery 계속; set Feature B flag so the persistent
           // "Taste로 저장·이동" button appears on all subsequent cards.
@@ -452,7 +506,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
 
   useKeyboardSwipe({
     onSwipe: async (dir) => { await cardRef.current?.swipe(dir) },
-    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial),
+    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial || promoteBlocking),
   })
 
   // FRONT-FLOW-1: tutorial dismiss — removing 'archithon_show_tutorial' (set only
@@ -463,11 +517,18 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   }
 
   // -- Promote to Taste (triggered by right-swipe on trigger card) --
-  async function handlePromoteToTaste() {
+  // opts.blockUi (trigger-card right swipe only): blocking overlay, error panel
+  // instead of a toast, and wait (<=3s) for the first Taste card image before
+  // navigating. Other callers (persistent CTA, 50-card button) are unchanged.
+  async function handlePromoteToTaste(opts) {
+    const blockUi = opts?.blockUi === true
     if (promoteLoading) return
     setPromoteLoading(true)
+    if (blockUi) setPromoteBlock('loading')
     try {
-      const result = await promoteToTaste(draftId)
+      const result = await (blockUi
+        ? promoteToTaste(draftId, { timeoutMs: PROMOTE_TIMEOUT_MS })
+        : promoteToTaste(draftId))
       // Clear draft session state — a future Discovery visit starts fresh
       setDraftId(null)
       setDraftLikeCount(0)
@@ -476,6 +537,19 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       sessionStorage.removeItem(DRAFT_ID_KEY)
       sessionStorage.removeItem(DRAFT_LIKES_KEY)
       sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+      if (blockUi) {
+        // Persist the session in App without navigating, then hold the overlay
+        // until the first Taste card image is ready (max 3s), then go.
+        window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
+          detail: { ...result, skipNav: true },
+        }))
+        await waitForCardImage(result?.next_image, FIRST_CARD_IMAGE_MAX_WAIT_MS)
+        // User left /discovery while we waited: the session is already persisted
+        // via the event above, so just skip the redirect.
+        if (!mountedRef.current) return
+        navigate('/swipe')
+        return
+      }
       // Hand off the session payload to App.jsx via custom event.
       window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', { detail: result }))
       navigate('/swipe')
@@ -486,12 +560,24 @@ export default function DiscoveryPage({ showToast, onLogout }) {
         triggerShownRef.current = false
         setDraftLikeCount(0)
         reportWriteError(showToast, t('discovery.toastNotEnoughLikes'))
+        if (blockUi) setPromoteBlock('idle')
+      } else if (blockUi) {
+        // Overlay shows the failure message + retry / back buttons (no toast).
+        setPromoteBlock('error')
       } else {
         reportWriteError(showToast, t('discovery.toastAnalysisFailed'))
       }
     } finally {
       setPromoteLoading(false)
     }
+  }
+
+  // Error panel: dismiss the overlay and fall back to the persistent
+  // "save taste & move" CTA (same state the left swipe on the trigger card sets).
+  function handleBackToDiscovery() {
+    setPromoteBlock('idle')
+    setContinueAfterTrigger(true)
+    try { sessionStorage.setItem(CONTINUE_AFTER_TRIGGER_KEY, '1') } catch { /* ignore */ }
   }
 
   function handleRetry() {
@@ -503,6 +589,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
 
   // ── Render ─────────────────────────────────────────────────────────────── //
 
+  // Persistent bottom CTA is redundant on the 50-card screen (it has its own button).
+  const showFinishCta = continueAfterTrigger && !capReached
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -511,7 +600,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       overflow: 'hidden',
       background: 'var(--color-bg)',
       // + 52px once the fixed bottom CTA shows (44px + 8px gap)
-      padding: `20px 16px calc(var(--tabbar-clearance) + ${continueAfterTrigger ? 52 : 0}px)`,
+      padding: `20px 16px calc(var(--tabbar-clearance) + ${showFinishCta ? 52 : 0}px)`,
     }}>
 
       <PageTopControls onLogout={onLogout} />
@@ -528,7 +617,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
           left-swiped the trigger card. Same fixed pill as the Taste swipe page's
           finish button (sits above the TabBar); the page's bottom padding
           reserves 52px so it never covers the card. */}
-      {continueAfterTrigger && (
+      {showFinishCta && (
         <FinishReportButton
           onClick={handlePromoteToTaste}
           disabled={promoteLoading}
@@ -540,6 +629,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
 
       {/* Card stack */}
       <div
+        className={promoteBlocking ? overlayStyles.blurStack : undefined}
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative', margin: 'auto 0' }}
       >
         {capReached ? (
@@ -569,15 +659,14 @@ export default function DiscoveryPage({ showToast, onLogout }) {
               style={{
                 minHeight: 44,
                 padding: '0 24px',
-                borderRadius: 12,
+                borderRadius: 'var(--radius-pill)',
                 border: 'none',
-                background: promoteLoading
-                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
-                  : 'var(--accent-1)',
-                color: '#fff',
+                background: 'var(--color-text)',
+                color: 'var(--color-bg)',
+                opacity: promoteLoading ? 0.6 : 1,
                 fontSize: 15,
                 fontWeight: 700,
-                cursor: promoteLoading ? 'not-allowed' : 'pointer',
+                cursor: promoteLoading ? 'default' : 'pointer',
                 fontFamily: 'inherit',
                 display: 'flex',
                 alignItems: 'center',
@@ -588,8 +677,8 @@ export default function DiscoveryPage({ showToast, onLogout }) {
                 <>
                   <div style={{
                     width: 14, height: 14, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    borderTopColor: '#fff',
+                    border: '2px solid color-mix(in srgb, var(--color-bg) 40%, transparent)',
+                    borderTopColor: 'var(--color-bg)',
                     animation: 'spin 0.8s linear infinite',
                     flexShrink: 0,
                   }} />
@@ -692,11 +781,13 @@ export default function DiscoveryPage({ showToast, onLogout }) {
                       ref={isTop ? cardRef : null}
                       onSwipe={isTop ? onTinderSwipe : undefined}
                       onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
-                      preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
+                      preventSwipe={(isTop && !promoteBlocking) ? undefined : SWIPE_PREVENT_ALL}
                       className={isShaking ? 'discovery-shake' : undefined}
+                      onSwipeRequirementFulfilled={isTop && isTrigger ? triggerLean.onFulfilled : undefined}
+                      onSwipeRequirementUnfulfilled={isTop && isTrigger ? triggerLean.onUnfulfilled : undefined}
                     >
                       {isTrigger ? (
-                        <DiscoveryTriggerCard />
+                        <DiscoveryTriggerCard leanStore={isTop ? triggerLean.store : undefined} />
                       ) : (
                         <SwipeCard
                           card={card}
@@ -724,6 +815,15 @@ export default function DiscoveryPage({ showToast, onLogout }) {
               </div>
             )}
           </>
+        )}
+
+        {/* Blocking promote overlay — above the SwipeDeck (zIndex 5/4), captures all input */}
+        {promoteBlocking && (
+          <DiscoveryPromoteOverlay
+            phase={promoteBlock}
+            onRetry={() => handlePromoteToTaste({ blockUi: true })}
+            onBack={handleBackToDiscovery}
+          />
         )}
       </div>
 
