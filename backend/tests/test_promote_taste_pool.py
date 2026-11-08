@@ -39,11 +39,8 @@ def _emb_text(vec):
 
 
 def _make_cursor(rows):
-    cursor = MagicMock()
-    cursor.__enter__ = lambda s: s
-    cursor.__exit__ = MagicMock(return_value=False)
-    cursor.fetchall.return_value = rows
-    return cursor
+    """Mock of engine._fetch_rows_binary (the only DB call of the pool build)."""
+    return MagicMock(return_value=rows)
 
 
 def _pref():
@@ -66,7 +63,7 @@ def _rows(n, *, clustered_head=0, seed=0):
             vec = _unit(base + 0.01 * rng.standard_normal(DIM))
         else:
             vec = _unit(rng.standard_normal(DIM))
-        rows.append((f'bld_{i + 100:06d}', _emb_text(vec), 1.0 - i * 0.001))
+        rows.append((f'bld_{i + 100:06d}', vec.tolist(), 1.0 - i * 0.001))
     return rows
 
 
@@ -90,9 +87,18 @@ def _clean_caches(monkeypatch):
 class TestTasteSeededPoolQuery:
 
     def _run(self, rows, **kw):
-        cursor = _make_cursor(rows)
-        with patch('apps.recommendation.engine.connection') as conn:
-            conn.cursor.return_value = cursor
+        def fake_fetch(sql, params):
+            # Mirror the real UNION ALL: the random-slice candidates (last bound
+            # param) come back as near=False rows carrying their embeddings.
+            out = list(rows)
+            if 'UNION ALL' in sql and isinstance(params[-1], list):
+                rng = np.random.default_rng(7)
+                out += [(b, _unit(rng.standard_normal(DIM)).tolist(), 0.0, False)
+                        for b in params[-1]]
+            return out
+
+        cursor = MagicMock(side_effect=fake_fetch)
+        with patch('apps.recommendation.engine._fetch_rows_binary', cursor):
             result = create_taste_seeded_pool(_pref(), **kw)
         return result, cursor
 
@@ -103,7 +109,7 @@ class TestTasteSeededPoolQuery:
                 _rows(60), seed_ids=[], exclude_ids=[], target=20,
             )
         rand.assert_not_called()
-        sql = cursor.execute.call_args[0][0]
+        sql = cursor.call_args[0][0]
         assert 'ORDER BY embedding <=> %s::vector' in sql
         assert 'is_publishable = true' in sql
         assert len(pool_ids) == 20
@@ -140,8 +146,8 @@ class TestTasteSeededPoolQuery:
     def test_overfetch_limit_is_multiplier_times_target(self, monkeypatch):
         monkeypatch.setitem(settings.RECOMMENDATION, 'taste_pool_overfetch', 3)
         _, cursor = self._run(_rows(10), seed_ids=[], exclude_ids=[], target=20)
-        params = cursor.execute.call_args[0][1]
-        assert params[-1] == 60            # LIMIT = 3 * target
+        params = cursor.call_args[0][1]
+        assert 60 in params                # LIMIT = 3 * target
 
     def test_excludes_seeds_and_disliked_ids_in_sql(self):
         seeds = ['bld_000001', 'bld_000002']
@@ -149,14 +155,40 @@ class TestTasteSeededPoolQuery:
         _, cursor = self._run(
             _rows(30), seed_ids=seeds, exclude_ids=disliked, target=10,
         )
-        sql, params = cursor.execute.call_args[0]
+        sql, params = cursor.call_args[0]
         assert '<> ALL(%s::text[])' in sql
         excluded = next(p for p in params if isinstance(p, list))
         assert set(excluded) == {'bld_000001', 'bld_000002', 'bld_000003'}
 
+    def test_single_query_uses_binary_array_embeddings_not_text(self):
+        _, cursor = self._run(_rows(30), seed_ids=[], exclude_ids=[], target=10)
+        assert cursor.call_count == 1
+        sql = cursor.call_args[0][0]
+        assert 'embedding::real[]' in sql
+        assert 'embedding::text' not in sql
+        assert 'UNION ALL' in sql                      # random slice rides in the same query
+        assert sql.count('is_publishable = true') == 2
+
+    def test_random_slice_embeddings_fetched_in_same_query_and_cached(self):
+        # Random-slice rows come back flagged near=false in the same result set.
+        rows = _rows(200)
+        rng = np.random.default_rng(7)
+        rnd = [(b, _unit(rng.standard_normal(DIM)).tolist(), 0.0, False)
+               for b in _fake_random_pool(20)]
+        (pool_ids, _), cursor = self._run(rows + rnd, seed_ids=[], exclude_ids=[], target=50)
+        rnd_in_pool = [b for b in pool_ids if b.startswith('rnd_')]
+        assert len(rnd_in_pool) == 10 and cursor.call_count == 1
+        assert all(b in engine._building_embedding_cache for b in pool_ids)
+        # full cache hit: no further embeddings SQL for the whole pool
+        with patch('apps.recommendation.engine.connection') as conn:
+            out = engine.get_pool_embeddings(pool_ids)
+        conn.cursor.assert_not_called()
+        assert set(out) == set(pool_ids)
+        assert all(abs(np.linalg.norm(v) - 1.0) < 1e-9 for v in out.values())
+
     def test_no_exclusion_clause_when_nothing_to_exclude(self):
         _, cursor = self._run(_rows(30), seed_ids=[], exclude_ids=[], target=10)
-        assert '<> ALL' not in cursor.execute.call_args[0][0]
+        assert '<> ALL' not in cursor.call_args[0][0]
 
     def test_pool_size_respects_target_including_seeds(self):
         seeds = [f'bld_{i:06d}' for i in range(12)]
@@ -189,10 +221,8 @@ class TestTasteSeededPoolQuery:
         assert near and all(bid in engine._building_embedding_cache for bid in near)
 
     def test_sql_failure_propagates_for_caller_fallback(self):
-        cursor = _make_cursor([])
-        cursor.execute.side_effect = RuntimeError('db down')
-        with patch('apps.recommendation.engine.connection') as conn:
-            conn.cursor.return_value = cursor
+        cursor = MagicMock(side_effect=RuntimeError('db down'))
+        with patch('apps.recommendation.engine._fetch_rows_binary', cursor):
             with pytest.raises(RuntimeError):
                 create_taste_seeded_pool(_pref(), [], target=10)
 
@@ -212,8 +242,7 @@ class TestDiversityStep:
         # Top-30 nearest are near-duplicates; the tail is spread out.
         rows = _rows(90, clustered_head=30)
         cursor = _make_cursor(rows)
-        with patch('apps.recommendation.engine.connection') as conn:
-            conn.cursor.return_value = cursor
+        with patch('apps.recommendation.engine._fetch_rows_binary', cursor):
             pool_ids, _ = create_taste_seeded_pool(
                 _pref(), [], exclude_ids=[], target=30,
             )

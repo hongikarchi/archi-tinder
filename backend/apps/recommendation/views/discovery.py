@@ -414,8 +414,12 @@ class DiscoveryPromoteView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # ── 2. Fetch seed embeddings ───────────────────────────────────────
-        pool_embeddings_seed = engine.get_pool_embeddings(seed_ids)
+        # ── 2. Fetch seed + dislike-window embeddings (ONE round-trip) ─────
+        _dis_window = int(RC['taste_v2_dislike_window'])
+        _dis_ids = [d for d in (_draft_liked_id_only(list(draft.disliked_ids or [])) if draft else [])
+                    if isinstance(d, str)][-_dis_window:] if _dis_window > 0 else []
+        _early_embeddings = engine.get_pool_embeddings(list(dict.fromkeys(seed_ids + _dis_ids)))
+        pool_embeddings_seed = {bid: _early_embeddings[bid] for bid in seed_ids if bid in _early_embeddings}
 
         # Build like_vectors and preference_vector from seed embeddings.
         # All seeds use round=0 so they share identical recency weight — no decay
@@ -486,10 +490,7 @@ class DiscoveryPromoteView(APIView):
         # pool_scores from the seeded pool are on another scale -> reset to zeros.
         pool_scores = {bid: 0.0 for bid in pool_ids}
 
-        _dis_window = int(RC['taste_v2_dislike_window'])
-        _dis_ids = [d for d in (_draft_liked_id_only(list(draft.disliked_ids or [])) if draft else [])
-                    if isinstance(d, str)][-_dis_window:] if _dis_window > 0 else []
-        _dis_map = engine.get_pool_embeddings(_dis_ids) if _dis_ids else {}
+        _dis_map = _early_embeddings   # fetched with the seeds above (no extra query)
         _ctx = session_selector.build_ctx(
             pool_scores, [], like_vectors, [_dis_map[d] for d in _dis_ids if d in _dis_map],
             [], session_floor, seeded_count,
