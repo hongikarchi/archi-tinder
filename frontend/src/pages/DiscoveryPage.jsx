@@ -17,6 +17,7 @@ import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import Modal from '../components/Modal.jsx'
+import FinishReportButton from '../components/FinishReportButton.jsx'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -509,7 +510,8 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       height: 'var(--page-height)',
       overflow: 'hidden',
       background: 'var(--color-bg)',
-      padding: '20px 16px var(--tabbar-clearance)',
+      // + 52px once the fixed bottom CTA shows (44px + 8px gap)
+      padding: `20px 16px calc(var(--tabbar-clearance) + ${continueAfterTrigger ? 52 : 0}px)`,
     }}>
 
       <PageTopControls onLogout={onLogout} />
@@ -520,65 +522,21 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       <div style={{ textAlign: 'center', width: '100%' }}>
         <PageLogoHeader padding={0} marginBottom={8} />
 
-        {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
-            the trigger card (Discovery 계속 선택). Rendered in the header (normal document
-            flow, before the absolute card stack) so it is always above the cards and
-            fully clickable. Primary CTA gradient per DESIGN.md §8.1, min-height 44px §3.2,
-            radius var(--radius-md) §3.1. position:relative + zIndex:10 + pointerEvents:auto
-            ensure it stays on top of the absolute-positioned card stack beneath it. */}
-        {continueAfterTrigger && (
-          <div style={{
-            width: '100%',
-            maxWidth: CARD_WIDTH,
-            margin: '10px auto 0',
-            position: 'relative',
-            zIndex: 10,
-            pointerEvents: 'auto',
-          }}>
-            <button
-              type="button"
-              onClick={handlePromoteToTaste}
-              disabled={promoteLoading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                width: '100%',
-                minHeight: 44,
-                padding: '0 20px',
-                borderRadius: 'var(--radius-md, 12px)',
-                border: 'none',
-                background: promoteLoading
-                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
-                  : 'var(--accent-1)',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: promoteLoading ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                letterSpacing: '-0.01em',
-                transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
-              }}
-            >
-              {promoteLoading ? (
-                <>
-                  <div style={{
-                    width: 14, height: 14, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.8s linear infinite',
-                    flexShrink: 0,
-                  }} />
-                  {t('discovery.tasteAnalyzing')}
-                </>
-              ) : (
-                t('discovery.saveTasteAndMove')
-              )}
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Persistent "save taste and go to Taste" CTA — shown after the user
+          left-swiped the trigger card. Same fixed pill as the Taste swipe page's
+          finish button (sits above the TabBar); the page's bottom padding
+          reserves 52px so it never covers the card. */}
+      {continueAfterTrigger && (
+        <FinishReportButton
+          onClick={handlePromoteToTaste}
+          disabled={promoteLoading}
+          loading={promoteLoading}
+          label={t('discovery.saveTasteAndMove')}
+          loadingLabel={t('discovery.tasteAnalyzing')}
+        />
+      )}
 
       {/* Card stack */}
       <div
