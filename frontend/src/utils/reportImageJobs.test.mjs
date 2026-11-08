@@ -177,3 +177,14 @@ test('regenerate with no previous entry (image came from the board) fails back t
   await jobs.regenerate('p1')
   assert.deepEqual(jobs.get('p1'), { status: 'idle', image: null, mime: null, regen: false, regenFailed: true })
 })
+
+test('never-regenerate rule: start() on done/with-image entries sends no regenerate:true POST; only regenerate() does', async () => {
+  const opts = []
+  const jobs = createReportImageJobs(async (id, o) => { opts.push(o.regenerate); return IMG }, noWait)
+  await jobs.start('p1')
+  await jobs.start('p1')
+  await jobs.start('p1')
+  assert.deepEqual(opts, [false])   // later start()s (auto paths) issue no POST at all
+  await jobs.regenerate('p1')       // explicit refresh button
+  assert.deepEqual(opts, [false, true])
+})

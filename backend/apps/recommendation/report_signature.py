@@ -32,6 +32,11 @@ def liked_signature(liked_ids):
     return hashlib.sha1('\n'.join(ids).encode('utf-8')).hexdigest()[:16]
 
 
+def liked_count(liked_ids):
+    """Number of DISTINCT liked building ids (dict / legacy str entries)."""
+    return len(set(liked_ids_of(liked_ids)))
+
+
 def is_report_stale(final_report, liked_ids):
     """True iff the report is a dict carrying a signature that differs from now."""
     if not isinstance(final_report, dict):

@@ -1,6 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isReportStale, shouldRegenerateOnOpen, shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './reportStale.js'
+import { isReportStale, shouldRegenerateOnOpen, shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName, countDistinctLiked, staleReason, staleReasonKey } from './reportStale.js'
+// swipeSettle tests ride this file (package.json test script is an explicit file list)
+import './swipeSettle.test.mjs'
 
 const board = (over = {}) => ({ final_report: { persona_type: 'x' }, liked_ids: ['a'], ...over })
 
@@ -52,4 +54,23 @@ test('pickServerBoardName: server name or null', () => {
   assert.equal(pickServerBoardName({ name: '' }), null)
   assert.equal(pickServerBoardName(null), null)
   assert.equal(pickServerBoardName({}), null)
+})
+
+test('countDistinctLiked: objects + legacy strings, de-duplicated by id', () => {
+  assert.equal(countDistinctLiked({ liked_ids: [{ id: 'a', intensity: 1 }, 'a', { id: 'b' }, 'c'] }), 3)
+  assert.equal(countDistinctLiked({ liked_ids: [] }), 0)
+  assert.equal(countDistinctLiked(null), 0)
+})
+
+test('staleReason: added / removed / changed / legacy', () => {
+  assert.equal(staleReason({ likedCount: 5, report: { source_count: 4 } }), 'added')
+  assert.equal(staleReason({ likedCount: 3, report: { source_count: 4 } }), 'removed')
+  assert.equal(staleReason({ likedCount: 4, report: { source_count: 4 } }), 'changed')
+  assert.equal(staleReason({ likedCount: 4, report: {} }), 'changed')
+  assert.equal(staleReason({ likedCount: 4, report: null }), 'changed')
+  assert.equal(staleReason({ likedCount: 4, report: { source_count: '4' } }), 'changed')
+  assert.equal(staleReason({ likedCount: 4, report: { source_count: 2.5 } }), 'changed')
+  assert.equal(staleReasonKey({ likedCount: 5, report: { source_count: 4 } }), 'persona.staleAdded')
+  assert.equal(staleReasonKey({ likedCount: 1, report: { source_count: 4 } }), 'persona.staleRemoved')
+  assert.equal(staleReasonKey({ likedCount: 1, report: {} }), 'persona.staleRegenerating')
 })

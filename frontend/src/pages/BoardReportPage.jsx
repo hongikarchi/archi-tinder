@@ -1,48 +1,58 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { useBoard } from '../hooks/useBoard.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import PersonaReportPage from '../components/PersonaReportPage.jsx'
+import Toast from '../components/Toast.jsx'
+import EditActionBar from './boardDetail/EditActionBar.jsx'
+import {
+  ReportNotice, OwnerMeta, ViewerMeta, OwnerTools, ViewerTools, TitleEdit, EditGrid, DeleteFooter,
+} from './boardReport/BoardReportParts.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { generateReport, getProjectRecommendations } from '../api/projects.js'
-import { reportJobs } from '../hooks/useReportJobs.js'
 import { useRegeneration } from '../hooks/useRegeneration.jsx'
-import { reportImageJobs } from '../hooks/useReportImageJob.js'
-import { shouldRegenerateOnOpen } from '../utils/reportStale.js'
+import { useBoardEdit } from '../hooks/useBoardEdit.js'
+import { useBoardReaction } from '../hooks/useBoardReaction.js'
+import { staleReason, countDistinctLiked } from '../utils/reportStale.js'
+import { isLegacyAxisScores } from '../utils/axisScores.js'
+import { localizeReport } from '../utils/reportText.js'
+import { resolveCoverTitle, isNameDirty } from '../utils/boardCoverTitle.js'
+import { shareBoardLink } from '../utils/shareBoard.js'
 
 /* ── BoardReportPage ────────────────────────────────────────────────────── */
-// Data + ownership for /board/:boardId/report; all rendering (report body and
-// the loading / failure / empty / unavailable states) is the shared
-// PersonaReportPage component.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+// The merged board page for boards WITH a persona report (chosen by BoardRoute at
+// /board/:boardId). One body (PersonaReportBody) in two modes:
+//   owner  — stale/legacy notice, tools row (continue / edit / share), visibility
+//            chip, edit mode (rename + delete buildings), delete-board footer
+//   viewer — read-only: owner link, reaction pill, share (public boards only)
+// Board data comes from BoardRoute's single useBoard call (`boardData`).
+const NOTICE_KEYS = {
+  added: 'persona.noticeAdded',
+  removed: 'persona.noticeRemoved',
+  changed: 'persona.noticeChanged',
+}
+const TOAST_MS = 2000
 
 function cardId(card) {
   return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
 }
 
-export default function BoardReportPage({ onLogout }) {
+export default function BoardReportPage({ boardId, boardData, onResume, onLogout }) {
   const navigate = useNavigate()
-  const { boardId: rawBoardId } = useParams()
-  // Same gate as BoardDetailPage: malformed URL param → null, never reaches the API layer.
-  const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
   const location = useLocation()
   const locationState = location.state
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
 
-  // Recommendations come from the project-recommendations endpoint (owner-only),
-  // not the session result.
-  const { board, loading, error: boardError, reload: reloadBoard } = useBoard(boardId, { fetchResult: false })
+  const { board, loading, error: boardError, reload: reloadBoard, recommendedArchitects = [] } = boardData
 
   const [localReport, setLocalReport] = useState(null)
   const [localAxisScores, setLocalAxisScores] = useState(null)
   const [genError, setGenError] = useState(false)
   const [recommendations, setRecommendations] = useState([])
   const genRef = useRef(false)
-  // Stale-report regeneration on open (owner only, once per mount).
-  const staleRef = useRef(false)
   const aliveRef = useRef(true)
-  const freshSaveRef = useRef(!!locationState?.saved)
-  const [staleBusy, setStaleBusy] = useState(false)
-  const [staleHandled, setStaleHandled] = useState(false)
+  // Deleted-liked count at the time of the last regeneration: deletions beyond it
+  // make the report stale again (the notice offers the manual regenerate).
+  const [regenBaseline, setRegenBaseline] = useState(0)
+  const deletedCountRef = useRef(0)
   useEffect(() => {
     aliveRef.current = true
     return () => { aliveRef.current = false }
@@ -58,32 +68,18 @@ export default function BoardReportPage({ onLogout }) {
   const report = localReport || board?.final_report
   const axisScores = localAxisScores || locationState?.axisScores || board?.axis_scores || null
   // Auto-generate condition, computed once and reused for both the effect
-  // guard AND the render branch below — avoids the first-paint flash: while the
-  // condition holds but the effect (one tick after paint) hasn't run yet, we
-  // still render the "making" skeleton instead of the noReport state.
-  //
-  // isOwner gate: without it, opening someone else's report-less board fired
-  // generateReport against THEIR project — a write on another user's data
-  // (and a Gemini call) triggered just by viewing.
+  // guard AND the render branch below — avoids the first-paint flash.
+  // isOwner gate: viewing someone else's board must never trigger a write.
   const shouldAutoGenerate = !!(
     isOwner && board && !report && !genError && board.liked_ids?.length > 0
   )
 
-  // Owner opens a board whose liked buildings changed after the report was made:
-  // regenerate the report (server resets staleness), then the image through the
-  // shared store without blocking the report. Handled flag avoids a flash of the
-  // stale flow after success.
-  // Never on a first generation: a report made in this visit (localReport) or
-  // arriving via the swipe-end save flow (freshSaveRef, captured at mount before
-  // the state flag is dropped) is fresh, so it must not be treated as stale.
-  const shouldRegenerateStale = !staleHandled
-    && shouldRegenerateOnOpen({ isOwner, board, hasLocalReport: !!localReport, freshlySaved: freshSaveRef.current })
-
+  // A stale report is never regenerated automatically: the top notice offers the
+  // manual "지금 재생성" button (the only regenerate path).
   useEffect(() => {
     if (!shouldAutoGenerate) return
     if (genRef.current) return
     genRef.current = true
-    staleRef.current = true   // first generation: the stale flow must never follow it
 
     generateReport(boardId)
       .then(data => {
@@ -102,16 +98,9 @@ export default function BoardReportPage({ onLogout }) {
     // Retry is user-initiated (handleRetry resets the ref).
   }, [shouldAutoGenerate, boardId])
 
-  // The report is owner-only. Once the board and viewer are known, a non-owner
-  // is sent back to the board detail (replace, so back doesn't loop).
-  const notOwner = !loading && !!board && !isOwner
-  useEffect(() => {
-    if (notOwner) navigate(`/board/${boardId}`, { replace: true })
-  }, [notOwner, boardId, navigate])
-
-  // Recommendations: owner only (the server 403s everyone else). A failed
-  // or empty fetch just hides the section.
-  const hasBoard = !!board && isOwner
+  // Recommendations: owners and (public-board) viewers. A failed or empty fetch
+  // just hides the section.
+  const hasBoard = !!board
   useEffect(() => {
     if (!boardId || !hasBoard) return
     let cancelled = false
@@ -129,37 +118,36 @@ export default function BoardReportPage({ onLogout }) {
     onReportRegenerated: data => {
       setLocalReport(data.final_report)
       setLocalAxisScores(data.axis_scores || null)
+      setRegenBaseline(deletedCountRef.current)
     },
   })
 
-  const { showToast } = regen
-  useEffect(() => {
-    if (!shouldRegenerateStale || staleRef.current) return
-    staleRef.current = true
-    setStaleBusy(true)
-    showToast(t('persona.staleRegenerating'))
-    // Shared in-flight store: joins a swipe-end regeneration already running for
-    // this board instead of sending a second POST. The image regeneration is
-    // chained by the store as soon as the report lands (even if this page was left
-    // meanwhile); the aliveRef guard only protects the state setters.
-    reportJobs.regenerate(boardId, { afterSuccess: () => { reportImageJobs.regenerate(boardId) } })
-      .then(data => {
-        if (!data?.final_report) throw new Error('empty report')
-        if (!aliveRef.current) return
-        setLocalReport(data.final_report)
-        setLocalAxisScores(data.axis_scores || null)
-      })
-      .catch(err => {
-        console.error('[BoardReportPage] stale regenerate failed:', err)
-        if (aliveRef.current) showToast(t('persona.regenFail'))
-      })
-      .finally(() => {
-        if (!aliveRef.current) return
-        setStaleHandled(true)
-        setStaleBusy(false)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldRegenerateStale, boardId])
+  // Viewers have no regeneration overlay, so they get their own tiny toast.
+  const [viewerToast, setViewerToast] = useState(null)
+  const viewerToastTimer = useRef(null)
+  useEffect(() => () => clearTimeout(viewerToastTimer.current), [])
+  const showToast = useCallback(text => {
+    if (isOwner) { regen.showToast(text); return }
+    setViewerToast({ text, key: Date.now() })
+    clearTimeout(viewerToastTimer.current)
+    viewerToastTimer.current = setTimeout(() => setViewerToast(null), TOAST_MS)
+  }, [isOwner, regen])
+
+  const localized = report ? localizeReport(report, language) : null
+  const fallbackTitle = resolveCoverTitle({
+    boardName: '', personaType: localized?.persona_type, defaultName: t('board.defaultName'),
+  })
+
+  // Owner edit state + handlers (shared with BoardDetailPage).
+  const edit = useBoardEdit({
+    boardId, board, isOwner,
+    getFallbackTitle: () => fallbackTitle,
+    showToast,
+  })
+  const reaction = useBoardReaction(board)
+  useEffect(() => { deletedCountRef.current = edit.deletedLikedIds.length }, [edit.deletedLikedIds])
+
+  const { showToast: regenToast } = regen
 
   // Post-save landing (App.handleBoardSaved navigates with state.saved): toast once,
   // then drop the flag so back/forward doesn't replay it. Waits for ownership
@@ -168,7 +156,7 @@ export default function BoardReportPage({ onLogout }) {
   useEffect(() => {
     if (!savedRef.current || !isOwner) return
     savedRef.current = false
-    showToast(t('results.savedToast'))
+    regenToast(t('results.savedToast'))
     const { saved: _saved, ...rest } = locationState || {}
     navigate(location.pathname, { replace: true, state: Object.keys(rest).length ? rest : null })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,7 +169,7 @@ export default function BoardReportPage({ onLogout }) {
 
   function handleRetry() {
     if (loadFailed) {
-      reloadBoard()
+      reloadBoard?.()
       return
     }
     genRef.current = false
@@ -194,32 +182,140 @@ export default function BoardReportPage({ onLogout }) {
     navigate(`/buildings/${id}`)
   }
 
+  // Back: the owner always lands on the profile (`replace` + profileRefresh mirror
+  // TabBar's Profile tap, so Back from the profile does not bounce through the
+  // board). A viewer goes back to wherever they came from.
+  function handleBack() {
+    if (isOwner) {
+      navigate('/user/me', { replace: true, state: { profileRefresh: Date.now() } })
+    } else if (location.key !== 'default') {
+      navigate(-1)
+    } else {
+      navigate('/people')
+    }
+  }
+
+  function handleShare() {
+    shareBoardLink({
+      title: (edit.localName || board?.name || t('board.defaultName')) + (localized?.persona_type ? ` · ${localized.persona_type}` : ''),
+      text: localized?.one_liner || edit.localName || '',
+      onCopied: () => showToast(t('board.linkCopied')),
+      onCopyFailed: () => showToast(t('board.copyFailed')),
+    })
+  }
+
   let state = 'ready'
   if (!boardId) state = 'unavailable'
   else if (loading) state = 'fetching'
-  else if (shouldAutoGenerate || shouldRegenerateStale || staleBusy) state = 'making'
+  else if (shouldAutoGenerate) state = 'making'
   else if (!board) state = loadFailed ? 'loadFail' : 'unavailable'
   else if (genError) state = 'genFail'
-  else if (!report) state = 'noReport'
+  else if (!report) state = isOwner ? 'noReport' : 'unavailable'
 
   // Liked row = the liked subset of the board's buildings (saved-only ones are not "liked").
-  const buildings = board?.buildings || []
+  const buildings = edit.localBuildings ?? board?.buildings ?? []
   const likedIdSet = new Set((board?.liked_ids || []).map(item => String(item?.id ?? item)))
   const likedBuildings = board?.liked_ids ? buildings.filter(b => likedIdSet.has(String(cardId(b)))) : buildings
+  const isPublic = edit.visibility === 'public'
 
-  // Non-owner: render nothing while the redirect effect runs (no report flash).
-  if (notOwner) return null
+  // Owner notice: deletions since the last regeneration, or a server-stale report
+  // whose open-time regeneration did not succeed -> offer the manual regenerate.
+  // Never while the user is mid-edit-save (busy) so the notice cannot flicker.
+  const deletedCount = edit.deletedLikedIds.length
+  const localStale = deletedCount > regenBaseline
+  const serverStale = board?.report_stale === true && !localReport
+  const needsRegen = isOwner && (localStale || serverStale)
+  const legacy = isOwner && isLegacyAxisScores(axisScores)
+  let noticeText = null
+  if (needsRegen) {
+    const reason = staleReason({
+      likedCount: Array.isArray(board?.liked_ids) ? Math.max(0, countDistinctLiked(board) - deletedCount) : NaN,
+      report,
+    })
+    noticeText = t(NOTICE_KEYS[reason])
+  } else if (legacy) {
+    noticeText = t('persona.noticeLegacy')
+  }
+  const topNotice = state === 'ready' && noticeText ? (
+    <ReportNotice
+      text={noticeText}
+      busy={regen.reportProps.regenerating}
+      failed={!!regen.reportProps.regenMessage}
+      onRegenerate={regen.reportProps.onRegenerateReport}
+    />
+  ) : null
+
+  const canSaveName = edit.isEditMode && isNameDirty(edit.nameDraft, edit.localName || fallbackTitle)
+
+  const ownerSlots = isOwner ? {
+    metaSlot: (
+      <OwnerMeta
+        isPublic={isPublic}
+        buildingCount={buildings.length}
+        reactionCount={reaction.reactionCount}
+        onToggleVisibility={next => {
+          edit.handleToggleVisibility(next)
+          showToast(t(next === 'public' ? 'board.nowPublic' : 'board.nowPrivate'))
+        }}
+        disabled={!board}
+      />
+    ),
+    titleSlot: edit.isEditMode ? (
+      <TitleEdit
+        value={edit.nameDraft}
+        onChange={edit.setNameDraft}
+        onCommit={() => edit.saveEdits({ deleting: false })}
+        onCancel={edit.exitEditMode}
+        canSave={canSaveName}
+        busy={edit.busy}
+      />
+    ) : null,
+    actionsSlot: (
+      <OwnerTools
+        onResume={onResume ? () => onResume(board?.board_id) : null}
+        resumeDisabled={!board || edit.isEditMode}
+        isEditMode={edit.isEditMode}
+        editDisabled={!board || !!edit.busy}
+        onToggleEdit={edit.isEditMode ? edit.exitEditMode : edit.enterEditMode}
+        onShare={handleShare}
+      />
+    ),
+    likedSlot: edit.isEditMode && likedBuildings.length > 0 ? (
+      <EditGrid buildings={likedBuildings} selectedIds={edit.selectedIds} onToggleSelect={edit.handleToggleBuildingSelect} />
+    ) : null,
+    footerSlot: <DeleteFooter onDelete={edit.handleDeleteBoard} />,
+  } : {
+    metaSlot: (
+      <ViewerMeta
+        owner={board?.user}
+        isPublic={isPublic}
+        buildingCount={buildings.length}
+        onOpenOwner={() => { if (board?.user?.user_id) navigate(`/user/${board.user.user_id}`) }}
+      />
+    ),
+    actionsSlot: (
+      <ViewerTools
+        isReacted={reaction.isReacted}
+        reactionCount={reaction.reactionCount}
+        pending={reaction.isPending}
+        error={reaction.error}
+        onToggleReaction={reaction.toggle}
+        onShare={handleShare}
+      />
+    ),
+  }
 
   return (
     <>
     <PersonaReportPage
       state={state}
       onLogout={onLogout}
-      onBack={() => (state === 'ready' ? navigate(`/board/${boardId}`) : navigate(-1))}
-      backLabel={t('board.backToDetail')}
+      onBack={handleBack}
+      backLabel={isOwner ? t('board.profile') : t('board.back')}
       onRetry={handleRetry}
-      onProfile={() => navigate('/user/me')}
-      boardId={boardId}
+      onProfile={() => navigate(isOwner ? '/user/me' : '/people')}
+      // Viewers never get a board id for the image job: Body's auto-start would POST.
+      boardId={isOwner ? boardId : null}
       finalReport={report}
       axisScores={axisScores}
       reportImage={board?.report_image || null}
@@ -227,16 +323,29 @@ export default function BoardReportPage({ onLogout }) {
       meta={{
         visibility: board?.visibility,
         buildingCount: buildings.length,
-        reactionCount: board?.reaction_count ?? 0,
+        reactionCount: reaction.reactionCount,
       }}
       likedBuildings={likedBuildings}
       recommendations={recommendations}
-      makingLabelKey={shouldRegenerateStale || staleBusy ? 'persona.staleRegenerating' : undefined}
+      architects={recommendedArchitects}
+      onOpenArchitect={id => navigate(`/architects/${id}`)}
       onOpenBuilding={handleOpenBuilding}
+      topNotice={topNotice}
+      {...ownerSlots}
       {...regen.imageProps}
-      {...regen.reportProps}
     />
     {regen.overlay}
+    {!isOwner && <Toast message={viewerToast} />}
+    {isOwner && edit.isEditMode && state === 'ready' && (
+      <EditActionBar
+        lastMsgOn={edit.lastMsgOn}
+        regenNotice={edit.selectedIds.size > 0 ? t('board.deleteRegenNotice') : null}
+        selectedCount={edit.selectedIds.size}
+        busy={edit.busy}
+        onCancel={edit.exitEditMode}
+        onDelete={() => edit.saveEdits({ deleting: true })}
+      />
+    )}
     </>
   )
 }

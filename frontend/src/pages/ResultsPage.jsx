@@ -6,10 +6,12 @@ import { useTranslation } from '../i18n/index.js'
 import { generateReport, getProject } from '../api/projects.js'
 import ResultCards, { ResultsStage, ResultStateCard } from '../components/ResultCards.jsx'
 
+const REPORT_ALREADY_PRESENT = Symbol('report-already-present')
+
 // /result/:sessionId — 3 swipeable result cards (FULL-REPORT-UI-1 WP3, #445).
 // Liked buildings + recommendations live on the shared report page
-// (/board/:id/report), reached through the closing card's CTA.
-export default function ResultsPage({ projects, setProjects, onReportGenerated, onLogout, onRequestSave }) {
+// (/board/:id), reached through the closing card's CTA.
+export default function ResultsPage({ projects, setProjects, onReportGenerated, awaitSwipesSettled, onLogout, onRequestSave }) {
   const navigate = useNavigate()
   const { sessionId } = useParams()
   const { t } = useTranslation()
@@ -24,6 +26,10 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
   const reportRepairRef = useRef(false)
   const [reportRepairError, setReportRepairError] = useState(false)
   const [reportRepairing, setReportRepairing] = useState(false)
+  // Latest report on the project: while this page waits for in-flight swipes, the
+  // swipe-completion flow in App.jsx may have already produced the first report.
+  const finalReportRef = useRef(null)
+  finalReportRef.current = project?.finalReport || null
 
   function attemptReportRepair() {
     // No liked buildings yet → backend always 400s ('No liked buildings yet');
@@ -34,8 +40,13 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
     reportRepairRef.current = true
     setReportRepairing(true)
     setReportRepairError(false)
-    generateReport(backendId)
+    // Wait for in-flight swipe POSTs (never rejects, 8s cap) so the report is built
+    // from a liked set that includes the final like.
+    Promise.resolve(awaitSwipesSettled?.())
+      // A report may have landed while waiting: do not POST a second generation.
+      .then(() => (finalReportRef.current ? REPORT_ALREADY_PRESENT : generateReport(backendId)))
       .then(data => {
+        if (data === REPORT_ALREADY_PRESENT) return
         if (data?.final_report) {
           setProjects(prev => prev.map(p => (
             p.id === project.id
@@ -109,7 +120,7 @@ export default function ResultsPage({ projects, setProjects, onReportGenerated, 
         ctaLabel={project.isTemp ? t('results.saveAndProfile') : t('results.goToProfile')}
         onCta={() => {
           if (project.isTemp) onRequestSave?.(project)
-          else navigate(`/board/${backendId}/report`)
+          else navigate(`/board/${backendId}`)
         }}
       />
     )

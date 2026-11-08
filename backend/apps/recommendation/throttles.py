@@ -49,6 +49,17 @@ class ProjectRecommendationsThrottle(UserRateThrottle):
     rate  = '30/min'
 
 
+class ArchitectRecommendationsThrottle(UserRateThrottle):
+    """30 recommended-architects reads per minute per user (anonymous: per IP).
+
+    AllowAny endpoint (public boards are viewable anonymously) that runs raw SQL
+    against the buildings DB on every call; UserRateThrottle keys anonymous
+    callers by IP. Code-pinned rate (class `rate` wins over settings).
+    """
+    scope = 'architect_recommendations'
+    rate  = '30/min'
+
+
 class ReportGenerateThrottle(UserRateThrottle):
     """10 persona report generations per hour per authenticated user.
 

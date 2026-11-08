@@ -1,0 +1,246 @@
+/* Merged board report page — owner tools / viewer chrome around PersonaReportBody.
+ * Layout values follow the approved mock (persona-report-final.html screens 1-2);
+ * colors, radii and type come from tokens.css. The 44px control height is the
+ * app-wide touch target (BoardDetailPage .pill). */
+
+/* ── Top notice (stale / legacy report) ─────────────────────────────────── */
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+.noticeText { min-width: 0; }
+.noticeBtn {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--accent-1);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+.noticeBtn:disabled { opacity: 0.5; cursor: default; }
+.noticeBtn:focus-visible,
+.visBtn:focus-visible,
+.ownerLink:focus-visible,
+.footLink:focus-visible,
+.tool:focus-visible,
+.icon:focus-visible,
+.titleBtn:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+.noticeFail { display: block; margin-top: 2px; color: var(--color-text); }
+
+/* ── Meta row pieces ────────────────────────────────────────────────────── */
+/* Visibility pill: 28px round, icon only; the state label expands for 2s after a toggle
+ * (same behaviour as BoardCover OwnerChips, themed surface instead of the glass scrim). */
+.visBtn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -8px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.visBtn:disabled { opacity: 0.5; cursor: default; }
+.visPill {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  min-width: 28px;
+  box-sizing: border-box;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.visIcon { flex: 0 0 14px; margin: 0 7px; }
+.visLabel {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 160px;
+  padding-right: 12px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  animation: visLabelGrow var(--motion-normal) var(--motion-ease);
+}
+@keyframes visLabelGrow {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 160px; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .visLabel { animation: none; }
+}
+.ownerLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+.ownerLink:hover .ownerName { text-decoration: underline; }
+.avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--color-surface-2);
+}
+
+/* ── Tools row (actionsSlot) ────────────────────────────────────────────── */
+.tools { display: flex; align-items: center; gap: 10px; }
+.tool {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+.toolDark {
+  background: var(--color-text);
+  color: var(--color-bg);
+  border-color: var(--color-text);
+}
+.toolReacted { color: var(--accent-1); border-color: var(--accent-1); }
+.icon {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform var(--motion-normal) var(--motion-ease);
+}
+.iconActive { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); }
+.tool:hover:not(:disabled),
+.icon:hover:not(:disabled) { transform: scale(1.04); }
+.tool:active:not(:disabled),
+.icon:active:not(:disabled) { transform: scale(0.97); }
+.tool:disabled,
+.icon:disabled { opacity: 0.4; cursor: default; }
+.toolError {
+  margin: 8px 4px 0;
+  color: var(--color-text);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool, .icon { transition: none; }
+  .tool:hover:not(:disabled), .icon:hover:not(:disabled),
+  .tool:active:not(:disabled), .icon:active:not(:disabled) { transform: none; }
+}
+
+/* ── Title edit (titleSlot) ─────────────────────────────────────────────── */
+.titleEdit { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.titleInput {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent-1);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.02em;
+}
+.titleInput:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.titleBtn {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: var(--accent-1);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.titleBtn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── Edit grid (likedSlot) ──────────────────────────────────────────────── */
+.editSection { padding: 26px var(--rp-gutter); }
+.editHead {
+  margin: 0 0 14px;
+  font-size: 13px; /* E1 (PersonaReportPage.module.css) */
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+.editPad { height: 72px; }
+
+/* ── Footer (delete board) ──────────────────────────────────────────────── */
+.foot {
+  margin: 18px var(--rp-gutter) 0;
+  padding: 20px 0 30px;
+  border-top: 1px solid var(--color-border-soft);
+  text-align: center;
+  color: var(--color-text);
+  font-size: 13px;
+}
+.footLink {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: var(--fw-medium);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.confirm { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.confirmAsk { color: var(--color-text); font-weight: var(--fw-semibold); }
+.footStrong { color: var(--color-text); font-weight: var(--fw-bold); }

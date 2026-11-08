@@ -1,22 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useBoard } from '../hooks/useBoard.js'
-import { updateProject, deleteProject, getProjectReportImage } from '../api/projects.js'
+import { useBoard, useBoardSessionResult } from '../hooks/useBoard.js'
+import { getProjectReportImage } from '../api/projects.js'
 import { useRegeneration } from '../hooks/useRegeneration.jsx'
 import { useReportImageJob } from '../hooks/useReportImageJob.js'
-import { canSelectForDelete, isLastLikedError } from '../utils/boardDeleteRules.js'
-import { reactToProject, unreactToProject } from '../api/social.js'
+import { useBoardEdit } from '../hooks/useBoardEdit.js'
+import { useBoardReaction } from '../hooks/useBoardReaction.js'
 import BuildingTile from './boardDetail/BuildingTile'
 import tileStyles from './boardDetail/BuildingTile.module.css'
 import RecommendedTile from './boardDetail/RecommendedTile'
 import ArchitectSection from './boardDetail/ArchitectSection'
 import BoardCover from './boardDetail/BoardCover'
 import CoverIconButton from './boardDetail/CoverIconButton'
+import EditActionBar from './boardDetail/EditActionBar'
 import { useTranslation } from '../i18n/index.js'
 import { localizeReport } from '../utils/reportText.js'
 import { resolveCoverTitle, isNameDirty } from '../utils/boardCoverTitle.js'
-import { planEditSave } from '../utils/boardEditPlan.js'
-import { purgeChatCache } from '../utils/appHelpers.js'
 import { safeImageMime } from '../utils/imageMime.js'
 import s from './BoardDetailPage.module.css'
 import PageShell from '../components/PageShell.jsx'
@@ -32,46 +31,40 @@ import { userHandle, atHandle } from '../utils/userIdentity.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export default function BoardDetailPage({ onResume, onLogout }) {
+// `boardData` (optional): the useBoard() result already loaded by BoardRoute
+// (with fetchResult:false); when given, this page skips its own board fetch and
+// loads only the owner-only session result. Standalone use still works.
+export default function BoardDetailPage({ boardData, onResume, onLogout }) {
   const navigate = useNavigate()
   const { t, language } = useTranslation()
   const rawBoardId = useParams().boardId
   const boardId = UUID_RE.test(String(rawBoardId || '')) ? rawBoardId : null
-  const { board, recommended: hookRecommended, recommendedArchitects, loading, resultLoading, error } = useBoard(boardId)
+  const own = useBoard(boardId, { enabled: !boardData })
+  const injected = useBoardSessionResult(boardData?.board, !!boardData)
+  const { board, recommendedArchitects, loading, error } = boardData || own
+  const hookRecommended = boardData ? injected.recommended : own.recommended
+  const resultLoading = boardData ? injected.resultLoading : own.resultLoading
 
-  const [isReacted, setIsReacted] = useState(false)
-  const [reactionCount, setReactionCount] = useState(0)
-  const [isReactionPending, setIsReactionPending] = useState(false)
-  const [reactionError, setReactionError] = useState(null)
-  const [localName, setLocalName] = useState('')
-  const [nameDraft, setNameDraft] = useState('')
-  const [isEditMode, setIsEditMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState(new Set())
-  const [localBuildings, setLocalBuildings] = useState(null)
-  // True while a save/delete request is in flight (one lock for every edit action).
-  const [busy, setBusy] = useState(null) // null | 'saving-name' | 'deleting'
-  const [deletedLikedIds, setDeletedLikedIds] = useState([])
-  const [lastMsgOn, setLastMsgOn] = useState(false)
-  const [visibilityOverride, setVisibilityOverride] = useState(null)
-  const lastMsgTimerRef = useRef(null)
-  const aliveRef = useRef(true)
-  const visPendingRef = useRef(false)
-  useEffect(() => {
-    aliveRef.current = true
-    return () => { aliveRef.current = false; clearTimeout(lastMsgTimerRef.current) }
-  }, [])
+  const viewerId = sessionStorage.getItem('archithon_user')
+  const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
+  const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
+  // Toast host + owner gate (image/report regeneration is owner-only).
+  const regen = useRegeneration({ projectId: boardId, enabled: isOwner, withReport: false })
 
-  useEffect(() => {
-    if (!board) return
-    setDeletedLikedIds([])
-    setVisibilityOverride(null)
-    setIsReacted(!!board.is_reacted)
-    setReactionCount(board.reaction_count ?? 0)
-    setReactionError(null)
-    setLocalName(board.name || '')
-    setNameDraft(board.name || '')
-    setLocalBuildings(board.buildings || [])
-  }, [board])
+  const {
+    isReacted, reactionCount, isPending: isReactionPending, error: reactionError, toggle: handleToggleReaction,
+  } = useBoardReaction(board)
+  // Owner edit state + handlers (shared with the merged report page).
+  const {
+    localName, nameDraft, setNameDraft, isEditMode, selectedIds, busy, lastMsgOn,
+    localBuildings, visibility,
+    enterEditMode, exitEditMode, saveEdits,
+    handleToggleBuildingSelect, handleToggleVisibility, handleDeleteBoard,
+  } = useBoardEdit({
+    boardId, board, isOwner,
+    getFallbackTitle: () => coverTitle,
+    showToast: regen.showToast,
+  })
 
   // Persona report image: inline on the project payload when present, else
   // lazily fetched (same chain as BoardCard). null -> building cover fallback.
@@ -95,32 +88,6 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       ? `data:${safeImageMime(board.report_image_mime)};base64,${board.report_image}`
       : fetchedPersonaImage
 
-  async function handleToggleReaction() {
-    if (!board || isReactionPending) return
-
-    const wasReacted = isReacted
-    const previousCount = reactionCount
-    const nextReacted = !wasReacted
-    setIsReactionPending(true)
-    setReactionError(null)
-    setIsReacted(nextReacted)
-    setReactionCount(prev => Math.max(0, prev + (nextReacted ? 1 : -1)))
-
-    try {
-      const resp = nextReacted
-        ? await reactToProject(board.project_id)
-        : await unreactToProject(board.project_id)
-      if (resp?.reaction_count !== undefined) setReactionCount(resp.reaction_count)
-      if (resp?.reacted !== undefined) setIsReacted(!!resp.reacted)
-    } catch (err) {
-      setIsReacted(wasReacted)
-      setReactionCount(previousCount)
-      setReactionError(err.message || t('board.reactionFailed'))
-    } finally {
-      setIsReactionPending(false)
-    }
-  }
-
   async function handleShare() {
     const report = localizeReport(board?.final_report, language)
     const shareData = {
@@ -140,148 +107,14 @@ export default function BoardDetailPage({ onResume, onLogout }) {
     }
   }
 
-  // Edit mode = { isEditMode, selectedIds, nameDraft }; these two are the only
-  // transitions (plus selection toggling and saveEdits below).
-  function enterEditMode() {
-    setIsEditMode(true)
-    setSelectedIds(new Set())
-    setNameDraft(localName || coverTitle)
-  }
-
-  function exitEditMode() {
-    setIsEditMode(false)
-    setSelectedIds(new Set())
-    setNameDraft(localName || coverTitle)
-  }
-
-  // Save the title draft (if dirty) and, when `deleting`, delete the selected
-  // buildings. Name first, then delete. Success of everything -> exit edit mode;
-  // any failure keeps edit mode, selection and draft. A saved name becomes the
-  // new baseline immediately so a retry never re-sends it.
-  async function saveEdits({ deleting }) {
-    if (!isOwner || busy) return
-    const plan = planEditSave({
-      draft: nameDraft, baseline: localName || coverTitle, selectedIds, deleting,
-    })
-    if (plan.blank && !deleting) return
-    if (plan.noop) { if (!plan.blank) exitEditMode(); return }
-    setBusy(deleting ? 'deleting' : 'saving-name')
-    try {
-      if (plan.name) {
-        try {
-          await updateProject(boardId, { name: plan.name })
-        } catch {
-          if (aliveRef.current) regen.showToast(t('board.nameSaveFailed'))
-          return
-        }
-        setLocalName(plan.name)
-        setNameDraft(plan.name)
-        regen.showToast(t('board.nameSaved'))
-      }
-      if (plan.deleteIds.length > 0) {
-        const ids = plan.deleteIds
-        const likedSet = new Set(likedIdList)
-        const deletedLiked = ids.filter(id => likedSet.has(String(id)))
-        try {
-          await updateProject(boardId, { remove_building_ids: ids })
-        } catch (err) {
-          if (aliveRef.current) {
-            if (isLastLikedError(err)) flashLastMessage()
-            else regen.showToast(t('board.deleteFailed'))
-          }
-          return
-        }
-        setLocalBuildings(prev => (prev || []).filter(b => {
-          const bid = b.image_id || b.canonical_bld_id || b.building_id || b.id
-          return !ids.includes(bid)
-        }))
-        if (deletedLiked.length > 0) setDeletedLikedIds(prev => [...prev, ...deletedLiked])
-        // No regeneration here: the server flags the report stale and the owner's
-        // next open of the report page regenerates it (the report is owner-only;
-        // non-owners never receive it).
-      }
-      setIsEditMode(false)
-      setSelectedIds(new Set())
-    } finally {
-      if (aliveRef.current) setBusy(null)
-    }
-  }
-
-  // Only liked ids that are actually rendered count toward the "keep one liked
-  // building" rule: ids the page cannot show (non-publishable / missing) can never
-  // be selected, so counting them would let the owner delete every visible one.
-  const renderedIdSet = new Set((localBuildings ?? board?.buildings ?? [])
-    .map(b => String(b.image_id || b.canonical_bld_id || b.building_id || b.id)))
-  const likedIdList = (board?.liked_ids || []).map(item => String(item?.id ?? item))
-    .filter(id => renderedIdSet.has(id))
-
-  function flashLastMessage() {
-    setLastMsgOn(true)
-    clearTimeout(lastMsgTimerRef.current)
-    lastMsgTimerRef.current = setTimeout(() => setLastMsgOn(false), 2300)
-  }
-
-  function handleToggleBuildingSelect(id) {
-    if (!selectedIds.has(id) && !canSelectForDelete({
-      likedIds: likedIdList, deletedIds: deletedLikedIds, selectedIds, candidateId: id,
-    })) {
-      flashLastMessage()
-      return
-    }
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  // Owner chips on the cover: optimistic visibility toggle (revert on failure).
-  // One PATCH at a time (taps during a pending request are ignored) so requests
-  // cannot commit out of order; on success the server's value wins.
-  async function handleToggleVisibility(next) {
-    if (visPendingRef.current) return
-    visPendingRef.current = true
-    const prev = visibility
-    setVisibilityOverride(next)
-    try {
-      const res = await updateProject(boardId, { visibility: next })
-      if (aliveRef.current && (res?.visibility === 'public' || res?.visibility === 'private')) {
-        setVisibilityOverride(res.visibility)
-      }
-    } catch {
-      if (aliveRef.current) {
-        setVisibilityOverride(prev ?? null)
-        regen.showToast(t('board.visibilityFailed'))
-      }
-    } finally {
-      visPendingRef.current = false
-    }
-  }
-
-  async function handleDeleteBoard() {
-    try {
-      await deleteProject(boardId)
-      purgeChatCache(String(boardId))
-      navigate('/user/me', { replace: true })
-    } catch {
-      if (aliveRef.current) regen.showToast(t('board.deleteFailed'))
-    }
-  }
-
   function handleNavigateToOwner() {
     if (!board?.user?.user_id) return
     navigate(`/user/${board.user.user_id}`)
   }
 
-  const visibility = visibilityOverride ?? board?.visibility
   const isPublic = !board || visibility === 'public'
   const buildings = localBuildings ?? board?.buildings ?? []
   const recommended = hookRecommended
-  const viewerId = sessionStorage.getItem('archithon_user')
-  const boardOwnerId = board?.user?.user_id ?? board?.owner?.user_id
-  const isOwner = !!viewerId && String(boardOwnerId) === String(viewerId)
-  // Toast host + owner gate (image/report regeneration is owner-only).
-  const regen = useRegeneration({ projectId: boardId, enabled: isOwner, withReport: false })
   const finalReport = board?.final_report || null
   // Notice: deleting buildings makes the persona report need regeneration.
   const showRegenNotice = selectedIds.size > 0 && !!board?.final_report
@@ -422,22 +255,10 @@ export default function BoardDetailPage({ onResume, onLogout }) {
         </div>
       ) : (
       <div>
-        {/* Action row — owner: [report pill | continue exploring] (no report:
-            continue only); viewer: reaction pill only (report is owner-only). Owner edit +
-            share live on the cover. */}
+        {/* Action row — owner: continue exploring; viewer: reaction pill only.
+            Boards WITH a report never render this page (BoardRoute shows the merged
+            persona-report page instead). Owner edit + share live on the cover. */}
         <div className={s.topActions}>
-          {isOwner && board?.final_report && (
-            <button
-              onClick={() => navigate(`/board/${board.board_id}/report`)}
-              className={`${s.pill} ${s.pillPrimary}`}
-              style={{
-                flex: onResume ? '3 1 0' : '1 1 0', minWidth: 0, padding: '0 12px',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}
-            >
-              {t('board.viewReport')}
-            </button>
-          )}
           {isOwner ? (
             onResume && (
               <button
@@ -445,7 +266,7 @@ export default function BoardDetailPage({ onResume, onLogout }) {
                 disabled={!board}
                 className={`${s.pill} ${s.pillSecondary}`}
                 style={{
-                  flex: board?.final_report ? '2 1 0' : '1 1 0', minWidth: 0, padding: '0 12px',
+                  flex: '1 1 0', minWidth: 0, padding: '0 12px',
                   fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}
@@ -487,35 +308,38 @@ export default function BoardDetailPage({ onResume, onLogout }) {
           </div>
         )}
 
-        {/* Viewer: link to the board owner's profile (kept from the old meta row). */}
+        {/* Viewer: link to the board owner's profile — a clear tappable row
+            (surface chip, 44px target, larger avatar) so it is easy to notice. */}
         {!isOwner && board?.user?.user_id && (
           <button
             type="button"
             onClick={handleNavigateToOwner}
             className={s.ownerRow}
+            aria-label={userHandle(board.user)}
             style={{
               margin: '14px 8px 0',
-              padding: 0,
-              minHeight: 32,
+              padding: '0 14px 0 8px',
+              minHeight: 44,
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
-              background: 'none',
-              border: 'none',
+              gap: 8,
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-pill)',
               cursor: 'pointer',
               fontFamily: 'inherit',
-              color: 'var(--color-text-dim)',
-              fontSize: 'var(--fs-caption)',
+              color: 'var(--color-text)',
+              fontSize: 'var(--fs-body)',
               fontWeight: 'var(--fw-semibold)',
             }}
           >
             <img
               src={board.user.avatar_url || ''}
               alt=""
-              style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', background: 'var(--color-surface-2)' }}
+              style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', background: 'var(--color-surface-2)' }}
             />
             <span className={s.ownerName}>{userHandle(board.user)}</span>
-            <span aria-hidden="true">›</span>
+            <span aria-hidden="true" style={{ color: 'var(--color-text-muted)' }}>›</span>
           </button>
         )}
 
@@ -635,74 +459,14 @@ export default function BoardDetailPage({ onResume, onLogout }) {
       {/* Edit mode floating action bar (persona-report mock `editBar`): no
           container, two solid buttons + a solid notice pill above them. */}
       {isEditMode && (
-        <div style={{
-          position: 'fixed',
-          left: 16, right: 16,
-          bottom: 'var(--tabbar-clearance)',
-          maxWidth: 420,
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 10,
-          zIndex: 200,
-        }}>
-          <div role="status" aria-live="polite">
-          {(lastMsgOn || showRegenNotice) && (
-            <span style={{
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-pill)',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border-soft)',
-              boxShadow: '0 4px 12px rgba(0,0,0,.12)',
-              fontSize: 'var(--fs-caption)',
-              color: lastMsgOn ? 'var(--color-text)' : 'var(--color-text-dim)',
-              fontWeight: lastMsgOn ? 'var(--fw-semibold)' : 'var(--fw-regular)',
-              textAlign: 'center',
-            }}>
-              {lastMsgOn ? t('board.lastBuilding') : t('board.deleteRegenNotice')}
-            </span>
-          )}
-          </div>
-          <div style={{ display: 'flex', gap: 10, width: '100%' }}>
-            <button
-              onClick={exitEditMode}
-              disabled={busy}
-              style={{
-                flex: 1, minHeight: 44, borderRadius: 'var(--radius-md)',
-                background: 'var(--color-surface)', color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
-                boxShadow: '0 6px 18px rgba(0,0,0,.18)',
-                fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
-                fontFamily: 'inherit', cursor: 'pointer',
-              }}
-            >
-              {t('board.cancel')}
-            </button>
-            <button
-              onClick={() => saveEdits({ deleting: true })}
-              disabled={selectedIds.size === 0 || busy}
-              style={{
-                flex: 2, minHeight: 44, borderRadius: 'var(--radius-md)',
-                background: selectedIds.size > 0 ? 'var(--color-text)' : 'var(--color-surface-2)',
-                color: selectedIds.size > 0 ? 'var(--color-bg)' : 'var(--color-text-dim)',
-                border: 'none',
-                boxShadow: selectedIds.size > 0 ? '0 6px 18px rgba(0,0,0,.25)' : 'none',
-                fontSize: 'var(--fs-body)', fontWeight: 'var(--fw-semibold)',
-                cursor: selectedIds.size === 0 ? 'default' : 'pointer',
-                fontFamily: 'inherit',
-                opacity: busy ? 0.6 : 1,
-                transition: 'background var(--motion-normal) var(--motion-ease), color var(--motion-normal) var(--motion-ease)',
-              }}
-            >
-              {busy === 'deleting'
-                ? t('board.deleting')
-                : selectedIds.size > 0
-                  ? t(selectedIds.size === 1 ? 'board.deleteCardOne' : 'board.deleteCardMany', { n: selectedIds.size })
-                  : t('board.selectToDelete')}
-            </button>
-          </div>
-        </div>
+        <EditActionBar
+          lastMsgOn={lastMsgOn}
+          regenNotice={showRegenNotice ? t('board.deleteRegenNotice') : null}
+          selectedCount={selectedIds.size}
+          busy={busy}
+          onCancel={exitEditMode}
+          onDelete={() => saveEdits({ deleting: true })}
+        />
       )}
     </PageShell>
   )
