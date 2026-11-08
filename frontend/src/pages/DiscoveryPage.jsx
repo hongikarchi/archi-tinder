@@ -780,7 +780,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
               >=10 likes: auto-promote then navigate to the intended destination.
                 Dispatches the custom event with skipNav:true so App.jsx persists
                 the session without forcing navigate('/swipe').
-              1-9 likes: discard draft and proceed immediately. */}
+              1-9 likes: no promotion; proceed immediately. The draft board is NOT
+                deleted — it was created server-side on the first feedback and stays
+                on the profile as a normal board. */}
           <button
             type="button"
             disabled={leaveModalPromoting}
@@ -817,7 +819,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
                 setLeaveModal(null)
                 proceed()
               } else {
-                // 1-9 likes: discard draft, leave immediately
+                // 1-9 likes: skip promotion and leave immediately (draft board is kept)
                 const proceed = leaveModal.proceed
                 setLeaveModal(null)
                 proceed()
