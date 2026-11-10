@@ -164,7 +164,8 @@ class ContactRequestReceivedView(MessagingView):
 
 
 class ContactRequestStatusView(MessagingView):
-    """GET /api/v1/contact-requests/status/?user_id= -> {state, can_request, reason}.
+    """GET /api/v1/contact-requests/status/?user_id= -> {state, can_request, reason,
+    blocked_by_me}.
 
     state: 'none' | 'sent' | 'connected'. Ignored (within the 30-day cooldown)
     maps to 'sent' — the sender is never told.
@@ -176,6 +177,9 @@ class ContactRequestStatusView(MessagingView):
       'unavailable'         -- everything else (blocked in either direction,
                                recipient guest / no personality / discovery
                                opt-out). PRIVACY: deliberately indistinguishable.
+
+    blocked_by_me: true only if the viewer blocked the target (one direction).
+    PRIVACY: never true because the target blocked the viewer.
     """
     throttle_classes = [MessageReadThrottle]
 
@@ -229,7 +233,10 @@ class ContactRequestStatusView(MessagingView):
                 reason = 'assessment_required'
             else:
                 reason = 'unavailable'
-        return Response({'state': state, 'can_request': can_request, 'reason': reason})
+        return Response({
+            'state': state, 'can_request': can_request, 'reason': reason,
+            'blocked_by_me': (not is_self) and services.has_blocked(me, target),
+        })
 
 
 class ContactRequestAcceptView(MessagingView):

@@ -5,6 +5,7 @@ import { reportWriteError } from '../utils/reportWriteError.js'
 import SwipeCard from '../components/SwipeCard.jsx'
 import { useCardSize } from '../hooks/useCardSize.js'
 import DiscoveryTriggerCard from '../components/DiscoveryTriggerCard.jsx'
+import DiscoveryCapCard from '../components/DiscoveryCapCard.jsx'
 import TutorialPopup from '../components/TutorialPopup.jsx'
 import SwipeGestureFrame from '../components/SwipeGestureFrame.jsx'
 import CardSkeleton from '../components/CardSkeleton.jsx'
@@ -12,11 +13,15 @@ import SwipeDeck from '../components/SwipeDeck.jsx'
 import { SWIPE_PREVENT_ALL } from '../components/swipeGestureConfig.js'
 import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import { useSwipeOrchestration } from '../hooks/useSwipeOrchestration.js'
+import { useCardLeanSource } from '../hooks/useCardLean.js'
 import { useKeyboardSwipe } from '../hooks/useKeyboardSwipe.js'
 import { useTranslation } from '../i18n/index.js'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
-import Modal from '../components/Modal.jsx'
+import LeaveDiscoveryModal from '../components/LeaveDiscoveryModal.jsx'
+import FinishReportButton from '../components/FinishReportButton.jsx'
+import DiscoveryPromoteOverlay from '../components/DiscoveryPromoteOverlay.jsx'
+import overlayStyles from '../components/DiscoveryPromoteOverlay.module.css'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -35,6 +40,34 @@ const SEEN_IDS_KEY = 'discovery_seen_ids'
 const CONTINUE_AFTER_TRIGGER_KEY = 'discovery_continue_after_trigger'
 
 const TRIGGER_CARD_ID = '__taste_trigger__'
+
+// Blocking promote (trigger-card right swipe): POST timeout and max wait for the
+// first Taste card image before navigating to /swipe.
+const PROMOTE_TIMEOUT_MS = 30000
+const FIRST_CARD_IMAGE_MAX_WAIT_MS = 3000
+
+// Resolves when the card's image is decoded/loaded, or after maxMs. Never rejects.
+function waitForCardImage(card, maxMs) {
+  const url = card?.image_url
+  if (!url) return Promise.resolve()
+  const ready = new Promise(resolve => {
+    try {
+      const img = new Image()
+      if (card.image_srcset) img.srcset = card.image_srcset
+      img.src = url
+      if (typeof img.decode === 'function') {
+        img.decode().then(resolve, resolve)
+      } else {
+        img.onload = img.onerror = () => resolve()
+      }
+    } catch {
+      resolve()
+    }
+  })
+  let timer
+  const timeout = new Promise(resolve => { timer = setTimeout(resolve, maxMs) })
+  return Promise.race([ready, timeout]).finally(() => clearTimeout(timer))
+}
 
 // Shake keyframes injected once per page mount
 const SHAKE_STYLE_ID = 'discovery-shake-style'
@@ -147,7 +180,37 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   // shakeCardId: the card id currently being shaken
   const [shakeCardId, setShakeCardId] = useState(null)
   const [promoteLoading, setPromoteLoading] = useState(false)
+  // Blocking overlay for the trigger-card right-swipe promote: 'idle' | 'loading' | 'error'.
+  // The ref mirrors it synchronously for the navigation-guard closure.
+  const [promoteBlock, setPromoteBlockState] = useState('idle')
+  const promoteBlockRef = useRef('idle')
+  // False once the page is unmounted (browser back etc. during the blocking
+  // promote): the in-flight handler must not navigate to /swipe afterwards.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+  function setPromoteBlock(v) {
+    promoteBlockRef.current = v
+    setPromoteBlockState(v)
+  }
+  const promoteBlocking = promoteBlock !== 'idle'
+  // Drag lean of the trigger / cap card (external store: no re-render mid-drag).
+  const triggerLean = useCardLeanSource()
+  const resetTriggerLean = triggerLean.reset
   const [capReached, setCapReached] = useState(false)
+  // capReached: the trigger card and the 50-cap card share this store; a left swipe on
+  // the trigger card leaves 'left' behind, so clear it when the cap card appears.
+  // (Declared AFTER the capReached state: the deps array is read during render.)
+  useEffect(() => { resetTriggerLean() }, [promoteBlocking, capReached, resetTriggerLean])
+  // Bumped to remount the 50-cap card's gesture frame at rest after it was
+  // swiped away but the user stayed (leave modal dismissed / overlay back).
+  const [capCardKey, setCapCardKey] = useState(0)
+  function restoreCapCard() {
+    resetTriggerLean()
+    setCapCardKey(k => k + 1)
+  }
   // FRONT-FLOW-1: shown once on first Discovery entry for newly registered
   // accounts — flag set by LoginPage's register-success path. DiscoveryPage
   // owns both localStorage keys end-to-end (component itself stays dumb).
@@ -252,6 +315,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   // Cleared on unmount so callers outside /discovery fall through immediately.
   useEffect(() => {
     discoveryNavigationGuard.check = (action, proceed) => {
+      // Promote call in flight: swallow the attempt (no modal, no proceed) so a
+      // tab/logout click does nothing and a second promote can never start.
+      if (promoteBlockRef.current === 'loading') return
       if (draftLikeCountRef.current < 1) {
         proceed()
         return
@@ -399,6 +465,18 @@ export default function DiscoveryPage({ showToast, onLogout }) {
     likeAction: 'like',
     dismissAction: 'pass',
     onCommit: (action) => {
+      // -- 50-cap card (no deck behind it; the deck is not advanced) --
+      if (capReached) {
+        if (action === 'like') {
+          // RIGHT swipe → promote to Taste (blocking overlay flow)
+          handlePromoteToTaste({ blockUi: true })
+        } else {
+          // LEFT swipe → Profile tab, through the Discovery leave guard
+          handleCapGoProfile()
+        }
+        return
+      }
+
       const card = topCard
       advance()
 
@@ -406,7 +484,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       if (isTriggerCard(card)) {
         if (action === 'like') {
           // RIGHT swipe → promote to Taste (기존 동작 유지)
-          handlePromoteToTaste()
+          handlePromoteToTaste({ blockUi: true })
         } else {
           // LEFT swipe → Discovery 계속; set Feature B flag so the persistent
           // "Taste로 저장·이동" button appears on all subsequent cards.
@@ -451,7 +529,10 @@ export default function DiscoveryPage({ showToast, onLogout }) {
 
   useKeyboardSwipe({
     onSwipe: async (dir) => { await cardRef.current?.swipe(dir) },
-    guardCondition: () => !!(capReached || !cardRef.current || !deck.length || showTutorial),
+    guardCondition: () => !!(
+      !cardRef.current || (!capReached && !deck.length) || showTutorial || promoteBlocking ||
+      (capReached && leaveModal)
+    ),
   })
 
   // FRONT-FLOW-1: tutorial dismiss — removing 'archithon_show_tutorial' (set only
@@ -462,11 +543,18 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   }
 
   // -- Promote to Taste (triggered by right-swipe on trigger card) --
-  async function handlePromoteToTaste() {
+  // opts.blockUi (trigger-card right swipe only): blocking overlay, error panel
+  // instead of a toast, and wait (<=3s) for the first Taste card image before
+  // navigating. Other callers (persistent CTA, 50-card button) are unchanged.
+  async function handlePromoteToTaste(opts) {
+    const blockUi = opts?.blockUi === true
     if (promoteLoading) return
     setPromoteLoading(true)
+    if (blockUi) setPromoteBlock('loading')
     try {
-      const result = await promoteToTaste(draftId)
+      const result = await (blockUi
+        ? promoteToTaste(draftId, { timeoutMs: PROMOTE_TIMEOUT_MS })
+        : promoteToTaste(draftId))
       // Clear draft session state — a future Discovery visit starts fresh
       setDraftId(null)
       setDraftLikeCount(0)
@@ -475,6 +563,19 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       sessionStorage.removeItem(DRAFT_ID_KEY)
       sessionStorage.removeItem(DRAFT_LIKES_KEY)
       sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+      if (blockUi) {
+        // Persist the session in App without navigating, then hold the overlay
+        // until the first Taste card image is ready (max 3s), then go.
+        window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
+          detail: { ...result, skipNav: true },
+        }))
+        await waitForCardImage(result?.next_image, FIRST_CARD_IMAGE_MAX_WAIT_MS)
+        // User left /discovery while we waited: the session is already persisted
+        // via the event above, so just skip the redirect.
+        if (!mountedRef.current) return
+        navigate('/swipe')
+        return
+      }
       // Hand off the session payload to App.jsx via custom event.
       window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', { detail: result }))
       navigate('/swipe')
@@ -484,13 +585,43 @@ export default function DiscoveryPage({ showToast, onLogout }) {
         setDeck(prev => prev.filter(c => !isTriggerCard(c)))
         triggerShownRef.current = false
         setDraftLikeCount(0)
+        setCapReached(false)
         reportWriteError(showToast, t('discovery.toastNotEnoughLikes'))
+        if (blockUi) setPromoteBlock('idle')
+      } else if (blockUi) {
+        // Overlay shows the failure message + retry / back buttons (no toast).
+        setPromoteBlock('error')
       } else {
         reportWriteError(showToast, t('discovery.toastAnalysisFailed'))
       }
     } finally {
       setPromoteLoading(false)
     }
+  }
+
+  // 50-cap card, LEFT swipe: same as tapping the Profile tab in TabBar
+  // (own profile + profileRefresh state), through the Discovery leave guard so
+  // the leave-warning modal shows first. The guard is registered by this page.
+  function handleCapGoProfile() {
+    const path = '/user/me'
+    const go = () => navigate(path, { state: { profileRefresh: Date.now() } })
+    if (discoveryNavigationGuard.check) discoveryNavigationGuard.check(path, go)
+    else go()
+  }
+
+  // Leave modal dismissed via "stay": bring the swiped-away cap card back.
+  function handleLeaveModalStay() {
+    setLeaveModal(null)
+    if (capReached && !leaveModalPromoting) restoreCapCard()
+  }
+
+  // Error panel: dismiss the overlay and fall back to the persistent
+  // "save taste & move" CTA (same state the left swipe on the trigger card sets).
+  function handleBackToDiscovery() {
+    setPromoteBlock('idle')
+    if (capReached) restoreCapCard()
+    setContinueAfterTrigger(true)
+    try { sessionStorage.setItem(CONTINUE_AFTER_TRIGGER_KEY, '1') } catch { /* ignore */ }
   }
 
   function handleRetry() {
@@ -502,6 +633,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
 
   // ── Render ─────────────────────────────────────────────────────────────── //
 
+  // Persistent bottom CTA is hidden on the 50-card screen (the cap card offers Taste itself).
+  const showFinishCta = continueAfterTrigger && !capReached
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -509,7 +643,8 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       height: 'var(--page-height)',
       overflow: 'hidden',
       background: 'var(--color-bg)',
-      padding: '20px 16px var(--tabbar-clearance)',
+      // + 52px once the fixed bottom CTA shows (44px + 8px gap)
+      padding: `20px 16px calc(var(--tabbar-clearance) + ${showFinishCta ? 52 : 0}px)`,
     }}>
 
       <PageTopControls onLogout={onLogout} />
@@ -520,128 +655,45 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       <div style={{ textAlign: 'center', width: '100%' }}>
         <PageLogoHeader padding={0} marginBottom={8} />
 
-        {/* Feature B: persistent "Taste로 저장·이동" CTA — shown after user left-swiped
-            the trigger card (Discovery 계속 선택). Rendered in the header (normal document
-            flow, before the absolute card stack) so it is always above the cards and
-            fully clickable. Primary CTA gradient per DESIGN.md §8.1, min-height 44px §3.2,
-            radius var(--radius-md) §3.1. position:relative + zIndex:10 + pointerEvents:auto
-            ensure it stays on top of the absolute-positioned card stack beneath it. */}
-        {continueAfterTrigger && (
-          <div style={{
-            width: '100%',
-            maxWidth: CARD_WIDTH,
-            margin: '10px auto 0',
-            position: 'relative',
-            zIndex: 10,
-            pointerEvents: 'auto',
-          }}>
-            <button
-              type="button"
-              onClick={handlePromoteToTaste}
-              disabled={promoteLoading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                width: '100%',
-                minHeight: 44,
-                padding: '0 20px',
-                borderRadius: 'var(--radius-md, 12px)',
-                border: 'none',
-                background: promoteLoading
-                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
-                  : 'var(--accent-1)',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: promoteLoading ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                letterSpacing: '-0.01em',
-                transition: `transform var(--motion-normal, 220ms) var(--motion-ease, cubic-bezier(0.4,0,0.2,1))`,
-              }}
-            >
-              {promoteLoading ? (
-                <>
-                  <div style={{
-                    width: 14, height: 14, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.8s linear infinite',
-                    flexShrink: 0,
-                  }} />
-                  {t('discovery.tasteAnalyzing')}
-                </>
-              ) : (
-                t('discovery.saveTasteAndMove')
-              )}
-            </button>
-          </div>
-        )}
       </div>
+
+      {/* Persistent "save taste and go to Taste" CTA — shown after the user
+          left-swiped the trigger card. Same fixed pill as the Taste swipe page's
+          finish button (sits above the TabBar); the page's bottom padding
+          reserves 52px so it never covers the card. */}
+      {showFinishCta && (
+        <FinishReportButton
+          onClick={handlePromoteToTaste}
+          disabled={promoteLoading}
+          loading={promoteLoading}
+          label={t('discovery.saveTasteAndMove')}
+          loadingLabel={t('discovery.tasteAnalyzing')}
+        />
+      )}
 
       {/* Card stack */}
       <div
+        className={promoteBlocking ? overlayStyles.blurStack : undefined}
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, position: 'relative', margin: 'auto 0' }}
       >
         {capReached ? (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            gap: 20, textAlign: 'center',
-            padding: '0 24px',
-            background: 'var(--color-bg)',
-            borderRadius: 20,
-          }}>
-            <p style={{
-              margin: 0,
-              fontSize: 16,
-              fontWeight: 700,
-              color: 'var(--color-text)',
-              lineHeight: 1.6,
-            }}>
-              <span style={{ color: 'var(--accent-1)' }}>{t('discovery.capReachedCount', { n: 50 })}</span>
-              {' '}{t('discovery.capReachedBody')}
-            </p>
-            <button
-              type="button"
-              onClick={handlePromoteToTaste}
-              disabled={promoteLoading}
-              style={{
-                minHeight: 44,
-                padding: '0 24px',
-                borderRadius: 12,
-                border: 'none',
-                background: promoteLoading
-                  ? 'color-mix(in srgb, var(--accent-1) 40%, transparent)'
-                  : 'var(--accent-1)',
-                color: '#fff',
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: promoteLoading ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
+          <SwipeDeck active>
+            <div
+              style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'auto' }}
             >
-              {promoteLoading ? (
-                <>
-                  <div style={{
-                    width: 14, height: 14, borderRadius: '50%',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    borderTopColor: '#fff',
-                    animation: 'spin 0.8s linear infinite',
-                    flexShrink: 0,
-                  }} />
-                  {t('discovery.tasteAnalyzing')}
-                </>
-              ) : (
-                t('discovery.startTasteDeep')
-              )}
-            </button>
-          </div>
+              <SwipeGestureFrame
+                key={capCardKey}
+                ref={cardRef}
+                onSwipe={onTinderSwipe}
+                onCardLeftScreen={onCardLeftScreen}
+                preventSwipe={promoteBlocking ? SWIPE_PREVENT_ALL : undefined}
+                onSwipeRequirementFulfilled={triggerLean.onFulfilled}
+                onSwipeRequirementUnfulfilled={triggerLean.onUnfulfilled}
+              >
+                <DiscoveryCapCard leanStore={triggerLean.store} />
+              </SwipeGestureFrame>
+            </div>
+          </SwipeDeck>
         ) : error && deck.length === 0 ? (
           <div style={{
             position: 'absolute', inset: 0,
@@ -734,11 +786,13 @@ export default function DiscoveryPage({ showToast, onLogout }) {
                       ref={isTop ? cardRef : null}
                       onSwipe={isTop ? onTinderSwipe : undefined}
                       onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
-                      preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
+                      preventSwipe={(isTop && !promoteBlocking) ? undefined : SWIPE_PREVENT_ALL}
                       className={isShaking ? 'discovery-shake' : undefined}
+                      onSwipeRequirementFulfilled={isTop && isTrigger ? triggerLean.onFulfilled : undefined}
+                      onSwipeRequirementUnfulfilled={isTop && isTrigger ? triggerLean.onUnfulfilled : undefined}
                     >
                       {isTrigger ? (
-                        <DiscoveryTriggerCard />
+                        <DiscoveryTriggerCard leanStore={isTop ? triggerLean.store : undefined} />
                       ) : (
                         <SwipeCard
                           card={card}
@@ -767,147 +821,72 @@ export default function DiscoveryPage({ showToast, onLogout }) {
             )}
           </>
         )}
+
+        {/* Blocking promote overlay — above the SwipeDeck (zIndex 5/4), captures all input */}
+        {promoteBlocking && (
+          <DiscoveryPromoteOverlay
+            phase={promoteBlock}
+            onRetry={() => handlePromoteToTaste({ blockUi: true })}
+            onBack={handleBackToDiscovery}
+          />
+        )}
       </div>
 
       {/* Leave-warning modal (DISCOVERY-PERF-3) — shown when user tries to navigate
-          away or log out while draftLikeCount >= 1. Built on the shared Modal
-          (DESIGN.md §8.10): mobile bottom sheet, desktop centered modal (max-width
-          480). Buttons min-height 44px per §3.2. */}
+          away or log out while draftLikeCount >= 1. Presentation lives in
+          LeaveDiscoveryModal (shared Modal underneath); the stay / leave logic stays here.
+            leave, >=10 likes: auto-promote then navigate to the intended destination.
+              Dispatches the custom event with skipNav:true so App.jsx persists
+              the session without forcing navigate('/swipe').
+            leave, 1-9 likes: no promotion; proceed immediately. The draft board is NOT
+              deleted — it was created server-side on the first feedback and stays
+              on the profile as a normal board. */}
       {leaveModal && (
-        <Modal
-          open
-          onClose={() => setLeaveModal(null)}
-          zIndex={1000}
-          closeLabel={t('modalB3.close')}
-          width={480}
-        >
-          <p style={{
-            margin: '0 0 20px',
-            paddingRight: 40,
-            fontSize: 'var(--fs-body)',
-            fontWeight: 400,
-            color: 'var(--color-text)',
-            lineHeight: 1.6,
-          }}>
-            {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-              ? t('discovery.leaveModalBodyConverged')
-              : t('discovery.leaveModalBodyDraft')}
-          </p>
-
-          {/* Primary action: stay */}
-          <button
-            type="button"
-            onClick={() => setLeaveModal(null)}
-            disabled={leaveModalPromoting}
-            style={{
-              display: 'block', width: '100%',
-              minHeight: 44,
-              padding: '0 16px',
-              borderRadius: 'var(--radius-md)',
-              border: 'none',
-              background: 'var(--accent-1)',
-              color: '#fff',
-              fontSize: 'var(--fs-body)',
-              fontWeight: 600,
-              cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit',
-              marginBottom: 10,
-              opacity: leaveModalPromoting ? 0.6 : 1,
-            }}
-          >
-            {t('discovery.leaveModalStay')}
-          </button>
-
-          {/* Secondary action: leave
-              >=10 likes: auto-promote then navigate to the intended destination.
-                Dispatches the custom event with skipNav:true so App.jsx persists
-                the session without forcing navigate('/swipe').
-              1-9 likes: discard draft and proceed immediately. */}
-          <button
-            type="button"
-            disabled={leaveModalPromoting}
-            onClick={async () => {
-              if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
-                // Auto-promote path: persist the Taste session, then go where the
-                // user was originally headed (not forced to /swipe).
-                const proceed = leaveModal.proceed
-                setLeaveModalPromoting(true)
-                try {
-                  const result = await promoteToTaste(draftId)
-                  // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
-                  setDraftId(null)
-                  setDraftLikeCount(0)
-                  setContinueAfterTrigger(false)
-                  triggerShownRef.current = false
-                  sessionStorage.removeItem(DRAFT_ID_KEY)
-                  sessionStorage.removeItem(DRAFT_LIKES_KEY)
-                  sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
-                  // Persist the session via App.jsx listener with skipNav:true so
-                  // App stores the project / calls applySessionResponse but does NOT
-                  // force-navigate to /swipe — proceed() will do the real navigation.
-                  window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
-                    detail: { ...result, skipNav: true },
-                  }))
-                } catch (err) {
-                  console.error('[LeaveModal] auto-promote failed:', err)
-                  // Surface a brief error toast but do NOT trap the user — still let
-                  // them proceed to their intended destination.
-                  if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
-                } finally {
-                  setLeaveModalPromoting(false)
-                }
-                setLeaveModal(null)
-                proceed()
-              } else {
-                // 1-9 likes: discard draft, leave immediately
-                const proceed = leaveModal.proceed
-                setLeaveModal(null)
-                proceed()
+        <LeaveDiscoveryModal
+          likeCount={draftLikeCount}
+          converged={draftLikeCount >= TASTE_NUDGE_THRESHOLD}
+          promoting={leaveModalPromoting}
+          onStay={handleLeaveModalStay}
+          onLeave={async () => {
+            if (draftLikeCount >= TASTE_NUDGE_THRESHOLD) {
+              // Auto-promote path: persist the Taste session, then go where the
+              // user was originally headed (not forced to /swipe).
+              const proceed = leaveModal.proceed
+              setLeaveModalPromoting(true)
+              try {
+                const result = await promoteToTaste(draftId)
+                // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
+                setDraftId(null)
+                setDraftLikeCount(0)
+                setContinueAfterTrigger(false)
+                triggerShownRef.current = false
+                sessionStorage.removeItem(DRAFT_ID_KEY)
+                sessionStorage.removeItem(DRAFT_LIKES_KEY)
+                sessionStorage.removeItem(CONTINUE_AFTER_TRIGGER_KEY)
+                // Persist the session via App.jsx listener with skipNav:true so
+                // App stores the project / calls applySessionResponse but does NOT
+                // force-navigate to /swipe — proceed() will do the real navigation.
+                window.dispatchEvent(new CustomEvent('archithon:promote-to-taste', {
+                  detail: { ...result, skipNav: true },
+                }))
+              } catch (err) {
+                console.error('[LeaveModal] auto-promote failed:', err)
+                // Surface a brief error toast but do NOT trap the user — still let
+                // them proceed to their intended destination.
+                if (showToast) showToast(t('discovery.toastSaveFailedLeave'), 'warning')
+              } finally {
+                setLeaveModalPromoting(false)
               }
-            }}
-            style={{
-              display: 'block', width: '100%',
-              minHeight: 44,
-              padding: '0 16px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border-soft)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text-muted)',
-              fontSize: 'var(--fs-body)',
-              fontWeight: 500,
-              cursor: leaveModalPromoting ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit',
-              opacity: leaveModalPromoting ? 0.6 : 1,
-            }}
-          >
-            {leaveModalPromoting ? (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <span style={{
-                  display: 'inline-block', width: 13, height: 13, borderRadius: '50%',
-                  border: '2px solid var(--color-text-dim)',
-                  borderTopColor: 'var(--accent-1)',
-                  animation: 'spin 0.8s linear infinite',
-                }} />
-                {t('discovery.tasteSaving')}
-              </span>
-            ) : (
-              <>
-                {t('discovery.leaveModalLeave')}
-                <span style={{
-                  display: 'block',
-                  fontSize: 'var(--fs-caption)',
-                  fontWeight: 400,
-                  color: 'var(--color-text-dim)',
-                  marginTop: 2,
-                }}>
-                  {draftLikeCount >= TASTE_NUDGE_THRESHOLD
-                    ? t('discovery.leaveModalSubConverged')
-                    : t('discovery.leaveModalSubDraft')}
-                </span>
-              </>
-            )}
-          </button>
-        </Modal>
+              setLeaveModal(null)
+              proceed()
+            } else {
+              // 1-9 likes: skip promotion and leave immediately (draft board is kept)
+              const proceed = leaveModal.proceed
+              setLeaveModal(null)
+              proceed()
+            }
+          }}
+        />
       )}
 
     </div>

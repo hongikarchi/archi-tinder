@@ -26,13 +26,13 @@ function adaptProjectToBoard(project, buildings) {
   }
 }
 
-// Both the session-result and recommended-architects requests are gated to the
-// board owner. `fetchResult: false` skips the owner-only session-result fetch (the persona
-// report page loads recommendations itself via getProjectRecommendations, which
-// is owner-only too: the report is owner-only, and the server nulls
-// final_report / analysis_report / axis_scores for non-owners. Only the persona
-// IMAGE stays public).
-export function useBoard(projectId, { fetchResult = true } = {}) {
+// The session-result request is owner-only. Recommended architects are fetched for
+// the owner and, for viewers, only when the board has a report (the server now
+// returns report data + recommendations to non-owners of PUBLIC boards).
+// `fetchResult: false` skips the owner-only session-result fetch (the merged
+// report page loads recommendations itself via getProjectRecommendations).
+// `enabled: false` makes the hook inert (the caller got the board from a parent).
+export function useBoard(projectId, { fetchResult = true, enabled = true } = {}) {
   const [board, setBoard] = useState(null)
   const [recommended, setRecommended] = useState([])
   const [recommendedArchitects, setRecommendedArchitects] = useState([])
@@ -43,6 +43,7 @@ export function useBoard(projectId, { fetchResult = true } = {}) {
   const reload = useCallback(() => setReloadKey(k => k + 1), [])
 
   useEffect(() => {
+    if (!enabled) return
     if (!projectId) {
       setBoard(null)
       setRecommended([])
@@ -105,7 +106,10 @@ export function useBoard(projectId, { fetchResult = true } = {}) {
         }
 
         // Fetch recommended architects in parallel — graceful degradation on failure.
-        if (isOwner) {
+        // Owner always; a viewer only for a board that carries a report (the
+        // endpoint is public for public boards, but report-less boards render the
+        // old detail page, which does not show architects to viewers).
+        if (isOwner || project.final_report) {
           getRecommendedArchitects(project.project_id)
             .then(architects => {
               if (cancelled) return
@@ -123,10 +127,34 @@ export function useBoard(projectId, { fetchResult = true } = {}) {
       })
 
     return () => { cancelled = true }
-  }, [projectId, fetchResult, reloadKey])
+  }, [projectId, fetchResult, enabled, reloadKey])
 
   // Expose a combined `loading` alias so existing consumers continue to work.
   const loading = buildingsLoading
 
   return { board, recommended, recommendedArchitects, loading, buildingsLoading, resultLoading, error, reload }
+}
+
+// Owner-only session result (predicted-like images) for a board that was loaded
+// elsewhere with `fetchResult: false`. Mirrors the fetch inside useBoard.
+export function useBoardSessionResult(board, enabled) {
+  const [recommended, setRecommended] = useState([])
+  const [resultLoading, setResultLoading] = useState(false)
+  const sessionId = board?.latest_session_id || null
+  const ownerId = board?.user?.user_id ?? board?.owner?.user_id
+  const viewerId = sessionStorage.getItem('archithon_user')
+  const isOwner = !!viewerId && ownerId != null && String(ownerId) === String(viewerId)
+  const active = enabled && isOwner && !!sessionId
+  useEffect(() => {
+    setRecommended([])
+    if (!active) { setResultLoading(false); return }
+    let cancelled = false
+    setResultLoading(true)
+    getResult({ session_id: sessionId })
+      .then(d => { if (!cancelled) setRecommended(d?.predicted_like_images || []) })
+      .catch(() => { /* leave empty */ })
+      .finally(() => { if (!cancelled) setResultLoading(false) })
+    return () => { cancelled = true }
+  }, [active, sessionId])
+  return { recommended, resultLoading }
 }

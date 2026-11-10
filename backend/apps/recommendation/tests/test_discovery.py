@@ -1463,6 +1463,37 @@ def test_promote_builds_pool_from_taste_seeded_pool(auth_client, user_profile):
 
 
 @pytest.mark.django_db
+def test_promote_fetches_seed_and_dislike_embeddings_in_one_call(auth_client, user_profile):
+    """Seeds + dislike-window ids go through ONE early get_pool_embeddings call;
+    the only other call is the pool lookup (a cache hit in production)."""
+    seeds = [f'bld_{i:06d}' for i in range(10)]
+    draft = create_discovery_draft(user_profile)
+    draft.liked_ids = [{'id': sid, 'intensity': 1.0} for sid in seeds]
+    draft.disliked_ids = ['bld_000050', 'bld_000051']
+    draft.save(update_fields=['liked_ids', 'disliked_ids'])
+
+    mock_emb = np.array([0.1] * 384, dtype=np.float64)
+    pool = seeds + ['bld_000010', 'bld_000011']
+    with (
+        patch(_PROMOTE_PATCH + 'get_pool_embeddings',
+              side_effect=lambda ids: {i: mock_emb for i in ids}) as gpe,
+        patch(_PROMOTE_PATCH + 'update_preference_vector', side_effect=lambda pv, emb, a: emb),
+        patch(_PROMOTE_PATCH + 'create_taste_seeded_pool',
+              return_value=(pool, {})),
+        patch(_PROMOTE_PATCH + 'get_buildings_by_ids', return_value=[_card('bld_000010')]),
+    ):
+        resp = auth_client.post(
+            '/api/v1/discovery/promote-to-taste/',
+            {'draft_id': str(draft.project_id)}, format='json',
+        )
+    assert resp.status_code == 201
+    assert gpe.call_count == 2
+    first = gpe.call_args_list[0][0][0]
+    assert set(first) == set(seeds) | {'bld_000050', 'bld_000051'}
+    assert list(gpe.call_args_list[1][0][0]) == pool
+
+
+@pytest.mark.django_db
 def test_promote_falls_back_to_relaxation_when_taste_pool_fails(auth_client, user_profile):
     """HNSW query failure must not 500 the promote: fall back to the old path."""
     draft = create_discovery_draft(user_profile)

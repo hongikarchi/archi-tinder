@@ -8,10 +8,10 @@
  *   image, bottom scrim + caption = board name only, a 28px glass heart top-right
  *   (hidden on the viewer's own board). The heart toggles the like and never
  *   expands the card.
- * Expanded — the SAME element grows to span the full grid row: BoardCover-style
- *   4:3 cover (radius-lg, soft border, E5 shadow), X top-left, 24px title with a
- *   32px glass heart on its right, owner/type/date meta line, and the board's
- *   buildings in a 2-col grid that scrolls INSIDE the fixed-height card.
+ * Expanded — the SAME element grows to span the full grid row as a rounded
+ *   panel holding ONLY the read-only viewer persona report (PersonaReportBody)
+ *   in an internal scroller, with a glass X pinned top-right. Data comes from
+ *   the page (`report` = usePublicBoardReport state).
  *
  * The page owns expand state, FLIP animation and like state; this component is
  * controlled (`board` carries is_reacted / reaction_count so the collapsed and
@@ -23,14 +23,15 @@
  *   onToggle    {(boardId) => void}   open / close
  *   onLike      {(board) => void}     like / unlike
  *   registerRef {(boardId, el|null) => void}  page-level element registry (FLIP)
+ *   report      {{status, data, retry}|undefined}  public report state (expanded only)
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getBoardReportImage } from '../api/people.js'
-import { getProject, getBoardBuildings } from '../api/projects.js'
-import { collectBoardBuildingIds } from '../hooks/useBoard.js'
 import { useNearViewport } from '../hooks/useNearViewport.js'
-import BuildingTile from '../pages/boardDetail/BuildingTile.jsx'
+import { PersonaReportBody, ReportSkeleton } from './PersonaReportPage.jsx'
+import EmptyState from './EmptyState.jsx'
 import { useTranslation } from '../i18n/index.js'
 import { safeImageMime } from '../utils/imageMime.js'
 import { throttleRetryDelayMs } from '../utils/throttleRetry.js'
@@ -52,15 +53,9 @@ function HeartIcon({ size }) {
   )
 }
 
-function formatDate(iso, language) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString(language === 'ko' ? 'ko-KR' : 'en-US', { month: 'numeric', day: 'numeric' })
-}
-
-export default function BoardSocialCard({ board, expanded, onToggle, onLike, registerRef }) {
-  const { t, language } = useTranslation()
+export default function BoardSocialCard({ board, expanded, onToggle, onLike, registerRef, report }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
   const id = board.board_id
   const rootRef = useRef(null)
   const closeRef = useRef(null)
@@ -95,29 +90,6 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
     return () => { cancelled = true; if (timer) clearTimeout(timer) }
   }, [id, near])
 
-  // Buildings: loaded the first time the card is expanded.
-  const [bState, setBState] = useState({ status: 'idle', items: [] })
-  const loadTokenRef = useRef(0)
-  const loadBuildings = useCallback(() => {
-    const token = ++loadTokenRef.current
-    setBState({ status: 'loading', items: [] })
-    getProject(id, { throwOnError: true })
-      .then(project => {
-        if (!project) throw new Error('not found')
-        return getBoardBuildings(collectBoardBuildingIds(project), { throwOnError: true })
-      })
-      .then(items => {
-        if (token === loadTokenRef.current) setBState({ status: 'ready', items })
-      })
-      .catch(() => {
-        if (token === loadTokenRef.current) setBState({ status: 'error', items: [] })
-      })
-  }, [id])
-  useEffect(() => {
-    if (expanded && bState.status === 'idle') loadBuildings()
-  }, [expanded, bState.status, loadBuildings])
-  useEffect(() => () => { loadTokenRef.current++ }, [])
-
   // Focus: into the card on open, back to the tile on close.
   useEffect(() => {
     if (expanded) {
@@ -148,7 +120,8 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
 
   const heartLabel = isMe ? t('socialBoard.likeOwn') : t(liked ? 'socialBoard.unlike' : 'socialBoard.like')
   const ownerLabel = atHandle(board)
-  const date = formatDate(board.updated_at, language)
+  const reportData = report?.data
+  const ownerId = reportData?.ownerId ?? board.user_id
 
   return (
     <article
@@ -160,23 +133,23 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
       tabIndex={expanded ? -1 : undefined}
       aria-label={expanded ? title : undefined}
     >
-      <div className={styles.frame}>
-        {image ? (
-          <img
-            src={image}
-            alt={t('socialBoard.reportImageAlt', { title })}
-            loading="lazy"
-            style={photoCardImageStyle}
-            draggable={false}
-          />
-        ) : (
-          <div className={`${styles.placeholder} ${imageFailed ? '' : 'skeleton-shimmer'}`}>
-            {imageFailed && !expanded && <span className={styles.placeholderText}>{t('socialBoard.noImage')}</span>}
-          </div>
-        )}
-        <div style={photoCardScrimStyle} className={styles.scrim} />
+      {!expanded && (
+        <div className={styles.frame}>
+          {image ? (
+            <img
+              src={image}
+              alt={t('socialBoard.reportImageAlt', { title })}
+              loading="lazy"
+              style={photoCardImageStyle}
+              draggable={false}
+            />
+          ) : (
+            <div className={`${styles.placeholder} ${imageFailed ? '' : 'skeleton-shimmer'}`}>
+              {imageFailed && <span className={styles.placeholderText}>{t('socialBoard.noImage')}</span>}
+            </div>
+          )}
+          <div style={photoCardScrimStyle} />
 
-        {!expanded && (
           <button
             ref={openRef}
             type="button"
@@ -185,21 +158,27 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
             aria-label={t('socialBoard.openCard', { title })}
             aria-expanded="false"
           />
-        )}
 
-        {!expanded && !isMe && (
-          <button
-            type="button"
-            className={`${styles.frontHeart} ${liked ? styles.on : ''}`}
-            onClick={handleHeart}
-            aria-label={heartLabel}
-            aria-pressed={liked}
-          >
-            <HeartIcon size={13} />
-          </button>
-        )}
+          {!isMe && (
+            <button
+              type="button"
+              className={`${styles.frontHeart} ${liked ? styles.on : ''}`}
+              onClick={handleHeart}
+              aria-label={heartLabel}
+              aria-pressed={liked}
+            >
+              <HeartIcon size={13} />
+            </button>
+          )}
 
-        {expanded && (
+          <div style={photoCardCaptionStyle}>
+            <h2 className={styles.title} style={photoCardTitleStyle}>{title}</h2>
+          </div>
+        </div>
+      )}
+
+      {expanded && (
+        <>
           <button
             ref={closeRef}
             type="button"
@@ -213,62 +192,63 @@ export default function BoardSocialCard({ board, expanded, onToggle, onLike, reg
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-        )}
 
-        <div className={styles.cap} style={expanded ? undefined : photoCardCaptionStyle}>
-          <div className={styles.titleRow}>
-            <div className={styles.titleCol}>
-              <h2 className={styles.title} style={expanded ? undefined : photoCardTitleStyle}>{title}</h2>
-              {expanded && (
-                <div className={styles.owner}>
-                  {ownerLabel && <span>{ownerLabel}</span>}
-                  {board.type_code && <span className={styles.type}>{board.type_code}</span>}
-                  {date && <span>· {date}</span>}
-                </div>
-              )}
-            </div>
-            {expanded && (
-              <button
-                type="button"
-                className={`${styles.heartIcon} ${liked ? styles.on : ''}`}
-                onClick={handleHeart}
-                disabled={isMe}
-                title={isMe ? t('socialBoard.likeOwn') : undefined}
-                aria-label={heartLabel}
-                aria-pressed={liked}
-              >
-                <HeartIcon size={16} />
-              </button>
+          {/* data-report-content: the page fades this in late during the grow FLIP. */}
+          <div className={styles.detail} data-report-content>
+            {(!report || report.status === 'idle' || report.status === 'loading') && (
+              <ReportSkeleton label={t('persona.loadingFetch')} />
+            )}
+            {report?.status === 'gone' && (
+              <EmptyState
+                neutral
+                title={t('persona.unavailableTitle')}
+                body={t('persona.unavailableBody')}
+                actionLabel={t('socialBoard.closeCard')}
+                onAction={() => onToggle(id)}
+              />
+            )}
+            {report?.status === 'error' && (
+              <div className={styles.note}>
+                <p>{t('socialBoard.reportError')}</p>
+                <button type="button" className={styles.retry} onClick={report.retry}>{t('socialBoard.retry')}</button>
+              </div>
+            )}
+            {report?.status === 'ready' && reportData && (
+              <PersonaReportBody
+                finalReport={reportData.finalReport}
+                axisScores={reportData.axisScores}
+                reportImage={reportData.reportImage}
+                reportImageMime={reportData.reportImageMime}
+                meta={{
+                  visibility: 'public',
+                  buildingCount: reportData.likedBuildings.length,
+                  reactionCount: board.reaction_count ?? 0,
+                  ownerLabel: ownerLabel || undefined,
+                  onOwner: ownerId != null ? () => navigate(`/user/${ownerId}`) : undefined,
+                }}
+                likedBuildings={reportData.likedBuildings}
+                recommendations={reportData.recommendations}
+                architects={reportData.architects}
+                onOpenBuilding={card => {
+                  const bid = card?.image_id || card?.canonical_bld_id || card?.building_id
+                  if (bid) navigate(`/buildings/${bid}`)
+                }}
+                onOpenArchitect={aid => navigate(`/architects/${aid}`)}
+                actionsSlot={isMe ? null : (
+                  <button
+                    type="button"
+                    className={`${styles.likePill} ${liked ? styles.on : ''}`}
+                    onClick={handleHeart}
+                    aria-pressed={liked}
+                  >
+                    <HeartIcon size={14} />
+                    {t('socialBoard.likeTaste', { n: board.reaction_count ?? 0 })}
+                  </button>
+                )}
+              />
             )}
           </div>
-        </div>
-      </div>
-
-      {expanded && (
-        <div className={styles.detail}>
-          {bState.status === 'ready' && bState.items.length > 0 && (
-            <p className={styles.label}>{t('socialBoard.buildingsLabel', { n: bState.items.length })}</p>
-          )}
-          {(bState.status === 'idle' || bState.status === 'loading') && (
-            <div className={styles.bgrid} aria-hidden="true">
-              {[0, 1, 2, 3].map(i => <div key={i} className={`${styles.bSkeleton} skeleton-shimmer`} />)}
-            </div>
-          )}
-          {bState.status === 'error' && (
-            <div className={styles.note}>
-              <p>{t('socialBoard.buildingsError')}</p>
-              <button type="button" className={styles.retry} onClick={loadBuildings}>{t('socialBoard.retry')}</button>
-            </div>
-          )}
-          {bState.status === 'ready' && bState.items.length === 0 && (
-            <div className={styles.note}><p>{t('socialBoard.buildingsEmpty')}</p></div>
-          )}
-          {bState.status === 'ready' && bState.items.length > 0 && (
-            <div className={styles.bgrid}>
-              {bState.items.map(b => <BuildingTile key={b.id || b.image_id} building={b} />)}
-            </div>
-          )}
-        </div>
+        </>
       )}
     </article>
   )

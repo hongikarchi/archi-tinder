@@ -3,12 +3,12 @@
  * Shared in-flight store for report REGENERATIONS (sibling of reportImageJobs.js).
  *
  * Several independent triggers can regenerate the same board's persona report
- * (swipe-end in App, BoardReportPage stale-on-open, the manual button). The server
+ * (swipe-end in App, the manual button). The server
  * keeps report_stale=true until the first one commits, so without coordination a
  * second trigger sends a second paid LLM call. regenerate(id) joins the running
  * promise instead. `afterSuccess` (leader only) runs once when the new report has
- * landed, used to chain the persona-image regeneration AFTER the report so the
- * image prompt is built from the NEW report; it runs even if the caller unmounted.
+ * landed; it runs even if the caller unmounted. It must NOT be used to regenerate
+ * the persona image: the image is regenerated only by the owner's refresh button.
  * First generations are not routed here (they are not regenerate:true).
  */
 export function createReportJobs(generate) {

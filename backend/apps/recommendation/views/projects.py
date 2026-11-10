@@ -30,7 +30,7 @@ from ..caches import (
     PROJECT_RECOMMENDATIONS_TTL,
     get_project_recommendations_cache_key,
 )
-from ..report_signature import liked_signature
+from ..report_signature import liked_count, liked_signature
 from ..services import session_service
 from ..throttles import ProjectRecommendationsThrottle
 from ..perf_timing import endpoint, stage
@@ -184,9 +184,10 @@ class ProjectDetailView(APIView):
     DELETE: owner-only — returns 404 for cross-user (not 403) to avoid leaking
             project existence to non-owners.
 
-    Report fields (final_report, analysis_report, axis_scores) are owner-only:
-    non-owners and anonymous callers on a public board receive them as null and
-    report_stale=False. Structural fields and the report image stay public.
+    Report fields: analysis_report is owner-only. final_report and axis_scores
+    are shown to non-owners/anonymous only on a public, confirmed board (this
+    detail GET passes share_report_with_viewers); report_stale is always False
+    for non-owners.
     """
     permission_classes = [AllowAny]
 
@@ -209,7 +210,10 @@ class ProjectDetailView(APIView):
         # touch connections['buildings'] or write -- a legacy-format stored
         # axis_scores is shown as-is; it is only upgraded to the new
         # embedding-projection shape on report generate/regenerate.
-        data = ProjectSerializer(project, context={'request': request}).data
+        data = ProjectSerializer(
+            project,
+            context={'request': request, 'share_report_with_viewers': True},
+        ).data
         if not is_owner:
             data.pop('conversation_history', None)
         if request.user.is_authenticated and profile:
@@ -306,6 +310,7 @@ class ProjectDetailView(APIView):
                     project.final_report = {
                         **project.final_report,
                         'source_signature': liked_signature(project.liked_ids),
+                        'source_count': liked_count(project.liked_ids),
                     }
                     update_fields.append('final_report')
                 project.liked_ids = [item for item in project.liked_ids if _entry_id(item) not in remove_set]
@@ -343,26 +348,31 @@ class ProjectDetailView(APIView):
 class ProjectRecommendationsView(APIView):
     """GET /api/v1/projects/{project_id}/recommendations/ — FULL-REPORT-UI-1.
 
-    OWNER-ONLY (the recommendations are part of the persona report; non-owners
-    must not see them). Non-owner (public or private board, or anonymous) ->
-    403 {'detail': 'Forbidden'}; unknown project 404. The access check runs
+    Owner, or anyone (incl. anonymous) when the board is public and not temp.
+    Otherwise: anonymous -> 404 (identical to unknown id), authenticated
+    non-owner -> 403 {'detail': 'Forbidden'}; unknown project 404. The access check runs
     BEFORE the cache lookup, so the (requester-independent) cached payload is
-    only ever served to the owner.
+    only served to permitted callers.
     Response: {'predicted_like_images': [card, ...]} — same cards and order as
     SessionResultView's predicted images; never the session id. Empty list when
     the board has no session / no like vectors. Cached per project (see
     get_project_recommendations_cache_key).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     throttle_classes = [ProjectRecommendationsThrottle]
 
     def get(self, request, pk):
         from django.core.cache import cache as _cache
 
         profile = _get_profile(request)
-        project = get_object_or_404(Project.objects.only('project_id', 'user_id', 'visibility'), project_id=pk)
+        project = Project.objects.only('project_id', 'user_id', 'visibility', 'is_temp').filter(project_id=pk).first()
+        if project is None:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
         is_owner = profile and project.user_id == profile.pk
-        if not is_owner:
+        if not is_owner and (project.visibility != 'public' or project.is_temp):
+            if not request.user.is_authenticated:
+                # Same 404 as an unknown id: no existence oracle for anonymous.
+                return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
             return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
         cache_key = get_project_recommendations_cache_key(str(pk))

@@ -19,6 +19,8 @@ _MAX_BLOB_BYTES = 65536   # 64 KB total JSON size cap
 # Report-derived columns: visible to the board owner only. Structural fields
 # (name, liked_ids, visibility, reaction_count, user, report_image(_mime)) stay.
 _REPORT_ONLY_FIELDS = ('final_report', 'analysis_report', 'axis_scores')
+# Internal final_report metadata never shown to non-owner viewers.
+_VIEWER_HIDDEN_REPORT_KEYS = ('source_signature', 'source_count', 'generation_id')
 
 
 class ProjectSerializer(serializers.ModelSerializer):
@@ -188,14 +190,34 @@ class ProjectSerializer(serializers.ModelSerializer):
         """
         if not self._is_owner(instance):
             instance = copy.copy(instance)
+            # Detail view only (context flag) and only for a public, confirmed
+            # board: viewers also get final_report + axis_scores (read-only
+            # persona report). analysis_report stays owner-only. List views
+            # never set the flag (their querysets defer these columns).
+            share = (
+                self.context.get('share_report_with_viewers')
+                and instance.visibility == 'public'
+                and not instance.is_temp
+            )
             for name in _REPORT_ONLY_FIELDS:
+                if share and name in ('final_report', 'axis_scores'):
+                    if name == 'final_report' and isinstance(instance.final_report, dict):
+                        # Strip internal bookkeeping from viewers; shallow copy
+                        # so the stored/cached dict is never mutated.
+                        instance.__dict__[name] = {
+                            k: v for k, v in instance.final_report.items()
+                            if k not in _VIEWER_HIDDEN_REPORT_KEYS
+                        }
+                    continue
                 instance.__dict__[name] = None
         return super().to_representation(instance)
 
     def get_report_stale(self, obj):
         # True iff the stored report carries a source_signature that no longer
         # matches the board's current liked buildings. No report / no signature
-        # (legacy) / equal -> False.
+        # (legacy) / equal -> False. Viewers can't regenerate: always False.
+        if not self._is_owner(obj):
+            return False
         return is_report_stale(obj.final_report, obj.liked_ids)
 
     class Meta:

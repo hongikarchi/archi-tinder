@@ -23,11 +23,39 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-10 21:01 KST',
-    head: '17399c9',
-    branch: 'feature/sns-messages-tab',
+    updatedAt: '2026-11-10 22:57 KST',
+    head: 'cbdb4d1',
+    branch: 'upd486',
   },
   done: [
+    {
+      id: 'PR #487',
+      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
+      completedAt: '2026-11-10',
+      prs: [487],
+      note: '',
+    },
+    {
+      id: 'PR #485',
+      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
+      completedAt: '2026-11-10',
+      prs: [485],
+      note: '',
+    },
+    {
+      id: 'PR #484',
+      title: 'fix(report): wait for in-flight swipes on auto-complete path + report generation diagnostics',
+      completedAt: '2026-11-10',
+      prs: [484],
+      note: '',
+    },
+    {
+      id: 'PR #483',
+      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
+      completedAt: '2026-11-10',
+      prs: [483],
+      note: '',
+    },
     {
       id: 'PR #479',
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
@@ -54,34 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FRONT-MESSAGE-ICON-1): 메시지 아이콘 겹친 말풍선 + 버튼 피드백',
       completedAt: '2026-11-07',
       prs: [475],
-      note: '',
-    },
-    {
-      id: 'PR #474',
-      title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
-      completedAt: '2026-10-31',
-      prs: [474],
-      note: '',
-    },
-    {
-      id: 'PR #469',
-      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
-      completedAt: '2026-10-31',
-      prs: [469],
-      note: '',
-    },
-    {
-      id: 'PR #466',
-      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
-      completedAt: '2026-10-31',
-      prs: [466],
-      note: '',
-    },
-    {
-      id: 'PR #465',
-      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
-      completedAt: '2026-10-31',
-      prs: [465],
       note: '',
     },
   ],
@@ -518,6 +518,34 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 487,
+      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
+      mergedAt: '2026-11-10T13:55:32Z',
+      mergedAtKST: '2026-11-10 22:55 KST',
+      sha: '597ff93',
+    },
+    {
+      number: 485,
+      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
+      mergedAt: '2026-11-10T13:55:02Z',
+      mergedAtKST: '2026-11-10 22:55 KST',
+      sha: 'a7eb694',
+    },
+    {
+      number: 484,
+      title: 'fix(report): wait for in-flight swipes on auto-complete path + report generation diagnostics',
+      mergedAt: '2026-11-10T13:57:04Z',
+      mergedAtKST: '2026-11-10 22:57 KST',
+      sha: 'cbdb4d1',
+    },
+    {
+      number: 483,
+      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
+      mergedAt: '2026-11-10T13:56:08Z',
+      mergedAtKST: '2026-11-10 22:56 KST',
+      sha: '3e00472',
+    },
+    {
       number: 479,
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
       mergedAt: '2026-11-07T01:52:17Z',
@@ -544,34 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-07T01:25:33Z',
       mergedAtKST: '2026-11-07 10:25 KST',
       sha: '998fb4d',
-    },
-    {
-      number: 474,
-      title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
-      mergedAt: '2026-10-31T02:34:15Z',
-      mergedAtKST: '2026-10-31 11:34 KST',
-      sha: 'ead0dc2',
-    },
-    {
-      number: 469,
-      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
-      mergedAt: '2026-10-31T00:05:41Z',
-      mergedAtKST: '2026-10-31 09:05 KST',
-      sha: '5e27f53',
-    },
-    {
-      number: 466,
-      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
-      mergedAt: '2026-10-31T00:20:25Z',
-      mergedAtKST: '2026-10-31 09:20 KST',
-      sha: '5bf2141',
-    },
-    {
-      number: 465,
-      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
-      mergedAt: '2026-10-31T00:20:14Z',
-      mergedAtKST: '2026-10-31 09:20 KST',
-      sha: '78008f4',
     },
   ],
   agents: [
@@ -1214,6 +1214,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/contests/management/commands/send_contest_deadline_reminders.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/contests/migrations/0001_initial.py',
       role: '',
     },
@@ -1259,6 +1263,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/contests/tests/test_contests_api.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_deadline_reminders.py',
       role: '',
     },
     {
@@ -1403,6 +1411,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/notifications/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/0002_contest_deadline_type.py',
       role: '',
     },
     {
@@ -2706,6 +2718,14 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
       path: 'frontend/src/api/admin.js',
       role: '',
     },
@@ -2842,6 +2862,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/ChoiceCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/ChoiceCard.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/ConfirmDialog.jsx',
       role: '',
     },
@@ -2852,6 +2880,18 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
       role: '세션·스와이프 디버그 오버레이',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryCapCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryPromoteOverlay.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryPromoteOverlay.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
@@ -2899,6 +2939,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/KakaoLoginButton.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/LeaveDiscoveryModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/LeaveDiscoveryModal.module.css',
       role: '',
     },
     {
@@ -3170,6 +3218,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/messaging/blockedUsers.js',
       role: '',
     },
@@ -3250,6 +3306,18 @@ window.PROJECT_STATE = {
       role: '보드 상세 로딩 훅',
     },
     {
+      path: 'frontend/src/hooks/useBoardEdit.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useBoardReaction.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useCardLean.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useCardSize.js',
       role: '',
     },
@@ -3284,6 +3352,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
+    },
+    {
+      path: 'frontend/src/hooks/usePublicBoardReport.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useRegeneration.jsx',
@@ -3380,6 +3452,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/BoardReportPage.jsx',
       role: '페르소나 리포트 페이지',
+    },
+    {
+      path: 'frontend/src/pages/BoardRoute.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.jsx',
@@ -3574,11 +3650,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/pages/boardDetail/EditActionBar.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/boardDetail/RecommendedTile.jsx',
       role: '보드 추천 타일 카드',
     },
     {
       path: 'frontend/src/pages/boardDetail/RecommendedTile.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardReport/BoardReportParts.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardReport/boardReport.module.css',
       role: '',
     },
     {
@@ -3814,11 +3902,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/shareBoard.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/socialFeed.js',
       role: '',
     },
     {
       path: 'frontend/src/utils/socialFeed.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.test.mjs',
       role: '',
     },
     {
@@ -3880,6 +3980,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

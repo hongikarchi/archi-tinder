@@ -59,3 +59,37 @@ export function pickServerBoardName(fetched) {
   const name = fetched && typeof fetched.name === 'string' ? fetched.name.trim() : ''
   return name || null
 }
+
+/** Distinct liked building ids on a board payload (entries are {id,intensity} or legacy strings). */
+export function countDistinctLiked(board) {
+  const ids = Array.isArray(board?.liked_ids) ? board.liked_ids : []
+  const set = new Set()
+  for (const item of ids) {
+    const id = item && typeof item === 'object' ? item.id : item
+    if (id !== undefined && id !== null && id !== '') set.add(String(id))
+  }
+  return set.size
+}
+
+/**
+ * Why a stale report is regenerated: buildings 'added', 'removed', or 'changed'
+ * (swap, or legacy report without `source_count`).
+ */
+export function staleReason({ likedCount, report }) {
+  const src = report?.source_count
+  if (!Number.isInteger(src) || !Number.isFinite(likedCount)) return 'changed'
+  if (likedCount > src) return 'added'
+  if (likedCount < src) return 'removed'
+  return 'changed'
+}
+
+const STALE_REASON_KEYS = {
+  added: 'persona.staleAdded',
+  removed: 'persona.staleRemoved',
+  changed: 'persona.staleRegenerating',
+}
+
+/** i18n key for the regeneration notice of a stale report. */
+export function staleReasonKey(args) {
+  return STALE_REASON_KEYS[staleReason(args)]
+}

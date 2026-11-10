@@ -4,10 +4,10 @@
  * helpers). DESIGN.md §11 "Pending exceptions" E1-E10 are INTENTIONALLY
  * off-scale and live in this one file so they can be promoted to tokens later:
  *   E1  13px body text            (.pattern, .description)
- *   E2  11px tags, 2px 8px, 18px  (.tag)
+ *   E2  12px tags, 4px 12px       (.tag)
  *   E3  28px page gutter          (--rp-gutter)
- *   E5  card shadow               (.recBig)
- *   E6  rank pill / 118px building card  (--rp-card-w, .pill*)
+ *   E5  rank pill shadow          (.pill)
+ *   E6  rank pill / 128px building card  (--rp-card-w, .pill*)
  *   E7  letter-spacing -.02em name, .14em eyebrow
  *   E8  reveal 700ms, name settle 900ms, stagger via --d
  * Do not round these to the type / spacing scale.
@@ -29,7 +29,7 @@
 .body,
 .skel {
   --rp-gutter: 28px;     /* E3 */
-  --rp-card-w: 118px;    /* E6 */
+  --rp-card-w: 128px;    /* E6 */
   --rp-reveal: 700ms;    /* E8 */
   --rp-settle: 900ms;    /* E8 */
   word-break: keep-all;
@@ -56,7 +56,9 @@
 }
 
 /* ── Hero ────────────────────────────────────────────────────────────────── */
-.hero { padding: 20px var(--rp-gutter) 32px; }
+.hero { padding: 20px var(--rp-gutter) 26px; }
+.topNotice { padding: 14px var(--rp-gutter) 0; }
+.actions { margin-top: 18px; }
 
 .meta {
   margin: 0 0 20px;
@@ -64,9 +66,21 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   font-size: var(--fs-caption);
 }
+
+.ownerLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.ownerLink:hover { color: var(--accent-1); }
+.ownerLink:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; border-radius: 4px; }
 
 .eyebrow {
   margin: 0 0 8px;
@@ -77,13 +91,9 @@
   text-transform: uppercase;
 }
 .eyebrowLead {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   margin: 0 0 14px;
   letter-spacing: 0.14em; /* E7 */
 }
-.eyebrowLine { width: 18px; height: 1px; background: var(--color-text-muted); }
 
 .personaName {
   margin: 0 0 12px;
@@ -102,7 +112,7 @@
 }
 .description {
   margin: 0;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: 13px; /* E1 */
   line-height: 1.8;
   letter-spacing: -0.005em;
@@ -162,7 +172,7 @@
   position: relative;
   padding: 0 16px;
   text-align: center;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
   line-height: 1.5;
@@ -175,7 +185,7 @@
   border: 1px solid var(--color-border-soft);
 }
 .imgFailText {
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: var(--fs-body);
   font-weight: var(--fw-medium);
 }
@@ -209,7 +219,7 @@
   padding: 0 16px;
   text-align: center;
 }
-.imgNoneCap { font-size: var(--fs-caption); color: var(--color-text-muted); }
+.imgNoneCap { font-size: var(--fs-caption); color: var(--color-text); }
 
 .refreshWrap {
   position: absolute;
@@ -251,72 +261,102 @@
   color: var(--color-text-dim);
 }
 
-/* ── Analysis sections ──────────────────────────────────────────────────── */
-.section {
-  padding: 32px var(--rp-gutter);
-  border-top: 1px solid var(--color-border-soft);
-}
+.section { padding: 26px var(--rp-gutter); }
+/* Section heading: small bold title + flexible hairline */
 .h2 {
-  margin: 0 0 12px;
-  font-size: var(--fs-emphasis);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  font-size: 14px; /* E1 +1 */
   font-weight: var(--fw-bold);
   letter-spacing: -0.01em;
   color: var(--color-text);
 }
-.h2Taste { margin-bottom: 18px; }
+.h2::after { content: ''; flex: 1; height: 1px; background: var(--color-border-soft); }
 .pattern {
   margin: 0 0 16px;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: 13px; /* E1 */
   line-height: 1.75;
 }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag {
   border-radius: var(--radius-pill);
-  font-weight: var(--fw-bold);
-  font-size: 11px;        /* E2 */
-  padding: 2px 8px;       /* E2 */
-  line-height: 18px;      /* E2 */
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-weight: var(--fw-regular);
+  font-size: 12px;        /* E2 */
+  padding: 4px 12px;      /* E2 */
+  line-height: 1.4;
 }
-.tagP { background: color-mix(in srgb, var(--accent-1) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-1) 22%, transparent); color: var(--accent-1); }
-.tagS { background: color-mix(in srgb, var(--accent-2) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-2) 22%, transparent); color: var(--accent-2); }
-.tagM { background: var(--color-tag-bg); border: 1px solid var(--color-tag-border); color: var(--color-tag-label); }
 
 .legacy {
   margin: -6px 0 12px;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: var(--fs-caption);
   line-height: 1.6;
 }
-.legacyLink {
-  padding: 0;
+
+/* Recommended architects: simple row list, hairline between rows. */
+.archList { display: flex; flex-direction: column; }
+.archRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 0;
   border: 0;
   background: none;
-  color: var(--accent-1);
-  font: inherit;
-  font-weight: var(--fw-semibold);
-  text-decoration: underline;
+  color: var(--color-text);
+  font-family: inherit;
+  text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
+}
+.archRow + .archRow { border-top: 1px solid var(--color-border-soft); }
+.archRow:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; border-radius: var(--radius-sm); }
+.archAvatar {
+  position: relative;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--color-surface-2);
+}
+.archAvatarImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.archText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.archName {
+  font-size: 15px;
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archSub {
+  font-size: var(--fs-caption);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.archGo {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
 }
 
 /* ── Building rows ──────────────────────────────────────────────────────── */
-.rowSection {
-  padding: 28px 0;
-  border-top: 1px solid var(--color-border-soft);
-}
-.rowHead { padding: 0 var(--rp-gutter) 14px; }
-.rowHead .eyebrow { margin: 0 0 5px; }
-.rowTitle {
-  margin: 0;
-  font-size: var(--fs-emphasis);
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.01em;
-  color: var(--color-text);
-}
+/* The row bleeds to the page edges; padding restores the gutter. */
 .row {
   display: flex;
   gap: 10px;
   overflow-x: auto;
+  margin: 0 calc(var(--rp-gutter) * -1);
   padding: 0 var(--rp-gutter) 4px;
   scrollbar-width: none;
 }
@@ -325,11 +365,10 @@
 .card {
   position: relative;
   flex: 0 0 var(--rp-card-w); /* E6 */
-  aspect-ratio: 3 / 4;
-  border-radius: var(--radius-md);
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
   overflow: hidden;
   background: var(--color-surface-2);
-  border: 1px solid var(--color-border-soft);
   cursor: pointer;
 }
 .cardImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -347,88 +386,26 @@
   overflow: hidden;
 }
 
-.recBigWrap { padding: 0 var(--rp-gutter) 10px; }
-.recBig {
-  aspect-ratio: 4 / 3;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); /* E5 */
-  flex: none;
-  width: 100%;
-}
-.recBig .cardScrim { background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.2) 48%, rgba(0, 0, 0, 0) 72%); }
-.recBig .cardCap { padding: 16px; }
-.recBig .cardTitle { font-size: var(--fs-body); margin-bottom: 2px; }
-.recSub { margin: 0; color: rgba(255, 255, 255, 0.7); font-size: var(--fs-caption); }
-
-.recSmall .cardScrim { background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.2) 48%, rgba(0, 0, 0, 0) 72%); }
-
+/* Rank pill: white in both themes so it reads on photos. */
 .pill {
   position: absolute;
   top: 8px;
   left: 8px;
-  padding: 0 6px;
-  line-height: 16px; /* E6 */
+  padding: 0 8px;
+  line-height: 20px; /* E6 */
   border-radius: var(--radius-pill);
-  background: var(--color-scrim-soft);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #fff;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); /* E5 */
+  color: #1F2328;
   font-size: var(--fs-caption);
   font-weight: var(--fw-bold);
-}
-.recBig .pill { top: 12px; left: 12px; padding: 2px 8px; line-height: 18px; }
-
-/* ── Footer ─────────────────────────────────────────────────────────────── */
-.footerOwner {
-  margin: 22px var(--rp-gutter) 0;
-  padding: 24px 0 8px;
-  border-top: 1px solid var(--color-border-soft);
-  text-align: center;
-}
-.footerLegacy {
-  margin: 0 0 14px;
-  color: var(--color-text-dim);
-  font-size: var(--fs-caption);
-  line-height: 1.6;
-}
-.regenLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-dim);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-medium);
-  font-family: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  text-decoration-thickness: 1px;
-  transition: color var(--motion-fast) var(--motion-ease);
-}
-.regenLink:hover:not([disabled]) { color: var(--color-text); }
-.regenLink[disabled] { opacity: 0.6; cursor: default; }
-.regenLinkAccent { color: var(--accent-1); }
-.regenMsg {
-  margin: 10px 0 0;
-  min-height: 16px;
-  color: var(--color-text-muted);
-  font-size: var(--fs-caption);
-}
-.pulse { animation: pulseBtn 1s ease-out 2; }
-@keyframes pulseBtn {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-1) 45%, transparent); }
-  100% { box-shadow: 0 0 0 14px transparent; }
 }
 
 /* ── Loading skeleton + state slot ──────────────────────────────────────── */
 .skel { max-width: 680px; margin: 0 auto; padding: 20px var(--rp-gutter); }
 .skelLabel {
   margin: 0 0 20px;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   font-size: var(--fs-caption);
   font-weight: var(--fw-semibold);
 }
@@ -453,5 +430,4 @@
 
 @media (prefers-reduced-motion: reduce) {
   .skeletonPulse, .bar, .skelImg { animation: none; }
-  .pulse { animation: none; }
 }

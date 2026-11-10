@@ -51,15 +51,28 @@ class TestProjectRecommendations:
         assert resp.json() == {'predicted_like_images': _CARDS}
         assert 'latest_session_id' not in resp.json()
 
-    def test_non_owner_public_board_403(self, other_auth_client, user_profile):
-        # Persona report content is owner-only, even on a public board.
+    def test_non_owner_public_board_gets_cards(self, other_auth_client, user_profile):
         project = _project(user_profile, visibility='public')
         _session(project, user_profile)
-        with patch(_BUILD) as build:
+        with patch(_BUILD, return_value=(_CARDS, [], None, None)):
             resp = other_auth_client.get(_url(project.project_id))
+        assert resp.status_code == 200
+        assert resp.json() == {'predicted_like_images': _CARDS}
+
+    def test_anonymous_public_board_gets_cards(self, api_client, user_profile):
+        project = _project(user_profile, visibility='public')
+        _session(project, user_profile)
+        with patch(_BUILD, return_value=(_CARDS, [], None, None)):
+            resp = api_client.get(_url(project.project_id))
+        assert resp.status_code == 200
+        assert resp.json() == {'predicted_like_images': _CARDS}
+
+    def test_non_owner_temp_public_board_403(self, other_auth_client, user_profile):
+        project = Project.objects.create(
+            user=user_profile, name='T', visibility='public', is_temp=True,
+        )
+        resp = other_auth_client.get(_url(project.project_id))
         assert resp.status_code == 403
-        assert resp.json() == {'detail': 'Forbidden'}
-        build.assert_not_called()
 
     def test_non_owner_private_board_403(self, other_auth_client, user_profile):
         project = _project(user_profile, visibility='private')
@@ -70,10 +83,17 @@ class TestProjectRecommendations:
         assert resp.json() == {'detail': 'Forbidden'}
         build.assert_not_called()
 
-    def test_anonymous_401(self, api_client, user_profile):
-        project = _project(user_profile, visibility='public')
-        resp = api_client.get(_url(project.project_id))
-        assert resp.status_code == 401
+    def test_anonymous_private_temp_unknown_identical_404(self, api_client, user_profile):
+        private = _project(user_profile, visibility='private')
+        temp = _project(user_profile)
+        Project.objects.filter(pk=temp.pk).update(is_temp=True)
+        resps = [
+            api_client.get(_url(private.project_id)),
+            api_client.get(_url(temp.project_id)),
+            api_client.get(_url(uuid.uuid4())),
+        ]
+        assert [r.status_code for r in resps] == [404, 404, 404]
+        assert resps[0].json() == resps[1].json() == resps[2].json()
 
     def test_unknown_project_404(self, auth_client):
         resp = auth_client.get(_url(uuid.uuid4()))
@@ -108,7 +128,7 @@ class TestProjectRecommendations:
     def test_cached_owner_payload_not_served_to_non_owner(
         self, auth_client, other_auth_client, user_profile,
     ):
-        project = _project(user_profile, visibility='public')
+        project = _project(user_profile, visibility='private')
         _session(project, user_profile)
         with patch(_BUILD, return_value=(_CARDS, [], None, None)):
             assert auth_client.get(_url(project.project_id)).status_code == 200  # warms cache

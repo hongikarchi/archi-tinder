@@ -70,7 +70,7 @@ function BuildingCard({ building, onClick }) {
   )
 }
 
-export default function ArchitectSection({ architect, onBuildingClick, onProfileClick }) {
+export default function ArchitectSection({ architect, onBuildingClick, onProfileClick, hideLabel = false }) {
   const { t } = useTranslation()
   const buildings = architect?.buildings || []
 
@@ -78,17 +78,19 @@ export default function ArchitectSection({ architect, onBuildingClick, onProfile
     <div className={styles.section}>
       {/* Header row */}
       <div style={{ marginBottom: 10 }}>
-        <span style={{
-          display: 'block',
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--color-text-muted)',
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          marginBottom: 6,
-        }}>
-          {t('board.recommendedOffice')}
-        </span>
+        {!hideLabel && (
+          <span style={{
+            display: 'block',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-muted)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>
+            {t('board.recommendedOffice')}
+          </span>
+        )}
         <div style={{
           display: 'flex',
           alignItems: 'center',
