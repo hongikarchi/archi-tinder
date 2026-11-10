@@ -12,7 +12,7 @@ const REASON_MAX = 500
  * `targetType`: 'user' | 'profile' | 'message'. System messages must never be
  * passed here (the backend rejects kind=system) — callers only offer the
  * report affordance on kind=user messages.
- * Always a centered modal above the messages sheet (zIndex 320 > 300).
+ * Always a centered modal above the messages page (zIndex 320 > 300).
  */
 export default function ReportDialog({ targetType, targetId, onClose }) {
   const { t } = useTranslation()

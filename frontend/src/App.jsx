@@ -11,7 +11,7 @@ import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
   LoginPage, TasteStartPage, UserProfilePage, ResultsPage,
   BuildingDetailPage, BoardDetailPage, BoardReportPage, UploadWorkPage,
-  ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, CompetitionListPage,
+  ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, MessagesPage, CompetitionListPage,
   CompetitionDetailPage, SettingsPage, AccountScreen, NotificationsScreen,
   NotificationInboxScreen, AppearanceScreen, EditProfileScreen, SaveBoardModal,
   VerifyGateModal, prefetchLikelyNextPages,
@@ -1193,6 +1193,10 @@ export default function App() {
           <Route path="notifications" element={<NotificationInboxScreen onLogout={handleLogout} />} />
           <Route path="assessment" element={<AssessmentPage onLogout={handleLogout} />} />
           <Route path="people" element={<PeopleDiscoveryPage onLogout={handleLogout} />} />
+          {/* FRONT-MESSAGES-TAB-1 — 메시지 탭. /messages = 받은 요청 + 대화 목록,
+              /messages/:conversationId = 대화. 같은 페이지가 둘 다 렌더한다. */}
+          <Route path="messages" element={<MessagesPage onLogout={handleLogout} />} />
+          <Route path="messages/:conversationId" element={<MessagesPage onLogout={handleLogout} />} />
           {/* FRONT-COMP-PROTO-1 — 공모전 팀빌딩 프로토타입. Social 탭의 두 번째
               세그먼트. 목 데이터 + localStorage 만 쓰며 백엔드가 없다. */}
           <Route path="competitions" element={<CompetitionListPage onLogout={handleLogout} />} />

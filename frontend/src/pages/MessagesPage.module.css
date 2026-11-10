@@ -1,0 +1,36 @@
+/*
+ * MessagesPage.module.css — /messages tab root + /messages/:conversationId
+ * (FRONT-MESSAGES-TAB-1). Page shell per DESIGN.md §3.3: full `--page-height`,
+ * bottom content clears the floating TabBar via `--tabbar-clearance` (the inbox
+ * list owns it as scroll padding in Messaging.module.css `.scroll`; the
+ * conversation body owns it below the composer).
+ */
+
+.page {
+  height: var(--page-height);
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.header {
+  flex-shrink: 0;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Conversation: composer sits above the capsule, message list scrolls above it. */
+.bodyConversation {
+  padding-bottom: var(--tabbar-clearance);
+}

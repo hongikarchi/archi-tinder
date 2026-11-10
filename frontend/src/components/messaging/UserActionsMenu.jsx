@@ -18,7 +18,7 @@ import styles from './Messaging.module.css'
  * UI / hides the contact CTA); `onUnblocked` after a successful unblock. After blocking, the same menu item flips to
  * "Unblock" for the rest of the session — the API has no block-status read, so
  * the state lives in the shared `blockedUsers` store (every menu instance for
- * this user agrees, even after the conversation sheet is reopened).
+ * this user agrees, even after the conversation is reopened).
  * `onOverlayChange(open)` lets a host sheet suspend its own ESC-to-close while
  * the dropdown or a dialog owns Escape.
  */

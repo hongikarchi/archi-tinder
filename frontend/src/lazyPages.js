@@ -56,6 +56,7 @@ export const UploadWorkPage = lazyPage(() => import('./pages/UploadWorkPage.jsx'
 export const ArchitectProfilePage = lazyPage(() => import('./pages/ArchitectProfilePage.jsx'))
 export const AssessmentPage = lazyPage(() => import('./pages/AssessmentPage.jsx'))
 export const PeopleDiscoveryPage = lazyPage(loadPeopleDiscoveryPage)
+export const MessagesPage = lazyPage(() => import('./pages/MessagesPage.jsx'))
 export const CompetitionListPage = lazyPage(() => import('./pages/CompetitionListPage.jsx'))
 export const CompetitionDetailPage = lazyPage(() => import('./pages/CompetitionDetailPage.jsx'))
 export const SettingsPage = lazyPage(() => import('./pages/settings/SettingsPage.jsx'))

@@ -10,8 +10,10 @@ export const locales = {
       discovery: '탐색',
       taste:     '검색',
       social:    '소셜',
+      messages:  '메시지',
       profile:   '프로필',
-      profileUnread: '프로필, 안 읽은 항목 {n}건',
+      profileUnread: '프로필, 안 읽은 알림 {n}건',
+      messagesUnread: '메시지, 안 읽음 {n}건',
     },
     discovery: {
       loading: '취향 탐색 중…',
@@ -1128,9 +1130,6 @@ export const locales = {
     },
     messaging: {
       title:        '메시지',
-      label:        '메시지',
-      open:         '메시지 열기',
-      openWithCount: '메시지 열기, 안 읽음 {n}건',
       close:        '닫기',
       back:         '뒤로',
       retry:        '다시 시도',
@@ -1208,8 +1207,10 @@ export const locales = {
       discovery: 'Explore',
       taste:     'Search',
       social:    'Social',
+      messages:  'Messages',
       profile:   'Profile',
-      profileUnread: 'Profile, {n} unread items',
+      messagesUnread: 'Messages, {n} unread',
+      profileUnread: 'Profile, {n} unread notifications',
     },
     discovery: {
       loading: 'Exploring your taste…',
@@ -2326,9 +2327,6 @@ export const locales = {
     },
     messaging: {
       title:        'Messages',
-      label:        'Messages',
-      open:         'Open messages',
-      openWithCount: 'Open messages, {n} unread',
       close:        'Close',
       back:         'Back',
       retry:        'Try again',

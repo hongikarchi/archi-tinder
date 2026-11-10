@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import Avatar from '../Avatar.jsx'
-import FloatingIconButton from '../FloatingIconButton.jsx'
 import Skeleton from '../Skeleton.jsx'
 import UserActionsMenu from './UserActionsMenu.jsx'
 import ReportDialog from './ReportDialog.jsx'
@@ -17,7 +16,9 @@ const MESSAGE_MAX = 1000
 const STICK_THRESHOLD = 80
 
 /**
- * ConversationView — View B of the messages sheet (FULL-MESSAGING-1).
+ * ConversationView — the conversation body of the /messages/:id page
+ * (FULL-MESSAGING-1; page-hosted since FRONT-MESSAGES-TAB-1). The back button
+ * lives in the page's PageTopControls, not here.
  *
  * Bubbles (mine right / accent, theirs left), `kind:'system'` messages as a
  * centered i18n caption (never DB text), composer (1..1000 chars). On entry
@@ -28,7 +29,7 @@ const STICK_THRESHOLD = 80
  * (no overlapping requests, no setInterval). Stops on unmount (back / close)
  * and while the tab is hidden; resumes immediately on becoming visible.
  */
-export default function ConversationView({ conversation, onBack, onOverlayChange, onOpenProfile }) {
+export default function ConversationView({ conversation, onOpenProfile }) {
   const { t, language } = useTranslation()
   const { id: conversationId, other } = conversation
   const otherName = userHandle(other) || t('messaging.unknownUser')
@@ -41,7 +42,6 @@ export default function ConversationView({ conversation, onBack, onOverlayChange
   const [sendError, setSendError] = useState(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [reportMessageId, setReportMessageId] = useState(null)
-  const [menuOverlay, setMenuOverlay] = useState(false)
 
   const listRef = useRef(null)
   const textareaRef = useRef(null)
@@ -51,12 +51,6 @@ export default function ConversationView({ conversation, onBack, onOverlayChange
 
   // Mirror `closed` so the poll loop can stop scheduling once closed.
   useEffect(() => { closedRef.current = closed }, [closed])
-
-  // Tell the host sheet when a dropdown/dialog owns Escape.
-  const overlay = menuOverlay || reportMessageId != null
-  useEffect(() => {
-    onOverlayChange?.(overlay)
-  }, [overlay, onOverlayChange])
 
   // Append (dedupe by id) WITHOUT touching the poll cursor. Used by the send
   // path: advancing the cursor to our own message id would make the next poll
@@ -215,12 +209,6 @@ export default function ConversationView({ conversation, onBack, onOverlayChange
   return (
     <>
       <div className={styles.convHeader}>
-        <FloatingIconButton onClick={onBack} ariaLabel={t('messaging.back')} title={t('messaging.back')}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-        </FloatingIconButton>
         {other?.user_id != null && onOpenProfile ? (
           <div className={styles.convTitle}>
             <button
@@ -244,7 +232,6 @@ export default function ConversationView({ conversation, onBack, onOverlayChange
             userId={other.user_id}
             name={otherName}
             onBlocked={() => { closedRef.current = true; setClosed(true); setSendError(null) }}
-            onOverlayChange={setMenuOverlay}
           />
         )}
       </div>

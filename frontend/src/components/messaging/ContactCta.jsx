@@ -4,7 +4,6 @@ import { useTranslation } from '../../i18n/index.js'
 import { getContactStatus } from '../../api/messaging.js'
 import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
 import GreetingSheet from './GreetingSheet.jsx'
-import MessagesSheet from './MessagesSheet.jsx'
 
 /**
  * ContactCta — the "관심 있어요" button on ANOTHER user's profile
@@ -20,8 +19,9 @@ import MessagesSheet from './MessagesSheet.jsx'
  *                           guest recipient are indistinguishable by design)
  *   sent                 -> disabled "보냄" (an ignored request is
  *                           indistinguishable by design, D10)
- *   connected            -> "메시지 보내기", opens the messages sheet on that
- *                           conversation
+ *   connected            -> "메시지 보내기", navigates to the /messages tab page
+ *                           (the status API returns no conversation id, so the
+ *                           page resolves the conversation by this peer)
  * Status fetch failure -> retry button (one fetch per click, no auto loop).
  * Loading, flag OFF, or `hidden` (I blocked them) -> renders nothing; when OFF
  * it never calls the API. `buttonClassName` lets the host page keep its own CTA styling.
@@ -34,7 +34,6 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
   const [loadFailed, setLoadFailed] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [greetingOpen, setGreetingOpen] = useState(false)
-  const [sheet, setSheet] = useState(null) // { conversationId } | null
 
   useEffect(() => {
     if (!enabled || !userId || hidden) return undefined
@@ -62,11 +61,9 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
     setStatus(null)
     setLoadFailed(false)
     setGreetingOpen(false)
-    setSheet(null)
   }
 
-  const sheetsOpen = greetingOpen || !!sheet
-  if (!enabled || (!status && !loadFailed && !sheetsOpen)) return null
+  if (!enabled || (!status && !loadFailed && !greetingOpen)) return null
 
   const { state, can_request: canRequest, reason } = status || {}
 
@@ -74,10 +71,17 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
     setGreetingOpen(false)
     if (res?.status === 'connected') {
       setStatus({ state: 'connected', can_request: false })
-      setSheet({ conversationId: res.conversation_id ?? null })
+      openMessages(res.conversation_id ?? null)
     } else {
       setStatus({ state: 'sent', can_request: false })
     }
+  }
+
+  // Known conversation -> straight to it; otherwise the inbox page, told which
+  // peer to open (it jumps to that conversation once the list is loaded).
+  function openMessages(conversationId) {
+    if (conversationId != null) navigate(`/messages/${conversationId}`)
+    else navigate('/messages', { state: { peerUserId: userId } })
   }
 
   function handleRetry() {
@@ -91,7 +95,7 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
 
   let button = null
   if (hidden) {
-    button = null // peer blocked: hide the button only; open sheets stay mounted
+    button = null // peer blocked: hide the button only; an open greeting sheet stays mounted
   } else if (state === 'sent') {
     button = (
       <button type="button" className={buttonClassName} disabled>
@@ -100,7 +104,7 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
     )
   } else if (state === 'connected') {
     button = (
-      <button type="button" className={buttonClassName} onClick={() => setSheet({ conversationId: null })}>
+      <button type="button" className={buttonClassName} onClick={() => openMessages(null)}>
         {t('messaging.sendMessage')}
       </button>
     )
@@ -149,13 +153,6 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
           recipientId={userId}
           onClose={() => setGreetingOpen(false)}
           onSent={handleSent}
-        />
-      )}
-      {sheet && (
-        <MessagesSheet
-          initialConversationId={sheet.conversationId}
-          initialPeerUserId={userId}
-          onClose={() => setSheet(null)}
         />
       )}
     </>

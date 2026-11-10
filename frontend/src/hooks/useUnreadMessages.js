@@ -1,6 +1,6 @@
 /**
- * useUnreadMessages — shared unread count for the messaging badge (profile
- * message pill) and the TabBar profile dot (FULL-MESSAGING-1, D6/D8).
+ * useUnreadMessages — shared unread count for the TabBar messages tab dot
+ * (FULL-MESSAGING-1, D6/D8; moved from the profile pill by FRONT-MESSAGES-TAB-1).
  *
  * Same contract as useUnreadNotifications: fetch on mount + on document
  * visibilitychange (tab becomes visible) + on route change. Deliberately NO
@@ -9,7 +9,7 @@
  *
  * The count lives in a tiny module-level store so every consumer agrees;
  * concurrent non-forced refreshes share one in-flight request, so TabBar and
- * the profile pill mounting together cost a single GET.
+ * the /messages page mounting together cost a single GET.
  *
  * Feature flag OFF => the hook returns 0 and never touches the network.
  */
