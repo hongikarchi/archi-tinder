@@ -47,3 +47,29 @@ test('decrement never goes below 0', () => {
   s.decrement()
   assert.equal(s.pending, 0)
 })
+
+test('excluding=1 resolves when the other swipe finishes while own is pending', async () => {
+  const s = createSwipeSettler({ timeoutMs: 5000 })
+  s.increment(); s.increment() // other + own
+  const p = s.wait({ excluding: 1 })
+  assert.equal(s.waiterCount, 1)
+  s.decrement() // other done; own still pending
+  assert.equal(await p, true)
+  assert.equal(s.pending, 1)
+  assert.equal(s.waiterCount, 0)
+})
+
+test('excluding=1 resolves immediately when only own is pending', async () => {
+  const s = createSwipeSettler({ timeoutMs: 5000 })
+  s.increment()
+  assert.equal(await s.wait({ excluding: 1 }), true)
+  assert.equal(s.waiterCount, 0)
+})
+
+test('excluding timeout resolves false and cleans up waiters', async () => {
+  const s = createSwipeSettler({ timeoutMs: 20 })
+  s.increment(); s.increment(); s.increment()
+  assert.equal(await s.wait({ excluding: 1 }), false)
+  assert.equal(s.waiterCount, 0)
+  assert.equal(s.pending, 3)
+})

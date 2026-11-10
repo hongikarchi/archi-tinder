@@ -87,6 +87,36 @@ class TestReportStale:
         project.refresh_from_db()
         assert project.final_report['source_count'] == 2
 
+    def test_generate_logs_used_count(self, auth_client, user_profile, caplog):
+        project = _make_project(user_profile)
+        with caplog.at_level('INFO', logger='apps.recommendation'):
+            resp = _generate(auth_client, project)
+        assert resp.status_code == 200
+        text = '\n'.join(r.getMessage() for r in caplog.records)
+        assert 'generation start' in text
+        assert 'liked_used=2 liked_now=2' in text
+        assert not [r for r in caplog.records if r.levelname == 'WARNING' and 'likes but board' in r.getMessage()]
+
+    def test_like_during_generation_logs_warning(self, auth_client, user_profile, caplog):
+        project = _make_project(user_profile)
+
+        def _add_like(*a, **k):
+            p = Project.objects.get(pk=project.pk)
+            p.liked_ids = list(p.liked_ids) + _liked('B003')
+            p.save(update_fields=['liked_ids'])
+            return {'summary': 'fresh'}
+
+        gen = patch('apps.recommendation.services.generate_persona_report', side_effect=_add_like)
+        axis = patch('apps.recommendation.views.reports.compute_axis_scores', return_value={'form': 0.1})
+        evict = patch('apps.recommendation.views.reports.evict_projects_list')
+        with gen, axis, evict, caplog.at_level('INFO', logger='apps.recommendation'):
+            resp = auth_client.post(
+                f'/api/v1/projects/{project.project_id}/report/generate/', {}, format='json',
+            )
+        assert resp.status_code == 200
+        warns = [r.getMessage() for r in caplog.records if r.levelname == 'WARNING']
+        assert any('built from 2 likes but board now has 3' in w for w in warns)
+
     def test_legacy_stamp_writes_source_count(self, auth_client, user_profile):
         project = _make_project(user_profile, final_report={'summary': 'legacy'})
         resp = auth_client.patch(

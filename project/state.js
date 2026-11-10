@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-10 22:55 KST',
-    head: '597ff93',
-    branch: 'upd483',
+    updatedAt: '2026-11-10 22:56 KST',
+    head: '3e00472',
+    branch: 'upd484',
   },
   done: [
     {
@@ -40,6 +40,13 @@ window.PROJECT_STATE = {
       title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
       completedAt: '2026-11-10',
       prs: [485],
+      note: '',
+    },
+    {
+      id: 'PR #483',
+      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
+      completedAt: '2026-11-10',
+      prs: [483],
       note: '',
     },
     {
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
       completedAt: '2026-10-31',
       prs: [474],
-      note: '',
-    },
-    {
-      id: 'PR #469',
-      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
-      completedAt: '2026-10-31',
-      prs: [469],
       note: '',
     },
   ],
@@ -532,6 +532,13 @@ window.PROJECT_STATE = {
       sha: 'a7eb694',
     },
     {
+      number: 483,
+      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
+      mergedAt: '2026-11-10T13:56:08Z',
+      mergedAtKST: '2026-11-10 22:56 KST',
+      sha: '3e00472',
+    },
+    {
       number: 479,
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
       mergedAt: '2026-11-07T01:52:17Z',
@@ -565,13 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-31T02:34:15Z',
       mergedAtKST: '2026-10-31 11:34 KST',
       sha: 'ead0dc2',
-    },
-    {
-      number: 469,
-      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
-      mergedAt: '2026-10-31T00:05:41Z',
-      mergedAtKST: '2026-10-31 09:05 KST',
-      sha: '5e27f53',
     },
   ],
   agents: [
@@ -1938,6 +1938,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
     },
@@ -2712,6 +2720,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
     },
     {
       path: 'frontend/src/App.jsx',
@@ -3903,6 +3919,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/swipeSettle.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.test.mjs',
       role: '',
     },
     {
