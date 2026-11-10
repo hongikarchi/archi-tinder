@@ -185,7 +185,8 @@ export default function MessagesPage({ onLogout }) {
 
   // Cold deep link (/messages/:id, no state): list still loading, conversation
   // unknown -> neutral shell instead of flashing the inbox title + skeleton.
-  const resolvingDeepLink = convId != null && !active
+  // A failed load falls through to the inbox error state (retry re-resolves).
+  const resolvingDeepLink = convId != null && !active && loadState === 'loading'
 
   return (
     <div className={styles.page}>
