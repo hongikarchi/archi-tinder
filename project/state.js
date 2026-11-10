@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-10 20:17 KST',
-    head: '17399c9',
-    branch: 'feature/sns-unblock-refresh',
+    updatedAt: '2026-11-10 22:55 KST',
+    head: 'a7eb694',
+    branch: 'upd487',
   },
   done: [
+    {
+      id: 'PR #485',
+      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
+      completedAt: '2026-11-10',
+      prs: [485],
+      note: '',
+    },
     {
       id: 'PR #479',
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
       completedAt: '2026-10-31',
       prs: [466],
-      note: '',
-    },
-    {
-      id: 'PR #465',
-      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
-      completedAt: '2026-10-31',
-      prs: [465],
       note: '',
     },
   ],
@@ -518,6 +518,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 485,
+      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
+      mergedAt: '2026-11-10T13:55:02Z',
+      mergedAtKST: '2026-11-10 22:55 KST',
+      sha: 'a7eb694',
+    },
+    {
       number: 479,
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
       mergedAt: '2026-11-07T01:52:17Z',
@@ -565,13 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-31T00:20:25Z',
       mergedAtKST: '2026-10-31 09:20 KST',
       sha: '5bf2141',
-    },
-    {
-      number: 465,
-      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
-      mergedAt: '2026-10-31T00:20:14Z',
-      mergedAtKST: '2026-10-31 09:20 KST',
-      sha: '78008f4',
     },
   ],
   agents: [
@@ -1214,6 +1214,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/contests/management/commands/send_contest_deadline_reminders.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/contests/migrations/0001_initial.py',
       role: '',
     },
@@ -1259,6 +1263,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/contests/tests/test_contests_api.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_deadline_reminders.py',
       role: '',
     },
     {
@@ -1403,6 +1411,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/notifications/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/0002_contest_deadline_type.py',
       role: '',
     },
     {
@@ -3884,6 +3896,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

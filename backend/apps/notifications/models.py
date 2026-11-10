@@ -13,11 +13,14 @@ class Notification(models.Model):
       reaction:          {project_id: str(uuid), project_title: str}
       password_changed:  {}
       new_login:         {}
+      contest_deadline:  {contest_id: int, contest_title: str, stage: 7|1,
+                          kind: 'apply'|'deadline', deadline_at: ISO str}
     """
     TYPE_CHOICES = [
         ('reaction', 'Reaction'),
         ('password_changed', 'Password Changed'),
         ('new_login', 'New Login'),
+        ('contest_deadline', 'Contest Deadline'),
     ]
     CATEGORY_CHOICES = [
         ('social', 'Social'),

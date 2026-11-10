@@ -11,6 +11,8 @@
  *                  AS the project_id -- see BoardDetailPage.jsx react/unreact
  *                  calls which pass `board.project_id` straight through)
  *   - password_changed / new_login (category 'security') -> /settings/account
+ *   - contest_deadline (actor-less, category 'social') -> /competitions/{payload.contest_id}
+ *                  when contest_id is a positive integer, else /competitions
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -31,7 +33,7 @@ const PAGE_SIZE = 20
 
 // Actor-less (security) notifications get a shield glyph in the Avatar slot
 // (same 40px circle, same surface/border tokens as Avatar's fallback).
-function SecurityBadge({ size = 40 }) {
+function SecurityBadge({ size = 40, children }) {
   return (
     <div
       aria-hidden="true"
@@ -52,10 +54,25 @@ function SecurityBadge({ size = 40 }) {
         width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       >
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        {children || <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />}
       </svg>
     </div>
   )
+}
+
+// Contest-deadline reminders have no actor either; neutral clock glyph in the
+// same badge shell.
+function ClockBadge({ size = 40 }) {
+  return (
+    <SecurityBadge size={size}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </SecurityBadge>
+  )
+}
+
+function isPositiveInt(v) {
+  return Number.isInteger(v) && v > 0
 }
 
 function sentenceFor(n, t) {
@@ -71,6 +88,15 @@ function sentenceFor(n, t) {
       return t('notifications.sentence.passwordChanged')
     case 'new_login':
       return t('notifications.sentence.newLogin')
+    case 'contest_deadline': {
+      const title = n.payload?.contest_title || ''
+      const { kind, stage } = n.payload || {}
+      const known = (kind === 'apply' || kind === 'deadline') && (stage === 7 || stage === 1)
+      const key = known
+        ? `contestDeadline${kind === 'apply' ? 'Apply' : ''}${stage}`
+        : 'contestDeadline'
+      return t(`notifications.sentence.${key}`, { title })
+    }
     default:
       return ''
   }
@@ -156,6 +182,11 @@ export default function NotificationInboxScreen({ onLogout }) {
     }
     if (n.type === 'reaction' && n.payload?.project_id) {
       navigate(`/board/${n.payload.project_id}`)
+      return
+    }
+    if (n.type === 'contest_deadline') {
+      const id = n.payload?.contest_id
+      navigate(isPositiveInt(id) ? `/competitions/${id}` : '/competitions')
     }
   }
 
@@ -202,7 +233,9 @@ export default function NotificationInboxScreen({ onLogout }) {
                 >
                   {n.category === 'security'
                     ? <SecurityBadge size={40} />
-                    : <Avatar src={n.actor?.avatar_url} name={n.actor ? userHandle(n.actor) : ''} size={40} />}
+                    : n.type === 'contest_deadline'
+                      ? <ClockBadge size={40} />
+                      : <Avatar src={n.actor?.avatar_url} name={n.actor ? userHandle(n.actor) : ''} size={40} />}
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                       {isUnread && (

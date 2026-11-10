@@ -283,6 +283,11 @@ export const locales = {
         reactionBoard: "회원님의 '{title}' 보드를 {name}님이 좋아했습니다",
         passwordChanged: '비밀번호가 변경되었습니다',
         newLogin: '새 기기에서 로그인되었습니다',
+        contestDeadlineApply7: '{title} 신청 마감이 7일 남았어요',
+        contestDeadlineApply1: '{title} 신청 마감이 내일이에요',
+        contestDeadline7: '{title} 마감이 7일 남았어요',
+        contestDeadline1: '{title} 마감이 내일이에요',
+        contestDeadline: '{title} 마감이 다가오고 있어요',
       },
       settings: {
         disclaimer: '이메일·푸시 알림은 추후 지원됩니다',
@@ -1481,6 +1486,11 @@ export const locales = {
         reactionBoard: "{name} liked your board '{title}'",
         passwordChanged: 'Your password was changed',
         newLogin: 'New sign-in from a new device',
+        contestDeadlineApply7: 'Applications for {title} close in 7 days',
+        contestDeadlineApply1: 'Applications for {title} close tomorrow',
+        contestDeadline7: '{title} closes in 7 days',
+        contestDeadline1: '{title} closes tomorrow',
+        contestDeadline: 'The deadline for {title} is approaching',
       },
       settings: {
         disclaimer: 'Email and push notifications are coming later',
