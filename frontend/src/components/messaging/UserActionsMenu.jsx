@@ -3,7 +3,8 @@ import Modal from '../Modal.jsx'
 import FloatingIconButton from '../FloatingIconButton.jsx'
 import ReportDialog from './ReportDialog.jsx'
 import { useTranslation } from '../../i18n/index.js'
-import { blockUser, unblockUser } from '../../api/messaging.js'
+import { blockUser, unblockUser, getContactStatus } from '../../api/messaging.js'
+import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
 import { VerifyRequiredError } from '../../api/projects.js'
 import { markBlocked, markUnblocked, useBlockedUser } from './blockedUsers.js'
 import styles from './Messaging.module.css'
@@ -16,9 +17,9 @@ import styles from './Messaging.module.css'
  *
  * `onBlocked` fires after a successful block (parent closes the conversation
  * UI / hides the contact CTA); `onUnblocked` after a successful unblock. After blocking, the same menu item flips to
- * "Unblock" for the rest of the session — the API has no block-status read, so
- * the state lives in the shared `blockedUsers` store (every menu instance for
- * this user agrees, even after the conversation sheet is reopened).
+ * "Unblock". State lives in the shared `blockedUsers` store (every menu instance
+ * for this user agrees); on mount it is seeded from `blocked_by_me` on
+ * contact-requests/status/ so a refresh still offers "Unblock" (#372).
  * `onOverlayChange(open)` lets a host sheet suspend its own ESC-to-close while
  * the dropdown or a dialog owns Escape.
  */
@@ -27,10 +28,23 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const enabled = useMessagingEnabled()
   const blocked = useBlockedUser(userId)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const wrapRef = useRef(null)
+
+  // The block state survives a refresh only server-side: seed the session store
+  // from the status read. Only ever marks blocked (never unmarks from a possibly
+  // stale response); errors are ignored so the menu still works.
+  useEffect(() => {
+    if (!enabled || !userId) return undefined
+    let cancelled = false
+    getContactStatus(userId)
+      .then(data => { if (!cancelled && data?.blocked_by_me === true) markBlocked(userId) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [enabled, userId])
 
   const overlay = menuOpen || confirmOpen || reportOpen
   useEffect(() => {

@@ -56,6 +56,11 @@ def is_blocked_between(a, b):
     ).exists()
 
 
+def has_blocked(blocker, blocked):
+    """One direction only: did `blocker` block `blocked`? (never the reverse)"""
+    return Block.objects.filter(blocker=blocker, blocked=blocked).exists()
+
+
 def recipient_eligible(profile):
     """D11: PersonalityProfile exists AND discovery_opt_in is True.
 
