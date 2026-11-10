@@ -23,16 +23,30 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-07 10:26 KST',
-    head: '998fb4d',
-    branch: 'sns-small-fixes',
+    updatedAt: '2026-11-10 22:03 KST',
+    head: '17399c9',
+    branch: 'feature/sns-contest-deadline-notif',
   },
   done: [
+    {
+      id: 'PR #479',
+      title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
+      completedAt: '2026-11-07',
+      prs: [479],
+      note: '',
+    },
     {
       id: 'PR #478',
       title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
       completedAt: '2026-11-07',
       prs: [478],
+      note: '',
+    },
+    {
+      id: 'PR #476',
+      title: 'fix(FULL-SNS-FIXES-1): SNS 리뷰 후속 묶음 + 채팅방 이름 → 프로필',
+      completedAt: '2026-11-07',
+      prs: [476],
       note: '',
     },
     {
@@ -70,29 +84,8 @@ window.PROJECT_STATE = {
       prs: [465],
       note: '',
     },
-    {
-      id: 'PR #462',
-      title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
-      completedAt: '2026-10-25',
-      prs: [462],
-      note: '',
-    },
-    {
-      id: 'PR #461',
-      title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
-      completedAt: '2026-10-25',
-      prs: [461],
-      note: '',
-    },
   ],
-  now: [
-    {
-      id: 'FULL-MESSAGING-5',
-      title: '관심 버튼 미노출 + 보드 기본 공개',
-      note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
-      issue: 467,
-    },
-  ],
+  now: [],
   next: {
     xhigh: [
       {
@@ -104,16 +97,10 @@ window.PROJECT_STATE = {
     ],
     high: [
       {
-        id: 'FULL-MESSAGING-5',
-        title: '관심 버튼 미노출 + 보드 기본 공개',
-        note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
-        issue: 467,
-      },
-      {
-        id: 'FULL-REPORT-UI-1',
-        title: '페르소나 리포트 UI 개편',
-        note: '스와이프 종료 → 결과 카드 3장 → 저장 → 리포트 페이지로 이어지는 페르소나 리포트 경험을 개편한다. 확정된 시연(진입 5개 × 상황)과 설계는 `docs/decisions/2026-10-22-persona-report-redesign.md`, 실행 계획은 `.claude/plans/persona-report-redesign.md`.',
-        issue: 445,
+        id: 'FULL-REPORT-UI-4',
+        title: '페르소나 리포트 통합 UI',
+        note: '보드 상세와 리포트 페이지를 /board/:id 하나로 병합하고, 공통 리포트 본문을 갤러리형으로 재디자인. 소셜 카드 펼침(FLIP), 비소유자 공개 보드 리포트/추천/사무소 읽기 권한(백엔드), 재생성은 상단 알림 버튼 전용, 페르소나 이미지 자동 재생성 제거.',
+        issue: 480,
       },
       {
         id: '#PERF: measure taste-start tag matching ',
@@ -128,36 +115,6 @@ window.PROJECT_STATE = {
         issue: 433,
       },
       {
-        id: 'TASTE-FEEDBACK-1',
-        title: '취향 시작 카드 신고·문장 인식 신고',
-        note: 'Taste-start top-3 cards: card report (! button) + query-recognition report ("태그가 잘못 인식됐나요?").',
-        issue: 432,
-      },
-      {
-        id: 'FULL-CONTEST-2',
-        title: '공모전을 등록·수정할 화면이 없음',
-        note: '운영에 공모전을 넣고 고칠 수단이 터미널 커맨드(`contest_status`, `contest_poster`)뿐이고 목록은 비어 있음. 기존 관리자 페이지(`/admin`)에 공모전 섹션 추가: 전체 목록(hidden/pending/마감 포함), 등록, 수정, 상태 변경, 감사 로그. 같은 PR에서 두 커맨드 삭제(운영 수단 공백 방지). `import_contests`는 만들지 않음. 모델 저장 단계 규칙: published는 공식 `source_url` 필수 + 공모전 정보(목록) 사이…',
-        issue: 428,
-      },
-      {
-        id: 'FRONT-CONTEST-1',
-        title: '공모전 화면이 목 데이터·가짜 유저를 보여줌',
-        note: '`api/contests.js`, 목록·상세 화면(시안 B, 테마 토큰), 포스터 hotlink + 확대 오버레이 + 폴백 카드, D-day 유틸(가장 가까운 마감 + 라벨), i18n, `mockCompetitions.js`·localStorage 관심 제거. 추천·팀 섹션은 숨김. §4-4, D4·D9·D10·D11.',
-        issue: 416,
-      },
-      {
-        id: 'BACK-CONTEST-2',
-        title: '공모전 관심 등록이 계정에 저장 안 됨',
-        note: '`ContestInterest`(Reaction 동형, interest_count signal) + `POST/DELETE contests/<id>/interest/`, `ContestPosterReport` + `POST contests/<id>/poster-report/`(접수 즉시 poster_status=none), 스로틀, 관리 커맨드 `contest_status` / `contest_poster`, 테스트. §4-2, §4-3, D3·D5·D6.',
-        issue: 415,
-      },
-      {
-        id: 'BACK-CONTEST-1',
-        title: '공모전이 실제 데이터가 아님 (모델·조회 API)',
-        note: '새 앱 `apps.contests`: `Contest` 모델 + 마이그레이션(신규 테이블만), `GET contests/`(published·미마감·마감 임박순), `GET contests/<id>/`, 개발용 `seed_contests`(DEBUG 전용, 7건), 테스트. §4-1, §4-2, §4-5. #363 ①② 관련.',
-        issue: 414,
-      },
-      {
         id: 'BACK-RECOMMEND-1',
         title: 'Project 두번째 세션이 이전 taste를 모름',
         note: 'Same Project can host multiple `AnalysisSession` rows (user comes back, "Resume" or new swipe round on the same Project — second session is created fresh while `Project.liked_ids` / `disliked_ids` / `saved_ids` carry forward as the persistent accumulator). Today the new sessio…',
@@ -168,30 +125,6 @@ window.PROJECT_STATE = {
         title: '"Aha(취향 포착)" 주장 미검증 — 측정 하네스 부재 (hypothesis-grade)',
         note: '_출처: 2026-07-06 4-agent 정적분석 종합(`.claude/plans/algo-speed-accuracy-analysis.md`, 2026-08-05 stale-정리 때 삭제 — speed 파트는 #266-#269/#283 등으로 대부분 해소, accuracy 파트만 여기로 이관)._',
         issue: 367,
-      },
-      {
-        id: 'FRONT-DESIGN-A1',
-        title: '디자인 정합성 기계적 스윕 (hex→토큰 + hover 핵 제거)',
-        note: '_디자인 4단계 이니셔티브(B1→A1→B2→A2, `.claude/plans/design-clever-valley.md`)의 A1. B1은 2026-08-15 완료(## Done)._',
-        issue: 366,
-      },
-      {
-        id: 'INFRA-TOKEN-1',
-        title: '--color-success 토큰 신설 (4테마) + #34d399 전환',
-        note: '_A1-HEX-R2 이연(2026-08-15): share-copied 등 success green을 accent-2로 바꾸면 의미 파괴(보라). tokens.css 4테마에 success green 추가 후 `BoardDetailPage.jsx:416` `#34d399` 전환 + DESIGN.md §1 동기화._',
-        issue: 365,
-      },
-      {
-        id: 'FRONT-UX-14',
-        title: '스와이프 모션 + 갤러리 UX 5종 (user 지적 2026-08-15, 원인 전부 확정)',
-        note: '_스와이프 경로 — feature workflow 필수. `lib/tinderCard.js`는 vendored fork(PR #295)라 물리 상수 자유 튜닝 가능._',
-        issue: 364,
-      },
-      {
-        id: 'DEPLOY-BLOCKER-1',
-        title: 'develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)',
-        note: '_user 결정: 개발 단계라 develop에는 먼저 합치고, 실서비스 배포 전에 반드시 처리. 다음 deploy PR 전에 이 항목 확인._',
-        issue: 363,
       },
       {
         id: 'FULL-BOARD-FLOW-1',
@@ -214,6 +147,12 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
+        id: 'FULL-SWIPE-SETTLE-1',
+        title: '자동 완료 경로 스와이프 대기',
+        note: 'App.jsx handleSwipeCard의 is_analysis_completed 경로(ensureFreshReport 직전)는 자기 스와이프가 pending이라 다른 진행 중 스와이프를 기다리지 않음. 또 swipeSettle 8초 타임아웃 후 그대로 리포트 생성. 내 스와이프 제외 대기 + 타임아웃 처리 필요. 관측: 보드 f9a6f440 리포트 기준 11, 이후 좋아요 13 (알림 뜸).',
+        issue: 481,
+      },
+      {
         id: 'FULL-AUTH-5',
         title: 'ID 대소문자 중복·이름 일치 DB 규칙',
         note: 'Follow-up of FULL-AUTH-4 (#455). Add functional unique index on Lower(handle) + CheckConstraint handle = display_name OR handle IS NULL (migration). Before: user runs read-only prod audit (divergent rows, null handles, reserved handles e.g. \'user\' produced by old suggest_handl…',
@@ -224,24 +163,6 @@ window.PROJECT_STATE = {
         title: '건물 상세 정보 이름표 한국어',
         note: 'Flow QA (#452) issue 9. Building detail info labels ARCHITECT/YEAR/PROGRAM/STYLE/MATERIAL/LOCATION are hardcoded English on ko UI (pages/BuildingDetailPage*); liked empty-state copy still says \'Discovery에서 …\' (locales swipeToSave / swipeToSaveInline). Values (Museum, concrete)…',
         issue: 456,
-      },
-      {
-        id: 'FULL-AUTH-4',
-        title: '이름·ID 저장·표시 통일',
-        note: 'From flow QA (#452) issue 6 audit (dev DB read-only, 2026-10-25): 33/60 profiles display_name != handle (20 seed, 13 null handle).',
-        issue: 455,
-      },
-      {
-        id: 'FRONT-UX-17',
-        title: '취향 시작 화면 겹침 정리',
-        note: 'From flow QA (#452) issues 2, 3, 5 (still present after #449).',
-        issue: 454,
-      },
-      {
-        id: 'FRONT-UX-16',
-        title: '한국어 화면 영어·문구 정리',
-        note: 'From flow QA (INFRA-QA-1 #452) issues 1, 4, 6(copy), 7, 8.',
-        issue: 453,
       },
       {
         id: 'INFRA-QA-1',
@@ -266,12 +187,6 @@ window.PROJECT_STATE = {
         title: '결정 문서 \'탭=다음 카드\' 갱신',
         note: 'TASTE-FEEDBACK-1 changed the taste-start card stack: tap now opens SwipeCard-style detail (+ gallery flip); prev/next is drag ±40px or ←/→ only. docs/decisions/2026-10-11-taste-start-redesign.md §2 still says 탭 = 다음. Update the decision doc (owner edit). Also new: ! report but…',
         issue: 435,
-      },
-      {
-        id: 'INFRA-CI-1',
-        title: '프론트 node 테스트가 CI에서 안 돎',
-        note: 'CI `Frontend (lint + build)` job과 `tools/front-validate.sh`가 lint + build만 실행. `npm test`(node --test, 추가 의존성 없음, ~0.2s)는 로컬에서만 돌아 회귀가 CI를 통과할 수 있음. 일부러 뺀 근거는 문서·이력에서 찾지 못함. job 이름은 branch protection 필수 체크라 유지.',
-        issue: 423,
       },
       {
         id: 'BACK-CONTEST-3',
@@ -358,30 +273,6 @@ window.PROJECT_STATE = {
         issue: 384,
       },
       {
-        id: 'SNS-PERSONA-AXIS-1',
-        title: 'persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)',
-        note: 'PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에…',
-        issue: 383,
-      },
-      {
-        id: 'FRONT-LOGINKEY-1',
-        title: '로그인 키보드 진행 지원',
-        note: 'choice/consent 두 카드가 SwipeGestureFrame 드래그 전용이라 키보드 사용자는 계정 생성 자체가 불가(포커스 가능 컨트롤 0개). 나머지 폼 단계(credentials/returning/profile)는 이미 form onSubmit + native button 완비. 후보: `useKeyboardSwipe` 훅 재사용(ArrowLeft/Right) + 텍스트 입력 포커스 중 오발동 guard. 2026-09-06 유저 결정으로 보류 — 인터랙션 디자인 선행 필요.',
-        issue: 382,
-      },
-      {
-        id: 'FRONT-PEOPLE-I18N-1',
-        title: 'PeopleDiscoveryPage 페이지 크롬 i18n',
-        note: '카드 내부(PersonCard 등)는 FRONT-FUNC-CHECK-1에서 i18n 완료됐으나 페이지 크롬이 하드코딩 한국어로 남음: 제목 "사람 발견", 프리셋 필터 칩(전체/영감 주는 사람/정반대 성향), 빈상태·에러·진단유도 문구, 관심 토스트. locales.js peoplePage.* namespace 신설 + useTranslation 배선.',
-        issue: 381,
-      },
-      {
-        id: 'FRONT-DESIGN-C2',
-        title: '디자인 포트 잔여 결정 4건 + 스타일 델타 21곳',
-        note: 'FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15…',
-        issue: 380,
-      },
-      {
         id: 'BACK-RECOMMEND-9',
         title: '태그 가중치 방식 잔재 삭제 확정',
         note: '_`services/axis_scores.py` 주석 처리된 태그 가중치 코드, `TagAxisWeight` 모델·표, `fixtures/tag_axis_weights.json`, 마이그레이션 0033 데이터. 사용자 확정 시 코드 삭제 + 표 삭제 마이그레이션._',
@@ -412,18 +303,6 @@ window.PROJECT_STATE = {
         issue: 375,
       },
       {
-        id: 'BACK-VOCAB-2',
-        title: '재료 어휘 timber vs wood 불일치',
-        note: '검색 해석이 재료를 `timber`로 내는데 DB는 `wood` 8,544 / `timber` 2,625 — 목재 검색이 후보 대부분을 놓침. 어휘 정규화(동의어 매핑) 필요. 출처: Jev PoC 검증 2026-09-30 (`docs/research/perf-baseline-2026-09-30.md` §4d).',
-        issue: 374,
-      },
-      {
-        id: 'PERF-RESULT-1',
-        title: '결과 조회 458KB 전송 병목',
-        note: '세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.',
-        issue: 373,
-      },
-      {
         id: 'FULL-MESSAGING-2',
         title: '새로고침하면 차단 해제를 못 함',
         note: '차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 \'차단\'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.',
@@ -447,8 +326,20 @@ window.PROJECT_STATE = {
         note: '2단계 호스팅·LLM 상태/계정/비용(Railway/Vercel/Neon/CF R2/OpenAI/Gemini/HF; 로그인 방식은 메모) → 3단계 신고 처리·작품 검수·계정 정지/삭제(PIPA)·동의 이력(typed-confirm + audit) → 4단계 실시간 API 성능(ServerTimingMiddleware→Redis) + 제품 지표 설계. 계획: ADMIN-DASH-1 plan "Later PRs".',
         issue: 369,
       },
+      {
+        id: 'DEPLOY-BLOCKER-1',
+        title: 'develop→main 배포 전 필수 정리 (#333 / #334, 2026-09-26 merge 결정)',
+        note: '_user 결정: 개발 단계라 develop에는 먼저 합치고, 실서비스 배포 전에 반드시 처리. 다음 deploy PR 전에 이 항목 확인._',
+        issue: 363,
+      },
     ],
     low: [
+      {
+        id: 'FULL-REPORT-UI-5',
+        title: '추천 사무소 보조 줄 정보',
+        note: '추천 사무소 행의 보조 줄이 첫 건물 이름. 목업은 위치·전문 분야인데 RecommendedArchitectsView 응답에 해당 필드 없음. 백엔드 필드 추가 필요. 또한 백엔드 pytest(test_report_owner_only, test_project_recommendations, test_report_staleness)와 Railway NUM_PROXIES 확인 미완.',
+        issue: 482,
+      },
       {
         id: '#fix(FULL-CONTEST-2): #466 review follow',
         title: 'fix(FULL-CONTEST-2): #466 review follow-ups — Korean errors, PATCH lost update, upsert rule gap',
@@ -466,12 +357,6 @@ window.PROJECT_STATE = {
         title: 'fix: expose Retry-After via CORS so 429 backoff honors server',
         note: 'Found in #465 review. `frontend/src/api/core.js:166` reads `Retry-After` on 429 to back off, but API is cross-origin (Vercel -> Railway, local 5174 -> 8001) and `backend/config/settings.py` `CORS_EXPOSE_HEADERS = [\'server-timing\']`. Browser hides header -> client always uses f…',
         issue: 471,
-      },
-      {
-        id: '#fix(SOCIAL-BOARD-LIKE-1): #465 review f',
-        title: 'fix(SOCIAL-BOARD-LIKE-1): #465 review follow-ups — feed recheck, empty page, liked-boards perf',
-        note: 'Review follow-ups from #465 (merged 78008f4). All low severity, verified against PR head.',
-        issue: 470,
       },
       {
         id: 'FRONT-TABBAR-MODAL-1',
@@ -502,12 +387,6 @@ window.PROJECT_STATE = {
         title: 'image regenerate retry can pay twice (job-scoped marker)',
         note: 'Follow-up from #449 review (finding F13, low).',
         issue: 451,
-      },
-      {
-        id: 'FULL-BOOKMARK-1',
-        title: '북마크 잔여 코드 정리',
-        note: '북마크 기능을 UI에서 제거했으나 코드가 남아 있음: BoardDetailPage(bookmarkChanged 신호, saved_ids 시드), BuildingTile, BuildingDetailPage, ArchitectProfilePage, SaveToBoardModal, SurpriseBoardModal, appHelpers, api/projects.bookmarkBuilding, App.jsx. 서버 saved_ids 필드는 다른 곳에서 쓰일 수 있어 사용처 확인 후 제거. 사용자가…',
-        issue: 448,
       },
       {
         id: 'FULL-REPORT-UI-3',
@@ -550,24 +429,6 @@ window.PROJECT_STATE = {
         title: 'messaging tests run on SQLite only',
         note: 'From #343 review. `backend/apps/messaging/tests/conftest.py` forces SQLite in-memory. Partial unique index `uniq_pending_contact_request`, CheckConstraints, `select_for_update`, and the IntegrityError dup-race branch in `ContactRequestCreateView.post` never run against Postgre…',
         issue: 413,
-      },
-      {
-        id: 'BACK-MESSAGING-INTID',
-        title: 'oversized integer ids return 500',
-        note: 'From #343 review. `users/<int:user_id>/block/`, `contact-requests/status/?user_id=`, report `target_id` (isdigit only) pass unbounded ints to filters; > 2^31-1 on auth_user.id → Postgres DataError → 500. Validate/clamp → 404/400. Same pre-existing pattern elsewhere (accounts/s…',
-        issue: 411,
-      },
-      {
-        id: 'BACK-MESSAGING-THROTTLE',
-        title: 'no throttle on messaging GET endpoints (incl. 4s poll)',
-        note: 'From #343 review. `ConversationMessagesView.get_throttles()` returns [] for GET; `ConversationListView`, `UnreadCountView`, `ContactRequestReceivedView`, `ContactRequestStatusView` have no throttle; no DEFAULT_THROTTLE_CLASSES. Authenticated client can poll at unlimited rate.…',
-        issue: 410,
-      },
-      {
-        id: 'INFRA-QUEUE-1',
-        title: 'corpus_rank telemetry 꺼져있음',
-        note: 'Bookmark telemetry used to compute `corpus_rank` synchronously (O(corpus_size) scan). PR #79 turned it off (`rank_corpus = None` + TODO in `swipe.py ProjectBookmarkView`). `engine.compute_corpus_rank()` still implemented (pgvector ROW_NUMBER); tests lock the None placeholder.…',
-        issue: 406,
       },
       {
         id: 'BACK-EXTERNAL-1',
@@ -630,20 +491,52 @@ window.PROJECT_STATE = {
         issue: 395,
       },
       {
-        id: 'FRONT-UX-15',
-        title: '메시지 시트 닫으면 포커스 사라짐',
-        note: 'Esc/닫기 후 `document.activeElement`가 body — 호출한 메시지 pill / 관심 있어요 버튼으로 포커스 복귀 필요 (portal Modal). 접근성 minor, FULL-MESSAGING-1 app-test.',
-        issue: 394,
+        id: 'SNS-PERSONA-AXIS-1',
+        title: 'persona 프롬프트에 axis_scores + 언어설정 미반영 (#232 유실 작업)',
+        note: 'PR #232(`feature/sns-persona-description-axis`, 2026-06-18, collaborator)가 CI red로 CLOSED-미머지 후 유실 — `generation.py` persona description 프롬프트에 `axis_scores` + 사용자 언어설정을 반영하는 작업(+68/-12, generation.py + views/reports.py). 2026-08-06 브랜치 정리 전수검사에서 발견: 현재 develop `generation.py`에…',
+        issue: 383,
+      },
+      {
+        id: 'FRONT-DESIGN-C2',
+        title: '디자인 포트 잔여 결정 4건 + 스타일 델타 21곳',
+        note: 'FRONT-DESIGN-C(#321) 후속. 결정 대기: 저장/북마크 amber(`#fbbf24`) 대응 토큰 부재(accent-3는 라이트에서 갈색이라 부적합 — 상태 토큰 계열 신설 필요); 모달 backdrop 0.4 vs scrim 0.65(DESIGN.md §1.4/§8.10 모순 해소); UserProfile 떠있는 뒤로가기 목적지(`/user/me`는 TabBar 루트); appearance 칩 radius 10px(토큰 스케일 밖, 공용 .chip). 로그인 첫카드 "10~15…',
+        issue: 380,
+      },
+      {
+        id: 'PERF-RESULT-1',
+        title: '결과 조회 458KB 전송 병목',
+        note: '세션 결과 buildings 쿼리가 `embedding::text`까지 가져와 ~458KB 전송(서버 실행 1.5ms, 나머지 전송). 임베딩은 캐시/바이너리로, 카드 컬럼만 선택. 기준값 `docs/research/perf-baseline-2026-09-30.md` §3.',
+        issue: 373,
+      },
+      {
+        id: 'INFRA-TOKEN-1',
+        title: '--color-success 토큰 신설 (4테마) + #34d399 전환',
+        note: '_A1-HEX-R2 이연(2026-08-15): share-copied 등 success green을 accent-2로 바꾸면 의미 파괴(보라). tokens.css 4테마에 success green 추가 후 `BoardDetailPage.jsx:416` `#34d399` 전환 + DESIGN.md §1 동기화._',
+        issue: 365,
       },
     ],
   },
   prs: [
+    {
+      number: 479,
+      title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
+      mergedAt: '2026-11-07T01:52:17Z',
+      mergedAtKST: '2026-11-07 10:52 KST',
+      sha: '17399c9',
+    },
     {
       number: 478,
       title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
       mergedAt: '2026-11-07T01:25:28Z',
       mergedAtKST: '2026-11-07 10:25 KST',
       sha: '6125ca5',
+    },
+    {
+      number: 476,
+      title: 'fix(FULL-SNS-FIXES-1): SNS 리뷰 후속 묶음 + 채팅방 이름 → 프로필',
+      mergedAt: '2026-11-07T01:36:00Z',
+      mergedAtKST: '2026-11-07 10:36 KST',
+      sha: '8bb7704',
     },
     {
       number: 475,
@@ -679,20 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-31T00:20:14Z',
       mergedAtKST: '2026-10-31 09:20 KST',
       sha: '78008f4',
-    },
-    {
-      number: 462,
-      title: 'feat(FULL-REPORT-PATTERN-1): pattern paragraph always present — tiered grounding',
-      mergedAt: '2026-10-25T03:01:42Z',
-      mergedAtKST: '2026-10-25 12:01 KST',
-      sha: 'ecc0577',
-    },
-    {
-      number: 461,
-      title: 'fix: #460 + #450 review follow-ups — guest handle retry, report generation_id dedupe, padding, notif badge',
-      mergedAt: '2026-10-25T03:01:37Z',
-      mergedAtKST: '2026-10-25 12:01 KST',
-      sha: '774616e',
     },
   ],
   agents: [
@@ -1335,6 +1214,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/contests/management/commands/send_contest_deadline_reminders.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/contests/migrations/0001_initial.py',
       role: '',
     },
@@ -1380,6 +1263,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/contests/tests/test_contests_api.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_deadline_reminders.py',
       role: '',
     },
     {
@@ -1524,6 +1411,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/notifications/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/0002_contest_deadline_type.py',
       role: '',
     },
     {
@@ -4005,14 +3896,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
