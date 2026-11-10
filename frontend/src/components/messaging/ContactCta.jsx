@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../../i18n/index.js'
 import { getContactStatus } from '../../api/messaging.js'
 import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
+import { markBlocked } from './blockedUsers.js'
 import GreetingSheet from './GreetingSheet.jsx'
 import MessagesSheet from './MessagesSheet.jsx'
 
@@ -40,7 +41,14 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
     if (!enabled || !userId || hidden) return undefined
     let cancelled = false
     getContactStatus(userId)
-      .then(data => { if (!cancelled) { setStatus(data); setLoadFailed(false) } })
+      .then(data => {
+        if (cancelled) return
+        // Server-side block survives a refresh; seed the session store so the
+        // CTA hides and the menu offers "Unblock".
+        if (data?.blocked_by_me === true) markBlocked(userId)
+        setStatus(data)
+        setLoadFailed(false)
+      })
       .catch(() => { if (!cancelled) { setStatus(null); setLoadFailed(true) } })
     return () => { cancelled = true }
   }, [enabled, userId, hidden, reloadKey])
