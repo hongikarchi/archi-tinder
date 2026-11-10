@@ -24,7 +24,6 @@ import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import Skeleton from '../components/Skeleton.jsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
 import { useMessagingEnabled } from '../hooks/useMessagingFeature.js'
-import MessagesEntry from '../components/messaging/MessagesEntry.jsx'
 import ContactCta from '../components/messaging/ContactCta.jsx'
 import UserActionsMenu from '../components/messaging/UserActionsMenu.jsx'
 import { useBlockedUser } from '../components/messaging/blockedUsers.js'
@@ -577,9 +576,8 @@ export default function UserProfilePage({ onLogout }) {
 
         {/* FULL-MESSAGING-1: in-flow (NOT fixed) so it can never overlap the
             fixed PageTopControls / isMe cluster; both render nothing while the
-            messaging flag is OFF. isMe -> message pill (>=44px, unread badge);
-            !isMe -> block/report "..." menu. */}
-        {isMe && <MessagesEntry />}
+            messaging flag is OFF. !isMe -> block/report "..." menu (own-profile
+            messaging lives on the /messages tab). */}
         {!isMe && messagingEnabled && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-12px 0 12px', minHeight: 44, alignItems: 'center' }}>
             <UserActionsMenu

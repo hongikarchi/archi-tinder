@@ -1,5 +1,6 @@
 /*
- * Messaging.module.css — contact requests + 1:1 messaging UI (FULL-MESSAGING-1).
+ * Messaging.module.css — contact requests + 1:1 messaging UI (FULL-MESSAGING-1;
+ * hosted by the /messages tab page since FRONT-MESSAGES-TAB-1).
  * DESIGN.md §4/§10.4: interactive controls owning :hover/:focus/:active live in
  * a CSS Module; themeable values come from tokens.css; layout-only values may
  * stay inline in the JSX. Type scale = the 5 --fs-* steps; weights <= 700;
@@ -70,65 +71,7 @@
   color: #fff;
 }
 
-/* ---- Profile entry pill (>=44px, in content flow) ------------------------ */
-
-.pill {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 50%;
-  /* Shared with MessageIcon's front-bubble fill so the occluding fill
-     always matches the button background (rest + hover tint). */
-  --message-icon-bg: var(--color-surface);
-  background: var(--message-icon-bg);
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text);
-  font-family: inherit;
-  font-size: var(--fs-body);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease),
-              background var(--motion-fast) var(--motion-ease),
-              transform var(--motion-normal) var(--motion-ease);
-}
-
-@media (hover: hover) {
-  .pill:hover {
-    border-color: var(--accent-1);
-    color: var(--accent-1);
-    --message-icon-bg: color-mix(in srgb, var(--accent-1) 8%, var(--color-surface));
-  }
-}
-
-.pill:active {
-  transform: scale(0.94);
-  transition-duration: 0s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pill,
-  .pill:active {
-    transform: none;
-  }
-}
-
-.pill:focus-visible {
-  outline: 2px solid var(--accent-1);
-  outline-offset: 2px;
-}
-
 /* ---- Badges -------------------------------------------------------------- */
-
-.pill .badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-}
 
 .badge {
   display: inline-block;
@@ -145,13 +88,15 @@
   text-align: center;
 }
 
-/* ---- Sheet scaffolding --------------------------------------------------- */
+/* ---- Page scaffolding (MessagesPage body, DESIGN.md §3.3) ----------------- */
 
 .scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* last row scrolls clear of the floating TabBar capsule */
+  padding-bottom: var(--tabbar-clearance);
 }
 
 .sectionTitle {
@@ -309,14 +254,13 @@
   color: var(--color-text-dim);
 }
 
-/* ---- Conversation view --------------------------------------------------- */
+/* ---- Conversation view (MessagesPage /messages/:id) --------------------------------------------------- */
 
 .convHeader {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  padding-right: 44px; /* clear Modal's absolute close button */
   margin-bottom: 8px;
   flex-shrink: 0;
 }
@@ -607,7 +551,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .btn,
-  .pill,
   .row {
     transition: none;
   }

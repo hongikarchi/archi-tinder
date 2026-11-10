@@ -7,9 +7,9 @@ import styles from './Messaging.module.css'
 import { userHandle } from '../../utils/userIdentity.js'
 
 /**
- * InboxView — View A of the messages sheet: received contact requests at the
+ * InboxView — the /messages inbox: received contact requests at the
  * top (Accept / Ignore), then the conversation list. Handles loading, error
- * and empty states. Purely presentational; MessagesSheet owns the data.
+ * and empty states. Purely presentational; MessagesPage owns the data.
  */
 export default function InboxView({
   loadState, requests, conversations, busy, actionError,

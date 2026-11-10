@@ -5,6 +5,7 @@ import { discoveryNavigationGuard } from '../utils/discoveryGuard.js'
 import SegmentedControl from './SegmentedControl.jsx'
 import { useUnreadMessages } from '../hooks/useUnreadMessages.js'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
+import { useMessagingEnabled } from '../hooks/useMessagingFeature.js'
 
 /*
  * TAB_ICONS — { outline, active } SVG pair per tab.
@@ -30,6 +31,10 @@ import { useUnreadNotifications } from '../hooks/useUnreadNotifications.js'
  * even in the active state rather than force-filling an open arc, which
  * would render as a stray wedge instead of a body shape.
  */
+// Bubble outlines for the `messages` tab icon (24 box).
+const MSG_BACK = 'M11 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-.5l.5 3-4-3H11a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'
+const MSG_FRONT = 'M5 10h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3 .5-3H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2z'
+
 const TAB_ICONS = {
   discovery: {
     outline: (
@@ -86,6 +91,38 @@ const TAB_ICONS = {
       </svg>
     ),
   },
+  // "Messages" tab (FRONT-MESSAGES-TAB-1) — two overlapping speech bubbles, the
+  // same pair as the former profile message pill (back bubble top-right with a
+  // bottom-right tail, front bubble bottom-left with a bottom-left tail),
+  // redrawn on the 24 box. The back bubble is masked around the front one so
+  // the overlap reads as two shapes on the translucent glass (no opaque fill).
+  // Active = both bubbles filled.
+  messages: {
+    outline: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <defs>
+          <mask id="tabbar-messages-cut-outline">
+            <rect width="24" height="24" fill="#fff" />
+            <path d={MSG_FRONT} fill="#000" stroke="#000" strokeWidth="4" />
+          </mask>
+        </defs>
+        <path d={MSG_BACK} mask="url(#tabbar-messages-cut-outline)" />
+        <path d={MSG_FRONT} />
+      </svg>
+    ),
+    active: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <defs>
+          <mask id="tabbar-messages-cut-active">
+            <rect width="24" height="24" fill="#fff" />
+            <path d={MSG_FRONT} fill="#000" stroke="#000" strokeWidth="3" />
+          </mask>
+        </defs>
+        <path d={MSG_BACK} mask="url(#tabbar-messages-cut-active)" />
+        <path d={MSG_FRONT} />
+      </svg>
+    ),
+  },
   profile: {
     outline: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -115,6 +152,7 @@ const TAB_ICONS = {
  */
 function getActiveTab(pathname) {
   if (pathname === '/swipe' || pathname.startsWith('/search') || pathname.startsWith('/result')) return 'swipe'
+  if (pathname.startsWith('/messages')) return 'messages'
   if (pathname.startsWith('/people') || pathname.startsWith('/assessment') || pathname.startsWith('/competitions')) return 'social'
   if (
     pathname.startsWith('/user') ||
@@ -135,14 +173,15 @@ export default function TabBar() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const activeTab = getActiveTab(location.pathname)
-  // FULL-MESSAGING-1 (D6): unread dot on the profile tab — the message pill
-  // only lives on /user/me, so other screens learn about new messages here.
+  // FRONT-MESSAGES-TAB-1: the messages tab exists only while the messaging
+  // flag is ON, and carries the unread-MESSAGES dot (FULL-MESSAGING-1 D6).
   // Flag OFF -> count is always 0 and no request is made.
+  const messagingEnabled = useMessagingEnabled()
   const { count: unreadMessages } = useUnreadMessages()
-  // The notification bell also lives on /user/me, so the dot covers unread
-  // notifications too. Contact events are never notifications (D9) -> no double count.
+  // The notification bell lives on /user/me, so the profile tab dot covers
+  // unread notifications only. Contact events are never notifications (D9).
   const { count: unreadNotifications } = useUnreadNotifications()
-  const unreadTotal = unreadMessages + unreadNotifications
+  const tabUnread = { messages: unreadMessages, profile: unreadNotifications }
 
   // Collapse state: expanded (icon + label) on load / tab tap; compact
   // (icon only) after scrolling any scroller > 8px or a pointerdown outside
@@ -196,6 +235,9 @@ export default function TabBar() {
     { id: 'discovery', labelKey: 'tabbar.discovery', path: '/discovery' },
     { id: 'swipe',     labelKey: 'tabbar.taste',     path: '/search' },
     { id: 'social',    labelKey: 'tabbar.social',    path: '/people' },
+    ...(messagingEnabled
+      ? [{ id: 'messages', labelKey: 'tabbar.messages', path: '/messages' }]
+      : []),
     { id: 'profile',   labelKey: 'tabbar.profile',   path: '/user/me' },
   ]
 
@@ -227,9 +269,11 @@ export default function TabBar() {
   const options = tabs.map(tab => ({
     value: tab.id,
     label: t(tab.labelKey),
-    ariaLabel: tab.id === 'profile' && unreadTotal > 0
-      ? t('tabbar.profileUnread', { n: unreadTotal })
-      : t(tab.labelKey),
+    ariaLabel: tab.id === 'profile' && unreadNotifications > 0
+      ? t('tabbar.profileUnread', { n: unreadNotifications })
+      : tab.id === 'messages' && unreadMessages > 0
+        ? t('tabbar.messagesUnread', { n: unreadMessages })
+        : t(tab.labelKey),
   }))
 
   return (
@@ -255,7 +299,7 @@ export default function TabBar() {
         WebkitBackdropFilter: 'blur(12px) saturate(160%) brightness(0.55)',
       }}
     >
-      {/* variant="pill" / size="lg" / as="nav" — the 4 tabs are real route
+      {/* variant="pill" / size="lg" / as="nav" — the tabs are real route
           navigation (not in-page panels), so this deliberately skips the
           tablist/tab or radiogroup/radio ARIA pattern; see SegmentedControl's
           docblock. `aria-label` stays on THIS <nav> (unchanged); the group
@@ -270,7 +314,11 @@ export default function TabBar() {
         options={options}
         value={activeTab}
         onChange={handleSelect}
-        onReselect={tabId => { if (tabId === 'profile') handleSelect(tabId) }}
+        onReselect={tabId => {
+          if (tabId === 'profile') handleSelect(tabId)
+          // re-tap Messages from inside a conversation -> back to the inbox
+          else if (tabId === 'messages' && location.pathname !== '/messages') navigate('/messages')
+        }}
         style={{ width: '100%', height: '100%' }}
         optionStyle={(opt, isActive) => ({
           height: '100%',
@@ -284,7 +332,7 @@ export default function TabBar() {
         highlightStyle={{ background: 'var(--tabbar-active-bg)' }}
         renderOption={(opt, isActive) => {
           const baseIcon = isActive ? TAB_ICONS[opt.value].active : TAB_ICONS[opt.value].outline
-          const icon = (opt.value !== 'profile' || unreadTotal <= 0) ? baseIcon : (
+          const icon = !(tabUnread[opt.value] > 0) ? baseIcon : (
             <span style={{ position: 'relative', display: 'inline-flex' }}>
               {baseIcon}
               <span

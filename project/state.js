@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-10 22:56 KST',
-    head: '3e00472',
-    branch: 'upd484',
+    updatedAt: '2026-11-10 22:57 KST',
+    head: 'cbdb4d1',
+    branch: 'upd486',
   },
   done: [
     {
@@ -40,6 +40,13 @@ window.PROJECT_STATE = {
       title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
       completedAt: '2026-11-10',
       prs: [485],
+      note: '',
+    },
+    {
+      id: 'PR #484',
+      title: 'fix(report): wait for in-flight swipes on auto-complete path + report generation diagnostics',
+      completedAt: '2026-11-10',
+      prs: [484],
       note: '',
     },
     {
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FRONT-MESSAGE-ICON-1): 메시지 아이콘 겹친 말풍선 + 버튼 피드백',
       completedAt: '2026-11-07',
       prs: [475],
-      note: '',
-    },
-    {
-      id: 'PR #474',
-      title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
-      completedAt: '2026-10-31',
-      prs: [474],
       note: '',
     },
   ],
@@ -532,6 +532,13 @@ window.PROJECT_STATE = {
       sha: 'a7eb694',
     },
     {
+      number: 484,
+      title: 'fix(report): wait for in-flight swipes on auto-complete path + report generation diagnostics',
+      mergedAt: '2026-11-10T13:57:04Z',
+      mergedAtKST: '2026-11-10 22:57 KST',
+      sha: 'cbdb4d1',
+    },
+    {
       number: 483,
       title: 'feat: unified persona report UI + Discovery→Taste promote flow',
       mergedAt: '2026-11-10T13:56:08Z',
@@ -565,13 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-07T01:25:33Z',
       mergedAtKST: '2026-11-07 10:25 KST',
       sha: '998fb4d',
-    },
-    {
-      number: 474,
-      title: 'feat(FULL-MESSAGING-5): port #468 onto per-board feed — contact reason, default public boards',
-      mergedAt: '2026-10-31T02:34:15Z',
-      mergedAtKST: '2026-10-31 11:34 KST',
-      sha: 'ead0dc2',
     },
   ],
   agents: [
@@ -1938,14 +1938,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
-      role: '',
-    },
-    {
-      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
-      role: '',
-    },
-    {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
     },
@@ -3214,23 +3206,19 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/MessageIcon.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/messaging/MessagesEntry.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/messaging/MessagesSheet.jsx',
-      role: '',
-    },
-    {
       path: 'frontend/src/components/messaging/Messaging.module.css',
       role: '',
     },
     {
       path: 'frontend/src/components/messaging/ReportDialog.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
       role: '',
     },
     {
@@ -3507,6 +3495,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/LoginPage.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/MessagesPage.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/MessagesPage.module.css',
       role: '',
     },
     {
@@ -3919,14 +3915,6 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/swipeSettle.js',
-      role: '',
-    },
-    {
-      path: 'frontend/src/utils/swipeSettle.js',
-      role: '',
-    },
-    {
-      path: 'frontend/src/utils/swipeSettle.test.mjs',
       role: '',
     },
     {
