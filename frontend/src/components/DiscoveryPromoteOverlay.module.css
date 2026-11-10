@@ -1,0 +1,80 @@
+/* Blur the top card photo while the promote-to-Taste call is in flight.
+   Applied to the card-stack wrapper so SwipeCard.jsx (shared with Taste) is
+   untouched; the card's own overflow:hidden clips the scaled photo, and the
+   bottom hint text stays crisp because only <img> is filtered. */
+.blurStack img {
+  filter: blur(18px);
+  transform: scale(1.12);
+}
+
+/* Paper ChoiceCards (trigger / 50-cap) have no <img>: soften the whole card so
+   its text does not fight the overlay message. */
+.blurStack [data-choice-card] {
+  filter: blur(7px);
+}
+
+/* Photo overlay: white/black rgba literals are allowed here (cards are photos). */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 24px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+  cursor: wait;
+}
+
+.ring {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  /* animation is set inline in the JSX: `spin` is a global keyframe (index.css)
+     and a CSS module would hash the name, so the ring would never rotate. */
+}
+
+.msg {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 260px;
+}
+
+.btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: #fff;
+  color: #000;
+}
+
+.secondary {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+}

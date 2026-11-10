@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom'
 import { useTheme } from './hooks/useTheme.js'
 import { useLanguage } from './hooks/useLanguage.js'
 import { useTranslation } from './i18n/index.js'
@@ -10,7 +10,7 @@ import RouteFallback from './components/RouteFallback.jsx'
 import DiscoveryPage from './pages/DiscoveryPage.jsx'
 import {
   LoginPage, TasteStartPage, UserProfilePage, ResultsPage,
-  BuildingDetailPage, BoardDetailPage, BoardReportPage, UploadWorkPage,
+  BuildingDetailPage, BoardRoute, UploadWorkPage,
   ArchitectProfilePage, AssessmentPage, PeopleDiscoveryPage, CompetitionListPage,
   CompetitionDetailPage, SettingsPage, AccountScreen, NotificationsScreen,
   NotificationInboxScreen, AppearanceScreen, EditProfileScreen, SaveBoardModal,
@@ -30,6 +30,7 @@ import { resetUnreadNotifications, refreshUnreadNotifications } from './hooks/us
 import { reportImageJobs } from './hooks/useReportImageJob.js'
 import { reportJobs } from './hooks/useReportJobs.js'
 import { shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName } from './utils/reportStale.js'
+import { createSwipeSettler } from './utils/swipeSettle.js'
 import { ONBOARDING_FLAG_KEY } from './utils/onboardingFlag.js'
 
 // ADMIN-DBCHECK-1 / ADMIN-DASH-1: operator pages under /admin/* — lazy so they
@@ -39,6 +40,13 @@ const AdminPage = lazy(() => import('./pages/admin/AdminPage.jsx'))
 const DbCheckPage = lazy(() => import('./pages/dbCheck/DbCheckPage.jsx'))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage.jsx'))
 const KakaoCallbackPage = lazy(() => import('./pages/KakaoCallbackPage.jsx'))
+
+// /board/:boardId/report was merged into /board/:boardId (replace, keep state).
+function BoardReportRedirect() {
+  const { boardId } = useParams()
+  const location = useLocation()
+  return <Navigate to={`/board/${encodeURIComponent(boardId || '')}`} replace state={location.state} />
+}
 
 /* ── App ─────────────────────────────────────────────────────────────────── */
 export default function App() {
@@ -68,6 +76,11 @@ export default function App() {
   // Tracks in-flight recordSwipe() calls. Button gates on this so the
   // "Finish & View Report" button can't fire before the backend save settles.
   const [swipePending, setSwipePending] = useState(0)
+  // Non-reactive mirror of swipePending + waiter registry: report generation awaits
+  // the last swipe POST so it never builds from a liked set missing the final like.
+  const swipeSettlerRef = useRef(null)
+  if (!swipeSettlerRef.current) swipeSettlerRef.current = createSwipeSettler()
+  const awaitSwipesSettled = () => swipeSettlerRef.current.wait()
   // keepExploringChosen: true once the user LEFT-swipes the action card.
   // Gates the top "Finish & View Report" button so it only appears AFTER the
   // action card is passed, not the moment action_card_shown arrives from the backend.
@@ -411,6 +424,8 @@ export default function App() {
     navigate('/result/' + sessionId)
     setIsResultLoading(true)
     try {
+      // Last like must be committed before the report is (re)built from the liked set.
+      await awaitSwipesSettled()
       const [resultData] = await Promise.all([
         api.getResult({ session_id: sessionId }),
         ensureFreshReport(project),
@@ -427,9 +442,9 @@ export default function App() {
   // right-swipe). Re-fetches the board when it might own a report, then:
   //  - regen (report existed AND the liked set changed): regenerate through the
   //    shared reportJobs store (joins an already-running regeneration, so the
-  //    paths cannot double-POST); the persona image regeneration is chained
-  //    AFTER the new report lands (the server builds the image prompt from the
-  //    stored report, so a parallel start would render the OLD persona).
+  //    paths cannot double-POST). The persona image is NEVER regenerated here:
+  //    an existing image is kept as-is; only the owner's refresh button
+  //    (useRegeneration.confirmImage) regenerates it.
   //  - allowFirst (swipe completion only): first generation, image starts
   //    immediately in parallel (facts-based prompt, no report needed).
   // Never throws. `extraLikes` = a like not yet reflected in `project`.
@@ -461,12 +476,9 @@ export default function App() {
       let reportData = null
       if (generating) {
         const run = regen
-          ? reportJobs.regenerate(backendId, { afterSuccess: () => { reportImageJobs.regenerate(backendId) } })
+          ? reportJobs.regenerate(backendId)
           : api.generateReport(backendId)
         reportData = await run.catch((err) => { console.error('report generation failed:', err); return null })
-        if (regen && reportData?.final_report && reportImageJobs.get(backendId).status === 'generating') {
-          reportImageJobs.start(backendId).then(persistImage)   // joins the chained regeneration
-        }
       }
       const finalReport = reportData?.final_report || existingReport
       const axisScores = reportData?.axis_scores || (!reportData ? fetched?.axis_scores : null) || null
@@ -611,6 +623,7 @@ export default function App() {
     // Mark swipe in-flight — prevents "Finish & View Report" button from firing
     // while recordSwipe() is pending (optimistic bump can reach isAt100 instantly).
     setSwipePending(n => n + 1)
+    swipeSettlerRef.current.increment()
 
     if (canInstantSwap) {
       setCurrentCard(savedPrefetch)
@@ -811,6 +824,7 @@ export default function App() {
       if (log.length >= 10) log.shift()
       log.push(_dbg)
       setSwipePending(n => Math.max(0, n - 1))
+      swipeSettlerRef.current.decrement()
       setIsSwipeLoading(false)
       swipeLock.current = false
     }
@@ -1044,7 +1058,7 @@ export default function App() {
     // Land on the shared persona report page (FULL-REPORT-UI-1); it shows the
     // "saved" toast itself (location.state.saved), so no global toast here.
     const savedBackendId = saveModalProject?.backendId
-    navigate(savedBackendId ? `/board/${savedBackendId}/report` : '/user/me', { state: { saved: true } })
+    navigate(savedBackendId ? `/board/${savedBackendId}` : '/user/me', { state: { saved: true } })
   }
 
   // CTA entry point from ResultsPage. A board that is already saved has nothing
@@ -1183,10 +1197,11 @@ export default function App() {
           <Route path="library/:folderId" element={<Navigate to="/user/me" replace />} />
           <Route path="user/me" element={<UserProfilePage {...sharedLayoutProps} />} />
           <Route path="user/:userId" element={<UserProfilePage {...sharedLayoutProps} />} />
-          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} onLogout={handleLogout} onRequestSave={handleRequestSave} />} />
+          <Route path="result/:sessionId" element={<ResultsPage projects={projects} setProjects={setProjects} onReportGenerated={handleReportGenerated} awaitSwipesSettled={awaitSwipesSettled} onLogout={handleLogout} onRequestSave={handleRequestSave} />} />
           <Route path="buildings/:buildingId" element={<BuildingDetailPage onLogout={handleLogout} />} />
-          <Route path="board/:boardId" element={<BoardDetailPage onResume={handleResumeProject} onLogout={handleLogout} />} />
-          <Route path="board/:boardId/report" element={<BoardReportPage onLogout={handleLogout} />} />
+          <Route path="board/:boardId" element={<BoardRoute onResume={handleResumeProject} onLogout={handleLogout} />} />
+          {/* Legacy URL: the report now lives on /board/:boardId (state kept for the post-save toast). */}
+          <Route path="board/:boardId/report" element={<BoardReportRedirect />} />
           <Route path="upload" element={<UploadWorkPage onLogout={handleLogout} />} />
           <Route path="my/liked-offices" element={<Navigate to="/user/me" replace />} />
           <Route path="architects/:architectId" element={<ArchitectProfilePage onLogout={handleLogout} />} />

@@ -14,7 +14,7 @@ from ..models import Project
 from .. import services
 from ..caches import evict_projects_list, evict_project_detail, evict_user_profile_detail
 from ..report_name import followed_board_name
-from ..report_signature import liked_signature
+from ..report_signature import liked_count, liked_signature
 from ..services.axis_scores import compute_axis_scores
 from ..throttles import ReportGenerateThrottle, ReportImageThrottle
 from ._shared import _get_profile, _liked_id_only
@@ -174,6 +174,7 @@ class ProjectReportGenerateView(APIView):
         # ProjectSerializer.report_stale can detect later liked-building changes.
         if isinstance(report, dict):
             report['source_signature'] = current_sig
+            report['source_count'] = liked_count(liked_id_strings)
             report['generation_id'] = uuid.uuid4().hex
 
         # Final writes are mutually exclusive with ProjectDetailView.patch (which

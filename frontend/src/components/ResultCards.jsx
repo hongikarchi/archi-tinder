@@ -22,7 +22,7 @@ import s from './ResultCards.module.css'
  * (DESIGN.md §11 E1/E5/E7/E8) live in ResultCards.module.css.
  *
  * Exports
- *   default  ResultCards      - the 3 cards (persona / pattern + taste / closing)
+ *   default  ResultCards      - the 3 cards (pattern + taste / persona / closing)
  *   named    ResultsStage     - page chrome (logo, top controls, centred card slot)
  *   named    ResultStateCard  - loading / failure / zero-likes card in the SAME box
  *
@@ -224,9 +224,9 @@ export default function ResultCards({ project, backendId, ctaLabel, onCta }) {
   const cardCls = i => `${s.card} ${i === 2 ? s.cardEnd : ''} ${seen.has(i) ? s.seen : ''}`
 
   const tags = [
-    ...(report.dominant_programs || []).map(x => [x, rp.tagP]),
-    ...(report.dominant_styles || []).map(x => [x, rp.tagS]),
-    ...(report.dominant_materials || []).map(x => [x, rp.tagM]),
+    ...(report.dominant_programs || []),
+    ...(report.dominant_styles || []),
+    ...(report.dominant_materials || []),
   ]
 
   return (
@@ -240,10 +240,35 @@ export default function ResultCards({ project, backendId, ctaLabel, onCta }) {
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
         >
-          {/* 1 — persona */}
+          {/* 1 — pattern + taste analysis */}
           <article className={cardCls(0)}>
-            <p className={`${s.rv} ${s.eyebrow}`}><span className={s.eyebrowLine} />{t('detailB3.personaReportEyebrow')}</p>
-            <h1 className={`${s.rv} ${s.name}`} style={delay(0.1)}>{report.persona_type}</h1>
+            <p className={`${s.rv} ${s.eyebrow}`}>{t('detailB3.personaReportEyebrow')}</p>
+            <h1 className={`${s.rv} ${s.h2}`} style={delay(0.1)}>{t('persona.patternTitle')}</h1>
+            <p className={`${s.rv} ${s.pattern}`} style={delay(0.2)}>
+              {report.pattern_paragraph || t('persona.patternEmpty')}
+            </p>
+            <div className={s.tags}>
+              {tags.map((tag, i) => (
+                <span
+                  key={`${i}-${tag}`}
+                  className={`${s.rv} ${s.pop} ${rp.tag}`}
+                  style={delay(Math.min(0.25 + i * TAG_STAGGER_S, TAG_STAGGER_MAX_S))}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+            <h3 className={`${s.rv} ${s.h3}`} style={delay(0.3)}>{t('persona.tasteSection')}</h3>
+            {legacy && <p className={`${s.rv} ${s.legacy}`}>{t('persona.legacySpectrum')}</p>}
+            <div className={s.rv} style={delay(0.4)}>
+              <TasteSpectrum axisScores={axisScores || {}} rowHeight={48} animate={!reduced} play={seen.has(0)} />
+            </div>
+          </article>
+
+          {/* 2 — persona */}
+          <article className={cardCls(1)}>
+            <p className={`${s.rv} ${s.eyebrow}`}>{t('detailB3.personaReportEyebrow')}</p>
+            <h2 className={`${s.rv} ${s.name}`} style={delay(0.1)}>{report.persona_type}</h2>
             <p className={`${s.rv} ${s.oneLiner}`} style={delay(0.3)}>{report.one_liner}</p>
             {report.description && (
               <p className={`${s.rv} ${s.desc}`} style={delay(0.45)}>{report.description}</p>
@@ -259,31 +284,6 @@ export default function ResultCards({ project, backendId, ctaLabel, onCta }) {
                 {...regen.imageProps}
                 t={t}
               />
-            </div>
-          </article>
-
-          {/* 2 — pattern + taste analysis */}
-          <article className={cardCls(1)}>
-            <p className={`${s.rv} ${s.eyebrow}`}><span className={s.eyebrowLine} />{t('persona.whyLabel')}</p>
-            <h2 className={`${s.rv} ${s.h2}`} style={delay(0.1)}>{t('persona.patternTitle')}</h2>
-            <p className={`${s.rv} ${s.pattern}`} style={delay(0.2)}>
-              {report.pattern_paragraph || t('persona.patternEmpty')}
-            </p>
-            <div className={s.tags}>
-              {tags.map(([tag, cls], i) => (
-                <span
-                  key={`${cls}-${tag}`}
-                  className={`${s.rv} ${s.pop} ${rp.tag} ${cls}`}
-                  style={delay(Math.min(0.25 + i * TAG_STAGGER_S, TAG_STAGGER_MAX_S))}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <h3 className={`${s.rv} ${s.h3}`} style={delay(0.3)}>{t('persona.tasteSection')}</h3>
-            {legacy && <p className={`${s.rv} ${s.legacy}`}>{t('persona.legacySpectrum')}</p>}
-            <div className={s.rv} style={delay(0.4)}>
-              <TasteSpectrum axisScores={axisScores || {}} rowHeight={48} animate={!reduced} play={seen.has(1)} />
             </div>
           </article>
 

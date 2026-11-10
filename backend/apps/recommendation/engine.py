@@ -795,6 +795,24 @@ def _mmr_downsample(relevance, emb_matrix, k, penalty):
     return selected
 
 
+def _fetch_rows_binary(sql, params):
+    """Run a read-only query on the buildings connection with BINARY result format.
+
+    Django's cursor is a psycopg ClientCursor, which cannot return binary
+    results, so a plain psycopg.Cursor (server-side binding) is opened on the
+    same pooled connection. Used to pull embeddings as float4[] without the
+    ~5x text-encoding blow-up of vector::text. Params use normal %s placeholders.
+    """
+    import psycopg
+    with connection.cursor():            # makes sure the connection is open
+        raw = psycopg.Cursor(connection.connection)
+        try:
+            raw.execute(sql, params, binary=True, prepare=False)
+            return raw.fetchall()
+        finally:
+            raw.close()
+
+
 def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None):
     """
     Promote-to-taste pool: pgvector HNSW neighbours of the Discovery preference
@@ -814,12 +832,14 @@ def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None)
       2. Greedy MMR down-sample of the neighbours so the swipe phase does not
          get a near-duplicate cluster.
       3. A small exploration slice (taste_pool_random_fraction, default 20%) of
-         uniformly random publishable buildings (cached id list, no extra SQL),
-         so the swipe phase can still discover taste outside the neighbourhood.
+         uniformly random publishable buildings (cached id list; their
+         embeddings are fetched in the SAME query via UNION ALL), so the swipe
+         phase can still discover taste outside the neighbourhood.
       4. Seed injection per create_bounded_pool semantics: seeds prepended with
          score 1.1 (the caller marks them exposed, so they are never served).
-      5. Neighbour embeddings are written into the pool-embedding cache, so the
-         caller's get_pool_embeddings(pool_ids) is a cache hit for them.
+      5. Neighbour + random-slice embeddings (binary float4[] transfer) are written
+         into the pool-embedding cache, so the caller's
+         get_pool_embeddings(pool_ids) is a full cache hit.
 
     Returns (pool_ids, pool_scores). Raises on SQL failure (caller falls back).
     Total pool size never exceeds target (seeds included) unless seeds alone do.
@@ -837,8 +857,30 @@ def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None)
     k_fetch = target * overfetch
     vec_str = _vec_to_pg(v_initial)
 
+    n_pick = max(0, target - len(seed_list))
+    n_random = int(round(n_pick * random_fraction))
+    n_near = n_pick - n_random
+
+    # Exploration slice candidates are drawn BEFORE the query (cached id list, no
+    # SQL) so their embeddings ride in the same round-trip as the HNSW neighbours.
+    # A few spare candidates absorb collisions with the near picks (~3% each).
+    random_cands = []
+    if n_random > 0:
+        try:
+            sample = _random_pool(2 * n_random + len(exclude_list))
+        except Exception as exc:
+            logger.warning('create_taste_seeded_pool: random slice failed (%s)', exc)
+            sample = []
+        ex_set = set(exclude_list)
+        random_cands = [b for b in dict.fromkeys(sample) if b not in ex_set][
+            :n_random + n_random // 4 + 4]
+
+    # Embeddings ship as float4[] in BINARY result format (~1.5 KB/row) instead of
+    # vector::text (~8 KB/row): the HNSW scan is ~15 ms server-side, the wire
+    # transfer of text embeddings was the whole cost.
+    cols = 'canonical_bld_id, embedding::real[]'
     sql = (
-        'SELECT canonical_bld_id, embedding::text, (1 - (embedding <=> %s::vector)) AS relevance'
+        f'(SELECT {cols}, (1 - (embedding <=> %s::vector)) AS relevance, true AS near'
         ' FROM canonical_v2_buildings'
         ' WHERE is_publishable = true'
     )
@@ -846,57 +888,66 @@ def create_taste_seeded_pool(v_initial, seed_ids, exclude_ids=None, target=None)
     if exclude_list:
         sql += ' AND canonical_bld_id <> ALL(%s::text[])'
         params.append(exclude_list)
-    sql += ' ORDER BY embedding <=> %s::vector LIMIT %s'
+    sql += ' ORDER BY embedding <=> %s::vector LIMIT %s)'
     params.extend([vec_str, k_fetch])
+    if random_cands:
+        sql += (
+            f' UNION ALL (SELECT {cols}, (1 - (embedding <=> %s::vector)) AS relevance, false AS near'
+            ' FROM canonical_v2_buildings'
+            ' WHERE is_publishable = true AND canonical_bld_id = ANY(%s::text[]))'
+        )
+        params.extend([vec_str, random_cands])
 
     with stage('taste_pool_hnsw_sql', target=target, k_fetch=k_fetch):
-        with connection.cursor() as cur:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
+        rows = _fetch_rows_binary(sql, params)
 
     ids, rel, embs = [], [], []
-    for bid, emb_text, relevance in rows:
-        emb = _parse_embedding_text(emb_text)
+    ids_set = set()
+    all_embs = {}                     # every parsed row (near + random slice) -> embedding
+    for row in rows:
+        bid, raw_emb, relevance = row[0], row[1], row[2]
+        is_near = row[3] if len(row) > 3 else True
+        emb = _parse_embedding_text(raw_emb) if isinstance(raw_emb, str) else (
+            _finite_unit_vector(np.asarray(raw_emb, dtype=np.float64)) if raw_emb is not None else None)
         if emb is None:
             continue
-        ids.append(bid)
-        rel.append(float(relevance))
-        embs.append(emb)
+        all_embs.setdefault(bid, emb)
+        if is_near and bid not in ids_set:
+            ids_set.add(bid)
+            ids.append(bid)
+            rel.append(float(relevance))
+            embs.append(emb)
 
     if not ids:
         # No usable neighbours (e.g. embeddings unparseable): let the caller fall back.
         raise RuntimeError('create_taste_seeded_pool: HNSW query returned no usable neighbours')
 
-    n_pick = max(0, target - len(seed_list))
-    n_random = int(round(n_pick * random_fraction))
-    n_near = n_pick - n_random
     with stage('taste_pool_mmr', n_candidates=len(ids), n_pick=n_pick):
         near_picked = _mmr_downsample(rel, np.stack(embs), n_pick, penalty)
 
-    # Exploration slice: random publishable ids not already chosen / excluded.
     random_ids = []
     if n_random > 0:
-        taken = set(exclude_list) | {ids[i] for i in near_picked[:n_near]}
-        try:
-            sample = _random_pool(2 * n_random + len(taken))
-        except Exception as exc:
-            logger.warning('create_taste_seeded_pool: random slice failed (%s)', exc)
-            sample = []
-        random_ids = [b for b in dict.fromkeys(sample) if b not in taken][:n_random]
+        taken = {ids[i] for i in near_picked[:n_near]}
+        random_ids = [b for b in random_cands if b not in taken and b in all_embs][:n_random]
     # Random slice came up short -> take more nearest-diverse picks instead.
     near_picked = near_picked[:n_near + (n_random - len(random_ids))]
 
-    with _cache_lock:
-        for i in near_picked:
-            _building_embedding_cache[ids[i]] = embs[i]
-        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
-            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
-            for old_bid in list(_building_embedding_cache.keys())[:excess]:
-                _building_embedding_cache.pop(old_bid, None)
     pool_ids = [ids[i] for i in near_picked]
     pool_scores = {ids[i]: rel[i] for i in near_picked}
     pool_ids.extend(random_ids)
     pool_ids = list(dict.fromkeys(pool_ids))   # defensive: random slice vs shortfall picks
+
+    # Cache every embedding the pool needs (near picks + random slice) so the
+    # caller's get_pool_embeddings(pool_ids) is a full cache hit.
+    with _cache_lock:
+        for bid in pool_ids:
+            emb = all_embs.get(bid)
+            if emb is not None:
+                _building_embedding_cache[bid] = emb
+        if len(_building_embedding_cache) > _BUILDING_CACHE_MAX_SIZE:
+            excess = len(_building_embedding_cache) - _BUILDING_CACHE_MAX_SIZE
+            for old_bid in list(_building_embedding_cache.keys())[:excess]:
+                _building_embedding_cache.pop(old_bid, None)
 
     for sid in reversed(seed_list):
         pool_ids.insert(0, sid)

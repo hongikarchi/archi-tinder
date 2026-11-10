@@ -9,12 +9,16 @@
  *
  * Mock: social-board-like.html. Expand behaviour: the expanded card is moved to
  * the START of its grid row (left sibling drops below), every tile animates with
- * FLIP keyed by board_id (WAAPI), the toggled card rises from below, and the
- * scroll container scrolls so the card sits at the top.
+ * FLIP keyed by board_id (WAAPI), the toggled card GROWS from its tile rect to
+ * its expanded rect (and shrinks back on close; translate + scale, origin 0 0)
+ * while the report content fades in late, and the scroll container scrolls so
+ * the card sits at the top. The expanded card shows the read-only persona report
+ * of the board (usePublicBoardReport, cached per board for the page lifetime).
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { usePublicBoardReport } from '../hooks/usePublicBoardReport.js'
 import { getMyPersonality } from '../api/personality.js'
 import { getPeopleDiscovery } from '../api/people.js'
 import { reactToProject, unreactToProject } from '../api/social.js'
@@ -37,7 +41,8 @@ const TOAST_MS = 3000 // DESIGN.md §8.11
 // Mirrors --motion-flip (500ms) / --motion-ease; WAAPI needs a literal.
 const FLIP_MS = 500
 const FLIP_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
-const RISE_PX = 56
+const RISE_PX = 56 // fallback only: toggled card with no previous rect
+const CONTENT_FADE_DELAY = 0.35 // report content stays hidden until 35% of the grow
 
 const PRESET_IDS = ['all', 'inspired', 'opposite']
 const PRESET_LABEL_KEY = {
@@ -96,6 +101,7 @@ export default function PeopleDiscoveryPage({ onLogout }) {
   const animsRef = useRef([])         // in-flight WAAPI animations
   const expandedRef = useRef(null)
   expandedRef.current = expanded
+  const publicReport = usePublicBoardReport(expanded?.id ?? null)
 
   useEffect(() => {
     isMounted.current = true
@@ -238,7 +244,7 @@ export default function PeopleDiscoveryPage({ onLogout }) {
     const opening = !cur || cur.id !== id
     const before = new Map()
     tileRefs.current.forEach((el, key) => before.set(key, el.getBoundingClientRect()))
-    flipRef.current = { before, risenId: opening ? id : cur.id, scrollToId: opening ? id : null }
+    flipRef.current = { before, risenId: opening ? id : cur.id, scrollToId: opening ? id : null, opening }
     let cols = 2
     if (gridRef.current) {
       const n = getComputedStyle(gridRef.current).gridTemplateColumns.split(' ').filter(Boolean).length
@@ -276,17 +282,38 @@ export default function PeopleDiscoveryPage({ onLogout }) {
       }
       tileRefs.current.forEach((el, key) => {
         if (!el.animate) return
-        if (key === flip.risenId) {
-          // The toggled card never slides sideways: it rises from below.
+        const a = flip.before.get(key)
+        if (key === flip.risenId && !a) {
+          // No previous rect (should not happen): fall back to the old rise.
           run(el, [{ transform: `translateY(${RISE_PX}px)`, opacity: 0.55 }, { transform: 'none', opacity: 1 }])
           return
         }
-        const a = flip.before.get(key)
         if (!a) return
         const b = el.getBoundingClientRect()
         const dx = a.left - b.left
         const dy = a.top - b.top
-        if (!dx && !dy) return
+        // The toggled card (and a card collapsing because another one opened)
+        // changes size: grow/shrink in place from the old rect (origin top-left).
+        const sx = b.width ? a.width / b.width : 1
+        const sy = b.height ? a.height / b.height : 1
+        const resized = Math.abs(sx - 1) > 0.01 || Math.abs(sy - 1) > 0.01
+        if (!dx && !dy && !resized) return
+        if (resized) {
+          run(el, [
+            { transformOrigin: '0 0', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+            { transformOrigin: '0 0', transform: 'none' },
+          ])
+          // Hide the distorted report while the panel is still scaling.
+          const content = flip.opening && key === flip.risenId ? el.querySelector('[data-report-content]') : null
+          if (content?.animate) {
+            run(content, [
+              { opacity: 0, offset: 0 },
+              { opacity: 0, offset: CONTENT_FADE_DELAY },
+              { opacity: 1, offset: 1 },
+            ])
+          }
+          return
+        }
         run(el, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }])
       })
     }
@@ -433,6 +460,7 @@ export default function PeopleDiscoveryPage({ onLogout }) {
                   onToggle={toggleExpand}
                   onLike={handleLike}
                   registerRef={registerRef}
+                  report={expanded?.id === board.board_id ? publicReport : undefined}
                 />
               ))}
               {loadingMore && Array.from({ length: 4 }, (_, i) => <SkeletonTile key={`more-${i}`} />)}

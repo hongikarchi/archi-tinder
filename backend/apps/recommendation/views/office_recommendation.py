@@ -24,9 +24,8 @@ DB notes:
 import logging
 
 from django.db import connections
-from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -34,6 +33,7 @@ from apps.social.models import ArchitectFollow
 
 from ..caches import evict_user_profile_detail
 from ..models import Project
+from ..throttles import ArchitectRecommendationsThrottle
 from ._shared import _get_profile, _liked_id_only
 
 logger = logging.getLogger('apps.recommendation')
@@ -114,17 +114,21 @@ class RecommendedArchitectsView(APIView):
     annotated with up to 5 of their other publishable works not already on
     the board.
 
-    Ownership: the requesting user must own the project.
+    Access: the owner, or anyone (incl. anonymous) when the board is public and
+    not temp. Otherwise 404 (hides existence); anonymous callers get the same
+    404 for private, temp and unknown ids (no existence oracle).
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    throttle_classes = [ArchitectRecommendationsThrottle]
 
     def get(self, request, pk):
         profile = _get_profile(request)
-        if not profile:
-            return Response({'detail': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        # Ownership check: filter(user=profile) ensures non-owner sees 404.
-        project = get_object_or_404(Project.objects.filter(user=profile), project_id=pk)
+        project = Project.objects.filter(project_id=pk).first()
+        if project is None:
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        is_owner = profile is not None and project.user_id == profile.pk
+        if not is_owner and (project.visibility != 'public' or project.is_temp):
+            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
         board_ids = _extract_ids_from_project(project)
         if not board_ids:

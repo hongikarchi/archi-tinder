@@ -1,8 +1,15 @@
-/* BoardSocialCard — /people board tile (mock: social-board-like.html).
+/* BoardSocialCard — /people board tile.
    Collapsed box (aspect/radius/border/shadow) arrives INLINE from
    photoCardShellStyle; the expanded state drops that inline style and is
    styled here. Glass values (rgba black/white) are the fixed on-image values
-   already used by BoardCover / CoverIconButton / the old people-card heart. */
+   already used by BoardCover / CoverIconButton / the old people-card heart.
+
+   Off-scale values (intentional, scoped to this file):
+   - scrollbar B (approved mock persona-report-final ③): 10px wide, 2px
+     transparent-border inset thumb, 48px min thumb, track margin 56px 0 18px so
+     the pinned X never covers the thumb and the rounded bottom corners never clip
+     it. Thumb #d0d7de / hover #8c959f (light), #3b434d (dark themes) have no
+     matching token (--color-border* are translucent), hence --sb-* locals. */
 
 .tile {
   outline: none;
@@ -56,7 +63,7 @@
   text-align: center;
 }
 
-/* Expanded: spans the whole row, report-card sized. */
+/* Expanded: spans the whole row; a white rounded panel, report inside. */
 .exp {
   grid-column: 1 / -1;
   justify-self: center;
@@ -65,86 +72,33 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 600px;
+  height: 640px;
   max-height: calc(var(--page-height) - 160px);
   min-height: 360px;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--color-bg);
   border: 1px solid var(--color-border-soft);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   cursor: default;
 }
-.exp .frame {
-  aspect-ratio: 4 / 3;
-  flex-shrink: 0;
-}
-.exp .scrim {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0.2) 50%, rgba(0, 0, 0, 0) 75%) !important;
-}
-.exp .cap {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 18px 18px 16px;
-}
 
-.titleRow {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-.titleCol {
-  min-width: 0;
-  flex: 1;
-}
 .title {
   margin: 0 0 2px;
 }
-.exp .title {
-  color: #fff;
-  font-size: var(--fs-title);
-  font-weight: var(--fw-bold);
-  line-height: 1.2;
-  margin: 0 0 4px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  word-break: keep-all;
-}
-.owner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: var(--fs-caption);
-  color: rgba(255, 255, 255, 0.72);
-}
-.type {
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
 
-/* Glass controls */
+/* Glass close, pinned top-right of the panel (outside the scroller). */
 .close {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 2;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
   width: 32px;
   height: 32px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.45);
   color: #fff;
   display: flex;
   align-items: center;
@@ -155,7 +109,7 @@
   touch-action: manipulation;
 }
 .close:focus-visible,
-.heartIcon:focus-visible,
+.likePill:focus-visible,
 .frontHeart:focus-visible {
   outline: 2px solid var(--accent-1);
   outline-offset: 2px;
@@ -184,7 +138,7 @@
     color var(--motion-fast) var(--motion-ease);
 }
 .frontHeart svg,
-.heartIcon svg {
+.likePill svg {
   fill: none;
   stroke: currentColor;
 }
@@ -194,63 +148,75 @@
   border-color: transparent;
 }
 .frontHeart.on svg,
-.heartIcon.on svg {
+.likePill.on svg {
   fill: currentColor;
 }
 
-.heartIcon {
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 0;
-  background: rgba(0, 0, 0, 0.35);
-  color: rgba(255, 255, 255, 0.85);
-  display: flex;
+/* "이 취향 좋아요 · n" — reuses the feed like (same handler as the tile heart). */
+.likePill {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-dim);
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
   cursor: pointer;
-  padding: 0;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   touch-action: manipulation;
   transition:
-    background var(--motion-normal) var(--motion-ease),
-    color var(--motion-normal) var(--motion-ease);
+    background var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
 }
-.heartIcon.on {
+.likePill.on {
   color: var(--color-destructive);
-  background: rgba(255, 255, 255, 0.9);
-}
-.heartIcon:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
-/* Buildings scroll INSIDE the card */
+/* Report scrolls INSIDE the card (scrollbar style B). */
 .detail {
+  --sb-thumb: #d0d7de;
+  --sb-thumb-hover: #8c959f;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 12px;
   background: var(--color-bg);
 }
-.label {
-  margin: 0 0 8px;
-  font-size: var(--fs-caption);
-  color: var(--color-text-muted);
+:global([data-theme="github-dark"]) .detail,
+:global([data-theme="synthwave-84"]) .detail {
+  --sb-thumb: #3b434d;
+  --sb-thumb-hover: #636e7b;
 }
-.bgrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.detail::-webkit-scrollbar {
+  width: 10px;
 }
-.bSkeleton {
-  aspect-ratio: 3 / 4;
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-2);
+.detail::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 56px 0 18px;
 }
+.detail::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  background: var(--sb-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+.detail::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hover);
+  background-clip: padding-box;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .detail {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb) transparent;
+  }
+}
+
 .note {
   padding: 28px 8px;
   text-align: center;

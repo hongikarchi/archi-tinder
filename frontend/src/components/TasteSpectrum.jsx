@@ -131,14 +131,14 @@ export default function TasteSpectrum({ axisScores, rowHeight = DEFAULT_ROW, ani
               <g opacity={none ? 0.35 : 1}>
                 <line x1={x0} y1={by} x2={x1} y2={by} stroke="var(--color-border)" strokeWidth={TRACK_WIDTH} strokeLinecap="round" />
               </g>
-              <text x={x0 - GAP} y={by + 4} fontSize={POLE_SIZE} fontWeight={600} textAnchor="end" fill="var(--color-text-muted)" opacity={none ? 0.5 : 1}>
+              <text x={x0 - GAP} y={by + 4} fontSize={POLE_SIZE} fontWeight={600} textAnchor="end" fill="var(--color-text)" opacity={none ? 0.5 : 1}>
                 {t(ax.leftKey)}
               </text>
-              <text x={x1 + GAP} y={by + 4} fontSize={POLE_SIZE} fontWeight={600} textAnchor="start" fill="var(--color-text-muted)" opacity={none ? 0.5 : 1}>
+              <text x={x1 + GAP} y={by + 4} fontSize={POLE_SIZE} fontWeight={600} textAnchor="start" fill="var(--color-text)" opacity={none ? 0.5 : 1}>
                 {t(ax.rightKey)}
               </text>
               {none && (
-                <text x={(x0 + x1) / 2} y={by - 8} fontSize={POLE_SIZE} textAnchor="middle" fill="var(--color-text-dim)">
+                <text x={(x0 + x1) / 2} y={by - 8} fontSize={POLE_SIZE} textAnchor="middle" fill="var(--color-text)">
                   {t('persona.noEvidence')}
                 </text>
               )}

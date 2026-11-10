@@ -11,7 +11,7 @@ from unittest.mock import patch
 from django.core.cache import cache
 
 from apps.recommendation.models import Project
-from apps.recommendation.report_signature import liked_signature
+from apps.recommendation.report_signature import liked_count, liked_signature
 
 
 @pytest.fixture(autouse=True)
@@ -67,8 +67,35 @@ class TestLikedSignature:
         assert liked_signature([]) == liked_signature(None)
 
 
+class TestLikedCount:
+
+    def test_distinct_and_tolerant(self):
+        assert liked_count(_liked('B001', 'B002', 'B001')) == 2
+        assert liked_count(['B001', {'id': 'B001'}, {'id': 'B002'}]) == 2
+        assert liked_count([]) == 0
+        assert liked_count(None) == 0
+
+
 @pytest.mark.django_db
 class TestReportStale:
+
+    def test_generate_stamps_source_count_distinct(self, auth_client, user_profile):
+        project = _make_project(user_profile, liked_ids=_liked('B001', 'B002', 'B001'))
+        resp = _generate(auth_client, project)
+        assert resp.status_code == 200
+        assert resp.json()['final_report']['source_count'] == 2
+        project.refresh_from_db()
+        assert project.final_report['source_count'] == 2
+
+    def test_legacy_stamp_writes_source_count(self, auth_client, user_profile):
+        project = _make_project(user_profile, final_report={'summary': 'legacy'})
+        resp = auth_client.patch(
+            f'/api/v1/projects/{project.project_id}/',
+            {'remove_building_ids': ['B001']}, format='json',
+        )
+        assert resp.status_code == 200
+        project.refresh_from_db()
+        assert project.final_report['source_count'] == 2
 
     def test_generate_stamps_signature_and_not_stale(self, auth_client, user_profile):
         project = _make_project(user_profile)

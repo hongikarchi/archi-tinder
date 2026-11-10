@@ -14,8 +14,8 @@ import s from './PersonaReportPage.module.css'
 /**
  * PersonaReportPage — the ONE shared persona report page (FULL-REPORT-UI-1, #445).
  *
- * Used by /board/:boardId/report (BoardReportPage), which is also the post-save
- * landing (ResultCards hands off to it). Look, copy and behaviour follow the approved mock
+ * Used by /board/:boardId (BoardReportPage, owner + read-only viewer), which is also
+ * the post-save landing. Look, copy and behaviour follow the approved mock
  * (archi-tinder-mock/persona-report-all.html); off-scale values are DESIGN.md
  * §11 E1-E10 and live in PersonaReportPage.module.css.
  *
@@ -127,6 +127,9 @@ function MetaRow({ meta, t }) {
   return (
     <p className={s.meta}>
       <span>{parts.join(' · ')}</span>
+      {meta?.ownerLabel && meta?.onOwner && (
+        <button type="button" className={s.ownerLink} onClick={meta.onOwner}>{meta.ownerLabel} ›</button>
+      )}
     </p>
   )
 }
@@ -201,29 +204,52 @@ export function ImageSlot({ boardId, personaName, imageData, imageMime, jobStatu
   )
 }
 
-function BuildingCard({ card, rank, big, onOpen }) {
+function BuildingCard({ card, rank, onOpen }) {
   const title = card.image_title || card.name_en || ''
-  const architects = card.metadata?.axis_architects || card.architect
-  const year = card.metadata?.axis_year || card.year
-  const sub = [architects, year].filter(Boolean).join(' · ')
   const rec = typeof rank === 'number'
   const open = () => onOpen?.(card, rank)
   return (
     <article
-      className={`${s.card} ${rec ? (big ? s.recBig : s.recSmall) : ''}`}
+      className={s.card}
       role="button"
       tabIndex={0}
       onClick={open}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } }}
     >
-      {card.image_url && <img className={s.cardImg} src={card.image_url} alt={title} loading={big ? 'eager' : 'lazy'} />}
+      {card.image_url && <img className={s.cardImg} src={card.image_url} alt={title} loading="lazy" />}
       <div className={s.cardScrim} />
       {rec && <span className={s.pill}>#{rank}</span>}
       <div className={s.cardCap}>
         <h3 className={s.cardTitle}>{title}</h3>
-        {big && sub && <p className={s.recSub}>{sub}</p>}
       </div>
     </article>
+  )
+}
+
+/** Recommended-architect row: photo tile · name + first work · "프로필 ›". */
+function ArchitectRow({ architect, onOpen, style, t }) {
+  const first = architect?.buildings?.[0]
+  const img = first?.image_url
+  const work = first ? (first.name_en || first.name || '') : ''
+  const name = architect?.name || ''
+  return (
+    <button
+      type="button"
+      data-rv
+      className={`${s.rv} ${s.archRow}`}
+      style={style}
+      onClick={() => onOpen?.(architect?.architect_id)}
+      aria-label={`${name} ${t('board.profile')}`}
+    >
+      <span className={s.archAvatar} aria-hidden="true">
+        {img && <img className={s.archAvatarImg} src={img} alt="" loading="lazy" />}
+      </span>
+      <span className={s.archText}>
+        <span className={s.archName}>{name}</span>
+        {work && <span className={s.archSub}>{work}</span>}
+      </span>
+      <span className={s.archGo} aria-hidden="true">{t('board.profile')} ›</span>
+    </button>
   )
 }
 
@@ -234,26 +260,32 @@ function BuildingCard({ card, rank, big, onOpen }) {
  *   finalReport       object       - { persona_type, one_liner, description, pattern_paragraph, dominant_* }
  *   axisScores        object|null  - see TasteSpectrum
  *   reportImage / reportImageMime  - stored base64 image (or null)
- *   meta              { visibility, buildingCount, reactionCount }
+ *   meta              { visibility, buildingCount, reactionCount, ownerLabel?, onOwner? }
+ *                       (ownerLabel + onOwner render an "@handle ›" link in the meta row)
  *   likedBuildings    ImageCard[]  - liked-buildings row (hidden when empty)
  *   recommendations   ImageCard[]  - recommendation rows (hidden when empty)
  *   onOpenBuilding    (card, rank?) => void
- *   onRegenerateReport  () => void - owner footer link (WP2); link hidden when absent
- *   regenerating      bool         - footer link busy state
- *   regenMessage      string       - small text under the footer link (failure)
+ *   architects        object[]     - recommended architects (useBoard.recommendedArchitects shape:
+ *                       { architect_id, name, buildings[] }); section hidden when empty
+ *   onOpenArchitect   (architectId) => void   - tap on an architect row
+ *   topNotice         ReactNode    - rendered at the very top, above the hero
+ *   actionsSlot       ReactNode    - rendered right after the hero description
+ *   metaSlot          ReactNode    - replaces the default meta row (merged board page: owner link / visibility toggle)
+ *   titleSlot         ReactNode    - replaces the persona-name <h1> (owner rename input in edit mode)
+ *   likedSlot         ReactNode    - replaces the liked-buildings row (owner edit grid)
+ *   footerSlot        ReactNode    - rendered after the last section (owner: delete board)
  *   onRegenerateImage () => void   - owner image refresh button (WP2); hidden when absent
  *   imageRegenerating / imageRegenFailed  bool
  */
 export function PersonaReportBody({
   boardId = null, finalReport, axisScores, reportImage, reportImageMime,
   meta, likedBuildings = [], recommendations = [], onOpenBuilding,
-  onRegenerateReport, regenerating = false, regenMessage = '',
+  architects = [], onOpenArchitect, topNotice = null, actionsSlot = null,
+  metaSlot = null, titleSlot = null, likedSlot = null, footerSlot = null,
   onRegenerateImage, imageRegenerating = false, imageRegenFailed = false,
 }) {
   const { t, language } = useTranslation()
   const rootRef = useRef(null)
-  const footerRef = useRef(null)
-  const linkRef = useRef(null)
   const [specPlay, setSpecPlay] = useState(false)
   const [reduced] = useState(prefersReducedMotion)
 
@@ -261,13 +293,16 @@ export function PersonaReportBody({
   const imageData = imageJob.image || reportImage || null
   const imageMime = imageJob.image ? imageJob.mime : reportImageMime
 
-  // Owner-only auto-start for legacy / previously failed boards. Fires only
-  // while the job is 'idle' (never after 'error'/'done'); viewers never write.
+  // Owner-only first-generation for legacy boards with NO image anywhere (store
+  // or board payload). Fires only while the job is 'idle' (never after
+  // 'error'/'done'); viewers (no onRegenerateImage) never write. An existing image
+  // is never regenerated here — only the refresh button does that.
+  const isOwnerView = !!onRegenerateImage
   useEffect(() => {
-    if (boardId && !imageData && imageJob.status === 'idle') {
+    if (isOwnerView && boardId && !imageData && imageJob.status === 'idle') {
       reportImageJobs.start(boardId)
     }
-  }, [boardId, imageData, imageJob.status])
+  }, [isOwnerView, boardId, imageData, imageJob.status])
 
   const onReveal = useCallback(node => {
     if (node.dataset.spec) setSpecPlay(true)
@@ -277,35 +312,24 @@ export function PersonaReportBody({
   const report = localizeReport(finalReport || {}, language)
   const scores = axisScores || {}
   const legacy = isLegacyAxisScores(axisScores)
-  const canRegenerate = !!onRegenerateReport
 
   const tags = [
-    ...(report.dominant_programs || []).map(x => [x, s.tagP]),
-    ...(report.dominant_styles || []).map(x => [x, s.tagS]),
-    ...(report.dominant_materials || []).map(x => [x, s.tagM]),
+    ...(report.dominant_programs || []),
+    ...(report.dominant_styles || []),
+    ...(report.dominant_materials || []),
   ]
 
-  function scrollToRegenerate() {
-    footerRef.current?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' })
-    const btn = linkRef.current
-    if (!btn) return
-    btn.classList.remove(s.pulse)
-    void btn.offsetWidth   // restart the CSS animation
-    btn.classList.add(s.pulse)
-  }
-
-  const [bigRec, ...restRecs] = recommendations
   const delay = d => ({ '--d': `${d}s` })
 
   return (
     <div ref={rootRef} className={s.body}>
+      {topNotice && <div className={s.topNotice}>{topNotice}</div>}
+
       {/* Persona */}
       <section className={s.hero}>
-        <MetaRow meta={meta} t={t} />
-        <p data-rv className={`${s.rv} ${s.eyebrow} ${s.eyebrowLead}`}>
-          <span className={s.eyebrowLine} />{t('detailB3.personaReportEyebrow')}
-        </p>
-        <h1 data-rv className={`${s.rv} ${s.name} ${s.personaName}`} style={delay(0.1)}>{report.persona_type}</h1>
+        {metaSlot || <MetaRow meta={meta} t={t} />}
+        <p data-rv className={`${s.rv} ${s.eyebrow} ${s.eyebrowLead}`}>{t('detailB3.personaReportEyebrow')}</p>
+        {titleSlot || <h1 data-rv className={`${s.rv} ${s.name} ${s.personaName}`} style={delay(0.1)}>{report.persona_type}</h1>}
         <p data-rv className={`${s.rv} ${s.oneLiner}`} style={delay(0.3)}>{report.one_liner}</p>
         <div data-rv className={s.rv} style={delay(0.5)}>
           <ImageSlot
@@ -323,21 +347,21 @@ export function PersonaReportBody({
         {report.description && (
           <p data-rv className={`${s.rv} ${s.description}`} style={delay(0.65)}>{report.description}</p>
         )}
+        {actionsSlot && <div data-rv className={`${s.rv} ${s.actions}`} style={delay(0.75)}>{actionsSlot}</div>}
       </section>
 
       {/* Pattern analysis */}
       <section className={s.section}>
-        <p data-rv className={`${s.rv} ${s.eyebrow}`}>{t('persona.whyLabel')}</p>
-        <h2 data-rv className={`${s.rv} ${s.h2}`} style={delay(0.05)}>{t('persona.patternTitle')}</h2>
+        <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('persona.patternTitle')}</h2>
         <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
           {report.pattern_paragraph || t('persona.patternEmpty')}
         </p>
         <div className={s.tags}>
-          {tags.map(([tag, cls], i) => (
+          {tags.map((tag, i) => (
             <span
-              key={`${cls}-${tag}`}
+              key={`${i}-${tag}`}
               data-rv
-              className={`${s.rv} ${s.pop} ${s.tag} ${cls}`}
+              className={`${s.rv} ${s.pop} ${s.tag}`}
               style={delay(Math.min(i * TAG_STAGGER_S, TAG_STAGGER_MAX_S))}
             >
               {tag}
@@ -348,17 +372,9 @@ export function PersonaReportBody({
 
       {/* Taste analysis */}
       <section className={s.section}>
-        <h2 data-rv className={`${s.rv} ${s.h2} ${s.h2Taste}`}>{t('persona.tasteSection')}</h2>
+        <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('persona.tasteSection')}</h2>
         {legacy && (
-          <p data-rv className={`${s.rv} ${s.legacy}`}>
-            {t('persona.legacySpectrum')}
-            {canRegenerate && (
-              <>
-                {' '}
-                <button type="button" className={s.legacyLink} onClick={scrollToRegenerate}>{t('persona.legacyGo')}</button>
-              </>
-            )}
-          </p>
+          <p data-rv className={`${s.rv} ${s.legacy}`}>{t('persona.legacySpectrum')}</p>
         )}
         <div data-rv data-spec="1" className={s.rv} style={delay(0.1)}>
           <TasteSpectrum axisScores={scores} animate={!reduced} play={specPlay} />
@@ -366,61 +382,48 @@ export function PersonaReportBody({
       </section>
 
       {/* Liked buildings */}
-      {likedBuildings.length > 0 && (
-        <section className={s.rowSection}>
-          <div data-rv className={`${s.rv} ${s.rowHead}`}>
-            <p className={s.eyebrow}>{t('detailB3.myLikesEyebrow')}</p>
-            <p className={s.rowTitle}>{t('detailB3.buildingsYouLiked', { n: likedBuildings.length })}</p>
-          </div>
+      {likedSlot || (likedBuildings.length > 0 && (
+        <section className={s.section}>
+          <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('detailB3.buildingsYouLiked')}</h2>
           <div data-rv className={`${s.rv} ${s.row}`} style={delay(0.1)}>
             {likedBuildings.map((card, i) => (
               <BuildingCard key={cardId(card) || i} card={card} onOpen={onOpenBuilding} />
             ))}
           </div>
         </section>
-      )}
+      ))}
 
-      {/* Recommendations */}
-      {bigRec && (
-        <section className={s.rowSection} style={{ paddingBottom: 8 }}>
-          <div data-rv className={`${s.rv} ${s.rowHead}`}>
-            <p className={s.eyebrow}>{t('detailB3.topKEyebrow')}</p>
-            <p className={s.rowTitle}>{t('results.rankRange', { n: recommendations.length })}</p>
+      {/* Recommendations — one row of the same card, rank pills */}
+      {recommendations.length > 0 && (
+        <section className={s.section}>
+          <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('results.recTitle')}</h2>
+          <div data-rv className={`${s.rv} ${s.row}`} style={delay(0.1)}>
+            {recommendations.map((card, i) => (
+              <BuildingCard key={cardId(card) || i} card={card} rank={i + 1} onOpen={onOpenBuilding} />
+            ))}
           </div>
-          <div data-rv className={`${s.rv} ${s.recBigWrap}`}>
-            <BuildingCard card={bigRec} rank={1} big onOpen={onOpenBuilding} />
-          </div>
-          {restRecs.length > 0 && (
-            <div data-rv className={`${s.rv} ${s.row}`} style={delay(0.1)}>
-              {restRecs.map((card, i) => (
-                <BuildingCard
-                  key={cardId(card) || i}
-                  card={card}
-                  rank={i + 2}
-                  onOpen={onOpenBuilding}
-                />
-              ))}
-            </div>
-          )}
         </section>
       )}
 
-      {/* Footer — owner: "리포트 재생성" text link (WP2 wires it) */}
-      {canRegenerate && (
-        <div ref={footerRef} className={s.footerOwner}>
-          {legacy && <p className={s.footerLegacy}>{t('persona.legacySpectrum')}</p>}
-          <button
-            ref={linkRef}
-            type="button"
-            className={`${s.regenLink} ${legacy ? s.regenLinkAccent : ''}`}
-            onClick={onRegenerateReport}
-            disabled={regenerating}
-          >
-            {regenerating ? t('persona.reportRegenerating') : t('persona.reportRegenerate')}
-          </button>
-          <p className={s.regenMsg} role="status">{regenMessage}</p>
-        </div>
+      {/* Recommended architects */}
+      {architects.length > 0 && (
+        <section className={s.section}>
+          <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('board.recommendedOffice')}</h2>
+          <div className={s.archList}>
+            {architects.map((architect, i) => (
+              <ArchitectRow
+                key={architect.architect_id ?? i}
+                architect={architect}
+                onOpen={onOpenArchitect}
+                style={delay(Math.min(0.1 + i * 0.1, 0.5))}
+                t={t}
+              />
+            ))}
+          </div>
+        </section>
       )}
+
+      {footerSlot}
     </div>
   )
 }
@@ -430,7 +433,7 @@ function Bar({ w, h, mb }) {
   return <div className={s.bar} style={{ width: w, height: h, marginBottom: mb }} />
 }
 
-function ReportSkeleton({ label }) {
+export function ReportSkeleton({ label }) {
   return (
     <div className={s.skel} role="status" aria-live="polite">
       <p className={s.skelLabel}>{label}</p>

@@ -24,10 +24,17 @@ window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
     updatedAt: '2026-11-10 22:55 KST',
-    head: 'a7eb694',
-    branch: 'upd487',
+    head: '597ff93',
+    branch: 'upd483',
   },
   done: [
+    {
+      id: 'PR #487',
+      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
+      completedAt: '2026-11-10',
+      prs: [487],
+      note: '',
+    },
     {
       id: 'PR #485',
       title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
       completedAt: '2026-10-31',
       prs: [469],
-      note: '',
-    },
-    {
-      id: 'PR #466',
-      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
-      completedAt: '2026-10-31',
-      prs: [466],
       note: '',
     },
   ],
@@ -518,6 +518,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 487,
+      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
+      mergedAt: '2026-11-10T13:55:32Z',
+      mergedAtKST: '2026-11-10 22:55 KST',
+      sha: '597ff93',
+    },
+    {
       number: 485,
       title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
       mergedAt: '2026-11-10T13:55:02Z',
@@ -565,13 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-31T00:05:41Z',
       mergedAtKST: '2026-10-31 09:05 KST',
       sha: '5e27f53',
-    },
-    {
-      number: 466,
-      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
-      mergedAt: '2026-10-31T00:20:25Z',
-      mergedAtKST: '2026-10-31 09:20 KST',
-      sha: '5bf2141',
     },
   ],
   agents: [
@@ -2854,6 +2854,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/ChoiceCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/ChoiceCard.module.css',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/ConfirmDialog.jsx',
       role: '',
     },
@@ -2864,6 +2872,18 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/components/DebugOverlay.jsx',
       role: '세션·스와이프 디버그 오버레이',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryCapCard.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryPromoteOverlay.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryPromoteOverlay.module.css',
+      role: '',
     },
     {
       path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
@@ -2911,6 +2931,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/KakaoLoginButton.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/LeaveDiscoveryModal.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/LeaveDiscoveryModal.module.css',
       role: '',
     },
     {
@@ -3274,6 +3302,18 @@ window.PROJECT_STATE = {
       role: '보드 상세 로딩 훅',
     },
     {
+      path: 'frontend/src/hooks/useBoardEdit.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useBoardReaction.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useCardLean.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/hooks/useCardSize.js',
       role: '',
     },
@@ -3308,6 +3348,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/hooks/useProjectReactors.js',
       role: '프로젝트 리액터 페이지네이션 훅',
+    },
+    {
+      path: 'frontend/src/hooks/usePublicBoardReport.js',
+      role: '',
     },
     {
       path: 'frontend/src/hooks/useRegeneration.jsx',
@@ -3404,6 +3448,10 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/src/pages/BoardReportPage.jsx',
       role: '페르소나 리포트 페이지',
+    },
+    {
+      path: 'frontend/src/pages/BoardRoute.jsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.jsx',
@@ -3590,11 +3638,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/pages/boardDetail/EditActionBar.jsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/pages/boardDetail/RecommendedTile.jsx',
       role: '보드 추천 타일 카드',
     },
     {
       path: 'frontend/src/pages/boardDetail/RecommendedTile.module.css',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardReport/BoardReportParts.jsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardReport/boardReport.module.css',
       role: '',
     },
     {
@@ -3830,11 +3890,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/shareBoard.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/socialFeed.js',
       role: '',
     },
     {
       path: 'frontend/src/utils/socialFeed.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.test.mjs',
       role: '',
     },
     {

@@ -112,7 +112,7 @@
   letter-spacing: 0.14em; /* E7 */
   text-transform: uppercase;
 }
-.eyebrowLine { width: 18px; height: 1px; background: var(--color-text-muted); flex: none; }
+
 
 .name {
   margin: 0 0 12px;
@@ -131,7 +131,7 @@
 }
 .desc {
   margin: 0 0 18px;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: 13px; /* E1 */
   line-height: 1.75;
 }
@@ -146,7 +146,7 @@
 }
 .pattern {
   margin: 0 0 14px;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: 13px; /* E1 */
   line-height: 1.7;
 }
@@ -162,7 +162,7 @@
 }
 .legacy {
   margin: 0 0 8px;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: var(--fs-caption);
   line-height: 1.6;
 }
@@ -194,7 +194,7 @@
 .doneBody {
   margin: 0 0 28px;
   max-width: 280px;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   font-size: var(--fs-body);
   line-height: 1.7;
 }

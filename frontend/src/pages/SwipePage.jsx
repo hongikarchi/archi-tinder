@@ -14,74 +14,27 @@ import PageTopControls from '../components/PageTopControls.jsx'
 import FloatingIconButton from '../components/FloatingIconButton.jsx'
 import FinishReportButton from '../components/FinishReportButton.jsx'
 import Modal from '../components/Modal.jsx'
-import {
-  INK,
-  MONO,
-  LS_CAPS,
-  paperFaceStyle,
-  wordmarkStyle,
-  monoLabelStyle,
-  cardMetaStyle,
-} from '../components/cardLanguage.js'
+import ChoiceCard from '../components/ChoiceCard.jsx'
+import { useCardLeanSource } from '../hooks/useCardLean.js'
 
 /* ── ActionCard ──────────────────────────────────────────────────────────── */
 // Rendered when card_type === 'action' (backend-emitted when session converges).
-// The user opts in to the report by right-swiping (like), or keeps exploring
-// by left-swiping (pass). The hint text at the bottom makes this explicit.
-// FRONT-FLOW-2: retheme from the indigo-purple gradient card to the paper
-// business-card language (components/cardLanguage.js), mirroring
-// DiscoveryTriggerCard.jsx's composition (wordmark row + mono stamp, ink
-// title, meta body, mono hint row). Swipe semantics/props unchanged.
-function ActionCard({ card }) {
+// Right swipe = view the taste report, left swipe = keep exploring. Visuals are
+// the shared ChoiceCard (same language as the Discovery trigger / 50-cap cards).
+// Copy comes only from i18n: the backend's action_card_message / _subtitle are
+// intentionally ignored (its subtitle repeats the direction hints).
+function ActionCard({ leanStore }) {
   const { t } = useTranslation()
-  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
-  const message  = card.action_card_message  || t('swipe.actionCard.message')
-  const subtitle = card.action_card_subtitle || t('swipe.actionCard.subtitle')
   return (
-    <div style={{
-      ...paperFaceStyle({ radius: 20, padding: '24px 22px' }),
-      position: 'absolute', top: 0, left: 0,
-      width: CARD_WIDTH, height: CARD_HEIGHT,
-      justifyContent: 'space-between',
-      userSelect: 'none',
-      boxSizing: 'border-box',
-    }}>
-      {/* Top: wordmark row + mono stamp */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={wordmarkStyle}>ARCHIBE</span>
-        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid }}>
-          {t('swipe.actionCard.stamp')}
-        </span>
-      </div>
-
-      {/* Middle: title + body */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center' }}>
-        <h2 style={{
-          fontFamily: 'var(--font-family)',
-          fontSize: 22,
-          fontWeight: 700,
-          letterSpacing: '-0.01em',
-          color: INK.strong,
-          lineHeight: 1.35,
-          margin: 0,
-        }}>
-          {message}
-        </h2>
-
-        {subtitle && (
-          <p style={{ ...cardMetaStyle, textAlign: 'center' }}>
-            {subtitle}
-          </p>
-        )}
-      </div>
-
-      {/* Bottom hint */}
-      <p style={{ ...monoLabelStyle, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        <span>{t('swipe.actionCard.continueHint')}</span>
-        <span style={{ color: INK.dim }}>·</span>
-        <span>{t('swipe.actionCard.viewResultsHint')}</span>
-      </p>
-    </div>
+    <ChoiceCard
+      leanStore={leanStore}
+      stamp={t('swipe.actionCard.stamp')}
+      title={t('swipe.actionCard.message')}
+      body={t('swipe.actionCard.subtitle')}
+      left={{ line1: t('swipe.actionCard.leftLine1'), line2: t('swipe.actionCard.leftLine2') }}
+      right={{ line1: t('swipe.actionCard.rightLine1'), line2: t('swipe.actionCard.rightLine2') }}
+      hint={t('swipe.actionCard.hint')}
+    />
   )
 }
 
@@ -294,6 +247,10 @@ export default function SwipePage({
   const hasShownDismissTutorial = useRef(!!localStorage.getItem('archithon_dismiss_tutorial_seen'))
   const pendingDismissDir = useRef(null)
   const [localResetTick, setLocalResetTick] = useState(0)
+  // Drag lean of the action card (external store: no re-render mid-drag).
+  const actionLean = useCardLeanSource()
+  const resetActionLean = actionLean.reset
+  useEffect(() => { resetActionLean() }, [currentCard?.image_id, cardResetToken, localResetTick, resetActionLean])
   const [showExitConfirm, setShowExitConfirm] = useState(false)
   const [showDismissConfirm, setShowDismissConfirm] = useState(false)
   // FRONT-UX-14-SIMPLIFY — scopes the recovery-remount key suffix to the
@@ -579,9 +536,11 @@ export default function SwipePage({
                       onSwipe={isTop ? onTinderSwipe : undefined}
                       onCardLeftScreen={isTop ? onCardLeftScreen : undefined}
                       preventSwipe={isTop ? undefined : SWIPE_PREVENT_ALL}
+                      onSwipeRequirementFulfilled={isTop && isActionCard(card) ? actionLean.onFulfilled : undefined}
+                      onSwipeRequirementUnfulfilled={isTop && isActionCard(card) ? actionLean.onUnfulfilled : undefined}
                     >
                       {isActionCard(card) ? (
-                        <ActionCard card={card} />
+                        <ActionCard leanStore={isTop ? actionLean.store : undefined} />
                       ) : (
                         <SwipeCard
                           card={card}

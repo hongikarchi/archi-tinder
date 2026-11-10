@@ -47,6 +47,18 @@
   transition: opacity var(--motion-fast) var(--motion-ease);
 }
 
+.spinner {
+  display: inline-block;
+  vertical-align: middle;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-bg) 40%, transparent);
+  border-top-color: var(--color-bg);
+}
+
 .btn:disabled {
   cursor: default;
   opacity: 0.6;
