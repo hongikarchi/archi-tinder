@@ -23,11 +23,32 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-08 21:18 KST',
-    head: '17399c9',
-    branch: 'feature/algo-refinement',
+    updatedAt: '2026-11-10 22:56 KST',
+    head: '3e00472',
+    branch: 'upd484',
   },
   done: [
+    {
+      id: 'PR #487',
+      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
+      completedAt: '2026-11-10',
+      prs: [487],
+      note: '',
+    },
+    {
+      id: 'PR #485',
+      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
+      completedAt: '2026-11-10',
+      prs: [485],
+      note: '',
+    },
+    {
+      id: 'PR #483',
+      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
+      completedAt: '2026-11-10',
+      prs: [483],
+      note: '',
+    },
     {
       id: 'PR #479',
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
@@ -63,27 +84,6 @@ window.PROJECT_STATE = {
       prs: [474],
       note: '',
     },
-    {
-      id: 'PR #469',
-      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
-      completedAt: '2026-10-31',
-      prs: [469],
-      note: '',
-    },
-    {
-      id: 'PR #466',
-      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
-      completedAt: '2026-10-31',
-      prs: [466],
-      note: '',
-    },
-    {
-      id: 'PR #465',
-      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
-      completedAt: '2026-10-31',
-      prs: [465],
-      note: '',
-    },
   ],
   now: [],
   next: {
@@ -101,12 +101,6 @@ window.PROJECT_STATE = {
         title: '페르소나 리포트 통합 UI',
         note: '보드 상세와 리포트 페이지를 /board/:id 하나로 병합하고, 공통 리포트 본문을 갤러리형으로 재디자인. 소셜 카드 펼침(FLIP), 비소유자 공개 보드 리포트/추천/사무소 읽기 권한(백엔드), 재생성은 상단 알림 버튼 전용, 페르소나 이미지 자동 재생성 제거.',
         issue: 480,
-      },
-      {
-        id: 'FULL-MESSAGING-5',
-        title: '관심 버튼 미노출 + 보드 기본 공개',
-        note: '1. Prod: a verified user (Google-linked, personality done) opens another user\'s profile and sees no 관심 있어요 button — only the ⋯ report/block menu. ContactCta renders `null` whenever `contact-requests/status/` answers `can_request:false` (or the call fails), so neither the user…',
-        issue: 467,
       },
       {
         id: '#PERF: measure taste-start tag matching ',
@@ -524,6 +518,27 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 487,
+      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
+      mergedAt: '2026-11-10T13:55:32Z',
+      mergedAtKST: '2026-11-10 22:55 KST',
+      sha: '597ff93',
+    },
+    {
+      number: 485,
+      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
+      mergedAt: '2026-11-10T13:55:02Z',
+      mergedAtKST: '2026-11-10 22:55 KST',
+      sha: 'a7eb694',
+    },
+    {
+      number: 483,
+      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
+      mergedAt: '2026-11-10T13:56:08Z',
+      mergedAtKST: '2026-11-10 22:56 KST',
+      sha: '3e00472',
+    },
+    {
       number: 479,
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
       mergedAt: '2026-11-07T01:52:17Z',
@@ -557,27 +572,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-10-31T02:34:15Z',
       mergedAtKST: '2026-10-31 11:34 KST',
       sha: 'ead0dc2',
-    },
-    {
-      number: 469,
-      title: 'chore(INFRA-QA-1): flow doc house format — [Archibe]-전체흐름, A–E flows, screen IDs',
-      mergedAt: '2026-10-31T00:05:41Z',
-      mergedAtKST: '2026-10-31 09:05 KST',
-      sha: '5e27f53',
-    },
-    {
-      number: 466,
-      title: 'feat(FULL-CONTEST-2): contest management in the admin dashboard; publish rule in the model layer',
-      mergedAt: '2026-10-31T00:20:25Z',
-      mergedAtKST: '2026-10-31 09:20 KST',
-      sha: '5bf2141',
-    },
-    {
-      number: 465,
-      title: 'feat(SOCIAL-BOARD-LIKE-1): per-board social feed + board likes, bookmark/liked-list cleanup, owner-only report',
-      mergedAt: '2026-10-31T00:20:14Z',
-      mergedAtKST: '2026-10-31 09:20 KST',
-      sha: '78008f4',
     },
   ],
   agents: [
@@ -1220,6 +1214,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/contests/management/commands/send_contest_deadline_reminders.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/contests/migrations/0001_initial.py',
       role: '',
     },
@@ -1265,6 +1263,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/contests/tests/test_contests_api.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/contests/tests/test_deadline_reminders.py',
       role: '',
     },
     {
@@ -1409,6 +1411,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/notifications/migrations/0001_initial.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/notifications/migrations/0002_contest_deadline_type.py',
       role: '',
     },
     {
@@ -1925,6 +1931,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/recommendation/tests/test_report_regen_dedupe.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_report_staleness.py',
       role: '',
     },
     {
@@ -2706,6 +2720,14 @@ window.PROJECT_STATE = {
     {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
+    },
+    {
+      path: 'frontend/src/App.jsx',
+      role: '앱 루트 라우팅 컴포넌트',
     },
     {
       path: 'frontend/src/App.jsx',
@@ -3900,6 +3922,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/utils/swipeSettle.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/swipeSettle.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/swipeSettle.test.mjs',
       role: '',
     },
@@ -3962,6 +3992,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

@@ -3,8 +3,8 @@ import { useSyncExternalStore } from 'react'
 /**
  * Session-local record of users the viewer blocked (FULL-MESSAGING-1).
  *
- * The API has no block-status read, so after a block action the menus must
- * remember it themselves. Module-level (not component state) so every
+ * Seeded from `blocked_by_me` on contact-requests/status/ (#372) and updated
+ * locally after block/unblock actions. Module-level (not component state) so every
  * UserActionsMenu instance — the conversation header (remounted whenever the
  * sheet reopens) and the profile menu — agrees and offers "Unblock".
  */

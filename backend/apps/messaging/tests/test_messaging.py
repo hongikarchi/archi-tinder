@@ -196,7 +196,9 @@ class TestIgnoreAndCooldown:
 class TestStatus:
     def test_transitions(self, ca, cb, alice, bob):
         url = f'/api/v1/contact-requests/status/?user_id={bob[0].id}'
-        assert ca.get(url).data == {'state': 'none', 'can_request': True, 'reason': None}
+        assert ca.get(url).data == {
+            'state': 'none', 'can_request': True, 'reason': None, 'blocked_by_me': False,
+        }
         send(ca, bob)
         assert ca.get(url).data['state'] == 'sent'
         cr = ContactRequest.objects.get()
@@ -210,6 +212,24 @@ class TestStatus:
         assert ca.get(f'/api/v1/contact-requests/status/?user_id={t[0].id}').data['can_request'] is False
         ca.post(f'/api/v1/users/{bob[0].id}/block/')
         assert ca.get(f'/api/v1/contact-requests/status/?user_id={bob[0].id}').data['can_request'] is False
+
+    def test_blocked_by_me(self, ca, cb, alice, bob):
+        url = f'/api/v1/contact-requests/status/?user_id={bob[0].id}'
+        assert ca.get(url).data['blocked_by_me'] is False
+        ca.post(f'/api/v1/users/{bob[0].id}/block/')
+        assert ca.get(url).data['blocked_by_me'] is True
+        ca.delete(f'/api/v1/users/{bob[0].id}/block/')
+        assert ca.get(url).data['blocked_by_me'] is False
+
+    def test_blocked_by_me_false_when_target_blocked_me(self, ca, cb, alice, bob):
+        cb.post(f'/api/v1/users/{alice[0].id}/block/')
+        d = ca.get(f'/api/v1/contact-requests/status/?user_id={bob[0].id}').data
+        assert d['blocked_by_me'] is False
+        assert d['reason'] == 'unavailable'
+
+    def test_blocked_by_me_self_false(self, ca, alice):
+        d = ca.get(f'/api/v1/contact-requests/status/?user_id={alice[0].id}').data
+        assert d['blocked_by_me'] is False and d['reason'] == 'self'
 
     def test_bad_param(self, ca):
         assert ca.get('/api/v1/contact-requests/status/').status_code == 400
