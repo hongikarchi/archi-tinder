@@ -7,9 +7,13 @@ boot instead, off the request path.
 
 Wired from ``backend/gunicorn.conf.py`` (``post_worker_init`` -> the app is
 loaded, we are inside the worker process) which calls ``start_prewarm_thread``.
-It is NOT an AppConfig.ready() hook on purpose: ready() also runs for
+It is NOT a general AppConfig.ready() hook on purpose: ready() also runs for
 ``collectstatic`` (Railway buildCommand), every manage.py command and pytest's
-django.setup(), none of which should open DB connections.
+django.setup(), none of which should open DB connections. The single narrow
+exception is local dev: ``RecommendationConfig.ready`` calls ``start_prewarm_thread``
+only when ``sys.argv`` has ``runserver`` AND the process is the serving one
+(``RUN_MAIN=true`` autoreloader child, or ``--noreload``), because Windows dev has
+no gunicorn hook and would otherwise never build the discovery pool.
 
 Guarantees:
 - Never raises (every step has its own try/except; one failing step does not
