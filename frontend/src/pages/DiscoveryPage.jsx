@@ -22,6 +22,7 @@ import LeaveDiscoveryModal from '../components/LeaveDiscoveryModal.jsx'
 import FinishReportButton from '../components/FinishReportButton.jsx'
 import DiscoveryPromoteOverlay from '../components/DiscoveryPromoteOverlay.jsx'
 import overlayStyles from '../components/DiscoveryPromoteOverlay.module.css'
+import { createDraftFeedbackQueue } from '../utils/draftFeedbackQueue.js'
 
 // Module-level flag: false on full page reload (module not yet loaded), true after
 // the first mount within the same SPA session. Used to detect tab re-entry vs first
@@ -260,6 +261,16 @@ export default function DiscoveryPage({ showToast, onLogout }) {
     if (isReentryMount) return null
     return sessionStorage.getItem(DRAFT_ID_KEY) || null
   })
+  // Ref-held queue mirrors draftId synchronously and serializes feedback while
+  // no draft id is known (prevents duplicate draft boards on rapid swipes).
+  const draftQueueRef = useRef(null)
+  if (!draftQueueRef.current) {
+    draftQueueRef.current = createDraftFeedbackQueue(draftId)
+  }
+  function applyDraftId(id) {
+    draftQueueRef.current.setDraftId(id)
+    setDraftId(id)
+  }
   const [draftLikeCount, setDraftLikeCount] = useState(() => {
     if (isReentryMount) return 0
     const hasDraft = sessionStorage.getItem(DRAFT_ID_KEY)
@@ -507,9 +518,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
         // synchronously this render cycle. The backend response reconciles with
         // the authoritative count (handles dedup / edge cases).
         setDraftLikeCount(prev => prev + 1)
-        discoveryFeedback(bldId, 'like', draftId)
+        draftQueueRef.current.send(id => discoveryFeedback(bldId, 'like', id))
           .then(res => {
-            if (res.draftId) setDraftId(res.draftId)
+            if (res.draftId) applyDraftId(res.draftId)
             // Reconcile with authoritative backend count (dedup/cap may adjust).
             setDraftLikeCount(res.draftLikeCount)
             if (res.likeCapReached) setCapReached(true)
@@ -518,9 +529,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
       } else {
         // Pass: server records it for dislike zone; failure is low-stakes but
         // we still surface it consistently per FRONT-UX silent-failure policy.
-        discoveryFeedback(bldId, 'pass', draftId)
+        draftQueueRef.current.send(id => discoveryFeedback(bldId, 'pass', id))
           .then(res => {
-            if (res.draftId) setDraftId(res.draftId)
+            if (res.draftId) applyDraftId(res.draftId)
           })
           .catch((err) => { if (!(err instanceof VerifyRequiredError)) reportWriteError(showToast, t('discovery.toastPassFailed')) })
       }
@@ -553,10 +564,10 @@ export default function DiscoveryPage({ showToast, onLogout }) {
     if (blockUi) setPromoteBlock('loading')
     try {
       const result = await (blockUi
-        ? promoteToTaste(draftId, { timeoutMs: PROMOTE_TIMEOUT_MS })
-        : promoteToTaste(draftId))
+        ? promoteToTaste(draftQueueRef.current.getDraftId(), { timeoutMs: PROMOTE_TIMEOUT_MS })
+        : promoteToTaste(draftQueueRef.current.getDraftId()))
       // Clear draft session state — a future Discovery visit starts fresh
-      setDraftId(null)
+      applyDraftId(null)
       setDraftLikeCount(0)
       setContinueAfterTrigger(false)
       triggerShownRef.current = false
@@ -854,9 +865,9 @@ export default function DiscoveryPage({ showToast, onLogout }) {
               const proceed = leaveModal.proceed
               setLeaveModalPromoting(true)
               try {
-                const result = await promoteToTaste(draftId)
+                const result = await promoteToTaste(draftQueueRef.current.getDraftId())
                 // Clear draft sessionStorage — same cleanup as handlePromoteToTaste
-                setDraftId(null)
+                applyDraftId(null)
                 setDraftLikeCount(0)
                 setContinueAfterTrigger(false)
                 triggerShownRef.current = false

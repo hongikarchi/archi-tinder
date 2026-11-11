@@ -44,6 +44,11 @@ DISCOVERY_DRAFT_PREFIX = 'discovery_'
 DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS = 5
 
 
+# A draft created within this window is reused by draft_id-less feedback calls
+# (de-dupes concurrent first likes into one board).
+DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS = 5
+
+
 # ── Local helper (avoids circular import through views._shared) ───────────────
 
 def _liked_id_only(liked_ids):
@@ -105,6 +110,44 @@ def create_discovery_draft(profile, tz_offset_minutes=0):
         name=name,
     )
     return draft
+
+
+def get_or_create_recent_discovery_draft(profile, tz_offset_minutes=0, guest_board_limit=None):
+    """Idempotent draft creation for concurrent first requests.
+
+    Serialises per profile by locking the owner row (select_for_update), then
+    reuses the user's newest discovery draft created within
+    DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS; otherwise creates a new one.
+
+    guest_board_limit: if set and profile.is_guest, a NEW draft is refused
+    (returns None) when the user already has >= limit non-temp boards. Reuse of
+    a just-created draft is never blocked by the limit.
+    """
+    from django.db import transaction
+
+    with transaction.atomic():
+        # Lock the owner row: concurrent callers for the same profile queue here.
+        type(profile).objects.select_for_update().get(pk=profile.pk)
+        cutoff = timezone.now() - timedelta(seconds=DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS)
+        recent = (
+            Project.objects
+            .filter(
+                user=profile,
+                name__startswith=DISCOVERY_DRAFT_PREFIX,
+                created_at__gte=cutoff,
+            )
+            .order_by('-created_at')
+            .first()
+        )
+        if recent is not None:
+            return recent
+        if (
+            guest_board_limit is not None
+            and profile.is_guest
+            and Project.objects.filter(user=profile, is_temp=False).count() >= guest_board_limit
+        ):
+            return None
+        return create_discovery_draft(profile, tz_offset_minutes=tz_offset_minutes)
 
 
 def get_or_create_recent_discovery_draft(profile, tz_offset_minutes=0, guest_board_limit=None):
