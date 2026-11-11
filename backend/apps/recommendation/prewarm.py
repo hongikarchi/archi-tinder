@@ -66,12 +66,19 @@ def _step_llm_clients():
         services._get_gemini_client()  # image path is Gemini-pinned regardless of provider
 
 
+def _step_discovery_pool():
+    from apps.recommendation import discovery_pool
+    if not discovery_pool._refresh():  # build_pool swallows errors and returns None
+        raise RuntimeError('discovery pool build returned nothing')
+
+
 _STEPS = (
     ('imports', _step_imports),
     ('axis_vocab', _step_axis_vocab),
     ('corpus_tag_df', _step_corpus_tag_df),
     ('random_pool', _step_random_pool),
     ('llm_clients', _step_llm_clients),
+    ('discovery_pool', _step_discovery_pool),
 )
 
 
