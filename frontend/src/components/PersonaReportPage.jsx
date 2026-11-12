@@ -265,8 +265,8 @@ export function ReportScope({ children }) {
 }
 
 /** Report section block (26px / gutter padding). */
-export function ReportSection({ children }) {
-  return <section className={s.section}>{children}</section>
+export function ReportSection({ children, style }) {
+  return <section className={s.section} style={style}>{children}</section>
 }
 
 /** Report hero block (meta / title / tools); `afterCover` tightens the top padding. */
@@ -274,13 +274,36 @@ export function ReportHero({ children, afterCover = false }) {
   return <section className={s.hero} style={afterCover ? { paddingTop: 18 } : undefined}>{children}</section>
 }
 
-/** Report heading: 14px bold + trailing hairline, optional count. */
-export function ReportHeading({ children, count = null }) {
+/** Report heading: 14px bold + trailing hairline, optional count and an optional
+ *  right-aligned control (`right`, rendered after the hairline). */
+export function ReportHeading({ children, count = null, right = null }) {
   return (
     <h2 data-rv className={`${s.rv} ${s.h2}`}>
       {children}
       {count != null && <span className={s.cnt}>{count}</span>}
+      {right && <span className={s.hRight}>{right}</span>}
     </h2>
+  )
+}
+
+/** Pattern-tag chips (pill, surface-2) — shared with the building detail info rows. */
+export function ReportTags({ items = [] }) {
+  return (
+    <div className={s.tags}>
+      {items.map((x, i) => <span key={`${x}-${i}`} className={s.tag}>{x}</span>)}
+    </div>
+  )
+}
+
+/** Horizontal 4:5 card row (bleeds to the page edges) — same as the building row. */
+export function ReportRow({ children }) {
+  return <div className={s.row}>{children}</div>
+}
+
+/** One 4:5 report card shell; `className` lets callers add overrides (e.g. cursor). */
+export function ReportCard({ children, className = '', onClick, ...rest }) {
+  return (
+    <div className={`${s.card} ${className}`} onClick={onClick} {...rest}>{children}</div>
   )
 }
 
