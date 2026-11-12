@@ -7,9 +7,13 @@ boot instead, off the request path.
 
 Wired from ``backend/gunicorn.conf.py`` (``post_worker_init`` -> the app is
 loaded, we are inside the worker process) which calls ``start_prewarm_thread``.
-It is NOT an AppConfig.ready() hook on purpose: ready() also runs for
+It is NOT a general AppConfig.ready() hook on purpose: ready() also runs for
 ``collectstatic`` (Railway buildCommand), every manage.py command and pytest's
-django.setup(), none of which should open DB connections.
+django.setup(), none of which should open DB connections. The single narrow
+exception is local dev: ``RecommendationConfig.ready`` calls ``start_prewarm_thread``
+only when ``sys.argv`` has ``runserver`` AND the process is the serving one
+(``RUN_MAIN=true`` autoreloader child, or ``--noreload``), because Windows dev has
+no gunicorn hook and would otherwise never build the discovery pool.
 
 Guarantees:
 - Never raises (every step has its own try/except; one failing step does not
@@ -66,12 +70,19 @@ def _step_llm_clients():
         services._get_gemini_client()  # image path is Gemini-pinned regardless of provider
 
 
+def _step_discovery_pool():
+    from apps.recommendation import discovery_pool
+    if not discovery_pool._refresh():  # build_pool swallows errors and returns None
+        raise RuntimeError('discovery pool build returned nothing')
+
+
 _STEPS = (
     ('imports', _step_imports),
     ('axis_vocab', _step_axis_vocab),
     ('corpus_tag_df', _step_corpus_tag_df),
     ('random_pool', _step_random_pool),
     ('llm_clients', _step_llm_clients),
+    ('discovery_pool', _step_discovery_pool),
 )
 
 

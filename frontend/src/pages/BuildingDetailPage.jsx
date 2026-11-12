@@ -4,15 +4,17 @@ import { getBuildings } from '../api/client.js'
 import ErrorState from './buildingDetail/ErrorState.jsx'
 import Header from './buildingDetail/Header.jsx'
 import LoadingState from './buildingDetail/LoadingState.jsx'
-import { kindLabel, metadataItems } from './buildingDetail/helpers.js'
+import { CHIP_KEYS, kindLabel, metadataItems } from './buildingDetail/helpers.js'
 import PhotoLightbox from './buildingDetail/PhotoLightbox.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
-import PageTitle from '../components/PageTitle.jsx'
-import SectionTitle from '../components/SectionTitle.jsx'
+import {
+  ReportScope, ReportSection, ReportHeading, ReportTags, ReportRow, ReportCard,
+} from '../components/PersonaReportPage.jsx'
 import { useTranslation } from '../i18n/index.js'
 import styles from './BuildingDetailPage.module.css'
 
+const COMPACT_MAX = 5
 const BUILDING_ID_RE = /^[A-Za-z0-9_-]{1,32}$/
 
 export default function BuildingDetailPage({ onLogout }) {
@@ -65,29 +67,31 @@ export default function BuildingDetailPage({ onLogout }) {
 
   const galleryMeta = useMemo(() => {
     if (!building) return []
-    const meta = building.gallery_meta?.length ? building.gallery_meta : []
-    return meta
+    return building.gallery_meta?.length ? building.gallery_meta : []
   }, [building])
 
   const photos = useMemo(() => galleryMeta.filter(g => g.kind !== 'drawing'), [galleryMeta])
   const drawings = useMemo(() => galleryMeta.filter(g => g.kind === 'drawing'), [galleryMeta])
-  const [galleryFilter, setGalleryFilter] = useState('all')  // 'all' | 'photos' | 'drawings'
+  // Per-section view: 'compact' (one scroll row) | 'full' (2-col masonry). Default compact.
+  const [photosView, setPhotosView] = useState('compact')
+  const [drawingsView, setDrawingsView] = useState('compact')
 
   const title = building?.image_title || buildingId || 'Building'
 
-  // Flat image list for lightbox, ordered to match what's visible under current filter
+  // Flat lightbox list: photos then drawings. Compact rows show a prefix of each
+  // section, so the same indices (photos idx, photos.length + drawing idx) hold in both views.
   const lightboxImages = useMemo(() => {
     if (galleryMeta.length > 0) {
-      const visiblePhotos   = galleryFilter !== 'drawings' ? photos   : []
-      const visibleDrawings = galleryFilter !== 'photos'   ? drawings : []
-      return [...visiblePhotos, ...visibleDrawings].map(g => ({ url: g.url, alt: kindLabel(g.kind) }))
+      return [...photos, ...drawings].map(g => ({ url: g.url, alt: kindLabel(g.kind, t) }))
     }
     return gallery.map(url => ({ url, alt: title }))
-  }, [galleryMeta, galleryFilter, photos, drawings, gallery, title])
+  }, [galleryMeta, photos, drawings, gallery, title, t])
   const architect = building?.metadata?.axis_architects
   const architectId = building?.metadata?.architect_id || null
+  // Description / atmosphere stay English as returned by the DB in both languages;
+  // translation will come from the DB later (do not add client dictionaries).
   const detailDescription = building?.metadata?.visual_description || building?.metadata?.description || null
-  const description = building?.metadata?.axis_atmosphere || 'No atmosphere description is available yet.'
+  const atmosphere = building?.metadata?.axis_atmosphere || t('detailB3.noAtmosphere')
   const items = metadataItems(building)
 
   function handleBack() {
@@ -114,14 +118,80 @@ export default function BuildingDetailPage({ onLogout }) {
     )
   }
 
+  const openArchitect = () => navigate(`/architects/${architectId}`)
+
+  function renderGallerySection(list, offset, heading, view, setView, isDrawing) {
+    if (list.length === 0) return null
+    const n = list.length
+    const showMore = view === 'compact' && n > COMPACT_MAX
+    const label = item => kindLabel(item.kind, t)
+    const alt = (item, idx) => `${title} ${label(item)} ${idx + 1}`
+    const sw = (
+      <span className={styles.vs}>
+        {['compact', 'full'].map(m => (
+          <button
+            key={m}
+            type="button"
+            className={view === m ? styles.on : undefined}
+            aria-pressed={view === m}
+            onClick={() => setView(m)}
+          >
+            {t(m === 'compact' ? 'detailB3.viewCompact' : 'detailB3.viewFull')}
+          </button>
+        ))}
+      </span>
+    )
+    return (
+      <ReportSection>
+        <ReportHeading count={n} right={sw}>{heading}</ReportHeading>
+        {view === 'compact' ? (
+          <ReportRow>
+            {list.slice(0, COMPACT_MAX).map((item, idx) => (
+              <ReportCard
+                key={`${item.url}-${idx}`}
+                className={`${styles.zoom} ${isDrawing ? styles.drawingCard : ''}`}
+                onClick={() => setLightboxIndex(offset + idx)}
+              >
+                <img
+                  className={styles.cardImg}
+                  src={item.url}
+                  alt={alt(item, idx)}
+                  loading={!isDrawing && idx < 2 ? 'eager' : 'lazy'}
+                />
+                <span className={styles.badge}>{label(item)}</span>
+              </ReportCard>
+            ))}
+            {showMore && (
+              <button type="button" className={styles.more} onClick={() => setView('full')}>
+                {t('detailB3.moreCount', { n: n - COMPACT_MAX })}
+              </button>
+            )}
+          </ReportRow>
+        ) : (
+          <div className={styles.mas}>
+            {list.map((item, idx) => (
+              <div
+                key={`${item.url}-${idx}`}
+                className={styles.mi}
+                onClick={() => setLightboxIndex(offset + idx)}
+              >
+                <img
+                  className={`${styles.masImg} ${isDrawing ? styles.drawingImg : ''}`}
+                  src={item.url}
+                  alt={alt(item, idx)}
+                  loading={!isDrawing && idx < 2 ? 'eager' : 'lazy'}
+                />
+                <span className={styles.badge}>{label(item)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </ReportSection>
+    )
+  }
+
   return (
-    <div style={{
-      height: 'var(--page-height)',
-      background: 'var(--color-bg)',
-      color: 'var(--color-text)',
-      overflowY: 'auto',
-      paddingBottom: 'var(--tabbar-clearance)',
-    }}>
+    <div className={styles.page}>
       <PageTopControls onLogout={onLogout} leading={<Header onBack={handleBack} />} />
       <PageLogoHeader />
 
@@ -134,340 +204,112 @@ export default function BuildingDetailPage({ onLogout }) {
         />
       )}
 
-      <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 16px' }}>
-        <p style={{
-          color: 'var(--color-text-muted)',
-          fontSize: 'var(--fs-caption)',
-          fontWeight: 'var(--fw-bold)',
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          margin: '0 0 8px',
-        }}>
-          {t('detailB3.buildingDetailEyebrow')}
-        </p>
-        <div style={{ margin: '0 0 8px' }}>
-          <PageTitle style={{ margin: 0, lineHeight: 1.08 }}>
-            {title}
-          </PageTitle>
-        </div>
-        {architect && (
-          <p style={{
-            color: 'var(--color-text-dim)',
-            fontSize: 'var(--fs-body)',
-            fontStyle: 'italic',
-            lineHeight: 1.45,
-            margin: '0 0 20px',
-          }}>
-            {architectId ? (
-              <button
-                type="button"
-                className={styles.architectLink}
-                onClick={() => navigate(`/architects/${architectId}`)}
-              >
-                {architect}
-              </button>
-            ) : architect}
-          </p>
-        )}
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))',
-          gap: 10,
-          marginBottom: 24,
-        }}>
-          {items.map(([label, value]) => (
-            <div key={label} style={{
-              minHeight: 58,
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--color-border-soft)',
-              background: 'var(--color-surface)',
-              padding: '10px 12px',
-            }}>
-              <div style={{
-                color: 'var(--color-text-muted)',
-                fontSize: 'var(--fs-caption)',
-                fontWeight: 'var(--fw-bold)',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                marginBottom: 4,
-              }}>
-                {label}
-              </div>
-              <div style={{
-                color: 'var(--color-text)',
-                fontSize: 'var(--fs-body)',
-                fontWeight: 'var(--fw-bold)',
-                lineHeight: 1.3,
-              }}>
-                {label === 'Architect' && architectId ? (
-                  <button
-                    type="button"
-                    className={styles.architectLink}
-                    onClick={() => navigate(`/architects/${architectId}`)}
-                  >
-                    {value}
+      <div className={styles.column}>
+        <ReportScope>
+          <section className={styles.hero}>
+            <p className={styles.eyebrow}>{t('detailB3.buildingDetailEyebrow')}</p>
+            <h1 className={styles.name}>{title}</h1>
+            {architect && (
+              <p className={styles.sub}>
+                {architectId ? (
+                  <button type="button" className={styles.architectLink} onClick={openArchitect}>
+                    {architect}
                   </button>
-                ) : value}
-              </div>
+                ) : architect}
+              </p>
+            )}
+          </section>
+
+          <ReportSection style={{ paddingTop: 20 }}>
+            <ReportHeading>{t('detailB3.infoHeading')}</ReportHeading>
+            <div className={styles.mlist}>
+              {items.map(([key, value]) => (
+                <div key={key} className={styles.mrow}>
+                  <span className={styles.k}>{t(`detailB3.label${key}`)}</span>
+                  <div className={styles.v}>
+                    {CHIP_KEYS.includes(key) ? (
+                      <div className={styles.chipV}>
+                        <ReportTags items={Array.isArray(value) ? value : [value]} />
+                      </div>
+                    ) : key === 'Architect' && architectId ? (
+                      <button type="button" className={styles.architectLink} onClick={openArchitect}>
+                        {value}
+                      </button>
+                    ) : value}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+            {building.source_url && (
+              <a
+                className={styles.srcLink}
+                href={building.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t('detailB3.viewSource')}
+                <span aria-hidden="true">↗</span>
+              </a>
+            )}
+          </ReportSection>
 
-        {building.source_url && (
-          <a
-            href={building.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              color: 'var(--color-text-dim)',
-              fontSize: 'var(--fs-caption)',
-              fontWeight: 'var(--fw-bold)',
-              textDecoration: 'none',
-              marginBottom: 24,
-            }}
-          >
-            {t('detailB3.viewSource')}
-            <span aria-hidden="true">↗</span>
-          </a>
-        )}
-      </main>
+          {detailDescription && (
+            <ReportSection style={{ paddingTop: 8 }}>
+              <ReportHeading>{t('detailB3.descriptionHeading')}</ReportHeading>
+              <p className={styles.desc}>{detailDescription}</p>
+            </ReportSection>
+          )}
 
-      {galleryMeta.length > 0 ? (
-        <>
-          {/* Filter toggle chips */}
-          <div style={{
-            display: 'flex',
-            gap: 8,
-            padding: '14px 20px 0',
-            maxWidth: 820,
-            margin: '0 auto',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}>
-            {[
-              { id: 'all', label: t('detailB3.filterAll') },
-              { id: 'photos', label: t('detailB3.filterPhotos') },
-              { id: 'drawings', label: t('detailB3.filterDrawings') },
-            ].map(chip => {
-              const active = galleryFilter === chip.id
-              const disabled = (chip.id === 'photos' && photos.length === 0)
-                || (chip.id === 'drawings' && drawings.length === 0)
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() => setGalleryFilter(chip.id)}
-                  disabled={disabled}
+          <ReportSection style={{ paddingTop: 8 }}>
+            <ReportHeading>{t('detailB3.atmosphereHeading')}</ReportHeading>
+            <p className={styles.desc}>{atmosphere}</p>
+          </ReportSection>
+
+          {galleryMeta.length > 0 ? (
+            <>
+              {renderGallerySection(photos, 0, t('detailB3.photosHeading'), photosView, setPhotosView, false)}
+              {renderGallerySection(drawings, photos.length, t('detailB3.drawingsHeading'), drawingsView, setDrawingsView, true)}
+            </>
+          ) : gallery.length > 0 ? (
+            <section className="hide-scrollbar" style={{
+              height: '50vh',
+              minHeight: 320,
+              display: 'flex',
+              overflowX: 'auto',
+              scrollSnapType: 'x mandatory',
+              background: 'var(--color-surface)',
+            }}>
+              {gallery.map((url, index) => (
+                <div
+                  key={`${url}-${index}`}
+                  onClick={() => setLightboxIndex(index)}
                   style={{
-                    padding: '7px 14px',
-                    borderRadius: 'var(--radius-pill)',
-                    border: active ? '1px solid var(--accent-1)' : '1px solid var(--color-border-soft)',
-                    background: active ? 'color-mix(in srgb, var(--accent-1) 14%, transparent)' : 'var(--color-surface)',
-                    color: disabled ? 'var(--color-text-dimmer)' : (active ? 'var(--accent-1)' : 'var(--color-text)'),
-                    fontSize: 'var(--fs-caption)',
-                    fontWeight: 'var(--fw-bold)',
-                    cursor: disabled ? 'default' : 'pointer',
-                    fontFamily: 'inherit',
-                    opacity: disabled ? 0.45 : 1,
+                    position: 'relative',
+                    minWidth: '100%',
+                    height: '100%',
+                    scrollSnapAlign: 'start',
+                    background: '#050505',
+                    cursor: 'zoom-in',
                   }}
                 >
-                  {chip.label}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* 2-section masonry */}
-          <div style={{
-            maxWidth: 820,
-            margin: '0 auto',
-            padding: '14px 20px 0',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}>
-            {photos.length > 0 && galleryFilter !== 'drawings' && (
-              <section style={{ marginBottom: 24 }}>
-                <div style={{ marginBottom: 10 }}>
-                  <SectionTitle>{t('detailB3.photosHeading')}</SectionTitle>
+                  <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
+                  <img
+                    src={url}
+                    alt={`${title} ${index + 1}`}
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
                 </div>
-                <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
-                  {photos.map((item, idx) => (
-                    <div
-                      key={`${item.url}-${idx}`}
-                      onClick={() => setLightboxIndex(idx)}
-                      style={{
-                        breakInside: 'avoid',
-                        marginBottom: 8,
-                        position: 'relative',
-                        borderRadius: 'var(--radius-sm)',
-                        overflow: 'hidden',
-                        background: 'var(--color-surface)',
-                        cursor: 'zoom-in',
-                      }}
-                    >
-                      <img
-                        src={item.url}
-                        alt={`${title} ${kindLabel(item.kind)} ${idx + 1}`}
-                        loading={idx < 2 ? 'eager' : 'lazy'}
-                        style={{
-                          width: '100%',
-                          height: 'auto',
-                          display: 'block',
-                        }}
-                      />
-                      <span style={{
-                        position: 'absolute',
-                        bottom: 6,
-                        left: 6,
-                        background: 'var(--color-scrim-soft)',
-                        color: '#fff',
-                        fontSize: 'var(--fs-caption)',
-                        fontWeight: 'var(--fw-bold)',
-                        padding: '2px 6px',
-                        borderRadius: 'var(--radius-sm)',
-                        letterSpacing: '0.04em',
-                      }}>
-                        {kindLabel(item.kind)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-            {drawings.length > 0 && galleryFilter !== 'photos' && (
-              <section style={{ marginBottom: 24 }}>
-                <div style={{ marginBottom: 10 }}>
-                  <SectionTitle>{t('detailB3.drawingsHeading')}</SectionTitle>
-                </div>
-                <div style={{ columnCount: 2, columnGap: 8 }} className="building-masonry">
-                  {drawings.map((item, idx) => (
-                    <div
-                      key={`${item.url}-${idx}`}
-                      onClick={() => setLightboxIndex(galleryFilter === 'drawings' ? idx : photos.length + idx)}
-                      style={{
-                        breakInside: 'avoid',
-                        marginBottom: 8,
-                        position: 'relative',
-                        borderRadius: 'var(--radius-sm)',
-                        overflow: 'hidden',
-                        background: 'var(--color-surface)',
-                        cursor: 'zoom-in',
-                      }}
-                    >
-                      <img
-                        src={item.url}
-                        alt={`${title} Drawing ${idx + 1}`}
-                        loading="lazy"
-                        style={{
-                          width: '100%',
-                          height: 'auto',
-                          display: 'block',
-                          objectFit: 'contain',
-                        }}
-                      />
-                      <span style={{
-                        position: 'absolute',
-                        bottom: 6,
-                        left: 6,
-                        background: 'var(--color-scrim-soft)',
-                        color: '#fff',
-                        fontSize: 'var(--fs-caption)',
-                        fontWeight: 'var(--fw-bold)',
-                        padding: '2px 6px',
-                        borderRadius: 'var(--radius-sm)',
-                        letterSpacing: '0.04em',
-                      }}>
-                        {kindLabel('drawing')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        </>
-      ) : gallery.length > 0 ? (
-        <section className="hide-scrollbar" style={{
-          height: '50vh',
-          minHeight: 320,
-          display: 'flex',
-          overflowX: 'auto',
-          scrollSnapType: 'x mandatory',
-          background: 'var(--color-surface)',
-        }}>
-          {gallery.map((url, index) => (
-            <div
-              key={`${url}-${index}`}
-              onClick={() => setLightboxIndex(index)}
-              style={{
-                position: 'relative',
-                minWidth: '100%',
-                height: '100%',
-                scrollSnapAlign: 'start',
-                background: '#050505',
-                cursor: 'zoom-in',
-              }}
-            >
-              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0 }} />
-              <img
-                src={url}
-                alt={`${title} ${index + 1}`}
-                loading={index === 0 ? 'eager' : 'lazy'}
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                }}
-              />
-            </div>
-          ))}
-        </section>
-      ) : null}
-
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '0 20px' }}>
-        {detailDescription && (
-          <section style={{
-            borderTop: '1px solid var(--color-border-soft)',
-            paddingTop: 20,
-            marginBottom: 20,
-          }}>
-            <div style={{ marginBottom: 10 }}>
-              <SectionTitle>{t('detailB3.descriptionHeading')}</SectionTitle>
-            </div>
-            <p style={{
-              color: 'var(--color-text-dim)',
-              fontSize: 'var(--fs-body)',
-              lineHeight: 1.65,
-              margin: 0,
-              whiteSpace: 'pre-wrap',
-            }}>
-              {detailDescription}
-            </p>
-          </section>
-        )}
-
-        <section style={{
-          borderTop: '1px solid var(--color-border-soft)',
-          paddingTop: 20,
-        }}>
-          <div style={{ marginBottom: 10 }}>
-            <SectionTitle>{t('detailB3.atmosphereHeading')}</SectionTitle>
-          </div>
-          <p style={{
-            color: 'var(--color-text-dim)',
-            fontSize: 'var(--fs-body)',
-            lineHeight: 1.65,
-            margin: 0,
-          }}>
-            {description}
-          </p>
-        </section>
+              ))}
+            </section>
+          ) : null}
+        </ReportScope>
       </div>
     </div>
   )

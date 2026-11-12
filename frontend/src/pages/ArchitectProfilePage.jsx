@@ -2,32 +2,28 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getArchitectProfile, followArchitect, unfollowArchitect } from '../api/architects.js'
 import styles from './ArchitectProfilePage.module.css'
+import r from './boardReport/boardReport.module.css'
 import { useTranslation } from '../i18n/index.js'
+import PageShell from '../components/PageShell.jsx'
 import PageLogoHeader from '../components/PageLogoHeader.jsx'
 import PageTopControls from '../components/PageTopControls.jsx'
 import PageBackButton from '../components/PageBackButton.jsx'
-import FloatingIconButton from '../components/FloatingIconButton.jsx'
-import Tabs from '../components/Tabs.jsx'
 import EmptyState from '../components/EmptyState.jsx'
-import PhotoTile from '../components/PhotoTile.jsx'
-import SectionTitle from '../components/SectionTitle.jsx'
 import Skeleton from '../components/Skeleton.jsx'
+import { ReportScope, ReportSection, ReportHero, ReportHeading } from '../components/PersonaReportPage.jsx'
 
 /**
- * ArchitectProfilePage — UI-CONSISTENCY-B3b-2.
- *
- * Rebuilt onto the same shared-component system as UserProfilePage /
- * ProfileHero (DESIGN.md §2.2/§3.1/§3.3a, .claude/plans/archive/ui-consistency-b.md
- * phase 3 item 3): the full-bleed accent-gradient hero band is retired for a
- * centered 1100-wide column with a 480-wide hero (avatar halo, title, meta,
- * stats) that mirrors ProfileHero's structure and sizes; Built/Unbuilt dark
- * pills are replaced with the shared underline `Tabs`; the building grid
- * moves onto `PhotoTile` (same 4:5 / radius-lg / auto-fill(260px) grid as the
- * profile Liked tab); loading/empty/error states move onto `Skeleton` /
- * `EmptyState`. The local `BuildingCard` + bespoke skeleton helpers are
- * deleted — no other page imported them (grep-verified, 2b build-only note
- * did not include this page).
+ * ArchitectProfilePage — studio profile on the persona-report / board-detail
+ * shell: 680 column, 28px gutter (ReportScope), left-aligned hero with a 72px
+ * rounded-square logo, a board-style tools row (Follow pill + website / email /
+ * share icon buttons), plain description text, and a hairline "Buildings"
+ * heading with a Built / Unbuilt pill switch above a report-style card grid.
  */
+const ICON_PROPS = {
+  width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+  strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+}
+
 export default function ArchitectProfilePage({ onLogout }) {
   const { architectId } = useParams()
   const navigate = useNavigate()
@@ -97,313 +93,210 @@ export default function ArchitectProfilePage({ onLogout }) {
     }
   }
 
+  const hasBuildings = !!profile && Array.isArray(profile.buildings) && profile.buildings.length > 0
+  const builtBuildings = hasBuildings ? profile.buildings.filter(b => b.year_kind === 'completed') : []
+  const unbuiltBuildings = hasBuildings ? profile.buildings.filter(b => b.year_kind !== 'completed') : []
+  const displayedBuildings = activeTab === 'built' ? builtBuildings : unbuiltBuildings
+
   return (
-    <div style={{
-      height: 'var(--page-height)',
-      overflowY: 'auto',
-      background: 'var(--color-bg)',
-      paddingBottom: 'var(--tabbar-clearance)',
-    }}>
-      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('architect.back')} />} />
-
-      {/* Share — stacked under the back button (kept per existing working
-       * control; the mock drops the sticky header with no relocation shown).
-       * zIndex 299 (one below PageBackButton's 300) so the two 44px hit
-       * areas' overlap sliver resolves toward "back". */}
-      <FloatingIconButton
-        onClick={handleShare}
-        ariaLabel={t('architect.share')}
-        style={{ position: 'fixed', top: 50, left: 12, zIndex: 299 }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="18" cy="5" r="3" />
-          <circle cx="6" cy="12" r="3" />
-          <circle cx="18" cy="19" r="3" />
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-        </svg>
-      </FloatingIconButton>
-
-      <PageLogoHeader padding="20px 16px 0" />
-
-      {/* Unified responsive container (max-width 1100) — same shell as UserProfilePage */}
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 40px' }}>
-
-        {/* Loading state */}
+    <PageShell
+      width="medium"
+      className={styles.scroll}
+      // The report column owns its gutter (28px) via --rp-gutter inside ReportScope.
+      contentStyle={{ padding: 0 }}
+      chrome={
+        <>
+          <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} label={t('architect.back')} />} />
+          <PageLogoHeader padding="20px 16px 0" />
+        </>
+      }
+    >
+      <ReportScope>
+        {/* Loading state — mirrors the hero silhouette + grid */}
         {isLoading && (
-          <>
-            <div style={{ maxWidth: 480, margin: '0 auto 36px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <Skeleton circle height={108} />
-              <Skeleton width={180} height={24} style={{ marginTop: 10 }} />
-              <Skeleton width={100} height={14} />
-              <div style={{ display: 'flex', gap: 24, marginTop: 14 }}>
-                <Skeleton width={56} height={36} />
-                <Skeleton width={56} height={36} />
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 14, width: '100%' }}>
-                {[1, 2, 3].map(i => (
-                  <Skeleton key={i} height={44} radius="var(--radius-md)" style={{ flex: 1 }} />
-                ))}
+          <div className={styles.state}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+              <Skeleton width={72} height={72} radius={20} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Skeleton width={60} height={12} />
+                <Skeleton width={180} height={24} />
+                <Skeleton width={100} height={14} />
               </div>
             </div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: 20,
-            }}>
+            <Skeleton width={140} height={12} style={{ marginBottom: 18 }} />
+            <Skeleton height={44} radius="var(--radius-pill)" style={{ marginBottom: 26 }} />
+            <div className={styles.skelGrid}>
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} radius="var(--radius-lg)" style={{ height: 'auto', aspectRatio: '4 / 5' }} />
+                <Skeleton key={i} radius={14} style={{ height: 'auto', aspectRatio: '4 / 5' }} />
               ))}
             </div>
-          </>
+          </div>
         )}
 
         {/* Error state */}
         {error && (
-          <EmptyState
-            icon={(
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: 'var(--color-text-muted)' }}>
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-            )}
-            title={t('architect.loadError')}
-            actionLabel={t('architect.retry')}
-            onAction={() => { setError(null); setProfile(undefined); setRetryKey(k => k + 1) }}
-          />
+          <div className={styles.state}>
+            <EmptyState
+              icon={(
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: 'var(--color-text-muted)' }}>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+              title={t('architect.loadError')}
+              actionLabel={t('architect.retry')}
+              onAction={() => { setError(null); setProfile(undefined); setRetryKey(k => k + 1) }}
+            />
+          </div>
         )}
 
         {/* Not found state */}
         {!isLoading && !error && profile === null && (
-          <EmptyState
-            icon={(
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: 'var(--color-text-muted)' }}>
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M9 9h6M9 12h6M9 15h6" />
-              </svg>
-            )}
-            title={t('architect.notFound')}
-          />
+          <div className={styles.state}>
+            <EmptyState
+              icon={(
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: 'var(--color-text-muted)' }}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M9 9h6M9 12h6M9 15h6" />
+                </svg>
+              )}
+              title={t('architect.notFound')}
+            />
+          </div>
         )}
 
         {/* Loaded state */}
         {!isLoading && !error && profile && (
           <>
-            {/* Hero — same structure/sizes as ProfileHero (narrower nested column, max-width 480) */}
-            <div style={{ maxWidth: 480, margin: '0 auto 36px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-
-                {/* Avatar / logo — halo treatment matches ProfileHero.AvatarCircle */}
-                <div style={{ marginBottom: 18 }}>
+            <ReportHero>
+              <div className={styles.id}>
+                <div className={styles.avatar}>
                   {profile.logo_url ? (
-                    <div style={{ position: 'relative' }}>
-                      <div
-                        style={{
-                          position: 'absolute', inset: -6, borderRadius: '50%',
-                          background: 'linear-gradient(135deg, var(--accent-1), var(--accent-2))',
-                          opacity: 0.55, filter: 'blur(12px)',
-                        }}
-                        aria-hidden="true"
-                      />
-                      <img
-                        src={profile.logo_url}
-                        alt={profile.name}
-                        style={{
-                          position: 'relative', zIndex: 2,
-                          width: 108, height: 108, borderRadius: '50%',
-                          border: '2px solid var(--color-border-soft)',
-                          objectFit: 'cover',
-                          background: 'var(--color-surface)',
-                          display: 'block',
-                        }}
-                      />
-                    </div>
+                    <img className={styles.avatarImg} src={profile.logo_url} alt={profile.name} />
                   ) : (
-                    <div style={{
-                      width: 108, height: 108, borderRadius: '50%',
-                      background: 'var(--color-surface)',
-                      border: '2px solid var(--color-border-soft)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="3" y="3" width="18" height="18" rx="2" />
-                        <path d="M9 9h6M9 12h6M9 15h6" />
-                      </svg>
-                    </div>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-dim)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <path d="M9 9h6M9 12h6M9 15h6" />
+                    </svg>
                   )}
                 </div>
-
-                {/* Name — same title style as ProfileHero */}
-                <h1 style={{
-                  color: 'var(--color-text)', fontSize: 'var(--fs-title)', fontWeight: 'var(--fw-bold)',
-                  margin: '0 0 4px', lineHeight: 1.2, letterSpacing: '-0.01em',
-                }}>
-                  {profile.name}
-                </h1>
-
-                {/* Country / meta line */}
-                {profile.primary_country && (
-                  <p style={{
-                    margin: '0 0 4px',
-                    color: 'var(--color-text-muted)',
-                    fontSize: 'var(--fs-body)',
-                    fontWeight: 400,
-                    lineHeight: 1.3,
-                  }}>
-                    {profile.primary_country}
-                  </p>
-                )}
-
-                {/* Stats row — same number/divider style as ProfileHero */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: 0, marginTop: 14, marginBottom: 4,
-                }}>
-                  <div className={styles.statBtn}>
-                    <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 'var(--fw-bold)', lineHeight: 1 }}>
-                      {profile.building_count != null ? profile.building_count.toLocaleString() : '—'}
-                    </span>
-                    <span className={styles.statLabel}>{t('architectB3.buildings')}</span>
-                  </div>
-                  <div style={{ width: 1, height: 28, background: 'var(--color-border)' }} />
-                  <div className={styles.statBtn}>
-                    <span style={{ color: 'var(--color-text)', fontSize: 18, fontWeight: 'var(--fw-bold)', lineHeight: 1 }}>
-                      {followerCount.toLocaleString()}
-                    </span>
-                    <span className={styles.statLabel}>{t('architectB3.followers')}</span>
-                  </div>
+                <div className={styles.idText}>
+                  <p className={styles.eyebrow}>{t('architect.eyebrow')}</p>
+                  <h1 className={styles.name}>{profile.name}</h1>
+                  {profile.primary_country && <p className={styles.sub}>{profile.primary_country}</p>}
                 </div>
-
-                {/* Actions — Follow (primary/secondary toggle) · Website · Contact, one row, max-width 480 */}
-                <div style={{ display: 'flex', gap: 8, marginTop: 14, width: '100%' }}>
-                  <button
-                    type="button"
-                    className={`${styles.actionBtn} ${isFollowing ? styles.secondaryBtn : styles.primaryBtn}`}
-                    onClick={handleFollow}
-                    disabled={followPending}
-                    aria-label={isFollowing ? t('architect.unfollow') : t('architect.follow')}
-                    style={{ opacity: followPending ? 0.7 : 1, cursor: followPending ? 'default' : 'pointer' }}
-                  >
-                    {isFollowing ? t('architectB3.following') : t('architectB3.follow')}
-                  </button>
-
-                  {profile.website && (
-                    <button
-                      type="button"
-                      className={`${styles.actionBtn} ${styles.secondaryBtn}`}
-                      onClick={handleWebsite}
-                      aria-label={t('architect.website')}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="2" y1="12" x2="22" y2="12" />
-                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                      </svg>
-                      {t('architectB3.website')}
-                    </button>
-                  )}
-
-                  {profile.email && (
-                    <button
-                      type="button"
-                      className={`${styles.actionBtn} ${styles.secondaryBtn}`}
-                      onClick={handleContact}
-                      aria-label={t('architect.email')}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                        <polyline points="22,6 12,13 2,6" />
-                      </svg>
-                      {t('architectB3.contact')}
-                    </button>
-                  )}
-                </div>
-
-                {/* Description card — surface panel radius md */}
-                {profile.description && (
-                  <div style={{
-                    marginTop: 20,
-                    width: '100%',
-                    padding: 16,
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border-soft)',
-                    textAlign: 'left',
-                  }}>
-                    <p style={{
-                      margin: 0,
-                      fontSize: 'var(--fs-body)',
-                      color: 'var(--color-text)',
-                      lineHeight: 1.6,
-                    }}>
-                      {profile.description}
-                    </p>
-                  </div>
-                )}
               </div>
-            </div>
 
-            {/* Buildings section */}
-            {Array.isArray(profile.buildings) && profile.buildings.length > 0 && (() => {
-              const builtBuildings = profile.buildings.filter(b => b.year_kind === 'completed')
-              const unbuiltBuildings = profile.buildings.filter(b => b.year_kind !== 'completed')
-              const displayedBuildings = activeTab === 'built' ? builtBuildings : unbuiltBuildings
-              return (
-                <>
-                  <div style={{ marginBottom: 12 }}>
-                    <SectionTitle as="h2" count={profile.building_count != null ? profile.building_count.toLocaleString() : profile.buildings.length}>
-                      {t('architectB3.buildingsSection')}
-                    </SectionTitle>
-                  </div>
+              <p className={styles.metaRow}>
+                <span>{t('architectB3.buildings')} <b>{profile.building_count != null ? profile.building_count.toLocaleString() : '—'}</b></span>
+                <span aria-hidden="true">·</span>
+                <span>{t('architectB3.followers')} <b>{followerCount.toLocaleString()}</b></span>
+              </p>
 
-                  {/* Built / Unbuilt — shared underline Tabs, counts in labels */}
-                  <Tabs
-                    style={{ marginBottom: 20 }}
-                    tabs={[
-                      { id: 'built', label: `${t('architectB3.builtTab')} · ${builtBuildings.length}` },
-                      { id: 'unbuilt', label: `${t('architectB3.unbuiltTab')} · ${unbuiltBuildings.length}` },
-                    ]}
-                    value={activeTab}
-                    onChange={setActiveTab}
-                  />
+              <div className={r.tools}>
+                <button
+                  type="button"
+                  className={`${r.tool} ${isFollowing ? '' : r.toolDark}`}
+                  onClick={handleFollow}
+                  disabled={followPending}
+                  aria-label={isFollowing ? t('architect.unfollow') : t('architect.follow')}
+                >
+                  {isFollowing ? t('architectB3.following') : t('architectB3.follow')}
+                </button>
+                {profile.website && (
+                  <button type="button" className={r.icon} onClick={handleWebsite} aria-label={t('architect.website')}>
+                    <svg {...ICON_PROPS}>
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="2" y1="12" x2="22" y2="12" />
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                    </svg>
+                  </button>
+                )}
+                {profile.email && (
+                  <button type="button" className={r.icon} onClick={handleContact} aria-label={t('architect.email')}>
+                    <svg {...ICON_PROPS}>
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
+                    </svg>
+                  </button>
+                )}
+                <button type="button" className={r.icon} onClick={handleShare} aria-label={t('architect.share')}>
+                  <svg {...ICON_PROPS}>
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                </button>
+              </div>
 
-                  {/* Grid or per-tab empty state */}
+              {profile.description && <p className={styles.desc}>{profile.description}</p>}
+            </ReportHero>
+
+            {hasBuildings ? (
+              <ReportSection>
+                <ReportHeading
+                  count={profile.building_count != null ? profile.building_count.toLocaleString() : profile.buildings.length}
+                  right={(
+                    <span className={styles.vs} role="group">
+                      {[
+                        { id: 'built', label: t('architectB3.builtTab'), n: builtBuildings.length },
+                        { id: 'unbuilt', label: t('architectB3.unbuiltTab'), n: unbuiltBuildings.length },
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          className={`${styles.vsBtn} ${activeTab === tab.id ? styles.vsOn : ''}`}
+                          aria-pressed={activeTab === tab.id}
+                          onClick={() => setActiveTab(tab.id)}
+                        >
+                          {`${tab.label} · ${tab.n}`}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                >
+                  {t('architectB3.buildingsSection')}
+                </ReportHeading>
+
+                <div className={styles.wrap}>
                   {displayedBuildings.length === 0 ? (
                     <EmptyState title={t('architectB3.noProjectsYet')} />
                   ) : (
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                      gap: 20,
-                    }}>
+                    <div className={styles.grid}>
                       {displayedBuildings.map(building => {
                         const title = building.name_en || building.name || ''
                         const subtitle = [building.year, building.program].filter(Boolean).join(' · ')
                         return (
-                          <PhotoTile
+                          <button
                             key={building.canonical_bld_id}
-                            imageUrl={building.image_url}
-                            title={title}
-                            subtitle={subtitle}
+                            type="button"
+                            className={styles.card}
                             onClick={() => navigate('/buildings/' + building.canonical_bld_id)}
-                          />
+                          >
+                            {building.image_url && (
+                              <img className={styles.cardImg} src={building.image_url} alt="" loading="lazy" />
+                            )}
+                            <span className={styles.cardScrim} aria-hidden="true" />
+                            <span className={styles.cardCap}>
+                              <span className={styles.cardTitle} style={{ display: '-webkit-box' }}>{title}</span>
+                              {subtitle && <span className={styles.cardSub} style={{ display: 'block' }}>{subtitle}</span>}
+                            </span>
+                          </button>
                         )
                       })}
                     </div>
                   )}
-                </>
-              )
-            })()}
-
-            {(!Array.isArray(profile.buildings) || profile.buildings.length === 0) && (
-              <EmptyState title={t('architect.noBuildings')} />
+                </div>
+              </ReportSection>
+            ) : (
+              <ReportSection>
+                <EmptyState title={t('architect.noBuildings')} />
+              </ReportSection>
             )}
           </>
         )}
-
-      </div>
-
-    </div>
+      </ReportScope>
+    </PageShell>
   )
 }
