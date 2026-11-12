@@ -21,6 +21,7 @@ import PageTopControls from '../components/PageTopControls.jsx'
 import LeaveDiscoveryModal from '../components/LeaveDiscoveryModal.jsx'
 import FinishReportButton from '../components/FinishReportButton.jsx'
 import DiscoveryPromoteOverlay from '../components/DiscoveryPromoteOverlay.jsx'
+import { describePromoteError, promoteErrorText } from '../components/promoteError.js'
 import overlayStyles from '../components/DiscoveryPromoteOverlay.module.css'
 import { createDraftFeedbackQueue } from '../utils/draftFeedbackQueue.js'
 
@@ -185,6 +186,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
   // The ref mirrors it synchronously for the navigation-guard closure.
   const [promoteBlock, setPromoteBlockState] = useState('idle')
   const promoteBlockRef = useRef('idle')
+  const [promoteErrorInfo, setPromoteErrorInfo] = useState(null)
   // False once the page is unmounted (browser back etc. during the blocking
   // promote): the in-flight handler must not navigate to /swipe afterwards.
   const mountedRef = useRef(true)
@@ -561,7 +563,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
     const blockUi = opts?.blockUi === true
     if (promoteLoading) return
     setPromoteLoading(true)
-    if (blockUi) setPromoteBlock('loading')
+    if (blockUi) { setPromoteErrorInfo(null); setPromoteBlock('loading') }
     try {
       const result = await (blockUi
         ? promoteToTaste(draftQueueRef.current.getDraftId(), { timeoutMs: PROMOTE_TIMEOUT_MS })
@@ -599,11 +601,18 @@ export default function DiscoveryPage({ showToast, onLogout }) {
         setCapReached(false)
         reportWriteError(showToast, t('discovery.toastNotEnoughLikes'))
         if (blockUi) setPromoteBlock('idle')
-      } else if (blockUi) {
-        // Overlay shows the failure message + retry / back buttons (no toast).
-        setPromoteBlock('error')
       } else {
-        reportWriteError(showToast, t('discovery.toastAnalysisFailed'))
+        const info = describePromoteError(err)
+        console.warn('[promote-to-taste] failed', {
+          status: err?.status, detail: err?.data?.detail, name: err?.name, reason: info.reason,
+        })
+        if (blockUi) {
+          // Overlay shows the failure reason + retry / back buttons (no toast).
+          setPromoteErrorInfo(info)
+          setPromoteBlock('error')
+        } else {
+          reportWriteError(showToast, promoteErrorText(t, info))
+        }
       }
     } finally {
       setPromoteLoading(false)
@@ -837,6 +846,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
         {promoteBlocking && (
           <DiscoveryPromoteOverlay
             phase={promoteBlock}
+            errorInfo={promoteErrorInfo}
             onRetry={() => handlePromoteToTaste({ blockUi: true })}
             onBack={handleBackToDiscovery}
           />
