@@ -1,81 +1,40 @@
 /*
- * BoardDetailPage.module.css — owner-row underline, action-button
- * hover/press states.
- *
- * UI-CONSISTENCY-B Phase 3a: the hero (full-bleed cover + its own 44px glass
- * back/share buttons) is gone — chrome is now PageBackButton /
- * PageTopControls / PageLogoHeader + a plain FloatingIconButton share
- * (see BoardDetailPage.jsx). `.heroBtn`/`.copied` (hero-only glass button
- * skin) are retired with it. `.ownerRow`/`.ownerName` and the reaction
- * button states carry over, restyled to plain (non-photo) colors + DESIGN.md
- * §8.1/§8.2 button chrome, motion tokens instead of literal ms.
+ * BoardDetailPage.module.css — scroll container of the report-less board page.
+ * Scrollbar = persona-report card "style B", verbatim from
+ * components/BoardSocialCard.module.css (.detail) — off-scale hex kept identical.
  */
-
-/* Owner row — name underlines on row hover (parent-hover-affects-child, method #4). */
-.ownerRow:hover .ownerName {
-  text-decoration: underline;
+.scroll {
+  --sb-thumb: #d0d7de;
+  --sb-thumb-hover: #8c959f;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
-
-/* Top action row (mock `boardDetail`) — 44px pills + circular icon buttons. */
-.topActions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 18px 8px 0;
+:global([data-theme="github-dark"]) .scroll,
+:global([data-theme="synthwave-84"]) .scroll {
+  --sb-thumb: #3b434d;
+  --sb-thumb-hover: #636e7b;
 }
-.pill {
-  min-height: 44px;
-  font-family: inherit;
-  font-size: var(--fs-body);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform var(--motion-normal) var(--motion-ease),
-              background var(--motion-normal) var(--motion-ease),
-              color var(--motion-normal) var(--motion-ease),
-              border-color var(--motion-normal) var(--motion-ease);
+.scroll::-webkit-scrollbar {
+  width: 10px;
 }
-.pill {
-  padding: 0 22px;
-  border-radius: var(--radius-pill);
-  border: 0;
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 56px 0 18px;
 }
-.pillPrimary {
-  flex: 1;
-  min-width: 0;
-  background: var(--accent-1);
-  color: #fff;
+.scroll::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  background: var(--sb-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
 }
-.pillSecondary {
-  padding: 0 18px;
-  gap: 6px;
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hover);
+  background-clip: padding-box;
 }
-.pillSecondary.reacted {
-  color: var(--accent-1);
-  border-color: var(--accent-1);
-}
-.pill:hover:not(:disabled) {
-  transform: scale(1.04);
-}
-.pill:active:not(:disabled) {
-  transform: scale(0.97);
-}
-.pill:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pill {
-    transition: none;
-  }
-  .pill:hover:not(:disabled),
-  .pill:active:not(:disabled) {
-    transform: none;
+@supports not selector(::-webkit-scrollbar) {
+  .scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb) transparent;
   }
 }

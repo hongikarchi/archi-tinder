@@ -253,6 +253,75 @@ function ArchitectRow({ architect, onOpen, style, t }) {
   )
 }
 
+/* ── Shared sections (also used by BoardDetailPage for report-less boards) ── */
+const delayStyle = d => ({ '--d': `${d}s` })
+
+/** Scope wrapper for report-style sections outside the report body: defines the
+ *  report CSS variables (gutter, card width, reveal) and runs the reveal hook. */
+export function ReportScope({ children }) {
+  const rootRef = useRef(null)
+  useReveal(rootRef)
+  return <div ref={rootRef} className={s.body}>{children}</div>
+}
+
+/** Report section block (26px / gutter padding). */
+export function ReportSection({ children }) {
+  return <section className={s.section}>{children}</section>
+}
+
+/** Report hero block (meta / title / tools); `afterCover` tightens the top padding. */
+export function ReportHero({ children, afterCover = false }) {
+  return <section className={s.hero} style={afterCover ? { paddingTop: 18 } : undefined}>{children}</section>
+}
+
+/** Report heading: 14px bold + trailing hairline, optional count. */
+export function ReportHeading({ children, count = null }) {
+  return (
+    <h2 data-rv className={`${s.rv} ${s.h2}`}>
+      {children}
+      {count != null && <span className={s.cnt}>{count}</span>}
+    </h2>
+  )
+}
+
+/** "추천 순위": one horizontal row of BuildingCard with rank pills; hidden when empty. */
+export function RecommendationsSection({ recommendations = [], onOpenBuilding }) {
+  const { t } = useTranslation()
+  if (recommendations.length === 0) return null
+  return (
+    <section className={s.section}>
+      <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('results.recTitle')}</h2>
+      <div data-rv className={`${s.rv} ${s.row}`} style={delayStyle(0.1)}>
+        {recommendations.map((card, i) => (
+          <BuildingCard key={cardId(card) || i} card={card} rank={i + 1} onOpen={onOpenBuilding} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** "추천 사무소": ArchitectRow list; hidden when empty. */
+export function ArchitectsSection({ architects = [], onOpenArchitect }) {
+  const { t } = useTranslation()
+  if (architects.length === 0) return null
+  return (
+    <section className={s.section}>
+      <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('board.recommendedOffice')}</h2>
+      <div className={s.archList}>
+        {architects.map((architect, i) => (
+          <ArchitectRow
+            key={architect.architect_id ?? i}
+            architect={architect}
+            onOpen={onOpenArchitect}
+            style={delayStyle(Math.min(0.1 + i * 0.1, 0.5))}
+            t={t}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 /* ── Body ───────────────────────────────────────────────────────────────── */
 /**
  * Props:
@@ -394,34 +463,10 @@ export function PersonaReportBody({
       ))}
 
       {/* Recommendations — one row of the same card, rank pills */}
-      {recommendations.length > 0 && (
-        <section className={s.section}>
-          <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('results.recTitle')}</h2>
-          <div data-rv className={`${s.rv} ${s.row}`} style={delay(0.1)}>
-            {recommendations.map((card, i) => (
-              <BuildingCard key={cardId(card) || i} card={card} rank={i + 1} onOpen={onOpenBuilding} />
-            ))}
-          </div>
-        </section>
-      )}
+      <RecommendationsSection recommendations={recommendations} onOpenBuilding={onOpenBuilding} />
 
       {/* Recommended architects */}
-      {architects.length > 0 && (
-        <section className={s.section}>
-          <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('board.recommendedOffice')}</h2>
-          <div className={s.archList}>
-            {architects.map((architect, i) => (
-              <ArchitectRow
-                key={architect.architect_id ?? i}
-                architect={architect}
-                onOpen={onOpenArchitect}
-                style={delay(Math.min(0.1 + i * 0.1, 0.5))}
-                t={t}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <ArchitectsSection architects={architects} onOpenArchitect={onOpenArchitect} />
 
       {footerSlot}
     </div>
