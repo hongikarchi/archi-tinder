@@ -5,9 +5,8 @@ import { useSyncExternalStore } from 'react'
  *
  * Seeded from `blocked_by_me` on contact-requests/status/ (#372) and updated
  * locally after block/unblock actions. Module-level (not component state) so every
- * UserActionsMenu instance — the conversation header (remounted whenever a
- * conversation is opened on the /messages tab) and the profile menu — agrees
- * and offers "Unblock".
+ * UserActionsMenu instance — the conversation header (remounted whenever the
+ * sheet reopens) and the profile menu — agrees and offers "Unblock".
  */
 const blocked = new Set()
 const listeners = new Set()
