@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from '../../i18n/index.js'
 import { getContactStatus } from '../../api/messaging.js'
 import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
-import { markBlocked } from './blockedUsers.js'
+import { getBlockSeq, applyServerBlockedByMe } from './blockedUsers.js'
 import GreetingSheet from './GreetingSheet.jsx'
 
 /**
@@ -37,14 +37,16 @@ export default function ContactCta({ userId, buttonClassName, hidden = false }) 
   const [greetingOpen, setGreetingOpen] = useState(false)
 
   useEffect(() => {
-    if (!enabled || !userId || hidden) return undefined
+    // Fetched even while `hidden` so a block/unblock done elsewhere is noticed;
+    // `hidden` stays a dep so a local unblock refetches fresh status.
+    if (!enabled || !userId) return undefined
     let cancelled = false
+    const s = getBlockSeq()
     getContactStatus(userId)
       .then(data => {
         if (cancelled) return
-        // Server-side block survives a refresh; seed the session store so the
-        // CTA hides and the menu offers "Unblock".
-        if (data?.blocked_by_me === true) markBlocked(userId)
+        // Server status is authoritative (both ways); stale responses dropped.
+        applyServerBlockedByMe(userId, data?.blocked_by_me, s)
         setStatus(data)
         setLoadFailed(false)
       })

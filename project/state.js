@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-21 01:28 KST',
-    head: '6a5ef4f',
-    branch: 'upd496',
+    updatedAt: '2026-11-21 01:29 KST',
+    head: 'de8c615',
+    branch: 'upd497',
   },
   done: [
+    {
+      id: 'PR #496',
+      title: 'chore(SNS-CLEANUP-1): drop dead follow serializer + unused onOverlayChange, fix stale comments',
+      completedAt: '2026-11-21',
+      prs: [496],
+      note: '',
+    },
     {
       id: 'PR #495',
       title: 'fix(SNS-NOTIF-ROUTE-1): refetch notification unread count on route change',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
       completedAt: '2026-11-07',
       prs: [479],
-      note: '',
-    },
-    {
-      id: 'PR #478',
-      title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
-      completedAt: '2026-11-07',
-      prs: [478],
       note: '',
     },
   ],
@@ -536,6 +536,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 496,
+      title: 'chore(SNS-CLEANUP-1): drop dead follow serializer + unused onOverlayChange, fix stale comments',
+      mergedAt: '2026-11-20T16:29:00Z',
+      mergedAtKST: '2026-11-21 01:29 KST',
+      sha: 'de8c615',
+    },
+    {
       number: 495,
       title: 'fix(SNS-NOTIF-ROUTE-1): refetch notification unread count on route change',
       mergedAt: '2026-11-20T16:28:41Z',
@@ -583,13 +590,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-07T01:52:17Z',
       mergedAtKST: '2026-11-07 10:52 KST',
       sha: '17399c9',
-    },
-    {
-      number: 478,
-      title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
-      mergedAt: '2026-11-07T01:25:28Z',
-      mergedAtKST: '2026-11-07 10:25 KST',
-      sha: '6125ca5',
     },
   ],
   agents: [
@@ -3225,6 +3225,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/messaging/blockedUsers.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/blockedUsers.test.mjs',
       role: '',
     },
     {
