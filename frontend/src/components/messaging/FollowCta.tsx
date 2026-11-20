@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Modal from '../Modal.tsx'
 import { useTranslation } from '../../i18n/index.ts'
 import { getFollowStatus, followUser, unfollowUser } from '../../api/social.ts'
-import { openConversation } from '../../api/messaging.ts'
+import { openConversation, listConversations } from '../../api/messaging.ts'
 import { VerifyRequiredError } from '../../api/projects.ts'
 import { useFollowEnabled, useMessagingEnabled } from '../../hooks/useMessagingFeature.ts'
 import { getBlockSeq, applyServerBlockedByMe } from './blockedUsers.ts'
@@ -20,7 +20,16 @@ import type { FollowStatus } from '../../types/api.ts'
  *                                    An existing follow survives the target
  *                                    opting out, so is_following wins over
  *                                    can_follow.
- *   !following + can_follow       -> [팔로우] ([맞팔로우] when they follow me)
+ *   Message button = (is_following OR has_conversation) AND messaging enabled.
+ *   Without a follow, POST conversations/ would 403, so the existing
+ *   conversation is looked up in listConversations() instead.
+ *   !following + can_follow       -> [팔로우] ([맞팔로우] when they follow me);
+ *                                    plus [메시지 보내기] alongside when an open
+ *                                    conversation exists (has_conversation) and
+ *                                    messaging is enabled
+ *   !following + !can_follow
+ *     + has_conversation          -> only [메시지 보내기] (existing conversation
+ *                                    partner who opted out of follows)
  *   !following + verify_required  -> [팔로우]; click fires the global
  *                                    'archithon:verify-required' {reason:
  *                                    'messaging'} event (VerifyGateModal), no
@@ -177,8 +186,17 @@ export default function FollowCta({ userId, name, buttonClassName, hidden = fals
     setPending('message')
     setActionError(null)
     try {
-      const res = await openConversation(userId)
+      let res: { id: number, other?: unknown, closed?: boolean } | undefined
+      if (status?.is_following) {
+        res = await openConversation(userId)
+      } else {
+        const list = await listConversations()
+        res = (list?.results || []).find(
+          (c: { other?: { user_id?: number | string } }) => String(c.other?.user_id) === String(userId),
+        )
+      }
       if (userIdRef.current !== requestedFor) return
+      if (!res) { setActionError('follow.messageError'); return }
       navigate(`/messages/${res.id}`, {
         state: { conversation: { id: res.id, other: res.other, closed: res.closed } },
       })
@@ -189,6 +207,13 @@ export default function FollowCta({ userId, name, buttonClassName, hidden = fals
       if (userIdRef.current === requestedFor) setPending(null)
     }
   }
+
+  const messageButton = (
+    <button type="button" className={buttonClassName} onClick={handleMessage} disabled={pending !== null}>
+      {t('messaging.sendMessage')}
+    </button>
+  )
+  const showMessage = !!status && (status.is_following || status.has_conversation) && messagingEnabled
 
   let buttons = null
   if (hidden || status?.blocked_by_me) {
@@ -210,24 +235,20 @@ export default function FollowCta({ userId, name, buttonClassName, hidden = fals
         >
           {t('follow.following')}
         </button>
-        {messagingEnabled && (
-          <button
-            type="button"
-            className={buttonClassName}
-            onClick={handleMessage}
-            disabled={pending !== null}
-          >
-            {t('messaging.sendMessage')}
-          </button>
-        )}
+        {showMessage && messageButton}
       </div>
     )
   } else if (status.can_follow) {
-    buttons = (
+    const followBtn = (
       <button type="button" className={buttonClassName} onClick={handleFollow} disabled={pending !== null}>
         {t(status.is_followed_by ? 'follow.followBack' : 'follow.follow')}
       </button>
     )
+    buttons = showMessage
+      ? <div className={styles.followRow}>{followBtn}{messageButton}</div>
+      : followBtn
+  } else if (status.has_conversation && showMessage) {
+    buttons = <div className={styles.followRow}>{messageButton}</div>
   } else if (status.reason === 'verify_required') {
     buttons = (
       <button type="button" className={buttonClassName} onClick={handleVerifyRequired}>

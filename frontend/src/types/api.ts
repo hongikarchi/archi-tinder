@@ -27,6 +27,8 @@ export interface FollowStatus {
   is_followed_by: boolean
   can_follow: boolean
   blocked_by_me: boolean
+  /** An open (unclosed) conversation exists between me and the target. */
+  has_conversation: boolean
   reason?: 'verify_required'
 }
 /** POST conversations/ {peer_user_id} (201 created / 200 existing). */
