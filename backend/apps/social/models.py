@@ -37,7 +37,8 @@ class Reaction(models.Model):
     """Single-tier ❤️ reaction on a Project (Board) — Phase 15 SOC2.
 
     `reaction_count` on Project is maintained via post_save / post_delete signals
-    (same pattern as Follow / follower_count). CASCADE handles project or user
+    (counter cache; the user-to-user Follow that used the same pattern was removed
+    2026-06-14). CASCADE handles project or user
     deletion without extra view-layer logic.
     """
     user = models.ForeignKey(

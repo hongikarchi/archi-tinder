@@ -117,9 +117,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ['user_id', 'persona_summary']
 
     def get_saved_studios_count(self, obj):
-        # Local import avoids circular dependency:
-        # apps.social.serializers already imports from apps.accounts.serializers
-        # at module level, so a top-level import here would form a cycle.
+        # Local import keeps accounts.serializers free of a module-level
+        # dependency on apps.social (it once also broke an import cycle with
+        # apps.social.serializers, since removed).
         from apps.social.models import ArchitectFollow
         return ArchitectFollow.objects.filter(follower=obj).count()
 

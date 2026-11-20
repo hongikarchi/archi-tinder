@@ -6,7 +6,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { blockUser, unblockUser, getContactStatus } from '../../api/messaging.js'
 import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
 import { VerifyRequiredError } from '../../api/projects.js'
-import { markBlocked, markUnblocked, useBlockedUser } from './blockedUsers.js'
+import { markBlocked, markUnblocked, useBlockedUser, getBlockSeq, applyServerBlockedByMe } from './blockedUsers.js'
 import styles from './Messaging.module.css'
 
 /**
@@ -20,10 +20,8 @@ import styles from './Messaging.module.css'
  * "Unblock". State lives in the shared `blockedUsers` store (every menu instance
  * for this user agrees); on mount it is seeded from `blocked_by_me` on
  * contact-requests/status/ so a refresh still offers "Unblock" (#372).
- * `onOverlayChange(open)` lets a host sheet suspend its own ESC-to-close while
- * the dropdown or a dialog owns Escape.
  */
-export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, onOverlayChange }) {
+export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -34,23 +32,18 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
   const [error, setError] = useState(null)
   const wrapRef = useRef(null)
 
-  // The block state survives a refresh only server-side: seed the session store
-  // from the status read. Only ever marks blocked (never unmarks from a possibly
-  // stale response); errors are ignored so the menu still works.
+  // The server status is authoritative: sync the session store both ways
+  // (block/unblock done on another device/tab included). A response issued before
+  // a local block/unblock is dropped via the seq check.
   useEffect(() => {
     if (!enabled || !userId) return undefined
     let cancelled = false
+    const s = getBlockSeq()
     getContactStatus(userId)
-      .then(data => { if (!cancelled && data?.blocked_by_me === true) markBlocked(userId) })
-      .catch(() => {})
+      .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, s) })
+      .catch(() => {}) // non-critical: the menu works without the status read
     return () => { cancelled = true }
   }, [enabled, userId])
-
-  const overlay = menuOpen || confirmOpen || reportOpen
-  useEffect(() => {
-    onOverlayChange?.(overlay)
-  }, [overlay, onOverlayChange])
-  useEffect(() => () => onOverlayChange?.(false), [onOverlayChange])
 
   // dropdown: close on outside press / Escape
   useEffect(() => {
