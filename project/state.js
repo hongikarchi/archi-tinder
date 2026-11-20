@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-10 22:57 KST',
-    head: 'cbdb4d1',
-    branch: 'upd486',
+    updatedAt: '2026-11-20 17:11 KST',
+    head: '373325f',
+    branch: 'feature/sns-notif-unread-route',
   },
   done: [
     {
@@ -33,6 +33,13 @@ window.PROJECT_STATE = {
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
       completedAt: '2026-11-10',
       prs: [487],
+      note: '',
+    },
+    {
+      id: 'PR #486',
+      title: 'feat(FRONT-MESSAGES-TAB-1): 메시지를 하단 탭바 탭으로',
+      completedAt: '2026-11-10',
+      prs: [486],
       note: '',
     },
     {
@@ -77,13 +84,6 @@ window.PROJECT_STATE = {
       prs: [476],
       note: '',
     },
-    {
-      id: 'PR #475',
-      title: 'feat(FRONT-MESSAGE-ICON-1): 메시지 아이콘 겹친 말풍선 + 버튼 피드백',
-      completedAt: '2026-11-07',
-      prs: [475],
-      note: '',
-    },
   ],
   now: [],
   next: {
@@ -96,12 +96,6 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
-      {
-        id: 'FULL-REPORT-UI-4',
-        title: '페르소나 리포트 통합 UI',
-        note: '보드 상세와 리포트 페이지를 /board/:id 하나로 병합하고, 공통 리포트 본문을 갤러리형으로 재디자인. 소셜 카드 펼침(FLIP), 비소유자 공개 보드 리포트/추천/사무소 읽기 권한(백엔드), 재생성은 상단 알림 버튼 전용, 페르소나 이미지 자동 재생성 제거.',
-        issue: 480,
-      },
       {
         id: '#PERF: measure taste-start tag matching ',
         title: 'PERF: measure taste-start tag matching full scan before deploy',
@@ -147,10 +141,16 @@ window.PROJECT_STATE = {
     ],
     medium: [
       {
-        id: 'FULL-SWIPE-SETTLE-1',
-        title: '자동 완료 경로 스와이프 대기',
-        note: 'App.jsx handleSwipeCard의 is_analysis_completed 경로(ensureFreshReport 직전)는 자기 스와이프가 pending이라 다른 진행 중 스와이프를 기다리지 않음. 또 swipeSettle 8초 타임아웃 후 그대로 리포트 생성. 내 스와이프 제외 대기 + 타임아웃 처리 필요. 관측: 보드 f9a6f440 리포트 기준 11, 이후 좋아요 13 (알림 뜸).',
-        issue: 481,
+        id: '#security(recommendation): set NUM_PROXI',
+        title: 'security(recommendation): set NUM_PROXIES so anon throttles key on real client IP',
+        note: '#483 opened anonymous reads (recommendations, recommended_architects 30/min). No NUM_PROXIES in settings -> DRF keys anon callers on raw X-Forwarded-For: rotatable (unlimited buckets) or one shared proxy bucket. Set NUM_PROXIES for Railway edge, verify with two clients.',
+        issue: 490,
+      },
+      {
+        id: '#infra(contests): schedule send_contest_',
+        title: 'infra(contests): schedule send_contest_deadline_reminders daily cron',
+        note: 'Command landed in #487 but nothing runs it. Needs Railway cron service: `python manage.py send_contest_deadline_reminders` daily 00:00 UTC (09:00 KST). After deploy: `--dry-run` on prod first. Prereq: migrate notifications 0002 before code.',
+        issue: 489,
       },
       {
         id: 'FULL-AUTH-5',
@@ -303,12 +303,6 @@ window.PROJECT_STATE = {
         issue: 375,
       },
       {
-        id: 'FULL-MESSAGING-2',
-        title: '새로고침하면 차단 해제를 못 함',
-        note: '차단 상태를 읽는 API가 없어 프론트가 세션 메모리(`components/messaging/blockedUsers.js`)로만 기억 → 새로고침/재로그인 후 ⋯ 메뉴가 \'차단\'으로 돌아가 UI에서 해제 불가. `contact-requests/status/` 응답에 `blocked_by_me` 추가(차단당한 쪽 비노출) 후 프론트 초기값으로 사용. FULL-MESSAGING-1 Deferred.',
-        issue: 372,
-      },
-      {
         id: 'FRONT-IMG-TELEMETRY-1',
         title: '카드 이미지 실패 원인 호스트별 집계',
         note: '`/api/v1/telemetry/image-load/` 실패 이벤트(100% 수집)를 호스트별(archdaily/dezeen/divisare/imgix…)로 묶어 실패율·지연 확인 → 외부 핫링크 차단 비중 판단, 필요 시 R2 미러링 검토. MOBILE-FIX-1 Deferred.',
@@ -334,6 +328,30 @@ window.PROJECT_STATE = {
       },
     ],
     low: [
+      {
+        id: '#fix(messaging): small gaps after messag',
+        title: 'fix(messaging): small gaps after messages tab + block status',
+        note: '/messages with MESSAGING flag OFF renders blank page inside MainLayout (stale bookmark). Redirect once features loaded. (#486)',
+        issue: 493,
+      },
+      {
+        id: '#fix(report): guard post-commit diagnost',
+        title: 'fix(report): guard post-commit diagnostic re-read in ProjectReportGenerateView',
+        note: '#484 added liked_now re-read + log after report commit, outside try/except. Transient DB error -> 500 for an already-saved report; client may regenerate (extra LLM call). Wrap re-read + log in try/except Exception.',
+        issue: 492,
+      },
+      {
+        id: '#fix(recommendation): uniform 404 for no',
+        title: 'fix(recommendation): uniform 404 for non-owner private/temp board recommendations',
+        note: 'ProjectRecommendationsView returns 403 to authenticated non-owners of private/temp boards but 404 for anon/unknown ids; RecommendedArchitectsView is uniform 404. Lets a logged-in account tell private from nonexistent. Align to 404.',
+        issue: 491,
+      },
+      {
+        id: '#fix(contests): deadline reminder copy w',
+        title: 'fix(contests): deadline reminder copy wrong for D-0 and catch-up runs',
+        note: 'send_contest_deadline_reminders stage 1 covers days_left 0..1, stage 7 covers 2..7 (catch-up). Inbox always renders \'tomorrow\' / \'7 days left\'.',
+        issue: 488,
+      },
       {
         id: 'FULL-REPORT-UI-5',
         title: '추천 사무소 보조 줄 정보',
@@ -525,6 +543,13 @@ window.PROJECT_STATE = {
       sha: '597ff93',
     },
     {
+      number: 486,
+      title: 'feat(FRONT-MESSAGES-TAB-1): 메시지를 하단 탭바 탭으로',
+      mergedAt: '2026-11-10T14:00:56Z',
+      mergedAtKST: '2026-11-10 23:00 KST',
+      sha: '373325f',
+    },
+    {
       number: 485,
       title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
       mergedAt: '2026-11-10T13:55:02Z',
@@ -565,13 +590,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-07T01:36:00Z',
       mergedAtKST: '2026-11-07 10:36 KST',
       sha: '8bb7704',
-    },
-    {
-      number: 475,
-      title: 'feat(FRONT-MESSAGE-ICON-1): 메시지 아이콘 겹친 말풍선 + 버튼 피드백',
-      mergedAt: '2026-11-07T01:25:33Z',
-      mergedAtKST: '2026-11-07 10:25 KST',
-      sha: '998fb4d',
     },
   ],
   agents: [
@@ -2718,14 +2736,6 @@ window.PROJECT_STATE = {
       role: '앱 루트 라우팅 컴포넌트',
     },
     {
-      path: 'frontend/src/App.jsx',
-      role: '앱 루트 라우팅 컴포넌트',
-    },
-    {
-      path: 'frontend/src/App.jsx',
-      role: '앱 루트 라우팅 컴포넌트',
-    },
-    {
       path: 'frontend/src/api/admin.js',
       role: '',
     },
@@ -3211,14 +3221,6 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/messaging/ReportDialog.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
       role: '',
     },
     {
@@ -3980,14 +3982,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
