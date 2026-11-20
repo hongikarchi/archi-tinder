@@ -3,7 +3,7 @@
 <!-- GENERATED FILE — DO NOT EDIT. Source: backend/config/settings.py RECOMMENDATION dict. -->
 <!-- Regenerate: python tools/gen-hyperparams.py   (CI fails if this file is stale) -->
 
-Generated from `backend/config/settings.py` `RECOMMENDATION` — **94 parameters**.
+Generated from `backend/config/settings.py` `RECOMMENDATION` — **96 parameters**.
 Values here are what production runs with (environment overrides are marked `env`).
 The *meaning* column is the inline comment on each key in `settings.py`; to document a
 parameter, comment it there. Design intent and phase semantics: `docs/algorithm.md`.
@@ -137,6 +137,8 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 | `discovery_like_hard_cap` | 50 | int | Discovery draft hard stop: block likes beyond 50; client redirects to Taste |
 | `discovery_recent_boards_cap` | 10 | int | DISCOVERY-PERF-1: scope tier/exclude/dislike/centroid to most-recent N boards (tunable). Older boards' liked/disliked/saved buildings may re-appear in Discovery — intended behaviour. |
 | `discovery_tablesample_pct` | 2.0 | float | DISCOVERY candidate fetch: TABLESAMPLE SYSTEM percentage — block-level random sample that avoids a full seq scan of the large canonical_v2_buildings table (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS. |
+| `discovery_pool_size` | 400 | int | DISCOVERY pre-built candidate pool (apps/recommendation/discovery_pool.py): user-independent random sample (ids + embeddings + warmed card cache) built at worker start, so requests skip the heavy embedding/card DB reads. Size = rows kept; ttl = seconds before a background rebuild. |
+| `discovery_pool_ttl` | 1800 | int |  |
 
 ## LLM search ranking (LLM-SEARCH-RANK-1)
 
@@ -182,4 +184,5 @@ parameter, comment it there. Design intent and phase semantics: `docs/algorithm.
 These keys have no comment in `settings.py` — add one next to the key:
 
 - `taste_v2_analyzing_min_likes`
+- `discovery_pool_ttl`
 
