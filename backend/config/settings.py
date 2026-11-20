@@ -501,6 +501,11 @@ RECOMMENDATION = {
     # sample that avoids a full seq scan of the large canonical_v2_buildings table
     # (VECTOR(384) + JSONB rows). ~2% of ~39k ≈ 780 sampled, ample for the 120-cap FPS.
     'discovery_tablesample_pct': 2.0,
+    # DISCOVERY pre-built candidate pool (apps/recommendation/discovery_pool.py): user-independent
+    # random sample (ids + embeddings + warmed card cache) built at worker start, so requests skip
+    # the heavy embedding/card DB reads. Size = rows kept; ttl = seconds before a background rebuild.
+    'discovery_pool_size': 400,
+    'discovery_pool_ttl': 1800,
     # LLM-SEARCH-RANK-1: A+BM25 soft-score ranking hyperparameters for engine.search_by_filters_scored.
     # Replaces ORDER BY RANDOM() + 3-tier relaxation ladder with a single ranked CTE.
     # All axes are soft (no hard gate except is_publishable=true).

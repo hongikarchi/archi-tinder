@@ -137,6 +137,9 @@ def test_build_boards_field_uses_thumbnails_not_full_cards():
     mock_qs.__getitem__ = lambda s, k: [mock_project]
     mock_qs.filter.return_value = mock_qs
     mock_qs.order_by.return_value = mock_qs
+    # paged slice now goes through defer(...).annotate(_has_image=...) (#494)
+    mock_qs.defer.return_value = mock_qs
+    mock_qs.annotate.return_value = mock_qs
 
     mock_profile = MagicMock()
 

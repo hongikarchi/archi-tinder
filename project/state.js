@@ -24,10 +24,17 @@ window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
     updatedAt: '2026-11-21 01:29 KST',
-    head: 'de8c615',
-    branch: 'upd497',
+    head: 'f755a7b',
+    branch: 'upd494',
   },
   done: [
+    {
+      id: 'PR #497',
+      title: 'fix(SNS-BLOCK-SYNC-1): apply server blocked_by_me both ways, fetch status while hidden',
+      completedAt: '2026-11-21',
+      prs: [497],
+      note: '',
+    },
     {
       id: 'PR #496',
       title: 'chore(SNS-CLEANUP-1): drop dead follow serializer + unused onOverlayChange, fix stale comments',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat: unified persona report UI + Discovery→Taste promote flow',
       completedAt: '2026-11-10',
       prs: [483],
-      note: '',
-    },
-    {
-      id: 'PR #479',
-      title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
-      completedAt: '2026-11-07',
-      prs: [479],
       note: '',
     },
   ],
@@ -536,6 +536,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 497,
+      title: 'fix(SNS-BLOCK-SYNC-1): apply server blocked_by_me both ways, fetch status while hidden',
+      mergedAt: '2026-11-20T16:29:19Z',
+      mergedAtKST: '2026-11-21 01:29 KST',
+      sha: 'f755a7b',
+    },
+    {
       number: 496,
       title: 'chore(SNS-CLEANUP-1): drop dead follow serializer + unused onOverlayChange, fix stale comments',
       mergedAt: '2026-11-20T16:29:00Z',
@@ -583,13 +590,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-10T13:56:08Z',
       mergedAtKST: '2026-11-10 22:56 KST',
       sha: '3e00472',
-    },
-    {
-      number: 479,
-      title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
-      mergedAt: '2026-11-07T01:52:17Z',
-      mergedAtKST: '2026-11-07 10:52 KST',
-      sha: '17399c9',
     },
   ],
   agents: [
@@ -1054,6 +1054,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/accounts/tests/test_phase13_userprofile.py',
       role: 'UserProfile Phase13 테스트',
+    },
+    {
+      path: 'backend/apps/accounts/tests/test_profile_boards_deferred.py',
+      role: '',
     },
     {
       path: 'backend/apps/accounts/tests/test_profile_role_affiliation.py',
@@ -1564,6 +1568,10 @@ window.PROJECT_STATE = {
       role: '발견 피드 청크 빌더 (3단계)',
     },
     {
+      path: 'backend/apps/recommendation/discovery_pool.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/engine.py',
       role: '추천 엔진 핵심',
     },
@@ -1912,6 +1920,10 @@ window.PROJECT_STATE = {
       role: 'Discovery 피드 테스트',
     },
     {
+      path: 'backend/apps/recommendation/tests/test_discovery_pool.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/recommendation/tests/test_inspect.py',
       role: '',
     },
@@ -1958,6 +1970,10 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/recommendation/tests/test_row_to_card.py',
       role: 'row_to_card 변환 테스트',
+    },
+    {
+      path: 'backend/apps/recommendation/tests/test_runserver_prewarm.py',
+      role: '',
     },
     {
       path: 'backend/apps/recommendation/tests/test_session_metrics_report.py',
@@ -2724,6 +2740,14 @@ window.PROJECT_STATE = {
       role: '프론트 패키지 매니페스트',
     },
     {
+      path: 'frontend/package.json',
+      role: '프론트 패키지 매니페스트',
+    },
+    {
+      path: 'frontend/package.json',
+      role: '프론트 패키지 매니페스트',
+    },
+    {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
     },
@@ -3268,6 +3292,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/promoteError.js',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/swipeGestureConfig.js',
       role: 'swipe 제스처 설정 상수',
     },
@@ -3620,14 +3648,6 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/boardDetail/ArchitectSection.jsx',
-      role: '보드 상세 architect 추천 섹션 (#178)',
-    },
-    {
-      path: 'frontend/src/pages/boardDetail/ArchitectSection.module.css',
-      role: '보드 상세 architect 섹션 CSS 모듈 (#178)',
-    },
-    {
       path: 'frontend/src/pages/boardDetail/BoardCover.jsx',
       role: '',
     },
@@ -3653,14 +3673,6 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/pages/boardDetail/EditActionBar.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/pages/boardDetail/RecommendedTile.jsx',
-      role: '보드 추천 타일 카드',
-    },
-    {
-      path: 'frontend/src/pages/boardDetail/RecommendedTile.module.css',
       role: '',
     },
     {
@@ -3764,6 +3776,14 @@ window.PROJECT_STATE = {
       role: '디자인 토큰 CSS 변수',
     },
     {
+      path: 'frontend/src/utils/apiError.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/apiError.test.mjs',
+      role: '',
+    },
+    {
       path: 'frontend/src/utils/appHelpers.js',
       role: '앱 필터·에러 헬퍼',
     },
@@ -3825,6 +3845,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/discoveryGuard.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/draftFeedbackQueue.js',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/draftFeedbackQueue.test.mjs',
       role: '',
     },
     {
@@ -3982,14 +4010,6 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
-    },
-    {
-      path: 'project/state.js',
-      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

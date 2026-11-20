@@ -1,84 +1,185 @@
 /*
- * ArchitectProfilePage.module.css
- * UI-CONSISTENCY-B3b-2: hero action buttons (Follow / Website / Contact) +
- * stat button, rebuilt onto DESIGN.md §8.1/§8.2 primary/secondary button
- * specs + ProfileHero's `.statBtn`/`.statLabel` pattern. Interactive
- * (:hover/:focus) -> co-located CSS Module per DESIGN.md §4/§10.4.
+ * ArchitectProfilePage.module.css — studio profile on the persona-report /
+ * board-detail shell (680 column, 28px gutter via ReportScope). Tools row
+ * classes (.tools/.tool/.toolDark/.icon) are reused from
+ * boardReport.module.css; this file holds the page-specific pieces.
+ * Scrollbar = persona-report "style B", verbatim from
+ * components/BoardSocialCard.module.css (.detail) — off-scale hex kept identical.
  */
 
-/* ---- Hero action buttons ---- */
+.scroll {
+  --sb-thumb: #d0d7de;
+  --sb-thumb-hover: #8c959f;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+:global([data-theme="github-dark"]) .scroll,
+:global([data-theme="synthwave-84"]) .scroll {
+  --sb-thumb: #3b434d;
+  --sb-thumb-hover: #636e7b;
+}
+.scroll::-webkit-scrollbar { width: 10px; }
+.scroll::-webkit-scrollbar-track { background: transparent; margin: 56px 0 18px; }
+.scroll::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  background: var(--sb-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+.scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hover);
+  background-clip: padding-box;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb) transparent;
+  }
+}
 
-.actionBtn {
-  flex: 1;
-  min-height: 44px;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
-  font-size: var(--fs-body);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
+/* ---- Hero ---- */
+.id { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.avatar {
+  position: relative;
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  font-family: inherit;
-  border: none;
-  transition: transform var(--motion-normal) var(--motion-ease),
-              background var(--motion-fast) var(--motion-ease),
-              border-color var(--motion-fast) var(--motion-ease),
-              box-shadow var(--motion-slow) var(--motion-ease-out);
 }
-
-.actionBtn:active {
-  transition: transform var(--motion-normal) var(--motion-ease), box-shadow 0s;
-}
-
-/* Primary — Follow (not-yet-following state). DESIGN.md §8.1: flat accent-1. */
-.primaryBtn {
-  background: var(--accent-1);
-  color: #fff;
-}
-
-.primaryBtn:active {
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-1) 28%, transparent);
-}
-
-/* Secondary — Following state + Website + Contact. DESIGN.md §8.2. */
-.secondaryBtn {
-  background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.secondaryBtn:hover {
-  background: var(--color-surface-2);
-  border-color: var(--color-border);
-}
-
-/* ---- Stats row (Buildings / Followers) — matches ProfileHero .statBtn ---- */
-
-.statBtn {
-  flex: 0 0 auto;
-  background: transparent;
-  border: none;
-  padding: 6px 14px;
-  min-height: 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-family: inherit;
-  color: inherit;
-  border-radius: var(--radius-sm);
-}
-
-.statLabel {
-  color: var(--color-text-dim);
+.avatarImg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.idText { min-width: 0; }
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
   font-size: var(--fs-caption);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
+.name {
+  margin: 0 0 4px;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+.sub {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+}
+.metaRow {
+  margin: 0 0 18px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--color-text);
+  font-size: var(--fs-caption);
+}
+.metaRow b { font-weight: var(--fw-bold); }
+.desc {
+  margin: 22px 0 0;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.8;
+  letter-spacing: -0.005em;
+}
+
+/* ---- Built / Unbuilt pill switch (heading `right`) ---- */
+.vs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--color-surface-2);
+}
+.vsBtn {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vsBtn:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.vsOn {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  font-weight: var(--fw-bold);
+}
+
+/* ---- Building grid ---- */
+.wrap { container-type: inline-size; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@container (min-width: 420px) {
+  .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.card {
+  position: relative;
+  display: block;
+  padding: 0;
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--color-surface-2);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+.card:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; }
+.cardImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.cardScrim { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 0%, rgba(0, 0, 0, 0) 58%); }
+.cardCap { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 10px; }
+.cardTitle {
+  margin: 0;
+  color: #fff;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cardSub {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--fs-caption);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Skeleton / states ---- */
+.skelGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.state { padding: 20px var(--rp-gutter, 28px); }
 
 @media (prefers-reduced-motion: reduce) {
-  .actionBtn {
-    transition: none;
-  }
+  .card { transition: none; }
+  .card:hover { transform: none; }
 }

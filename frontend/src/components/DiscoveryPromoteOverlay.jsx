@@ -1,14 +1,15 @@
 import { useTranslation } from '../i18n/index.js'
+import { promoteErrorText } from './promoteError.js'
 import styles from './DiscoveryPromoteOverlay.module.css'
 
 // Blocking overlay for the trigger-card right-swipe promote call.
 // phase: 'loading' | 'error'. Captures all pointer input over the card stack.
-export default function DiscoveryPromoteOverlay({ phase, onRetry, onBack }) {
+export default function DiscoveryPromoteOverlay({ phase, errorInfo, onRetry, onBack }) {
   const { t } = useTranslation()
   if (phase === 'error') {
     return (
       <div className={styles.overlay} role="alert" style={{ cursor: 'default' }}>
-        <div className={styles.msg}>{t('discovery.toastAnalysisFailed')}</div>
+        <div className={styles.msg}>{promoteErrorText(t, errorInfo)}</div>
         <div className={styles.actions}>
           <button type="button" className={`${styles.btn} ${styles.primary}`} onClick={onRetry}>
             {t('discovery.retry')}

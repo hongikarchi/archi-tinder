@@ -1544,3 +1544,78 @@ def test_promote_first_cards_come_from_v2_selector(auth_client, user_profile):
     assert session.exposed_ids[-1] == 'bld_000010'
     cached = cache.get(f'prefetch:{session.session_id}:{len(seeds) + 1}')
     assert cached == {'prefetch_card_id': 'bld_000012', 'prefetch_card_2_id': 'bld_000013'}
+
+
+# ── Feedback draft-creation idempotency (concurrent first likes) ──────────────
+
+def _post_feedback(client, bld_id, action='like', **extra):
+    with patch('apps.recommendation.views.discovery._dj_connections') as mock_conns:
+        mock_cursor = MagicMock()
+        mock_cursor.__enter__ = lambda s: s
+        mock_cursor.__exit__ = MagicMock(return_value=False)
+        mock_cursor.fetchone.return_value = (1,)
+        mock_conns.__getitem__.return_value.cursor.return_value = mock_cursor
+        return client.post(
+            '/api/v1/discovery/feedback/',
+            {'canonical_bld_id': bld_id, 'action': action, **extra},
+            format='json',
+        )
+
+
+@pytest.mark.django_db
+def test_feedback_no_draft_id_twice_reuses_recent_draft(auth_client, user_profile):
+    r1 = _post_feedback(auth_client, 'bld_000001')
+    r2 = _post_feedback(auth_client, 'bld_000002')
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json()['draft_id'] == r2.json()['draft_id']
+    assert r2.json()['draft_like_count'] == 2
+    drafts = Project.objects.filter(user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX)
+    assert drafts.count() == 1
+
+
+@pytest.mark.django_db
+def test_feedback_no_draft_id_old_draft_creates_new(auth_client, user_profile):
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.recommendation.discovery_feed import DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS
+
+    old = create_discovery_draft(user_profile)
+    Project.objects.filter(pk=old.pk).update(
+        created_at=timezone.now() - timedelta(seconds=DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS + 60)
+    )
+    resp = _post_feedback(auth_client, 'bld_000001')
+    assert resp.status_code == 200
+    assert resp.json()['draft_id'] != str(old.project_id)
+    assert Project.objects.filter(
+        user=user_profile, name__startswith=DISCOVERY_DRAFT_PREFIX
+    ).count() == 2
+
+
+@pytest.mark.django_db
+def test_feedback_valid_draft_id_unchanged(auth_client, user_profile):
+    first = create_discovery_draft(user_profile)
+    other = create_discovery_draft(user_profile)  # newer draft must not be picked
+    resp = _post_feedback(auth_client, 'bld_000001', draft_id=str(first.project_id))
+    assert resp.status_code == 200
+    assert resp.json()['draft_id'] == str(first.project_id)
+    assert resp.json()['draft_like_count'] == 1
+    other.refresh_from_db()
+    assert not other.liked_ids
+
+
+@pytest.mark.django_db
+def test_guest_at_board_limit_blocked_but_reuses_recent_draft(auth_client, user_profile):
+    user_profile.is_guest = True
+    user_profile.save(update_fields=['is_guest'])
+    for i in range(3):
+        Project.objects.create(user=user_profile, name=f'Board {i}')
+
+    resp = _post_feedback(auth_client, 'bld_000001')
+    assert resp.status_code == 403
+    assert resp.json()['reason'] == 'board_limit_reached'
+
+    # A just-created draft (e.g. from a concurrent request) is reused, not blocked.
+    draft = create_discovery_draft(user_profile)
+    resp = _post_feedback(auth_client, 'bld_000002')
+    assert resp.status_code == 200
+    assert resp.json()['draft_id'] == str(draft.project_id)

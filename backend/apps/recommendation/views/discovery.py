@@ -39,9 +39,10 @@ from ..caches import (
 )
 from ..services.hydration import cache_embedding
 from ..taste_start import session_pool, session_selector, swipe_rules
-from ..discovery_feed import (
+from ..discovery_feed import (  # noqa: F401
     DISCOVERY_DRAFT_PREFIX,
-    create_discovery_draft,
+    create_discovery_draft,  # re-exported; tests patch this name
+    get_or_create_recent_discovery_draft,
     get_discovery_draft,
     _tier_from_project_rows,
     build_discovery_chunk,
@@ -267,32 +268,42 @@ class DiscoveryFeedbackView(APIView):
             # but enforce the guest board-limit so guests can't bypass the 3-board cap.
             # Count only permanent (is_temp=False) boards — temp boards are in-progress
             # taste sessions, not finalized boards, and must not trigger the gate early.
-            if profile.is_guest and Project.objects.filter(user=profile, is_temp=False).count() >= 3:
+            # Serialised per profile; reuses a draft created moments ago by a
+            # concurrent request (the limit never blocks that reuse).
+            draft = get_or_create_recent_discovery_draft(
+                profile,
+                tz_offset_minutes=tz_offset_minutes,
+                guest_board_limit=3,
+            )
+            if draft is None:
                 return Response(
                     {'detail': 'verify_required', 'reason': 'board_limit_reached', 'limit': 3},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            draft = create_discovery_draft(profile, tz_offset_minutes=tz_offset_minutes)
 
         HARD_CAP = RC.get('discovery_like_hard_cap', 50)
-        if action == 'like':
-            liked = list(draft.liked_ids or [])
-            existing_ids = {
-                (e if isinstance(e, str) else e.get('id', ''))
-                for e in liked
-            }
-            # Hard cap: do not record a NEW like once the draft is at the cap.
-            # (Re-liking an already-liked id is a no-op and stays allowed.)
-            if bld_id not in existing_ids and len(liked) < HARD_CAP:
-                liked.append({'id': bld_id, 'intensity': 1.0})
-            draft.liked_ids = liked[-_DRAFT_LIKE_CAP:]
-            draft.save(update_fields=['liked_ids', 'updated_at'])
-        else:  # pass  (UNCHANGED)
-            disliked = list(draft.disliked_ids or [])
-            if bld_id not in disliked:
-                disliked.append(bld_id)
-            draft.disliked_ids = disliked[-_DRAFT_DISLIKE_CAP:]
-            draft.save(update_fields=['disliked_ids', 'updated_at'])
+        # Lock the draft row so concurrent updates to the same draft don't lose
+        # each other's likes/passes (read-modify-write).
+        with transaction.atomic():
+            draft = Project.objects.select_for_update().get(pk=draft.pk)
+            if action == 'like':
+                liked = list(draft.liked_ids or [])
+                existing_ids = {
+                    (e if isinstance(e, str) else e.get('id', ''))
+                    for e in liked
+                }
+                # Hard cap: do not record a NEW like once the draft is at the cap.
+                # (Re-liking an already-liked id is a no-op and stays allowed.)
+                if bld_id not in existing_ids and len(liked) < HARD_CAP:
+                    liked.append({'id': bld_id, 'intensity': 1.0})
+                draft.liked_ids = liked[-_DRAFT_LIKE_CAP:]
+                draft.save(update_fields=['liked_ids', 'updated_at'])
+            else:  # pass  (UNCHANGED)
+                disliked = list(draft.disliked_ids or [])
+                if bld_id not in disliked:
+                    disliked.append(bld_id)
+                draft.disliked_ids = disliked[-_DRAFT_DISLIKE_CAP:]
+                draft.save(update_fields=['disliked_ids', 'updated_at'])
 
         # Evict caches so the profile reflects the new/updated board in real-time.
         evict_projects_list(profile.id)

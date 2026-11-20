@@ -17,6 +17,7 @@ Hard rules (also in CLAUDE.md):
   - engine.py is read-only (import, never modify).
 """
 import logging
+import random
 import time
 from datetime import timezone as dt_timezone, timedelta
 
@@ -27,7 +28,7 @@ from django.db import connections as _dj_connections
 from django.utils import timezone
 
 from .models import Project
-from . import engine
+from . import engine, discovery_pool
 from .engine_vecmath import _normalize
 
 logger = logging.getLogger('apps.recommendation')
@@ -37,6 +38,10 @@ RC = settings.RECOMMENDATION  # shorthand
 # Per-session draft boards are named with this prefix (e.g. 'discovery_260604_1430').
 # These are normal visible boards — shown on the profile, not hidden.
 DISCOVERY_DRAFT_PREFIX = 'discovery_'
+
+# A draft created within this window is reused by draft_id-less feedback calls
+# (de-dupes concurrent first likes into one board).
+DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS = 5
 
 
 # ── Local helper (avoids circular import through views._shared) ───────────────
@@ -100,6 +105,44 @@ def create_discovery_draft(profile, tz_offset_minutes=0):
         name=name,
     )
     return draft
+
+
+def get_or_create_recent_discovery_draft(profile, tz_offset_minutes=0, guest_board_limit=None):
+    """Idempotent draft creation for concurrent first requests.
+
+    Serialises per profile by locking the owner row (select_for_update), then
+    reuses the user's newest discovery draft created within
+    DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS; otherwise creates a new one.
+
+    guest_board_limit: if set and profile.is_guest, a NEW draft is refused
+    (returns None) when the user already has >= limit non-temp boards. Reuse of
+    a just-created draft is never blocked by the limit.
+    """
+    from django.db import transaction
+
+    with transaction.atomic():
+        # Lock the owner row: concurrent callers for the same profile queue here.
+        type(profile).objects.select_for_update().get(pk=profile.pk)
+        cutoff = timezone.now() - timedelta(seconds=DISCOVERY_DRAFT_REUSE_WINDOW_SECONDS)
+        recent = (
+            Project.objects
+            .filter(
+                user=profile,
+                name__startswith=DISCOVERY_DRAFT_PREFIX,
+                created_at__gte=cutoff,
+            )
+            .order_by('-created_at')
+            .first()
+        )
+        if recent is not None:
+            return recent
+        if (
+            guest_board_limit is not None
+            and profile.is_guest
+            and Project.objects.filter(user=profile, is_temp=False).count() >= guest_board_limit
+        ):
+            return None
+        return create_discovery_draft(profile, tz_offset_minutes=tz_offset_minutes)
 
 
 def get_discovery_draft(profile, draft_id):
@@ -330,6 +373,55 @@ def _interleave_local_global(local_rows, global_rows):
     return [r for r in result if r is not None]
 
 
+# ── Candidate fetch from the pre-built pool (no DB) ───────────────────────────
+
+def _candidates_from_pool(exclude_ids, dislike_centroid, chunk_size):
+    """Sample candidates from the in-memory pre-built pool, or None to fall back to DB.
+
+    Applies the same exclusion + dislike-zone filter as the DB path (reusing the
+    already-parsed `_vec`), then random.sample up to sample_cap. Returns SHALLOW
+    COPIES of the pool rows (downstream mutates rows). Never raises.
+    """
+    try:
+        pool = discovery_pool.get_pool()
+        if not pool:
+            return None
+        threshold = RC.get('discovery_dislike_zone_threshold', 0.15)
+        sample_cap = min(chunk_size * 8, 120)
+
+        remaining = [r for r in pool if r['canonical_bld_id'] not in exclude_ids] \
+            if exclude_ids else list(pool)
+
+        if dislike_centroid is not None and remaining:
+            c = np.asarray(dislike_centroid, dtype=np.float64)
+            c_norm = np.linalg.norm(c)
+            if c_norm != 0.0:
+                kept = []
+                for row in remaining:
+                    vec = row.get('_vec')
+                    if not vec:
+                        kept.append(row)
+                        continue
+                    v = np.asarray(vec, dtype=np.float64)
+                    v_norm = np.linalg.norm(v)
+                    if v_norm == 0.0:
+                        kept.append(row)
+                        continue
+                    dim = min(len(c), len(v))
+                    sim = float(np.dot(c[:dim], v[:dim]) / (c_norm * v_norm))
+                    if (1.0 - sim) > threshold:
+                        kept.append(row)
+                remaining = kept
+
+        if len(remaining) < chunk_size * 2:
+            return None
+        picked = random.sample(remaining, min(sample_cap, len(remaining)))
+        return [dict(r) for r in picked]
+    except Exception as exc:  # noqa: BLE001 -- fall back to the DB path
+        logger.warning('discovery pool sampling failed (%s: %s)', type(exc).__name__, exc)
+        return None
+
+
 # ── Candidate fetch (raw SQL, 2-query pattern) ────────────────────────────────
 
 def _fetch_candidates(exclude_ids, dislike_centroid, chunk_size):
@@ -551,7 +643,11 @@ def build_discovery_chunk(
 
     # ── Fetch candidates ───────────────────────────────────────────────────
     _t = time.perf_counter()
-    rows = _fetch_candidates(exclude_set, dislike_centroid, chunk_size)
+    rows = _candidates_from_pool(exclude_set, dislike_centroid, chunk_size)
+    _source = 'pool'
+    if rows is None:
+        _source = 'db'
+        rows = _fetch_candidates(exclude_set, dislike_centroid, chunk_size)
     _ms_fetch = (time.perf_counter() - _t) * 1000
     if not rows:
         return []
@@ -560,6 +656,9 @@ def build_discovery_chunk(
     # ── Parse embeddings ───────────────────────────────────────────────────
     parsed_rows = []
     for row in rows:
+        if row.get('_vec'):  # pool rows arrive pre-parsed
+            parsed_rows.append(row)
+            continue
         raw = row.get('embedding')
         if not raw:
             continue
@@ -634,7 +733,7 @@ def build_discovery_chunk(
     _cards = engine.get_buildings_by_ids(final_ids)
     logger.debug(
         'DISCOVERY-TIMING build_chunk_sub | dislike_emb=%.0fms fetch_candidates=%.0fms '
-        'rest(parse+split+fps+cards)=%.0fms | n_cand=%s',
-        _ms_dislike, _ms_fetch, (time.perf_counter() - _t_rest) * 1000, len(rows),
+        'rest(parse+split+fps+cards)=%.0fms | n_cand=%s source=%s',
+        _ms_dislike, _ms_fetch, (time.perf_counter() - _t_rest) * 1000, len(rows), _source,
     )
     return _cards

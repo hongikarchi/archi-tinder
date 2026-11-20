@@ -85,8 +85,8 @@ def _build_board_items(projects):
             # Project.report_image is base64 TEXT (~200KB each) and page_size
             # goes up to 50, so inlining would make one profile response
             # megabytes wide. Same split the /people feed uses.
-            # `p.report_image` is already in memory (the queryset above loads
-            # full rows), so this flag costs no extra query.
+            # The flag is precomputed (`_has_report_image`) or read from a
+            # loaded column, so it costs no extra query.
             'has_report_image': bool(has_image),
             'report_image_url': (
                 f'/api/v1/projects/{p.project_id}/report-image/'
@@ -120,6 +120,8 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
     Image batch lookup is performed only for the paged slice to avoid N+1 at
     scale.
     """
+    from django.db.models import Exists, OuterRef
+
     from apps.recommendation.models import Project
 
     # Clamp pagination params
@@ -136,8 +138,25 @@ def _build_boards_field(target_profile, is_owner, page=1, page_size=12):
 
     total_count = qs.count()
     offset = (page - 1) * page_size
-    paged_qs = qs[offset: offset + page_size]
+    # Defer the heavy columns (report_image is base64 TEXT, ~200KB/row); the
+    # card only needs a has-image flag, computed in SQL. Keep this list in sync
+    # with what _build_board_items reads (a missed column costs a query per row).
+    paged_qs = (
+        qs.defer(
+            'report_image', 'report_image_mime', 'analysis_report',
+            'final_report', 'conversation_history', 'axis_scores',
+        )
+        .annotate(_has_image=Exists(
+            Project.objects
+            .filter(pk=OuterRef('pk'))
+            .exclude(report_image__isnull=True)
+            .exclude(report_image='')
+        ))
+        [offset: offset + page_size]
+    )
     projects = list(paged_qs)
+    for p in projects:
+        p._has_report_image = bool(p._has_image)
 
     has_more = offset + page_size < total_count
     next_page = page + 1 if has_more else None

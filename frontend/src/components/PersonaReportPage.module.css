@@ -431,3 +431,7 @@
 @media (prefers-reduced-motion: reduce) {
   .skeletonPulse, .bar, .skelImg { animation: none; }
 }
+
+/* Count next to a section heading (board detail "좋아요한 건물 12"). */
+.h2 .cnt { font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--color-text-dimmer); }
+.h2 .hRight { order: 3; display: inline-flex; flex: 0 0 auto; }

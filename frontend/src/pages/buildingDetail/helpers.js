@@ -1,8 +1,13 @@
+// Info rows as [key, value] pairs; key maps to detailB3.label<Key>. Material is
+// an array of chips (axis_material_visual is an array or a comma string).
+export const CHIP_KEYS = ['Program', 'Style', 'Material']
+
 export function metadataItems(card) {
   const metadata = card?.metadata || {}
-  const materialVisual = Array.isArray(metadata.axis_material_visual)
-    ? metadata.axis_material_visual.join(', ')
-    : metadata.axis_material_visual
+  const material = Array.isArray(metadata.axis_material_visual)
+    ? metadata.axis_material_visual
+    : String(metadata.axis_material_visual || '').split(',')
+  const materialChips = material.map(x => String(x).trim()).filter(Boolean)
 
   const location = [metadata.axis_city, metadata.axis_country]
     .filter(Boolean).join(', ')
@@ -14,20 +19,21 @@ export function metadataItems(card) {
     ['Year', metadata.axis_year],
     ['Program', metadata.axis_typology],
     ['Style', metadata.axis_style],
-    ['Material', materialVisual],
+    ['Material', materialChips.length ? materialChips : null],
     ['Location', location || null],
   ].filter(([, value]) => value)
 }
 
-export function kindLabel(kind) {
-  const map = {
-    exterior: 'Exterior',
-    interior: 'Interior',
-    drawing: 'Drawing',
-    aerial: 'Aerial',
-    detail: 'Detail',
-    cover: 'Cover',
-    gallery: 'Photo',
-  }
-  return map[kind] || 'Photo'
+const KIND_KEYS = {
+  exterior: 'detailB3.kindExterior',
+  interior: 'detailB3.kindInterior',
+  drawing: 'detailB3.kindDrawing',
+  aerial: 'detailB3.kindAerial',
+  detail: 'detailB3.kindDetail',
+  cover: 'detailB3.kindCover',
+}
+
+// Pure: takes the i18n `t` so the badge / alt text follow the UI language.
+export function kindLabel(kind, t) {
+  return t(KIND_KEYS[kind] || 'detailB3.kindPhoto')
 }

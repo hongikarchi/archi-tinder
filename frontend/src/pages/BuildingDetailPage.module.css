@@ -1,11 +1,85 @@
-/* Architect name affordance — WI-4 (FRONT-FUNC-CHECK-1).
- * Turns the plain-text architect name into a native <button> when
- * architect_id is present, without touching the existing typography (the
- * italic sub-line stays italic; the metadata tile value keeps its own
- * font-size/weight). `font: inherit` + reset button chrome so the button
- * renders identically to the plain text it replaces; :hover/:focus-visible
- * add the click affordance per DESIGN.md §4 (CSS :hover only).
+/*
+ * BuildingDetailPage.module.css — persona-report shell for the building detail.
+ * Values mirror PersonaReportPage.module.css (E1/E7 exceptions) per the approved
+ * mock building-detail-redesign.html. Chips / card row / headings are reused
+ * from PersonaReportPage (ReportTags / ReportRow / ReportCard / ReportHeading).
  */
+
+/* Page scroller with scrollbar "style B", verbatim from BoardDetailPage.module.css. */
+.page {
+  --sb-thumb: #d0d7de;
+  --sb-thumb-hover: #8c959f;
+  height: var(--page-height);
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+:global([data-theme="github-dark"]) .page,
+:global([data-theme="synthwave-84"]) .page {
+  --sb-thumb: #3b434d;
+  --sb-thumb-hover: #636e7b;
+}
+.page::-webkit-scrollbar {
+  width: 10px;
+}
+.page::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 56px 0 18px;
+}
+.page::-webkit-scrollbar-thumb {
+  min-height: 48px;
+  background: var(--sb-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+.page::-webkit-scrollbar-thumb:hover {
+  background: var(--sb-thumb-hover);
+  background-clip: padding-box;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .page {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb) transparent;
+  }
+}
+
+.column {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-bottom: var(--tabbar-clearance);
+}
+
+/* Hero */
+.hero { padding: 20px var(--rp-gutter, 28px) 8px; }
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.name {
+  margin: 0 0 10px;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+.sub {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+}
+
+/* Architect name affordance (button that looks like plain text). */
 .architectLink {
   display: inline;
   background: none;
@@ -13,20 +87,135 @@
   padding: 0;
   margin: 0;
   font: inherit;
-  font-style: inherit;
   color: inherit;
   text-align: inherit;
   cursor: pointer;
   transition: color var(--motion-fast) var(--motion-ease);
 }
-
 .architectLink:hover {
   color: var(--accent-1);
   text-decoration: underline;
 }
-
 .architectLink:focus-visible {
   outline: 2px solid var(--accent-1);
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* Info rows */
+.mlist { display: flex; flex-direction: column; }
+.mrow { display: flex; gap: 14px; padding: 11px 0; }
+.mrow + .mrow { border-top: 1px solid var(--color-border-soft); }
+.k {
+  flex: 0 0 76px;
+  padding-top: 2px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.v {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px; /* E1 */
+  line-height: 1.6;
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+}
+.chipV { margin: -2px 0; }
+.srcLink {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--color-text);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  text-decoration: none;
+}
+.srcLink:hover { color: var(--accent-1); text-decoration: underline; }
+
+/* Description / atmosphere body text */
+.desc {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px; /* E1 */
+  line-height: 1.8;
+  letter-spacing: -0.005em;
+  white-space: pre-wrap;
+}
+
+/* Compact / Full switch */
+.vs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+}
+.vs button {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vs button.on {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  font-weight: var(--fw-bold);
+}
+
+/* Compact strip cards (extend the report .card) */
+.page .zoom { cursor: zoom-in; }
+.page .drawingCard { background: var(--color-surface); }
+.cardImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.drawingCard .cardImg { object-fit: contain; }
+.badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  background: var(--color-scrim-soft);
+  color: #fff;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.04em;
+}
+.more {
+  flex: 0 0 var(--rp-card-w, 128px);
+  aspect-ratio: 4 / 5;
+  border-radius: 14px;
+  border: 1px dashed var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-bold);
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.more:hover { color: var(--color-text); }
+
+/* Full view: 2-column masonry */
+.mas { column-count: 2; column-gap: 8px; }
+.mi {
+  break-inside: avoid;
+  margin-bottom: 8px;
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--color-surface);
+  cursor: zoom-in;
+}
+.masImg { width: 100%; height: auto; display: block; }
+.drawingImg { object-fit: contain; }
