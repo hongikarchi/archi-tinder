@@ -23,11 +23,25 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-20 17:12 KST',
-    head: '373325f',
-    branch: 'feature/sns-block-status-sync',
+    updatedAt: '2026-11-21 01:29 KST',
+    head: 'de8c615',
+    branch: 'upd497',
   },
   done: [
+    {
+      id: 'PR #496',
+      title: 'chore(SNS-CLEANUP-1): drop dead follow serializer + unused onOverlayChange, fix stale comments',
+      completedAt: '2026-11-21',
+      prs: [496],
+      note: '',
+    },
+    {
+      id: 'PR #495',
+      title: 'fix(SNS-NOTIF-ROUTE-1): refetch notification unread count on route change',
+      completedAt: '2026-11-21',
+      prs: [495],
+      note: '',
+    },
     {
       id: 'PR #487',
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
@@ -68,20 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FULL-NOTIF-BELL-1): inbox to profile bell, shared unread store — takeover #477, D9 kept',
       completedAt: '2026-11-07',
       prs: [479],
-      note: '',
-    },
-    {
-      id: 'PR #478',
-      title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
-      completedAt: '2026-11-07',
-      prs: [478],
-      note: '',
-    },
-    {
-      id: 'PR #476',
-      title: 'fix(FULL-SNS-FIXES-1): SNS 리뷰 후속 묶음 + 채팅방 이름 → 프로필',
-      completedAt: '2026-11-07',
-      prs: [476],
       note: '',
     },
   ],
@@ -536,6 +536,20 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 496,
+      title: 'chore(SNS-CLEANUP-1): drop dead follow serializer + unused onOverlayChange, fix stale comments',
+      mergedAt: '2026-11-20T16:29:00Z',
+      mergedAtKST: '2026-11-21 01:29 KST',
+      sha: 'de8c615',
+    },
+    {
+      number: 495,
+      title: 'fix(SNS-NOTIF-ROUTE-1): refetch notification unread count on route change',
+      mergedAt: '2026-11-20T16:28:41Z',
+      mergedAtKST: '2026-11-21 01:28 KST',
+      sha: '6a5ef4f',
+    },
+    {
       number: 487,
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
       mergedAt: '2026-11-10T13:55:32Z',
@@ -576,20 +590,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-07T01:52:17Z',
       mergedAtKST: '2026-11-07 10:52 KST',
       sha: '17399c9',
-    },
-    {
-      number: 478,
-      title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
-      mergedAt: '2026-11-07T01:25:28Z',
-      mergedAtKST: '2026-11-07 10:25 KST',
-      sha: '6125ca5',
-    },
-    {
-      number: 476,
-      title: 'fix(FULL-SNS-FIXES-1): SNS 리뷰 후속 묶음 + 채팅방 이름 → 프로필',
-      mergedAt: '2026-11-07T01:36:00Z',
-      mergedAtKST: '2026-11-07 10:36 KST',
-      sha: '8bb7704',
     },
   ],
   agents: [
@@ -2126,10 +2126,6 @@ window.PROJECT_STATE = {
     {
       path: 'backend/apps/social/models.py',
       role: '팔로우/리액션 모델',
-    },
-    {
-      path: 'backend/apps/social/serializers.py',
-      role: 'social 직렬화기 재노출',
     },
     {
       path: 'backend/apps/social/tests/__init__.py',
@@ -3986,6 +3982,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

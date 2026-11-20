@@ -20,10 +20,8 @@ import styles from './Messaging.module.css'
  * "Unblock". State lives in the shared `blockedUsers` store (every menu instance
  * for this user agrees); on mount it is seeded from `blocked_by_me` on
  * contact-requests/status/ so a refresh still offers "Unblock" (#372).
- * `onOverlayChange(open)` lets a host sheet suspend its own ESC-to-close while
- * the dropdown or a dialog owns Escape.
  */
-export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, onOverlayChange }) {
+export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -46,12 +44,6 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
       .catch(() => {}) // non-critical: the menu works without the status read
     return () => { cancelled = true }
   }, [enabled, userId])
-
-  const overlay = menuOpen || confirmOpen || reportOpen
-  useEffect(() => {
-    onOverlayChange?.(overlay)
-  }, [overlay, onOverlayChange])
-  useEffect(() => () => onOverlayChange?.(false), [onOverlayChange])
 
   // dropdown: close on outside press / Escape
   useEffect(() => {
