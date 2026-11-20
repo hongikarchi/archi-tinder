@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   markBlocked, clearBlocked, isBlockedLocally, getBlockSeq, applyServerBlockedByMe,
-} from './blockedUsers.js'
+} from './blockedUsers.ts'
 
 test('block, unblock elsewhere, refetch -> unblocked', () => {
   clearBlocked()

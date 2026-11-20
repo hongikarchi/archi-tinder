@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   rowStartIndex, reorderForExpanded, mergePages, patchReaction, toggledReaction,
-} from './socialFeed.js'
+} from './socialFeed.ts'
 
 const mk = ids => ids.map(id => ({ board_id: id }))
 const ids = l => l.map(b => b.board_id)

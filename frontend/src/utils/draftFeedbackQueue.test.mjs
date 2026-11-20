@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createDraftFeedbackQueue } from './draftFeedbackQueue.js'
+import { createDraftFeedbackQueue } from './draftFeedbackQueue.ts'
 
 test('second back-to-back call receives the draft id from the first', async () => {
   const q = createDraftFeedbackQueue(null)

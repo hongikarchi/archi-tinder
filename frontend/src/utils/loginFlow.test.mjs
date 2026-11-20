@@ -17,7 +17,7 @@ import {
   isIdFormatValid,
   isRoleReady,
   isGuestProfileReady,
-} from './loginFlow.js'
+} from './loginFlow.ts'
 
 // ---------------------------------------------------------------------------
 // ONBOARDING_ROLES shape

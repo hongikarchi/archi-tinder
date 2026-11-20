@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   clampIndex, stepIndex, tagMatches, buildChips, isTypingTarget,
   tagKey, keptCards, buildStartDeck, cardZIndex,
-} from './tasteStart.js'
+} from './tasteStart.ts'
 
 const mkCards = ids => ids.map(id => ({ card: { image_id: id } }))
 

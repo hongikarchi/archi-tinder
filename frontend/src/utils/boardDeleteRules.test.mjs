@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { canSelectForDelete, isLastLikedError } from './boardDeleteRules.js'
+import { canSelectForDelete, isLastLikedError } from './boardDeleteRules.ts'
 
 describe('canSelectForDelete', () => {
   test('single liked building is refused', () => {

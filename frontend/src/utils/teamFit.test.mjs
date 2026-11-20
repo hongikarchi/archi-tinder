@@ -11,7 +11,7 @@ import {
   teamFitScore,
   fitReason,
   sortByFit,
-} from './teamFit.js'
+} from './teamFit.ts'
 
 const ME = [0.6, -0.3, 0.5, 0.7, 0]
 

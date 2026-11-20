@@ -1,0 +1,591 @@
+/**
+ * AccountScreen — /settings/account
+ *
+ * Editable: ID/handle (PATCH /api/v1/users/me/), password (POST /auth/set-password/).
+ * Read-only display: verified status (!!email_verified_at) + email once verified.
+ * Email verify: tap the status row (unverified) -> Google auth-code flow → POST /auth/link-email/.
+ * Discovery opt-in: GET /api/v1/personality/me/ (reused from /assessment, /people) +
+ * PATCH /api/v1/personality/me/ {discovery_opt_in}. Section renders only when the
+ * user has a PersonalityProfile (404/error on GET → section hidden).
+ */
+import { useState, useEffect } from 'react'
+import type { CSSProperties, FormEvent, KeyboardEvent, ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getMe, updateMyProfile, setPassword as apiSetPassword } from '../../api/client.ts'
+import { getMyPersonality, patchMyPersonality } from '../../api/personality.ts'
+import GoogleVerifyButton from '../../components/GoogleVerifyButton.tsx'
+import { hasGoogleLogin } from '../../utils/loginFlow.ts'
+import { useGoogleEmailVerify } from '../../hooks/useGoogleEmailVerify.ts'
+import { useTranslation } from '../../i18n/index.ts'
+import PageLogoHeader from '../../components/PageLogoHeader.tsx'
+import PageTopControls from '../../components/PageTopControls.tsx'
+import PageBackButton from '../../components/PageBackButton.tsx'
+import PageShell from '../../components/PageShell.tsx'
+import PageTitle from '../../components/PageTitle.tsx'
+import PasswordInput from '../../components/PasswordInput.tsx'
+import Toggle from '../../components/Toggle.tsx'
+import btnStyles from '../../components/Button.module.css'
+import styles from './AccountScreen.module.css'
+
+const LABEL_STYLE = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  color: 'var(--color-text-muted)',
+  textTransform: 'uppercase',
+  display: 'block',
+  marginBottom: 6,
+}
+
+const HINT_STYLE = {
+  fontSize: 12,
+  color: 'var(--color-text-dim)',
+  marginTop: 6,
+  display: 'block',
+  lineHeight: 1.5,
+}
+
+const READONLY_VALUE_STYLE = {
+  fontSize: 15,
+  color: 'var(--color-text)',
+  fontWeight: 500,
+  padding: '10px 0',
+}
+
+interface ScreenProps {
+  onLogout?: () => void
+}
+
+export default function AccountScreen({ onLogout }: ScreenProps) {
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+
+  const [me, setMe] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(null)
+
+  // Handle draft state
+  const [handle, setHandle] = useState('')
+  const [handleError, setHandleError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // Password section state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState(null)
+  const [passwordCurrentError, setPasswordCurrentError] = useState(null)
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+
+  // Discovery opt-in section — null = no personality profile (assessment not taken); hidden entirely
+  const [personality, setPersonality] = useState(null)
+  const [discoverySaving, setDiscoverySaving] = useState(false)
+  const [discoveryError, setDiscoveryError] = useState(null)
+
+  // Email verify — shared hook (must stay identical to VerifyGateModal; see useGoogleEmailVerify.js)
+  const googleConfigured = hasGoogleLogin(import.meta.env.VITE_GOOGLE_CLIENT_ID)
+  const {
+    loading: verifyLoading,
+    error: verifyError,
+    onSuccess: handleVerifySuccess,
+    onError: handleVerifyError,
+    onNonOAuthError: handleVerifyNonOAuthError,
+  } = useGoogleEmailVerify({
+    onVerified: (fresh) => setMe(fresh),
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setFetchError(null)
+    getMe()
+      .then(data => {
+        if (cancelled) return
+        setMe(data)
+        setHandle(data.handle || '')
+      })
+      .catch(err => {
+        if (cancelled) return
+        setFetchError(err.message || t('account.profileLoadError'))
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false
+    getMyPersonality()
+      .then(data => { if (!cancelled) setPersonality(data) })
+      .catch(() => { if (!cancelled) setPersonality(null) })
+    return () => { cancelled = true }
+  }, [])
+
+  async function handleSave() {
+    if (saving) return
+    setHandleError(null)
+    setSaveSuccess(false)
+
+    // Client-side format check (backend also validates; this is UX-only)
+    const trimmed = handle.trim()
+    if (trimmed && !/^[가-힣ᄀ-ᇿꥠ-꥿ힰ-퟿a-zA-Z0-9_]{2,20}$/.test(trimmed)) {
+      setHandleError(t('account.idHandleFormatError'))
+      return
+    }
+
+    setSaving(true)
+    try {
+      const updated = await updateMyProfile({ handle: trimmed || null })
+      // PATCH /users/me/ responds with UserProfileSerializer which includes handle.
+      // Use ?? trimmed for both so the field never blanks if handle is absent in the response.
+      setMe(prev => ({ ...prev, handle: updated.handle ?? trimmed }))
+      setHandle(updated.handle ?? trimmed)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err) {
+      // Backend returns 400 with {handle: ["..."]} or {detail: "..."}
+      const data = err?.data
+      if (data?.handle) {
+        setHandleError(Array.isArray(data.handle) ? data.handle[0] : data.handle)
+      } else {
+        setHandleError(err.message || t('account.saveFailed'))
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') handleSave()
+  }
+
+  async function handlePasswordSave(e: FormEvent) {
+    e.preventDefault()
+    if (savingPassword) return
+    setPasswordError(null)
+    setPasswordCurrentError(null)
+    setPasswordSuccess(false)
+
+    if (newPassword.length < 8) {
+      setPasswordError(t('account.passwordMin8'))
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('account.passwordMismatch'))
+      return
+    }
+    if (me?.has_password && !currentPassword) {
+      setPasswordCurrentError(t('account.currentPasswordRequired'))
+      return
+    }
+
+    setSavingPassword(true)
+    try {
+      const updatedUser = await apiSetPassword(
+        newPassword,
+        me?.has_password ? currentPassword : undefined,
+      )
+      // Token swap is done inside apiSetPassword — tokens already updated in localStorage.
+      // Update local me so the form switches 설정↔변경.
+      setMe(prev => ({ ...prev, has_password: true, ...updatedUser }))
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordSuccess(true)
+      setTimeout(() => setPasswordSuccess(false), 3000)
+    } catch (err) {
+      const data = err?.data
+      if (data?.current_password) {
+        setPasswordCurrentError(Array.isArray(data.current_password) ? data.current_password[0] : data.current_password)
+      } else if (data?.password) {
+        setPasswordError(Array.isArray(data.password) ? data.password[0] : data.password)
+      } else {
+        setPasswordError(err.message || t('account.saveFailed'))
+      }
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  async function handleDiscoveryToggle(next: boolean) {
+    if (discoverySaving || !personality) return
+    const previous = personality.discovery_opt_in
+    setDiscoverySaving(true)
+    setDiscoveryError(null)
+    setPersonality(prev => ({ ...prev, discovery_opt_in: next }))
+    try {
+      const updated = await patchMyPersonality({ discovery_opt_in: next })
+      setPersonality(updated)
+    } catch (err) {
+      setPersonality(prev => ({ ...prev, discovery_opt_in: previous }))
+      // DRF field errors arrive as err.data.discovery_opt_in (no .detail/.message),
+      // same shape handleSave/password handlers already parse.
+      const fieldErr = err?.data?.discovery_opt_in
+      if (fieldErr) {
+        setDiscoveryError(Array.isArray(fieldErr) ? fieldErr[0] : fieldErr)
+      } else {
+        setDiscoveryError(err.message || t('account.discoverySaveError'))
+      }
+    } finally {
+      setDiscoverySaving(false)
+    }
+  }
+
+  const verified = !!me?.email_verified_at
+  const isDirty = handle !== (me?.handle || '')
+
+  return (
+    <PageShell
+      width="narrow"
+      chrome={<ScreenChrome navigate={navigate} onLogout={onLogout} />}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('account.title')}</PageTitle>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-text-dim)', fontSize: 14 }}>
+          {t('account.loading')}
+        </div>
+      ) : fetchError ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 48, color: 'var(--color-destructive)', fontSize: 14 }}>
+          {fetchError}
+        </div>
+      ) : (
+        <>
+
+        {/* Read-only info section */}
+        <section style={{ marginBottom: 32 }}>
+          <p style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)', textTransform: 'uppercase',
+            margin: '0 0 16px',
+          }}>
+            {t('account.infoSection')}
+          </p>
+
+          <div style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+          }}>
+            {/* Account status — tap target while unverified */}
+            {verified ? (
+              <InfoRow
+                label={t('account.status')}
+                value={t('account.statusVerified')}
+                valueStyle={{ color: 'var(--accent-1)', fontWeight: 600 }}
+                last={!me?.email}
+              />
+            ) : googleConfigured ? (
+              <GoogleVerifyButton
+                onSuccess={handleVerifySuccess}
+                onError={handleVerifyError}
+                onNonOAuthError={handleVerifyNonOAuthError}
+                disabled={verifyLoading}
+                loading={verifyLoading}
+                renderTrigger={({ onClick, loading: busy, disabled }) => (
+                  <button
+                    type="button"
+                    onClick={onClick}
+                    disabled={disabled}
+                    aria-busy={busy}
+                    className={styles.actionRow}
+                  >
+                    <span className={styles.actionRowLabel}>{t('account.status')}</span>
+                    <span className={styles.actionRowValue}>
+                      {busy ? t('account.verifying') : t('account.statusGuest')}
+                    </span>
+                    <span className={styles.actionRowChevron} aria-hidden="true">›</span>
+                  </button>
+                )}
+              />
+            ) : (
+              <InfoRow
+                label={t('account.status')}
+                value={t('account.statusGuest')}
+                valueStyle={{ color: 'var(--accent-3)', fontWeight: 600 }}
+                last
+              />
+            )}
+
+            {/* Email — only once verified */}
+            {verified && me?.email && (
+              <InfoRow
+                label={t('account.email')}
+                value={t('account.emailVerified', { email: me.email })}
+                valueStyle={{ color: 'var(--accent-1)', fontWeight: 500 }}
+                last
+              />
+            )}
+          </div>
+
+          {!verified && !googleConfigured && (
+            <div role="status" style={{ ...HINT_STYLE, marginTop: 10 }}>
+              {t('account.googleUnavailable')}
+            </div>
+          )}
+
+          {verifyError && (
+            <div style={{
+              padding: '10px 14px',
+              marginTop: 12,
+              background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+              border: '1px solid var(--color-destructive)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: 13,
+              color: 'var(--color-destructive)',
+              fontWeight: 500,
+            }}>
+              {t(verifyError.key, verifyError.params)}
+            </div>
+          )}
+        </section>
+
+        {/* ID (handle) edit section */}
+        <section style={{ marginBottom: 32 }}>
+          <p style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)', textTransform: 'uppercase',
+            margin: '0 0 16px',
+          }}>
+            {t('account.idSection')}
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <label>
+              <span style={LABEL_STYLE}>ID</span>
+              <input
+                type="text"
+                value={handle}
+                onChange={(e) => {
+                  setHandle(e.target.value)
+                  setHandleError(null)
+                  setSaveSuccess(false)
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={t('account.idPlaceholder')}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className={`${styles.inputWrapper} ${handleError ? styles.inputError : ''}`}
+              />
+              {handleError ? (
+                <span style={{ ...HINT_STYLE, color: 'var(--color-destructive)' }}>
+                  {handleError}
+                </span>
+              ) : (
+                <span style={HINT_STYLE}>
+                  {t('account.idHint')}
+                </span>
+              )}
+            </label>
+
+            {saveSuccess && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+                border: '1px solid var(--accent-1)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--accent-1)',
+                fontWeight: 500,
+              }}>
+                {t('account.idSaved')}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !isDirty}
+              className={btnStyles.cta}
+              style={{ alignSelf: 'flex-start', minWidth: 120 }}
+            >
+              {saving ? t('account.saving') : t('account.save')}
+            </button>
+          </div>
+        </section>
+
+        {/* Password section */}
+        <section style={{ marginBottom: 32 }}>
+          <p style={{
+            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            color: 'var(--color-text-muted)', textTransform: 'uppercase',
+            margin: '0 0 16px',
+          }}>
+            {me?.has_password ? t('account.passwordChange') : t('account.passwordSet')}
+          </p>
+
+          <form onSubmit={handlePasswordSave} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {me?.has_password && (
+              <label>
+                <span style={LABEL_STYLE}>{t('account.currentPassword')}</span>
+                <PasswordInput
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value)
+                    setPasswordCurrentError(null)
+                  }}
+                  placeholder={t('account.currentPassword')}
+                  autoComplete="current-password"
+                  className={`${styles.inputWrapper} ${passwordCurrentError ? styles.inputError : ''}`}
+                />
+                {passwordCurrentError && (
+                  <span style={{ ...HINT_STYLE, color: 'var(--color-destructive)' }}>
+                    {passwordCurrentError}
+                  </span>
+                )}
+              </label>
+            )}
+
+            <label>
+              <span style={LABEL_STYLE}>{t('account.newPassword')}</span>
+              <PasswordInput
+                  value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value)
+                  setPasswordError(null)
+                }}
+                placeholder={t('account.newPassword')}
+                autoComplete="new-password"
+                className={`${styles.inputWrapper} ${passwordError ? styles.inputError : ''}`}
+              />
+            </label>
+
+            <label>
+              <span style={LABEL_STYLE}>{t('account.confirmPassword')}</span>
+              <PasswordInput
+                  value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value)
+                  setPasswordError(null)
+                }}
+                placeholder={t('account.confirmPassword')}
+                autoComplete="new-password"
+                className={`${styles.inputWrapper} ${passwordError && confirmPassword !== newPassword ? styles.inputError : ''}`}
+              />
+              {passwordError && (
+                <span style={{ ...HINT_STYLE, color: 'var(--color-destructive)' }}>
+                  {passwordError}
+                </span>
+              )}
+            </label>
+
+            {passwordSuccess && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+                border: '1px solid var(--accent-1)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--accent-1)',
+                fontWeight: 500,
+              }}>
+                {me?.has_password ? t('account.passwordChanged') : t('account.passwordSetSuccess')}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={savingPassword || !newPassword}
+              className={btnStyles.cta}
+              style={{ alignSelf: 'flex-start', minWidth: 160 }}
+            >
+              {savingPassword ? t('account.saving') : (me?.has_password ? t('account.passwordChange') : t('account.passwordSet'))}
+            </button>
+          </form>
+        </section>
+
+        {/* Discovery opt-in section — only rendered for users with a personality profile */}
+        {personality && (
+          <section style={{ marginBottom: 32 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+              color: 'var(--color-text-muted)', textTransform: 'uppercase',
+              margin: '0 0 16px',
+            }}>
+              {t('account.discoverySection')}
+            </p>
+
+            {discoveryError && (
+              <div style={{
+                padding: '10px 14px',
+                marginBottom: 12,
+                background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+                border: '1px solid var(--color-destructive)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--color-destructive)',
+                fontWeight: 500,
+              }}>
+                {discoveryError}
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '14px 16px',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+            }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', display: 'block' }}>
+                  {t('account.discoveryLabel')}
+                </span>
+                <span style={{ ...HINT_STYLE, marginTop: 4 }}>
+                  {t('account.discoveryHint')}
+                </span>
+              </div>
+              <Toggle
+                checked={!!personality.discovery_opt_in}
+                onChange={handleDiscoveryToggle}
+                disabled={discoverySaving}
+                aria-label={t('account.discoveryLabel')}
+              />
+            </div>
+          </section>
+        )}
+
+        </>
+      )}
+      <div style={{ height: 24 }} />
+    </PageShell>
+  )
+}
+
+/* ── Internal helpers ────────────────────────────────────────────────── */
+
+function ScreenChrome({ navigate, onLogout }: { navigate: (delta: number) => void; onLogout?: () => void }) {
+  return (
+    <>
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
+    </>
+  )
+}
+
+function InfoRow({ label, value, valueStyle, last }: { label: ReactNode; value: ReactNode; valueStyle?: CSSProperties; last?: boolean }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      padding: '14px 16px',
+      borderBottom: last ? 'none' : '1px solid var(--color-border)',
+    }}>
+      <span style={{ fontSize: 13, color: 'var(--color-text-muted)', flexShrink: 0 }}>
+        {label}
+      </span>
+      <span style={{ ...READONLY_VALUE_STYLE, textAlign: 'right', ...valueStyle }}>
+        {value}
+      </span>
+    </div>
+  )
+}

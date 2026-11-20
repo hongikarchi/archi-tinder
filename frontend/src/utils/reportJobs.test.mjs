@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createReportJobs } from './reportJobs.js'
+import { createReportJobs } from './reportJobs.ts'
 
 const DATA = { final_report: { persona_type: 'x' }, axis_scores: {} }
 

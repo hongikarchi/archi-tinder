@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p .",
     "preview": "vite preview",
     "test": "node --test src/utils/loginFlow.test.mjs src/utils/assessmentDraft.test.mjs src/utils/assessmentDirection.test.mjs src/utils/teamFit.test.mjs src/utils/contestDeadline.test.mjs src/utils/safeUrl.test.mjs src/utils/reportText.test.mjs src/utils/axisScores.test.mjs src/api/rightSizeImageUrl.test.mjs src/api/images.test.mjs src/api/getResult.test.mjs src/utils/reportImageJobs.test.mjs src/utils/tasteStart.test.mjs src/utils/imageMime.test.mjs src/utils/boardDeleteRules.test.mjs src/utils/reportStale.test.mjs src/utils/boardCoverTitle.test.mjs src/utils/boardEditPlan.test.mjs src/utils/reportJobs.test.mjs src/utils/postUntilReady.test.mjs src/utils/userIdentity.test.mjs src/utils/socialFeed.test.mjs src/utils/throttleRetry.test.mjs src/utils/draftFeedbackQueue.test.mjs src/utils/apiError.test.mjs src/components/messaging/blockedUsers.test.mjs"
   },
@@ -21,11 +22,15 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "9.39.1",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.73.0",
     "vite": "7.3.1"
   }
 }

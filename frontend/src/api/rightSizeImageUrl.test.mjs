@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rightSizeImageUrl, buildCardSrcSet, buildLqipUrl } from './rightSizeImageUrl.js'
+import { rightSizeImageUrl, buildCardSrcSet, buildLqipUrl } from './rightSizeImageUrl.ts'
 
 // -- Divisare ------------------------------------------------------------------
 

@@ -1,0 +1,182 @@
+/**
+ * EditProfileScreen — /settings/edit-profile
+ *
+ * Full-screen settings child layout (same pattern as AccountScreen).
+ * Edits: role, affiliation, bio, external_links.
+ * Saves via PATCH /api/v1/users/me/ (updateMyProfile).
+ *
+ * Uses EditCardForm for all fields.
+ */
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import type { ProfileEditPatch } from '../../types/api.ts'
+import { getMe } from '../../api/client.ts'
+import { updateMyProfile } from '../../api/profiles.ts'
+import EditCardForm from '../../components/profile/EditCardForm.tsx'
+import { useTranslation } from '../../i18n/index.ts'
+import PageLogoHeader from '../../components/PageLogoHeader.tsx'
+import PageTopControls from '../../components/PageTopControls.tsx'
+import PageBackButton from '../../components/PageBackButton.tsx'
+import PageShell from '../../components/PageShell.tsx'
+import PageTitle from '../../components/PageTitle.tsx'
+import btnStyles from '../../components/Button.module.css'
+
+interface ScreenProps {
+  onLogout?: () => void
+}
+
+export default function EditProfileScreen({ onLogout }: ScreenProps) {
+  const navigate = useNavigate()
+  const { t } = useTranslation()
+
+  const [me, setMe] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(null)
+
+  const [patch, setPatch] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const hasPatch = patch !== null
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setFetchError(null)
+    getMe()
+      .then(data => {
+        if (cancelled) return
+        setMe(data)
+      })
+      .catch(err => {
+        if (cancelled) return
+        setFetchError(err.message || t('profileEdit.profileLoadError'))
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSave() {
+    if (!hasPatch || saving) return
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      // SETTINGS-POLISH-1 §A.4 SAVE RULE: EditCardForm.onChange only includes
+      // onboarding_role/role in the patch when a dropdown selection was made
+      // (clearing legacy role text). An empty selection omits both keys so
+      // the legacy free-text role is preserved untouched server-side — do
+      // NOT hardcode `role: patch.role` here, that would always send an
+      // (often blank) role and defeat the preservation rule.
+      const payload: ProfileEditPatch = {
+        affiliation: patch.affiliation,
+        bio: patch.bio,
+        external_links: patch.external_links,
+      }
+      if ('onboarding_role' in patch) payload.onboarding_role = patch.onboarding_role
+      if ('role' in patch) payload.role = patch.role
+      await updateMyProfile(payload)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+      // Optionally navigate back to profile after save
+      // navigate(-1)
+    } catch (err) {
+      setSaveError(err?.message || t('profileEdit.saveFailed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <PageShell
+      width="narrow"
+      chrome={<ScreenChrome navigate={navigate} onLogout={onLogout} />}
+      contentStyle={{ padding: '24px 20px' }}
+    >
+      <PageTitle>{t('profileEdit.title')}</PageTitle>
+
+      {loading ? (
+        <div style={{
+          display: 'flex', justifyContent: 'center',
+          padding: 48, color: 'var(--color-text-dim)', fontSize: 14,
+        }}>
+          {t('profileEdit.loading')}
+        </div>
+      ) : fetchError ? (
+        <div style={{
+          display: 'flex', justifyContent: 'center',
+          padding: 48, color: 'var(--color-destructive)', fontSize: 14,
+        }}>
+          {fetchError}
+        </div>
+      ) : (
+        <>
+
+        <EditCardForm
+          user={me}
+          onChange={setPatch}
+        />
+
+        {/* Error */}
+        {saveError && (
+          <div style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'color-mix(in srgb, var(--color-destructive) 8%, transparent)',
+            border: '1px solid var(--color-destructive)',
+            color: 'var(--color-destructive)',
+            fontSize: 13,
+            lineHeight: 1.45,
+          }}>
+            {saveError}
+          </div>
+        )}
+
+        {/* Success */}
+        {saveSuccess && (
+          <div style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
+            border: '1px solid var(--accent-1)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 13,
+            color: 'var(--accent-1)',
+            fontWeight: 500,
+          }}>
+            {t('profileEdit.saved')}
+          </div>
+        )}
+
+        {/* Save CTA */}
+        <div style={{ marginTop: 24 }}>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !hasPatch}
+            className={btnStyles.cta}
+            style={{ width: '100%' }}
+          >
+            {saving ? t('profileEdit.saving') : t('profileEdit.save')}
+          </button>
+        </div>
+
+        </>
+      )}
+      <div style={{ height: 24 }} />
+    </PageShell>
+  )
+}
+
+/* ── Internal helpers ────────────────────────────────────────────────── */
+
+function ScreenChrome({ navigate, onLogout }: { navigate: (delta: number) => void; onLogout?: () => void }) {
+  return (
+    <>
+      <PageLogoHeader />
+      <PageTopControls onLogout={onLogout} leading={<PageBackButton inline onClick={() => navigate(-1)} />} />
+    </>
+  )
+}
