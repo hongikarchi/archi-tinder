@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-20 17:12 KST',
-    head: '373325f',
-    branch: 'feature/sns-dead-code-cleanup',
+    updatedAt: '2026-11-21 01:28 KST',
+    head: '6a5ef4f',
+    branch: 'upd496',
   },
   done: [
+    {
+      id: 'PR #495',
+      title: 'fix(SNS-NOTIF-ROUTE-1): refetch notification unread count on route change',
+      completedAt: '2026-11-21',
+      prs: [495],
+      note: '',
+    },
     {
       id: 'PR #487',
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'fix(deps): pin google-genai + openai <3 — 3.0 drops httpx, CI red',
       completedAt: '2026-11-07',
       prs: [478],
-      note: '',
-    },
-    {
-      id: 'PR #476',
-      title: 'fix(FULL-SNS-FIXES-1): SNS 리뷰 후속 묶음 + 채팅방 이름 → 프로필',
-      completedAt: '2026-11-07',
-      prs: [476],
       note: '',
     },
   ],
@@ -536,6 +536,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 495,
+      title: 'fix(SNS-NOTIF-ROUTE-1): refetch notification unread count on route change',
+      mergedAt: '2026-11-20T16:28:41Z',
+      mergedAtKST: '2026-11-21 01:28 KST',
+      sha: '6a5ef4f',
+    },
+    {
       number: 487,
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
       mergedAt: '2026-11-10T13:55:32Z',
@@ -583,13 +590,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-07T01:25:28Z',
       mergedAtKST: '2026-11-07 10:25 KST',
       sha: '6125ca5',
-    },
-    {
-      number: 476,
-      title: 'fix(FULL-SNS-FIXES-1): SNS 리뷰 후속 묶음 + 채팅방 이름 → 프로필',
-      mergedAt: '2026-11-07T01:36:00Z',
-      mergedAtKST: '2026-11-07 10:36 KST',
-      sha: '8bb7704',
     },
   ],
   agents: [
@@ -3978,6 +3978,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',
