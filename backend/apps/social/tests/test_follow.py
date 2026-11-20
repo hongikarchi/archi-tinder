@@ -106,7 +106,7 @@ class TestStatus:
         assert r.status_code == 200
         assert r.data == {
             'is_following': False, 'is_followed_by': False,
-            'can_follow': True, 'blocked_by_me': False,
+            'can_follow': True, 'blocked_by_me': False, 'has_conversation': False,
         }
 
     def test_unassessed_target_can_be_followed(self, ca):
@@ -128,7 +128,7 @@ class TestStatus:
         r = ca.get(url(alice))
         assert r.data == {
             'is_following': False, 'is_followed_by': False,
-            'can_follow': False, 'blocked_by_me': False,
+            'can_follow': False, 'blocked_by_me': False, 'has_conversation': False,
         }
 
     def test_is_followed_by(self, ca, alice, bob):
@@ -148,7 +148,7 @@ class TestStatus:
         assert r.status_code == 200
         assert r.data == {
             'is_following': False, 'is_followed_by': False,
-            'can_follow': False, 'blocked_by_me': False,
+            'can_follow': False, 'blocked_by_me': False, 'has_conversation': False,
         }
 
     def test_target_blocked_me_indistinguishable_from_optout(self, ca, alice, bob):
@@ -167,6 +167,39 @@ class TestStatus:
         assert ca.get('/api/v1/users/999999/follow/').status_code == 404
         assert ca.get(f'/api/v1/users/{2**31}/follow/').status_code == 404
         assert ca.get('/api/v1/users/99999999999999999999/follow/').status_code == 404
+
+
+class TestHasConversation:
+    def test_false_without_room(self, ca, bob):
+        assert ca.get(url(bob)).data['has_conversation'] is False
+
+    def test_true_after_open_conversation_for_both_sides(self, ca, cb, alice, bob):
+        from apps.messaging import services as ms
+        UserFollow.objects.create(follower=alice[1], following=bob[1])
+        ms.open_conversation(alice[1], bob[1])
+        assert ca.get(url(bob)).data['has_conversation'] is True
+        # bob does NOT follow alice but was messaged: still True for him
+        assert not UserFollow.objects.filter(follower=bob[1]).exists()
+        assert cb.get(url(alice)).data['has_conversation'] is True
+
+    @pytest.mark.parametrize('blocker', ['alice', 'bob'])
+    def test_false_after_either_side_blocks(self, ca, cb, alice, bob, blocker):
+        from apps.messaging import services as ms
+        UserFollow.objects.create(follower=alice[1], following=bob[1])
+        ms.open_conversation(alice[1], bob[1])
+        c = ca if blocker == 'alice' else cb
+        other = bob if blocker == 'alice' else alice
+        assert c.post(f'/api/v1/users/{other[0].id}/block/').status_code == 201
+        assert ca.get(url(bob)).data['has_conversation'] is False
+        assert cb.get(url(alice)).data['has_conversation'] is False
+
+    def test_self_false(self, ca, alice):
+        assert ca.get(url(alice)).data['has_conversation'] is False
+
+    def test_key_present_in_every_response(self, ca, bob):
+        assert 'has_conversation' in ca.get(url(bob)).data
+        assert 'has_conversation' in ca.post(url(bob)).data   # 201
+        assert 'has_conversation' in ca.post(url(bob)).data   # 200 duplicate
 
 
 class TestFollow:

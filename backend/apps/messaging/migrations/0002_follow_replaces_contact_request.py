@@ -1,14 +1,21 @@
 """SNS-FOLLOW-1: contact request -> follow. Retire ContactRequest WITHOUT deleting data.
 
+The reverse of this migration does NOT restore the schema. It is not a real
+rollback: reverse leaves the follow edges in place and does not recreate the
+dropped FK constraints (recreating them could fail if users were deleted
+meanwhile and left orphan rows).
+
 The DB is shared (and also prod), so nothing here deletes rows or tables:
 
 1. RunPython `convert_contact_requests` — carry existing relations over to
    social.UserFollow so nobody loses a connection:
-     accepted -> follow edges in BOTH directions (existing relations survive a
-                 later discovery opt-out, so no opt-out check);
-     pending  -> one edge sender -> recipient, skipped when the recipient is a
-                 guest or opted out of discovery (the accepts_new_followers rule,
-                 replicated inline: services cannot be imported in a migration);
+     accepted -> follow edges in BOTH directions, skipped when either side is
+                 currently a guest (guests cannot follow); no opt-out check
+                 (existing relations survive a later discovery opt-out);
+     pending  -> one edge sender -> recipient, skipped when the sender or the
+                 recipient is a guest, or the recipient opted out of discovery
+                 (the can_follow rule, replicated inline: services cannot be
+                 imported in a migration);
      ignored  -> not converted.
    A pair with a Block in either direction is skipped; self edges are never
    created. Idempotent (ignore_conflicts), a no-op with 0 accepted + 0 pending
@@ -33,25 +40,35 @@ _STATUS_ACCEPTED = 'accepted'
 _STATUS_PENDING = 'pending'
 
 
-def plan_follows(rows, blocked_pairs, ineligible_pending_recipient_ids):
+def plan_follows(rows, blocked_pairs, guest_ids, optout_pending_recipient_ids):
     """Pure conversion rule. Returns a set of (follower_id, following_id).
 
     rows: iterable of (sender_id, recipient_id, status) UserProfile pks.
     blocked_pairs: iterable of (blocker_id, blocked_id); a block in either
         direction skips the pair.
-    ineligible_pending_recipient_ids: recipients (guest / discovery opt-out) that
-        a PENDING request must not convert for. Accepted rows ignore it.
+    guest_ids: UserProfile pks that are currently guests. A row is skipped, for
+        EVERY status, when its sender or its recipient is in this set.
+    optout_pending_recipient_ids: recipients that opted out of discovery. Applies
+        to PENDING rows only.
+
+    Every edge created passes the runtime can_follow rule except one intentional
+    mismatch: an ACCEPTED pair whose member opted out is still converted
+    (mutual). Decision 7: existing relations survive a later opt-out; opt-out
+    only blocks NEW follows.
     """
     blocked = {frozenset(p) for p in blocked_pairs}
-    ineligible = set(ineligible_pending_recipient_ids)
+    guests = set(guest_ids)
+    optout = set(optout_pending_recipient_ids)
     edges = set()
     for sender_id, recipient_id, status in rows:
         if sender_id == recipient_id or frozenset((sender_id, recipient_id)) in blocked:
             continue
+        if sender_id in guests or recipient_id in guests:
+            continue
         if status == _STATUS_ACCEPTED:
             edges.add((sender_id, recipient_id))
             edges.add((recipient_id, sender_id))
-        elif status == _STATUS_PENDING and recipient_id not in ineligible:
+        elif status == _STATUS_PENDING and recipient_id not in optout:
             edges.add((sender_id, recipient_id))
     return edges
 
@@ -79,17 +96,19 @@ def convert_contact_requests(apps, schema_editor):
         .values_list('sender_id', 'recipient_id', 'status')
     )
     blocked_pairs = list(Block.objects.values_list('blocker_id', 'blocked_id'))
+    involved = {i for sender, recipient, _ in rows for i in (sender, recipient)}
     pending_recipients = {r for _, r, status in rows if status == _STATUS_PENDING}
-    ineligible = set(
-        UserProfile.objects.filter(pk__in=pending_recipients, is_guest=True)
+    guest_ids = set(
+        UserProfile.objects.filter(pk__in=involved, is_guest=True)
         .values_list('pk', flat=True)
-    ) | set(
+    )
+    optout = set(
         PersonalityProfile.objects.filter(
             user_id__in=pending_recipients, discovery_opt_in=False,
         ).values_list('user_id', flat=True)
     )
 
-    edges = plan_follows(rows, blocked_pairs, ineligible)
+    edges = plan_follows(rows, blocked_pairs, guest_ids, optout)
     before = UserFollow.objects.count()
     UserFollow.objects.bulk_create(
         [UserFollow(follower_id=f, following_id=t) for f, t in sorted(edges)],
