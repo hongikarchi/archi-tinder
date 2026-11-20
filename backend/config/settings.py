@@ -254,10 +254,13 @@ REST_FRAMEWORK = {
         'report_image':     '5/hour',
         # MESSAGING (FULL-MESSAGING-1): registry only — effective values are class attrs
         # in apps/messaging/throttling.py (code-pinned).
-        'contact_request': '20/day',
+        'conversation_open': '60/day',
         'message_send':    '30/min',
         'message_read':    '120/min',
         'report':          '10/hour',
+        # SNS-FOLLOW-1: follow / unfollow writes (registry; effective value = class attr
+        # in apps/social/throttling.py).
+        'follow':          '200/day',
         # ADMIN-DASH-1: admitted admin-dashboard calls (registry; effective value = class attr
         # in apps/admin_dashboard/throttling.py).
         'admin': '120/min',
@@ -566,10 +569,15 @@ _check_async_prefetch_safety(
 # -- External API keys -----------------------------------------------------
 PERF_TIMING_ENABLED = os.environ.get('PERF_TIMING_ENABLED', 'False').lower() == 'true'
 
-# Contact-request + in-app messaging feature flag (D12, docs/decisions/2026-10-02-contact-messaging-design.md).
+# In-app messaging feature flag (D12, docs/decisions/2026-10-02-contact-messaging-design.md).
 # Default OFF: every messaging endpoint 404s. Flip via env (restart only, no redeploy).
 # Schema/migrations are applied regardless of this flag.
 MESSAGING_ENABLED = os.getenv('MESSAGING_ENABLED', 'false').lower() == 'true'
+
+# SNS-FOLLOW-1: one-way user-to-user follow. Default OFF: the follow API 404s.
+# Independent of MESSAGING_ENABLED (opening a conversation needs both; block/report
+# stay reachable when either is on). Schema/migrations are applied regardless.
+FOLLOW_ENABLED = os.getenv('FOLLOW_ENABLED', 'false').lower() == 'true'
 
 # ADMIN-DASH-1: in-app admin dashboard allow-list. Comma-separated emails, stripped +
 # lowercased; empty/unset -> empty set -> IsAdminOperator denies everyone. Team members are

@@ -1,55 +1,43 @@
 """Tests for apps.messaging (FULL-MESSAGING-1)."""
-from datetime import timedelta
-
 import pytest
-from django.utils import timezone
 
-from apps.messaging.models import (
-    Block, ContactRequest, Conversation, Message, Report,
-)
-from apps.notifications.models import Notification
+from apps.messaging.models import Block, Conversation, Message, Report
+from apps.social.models import UserFollow
 
 from .conftest import client_for, make_user
 
 pytestmark = pytest.mark.django_db
 
 
-def send(client, target, greeting=None):
-    body = {'recipient_id': target[0].id}
-    if greeting is not None:
-        body['greeting'] = greeting
-    return client.post('/api/v1/contact-requests/', body, format='json')
-
-
 def unread(client):
     return client.get('/api/v1/messages/unread-count/').data['count']
 
 
-def connect_pair(ca, cb, a, b, greeting='hi'):
-    """a requests, b accepts. Returns conversation."""
-    assert send(ca, b, greeting).status_code == 201
-    cr = ContactRequest.objects.get(sender=a[1], recipient=b[1])
-    r = cb.post(f'/api/v1/contact-requests/{cr.id}/accept/')
-    assert r.status_code == 200
-    return Conversation.objects.get(pk=r.data['conversation_id'])
+def follow(a, b):
+    """a follows b (direct row; the follow API has its own tests in apps/social)."""
+    return UserFollow.objects.get_or_create(follower=a[1], following=b[1])[0]
+
+
+def connect_pair(ca, cb, a, b):
+    """a follows b and opens the conversation. Returns the Conversation."""
+    follow(a, b)
+    r = ca.post('/api/v1/conversations/', {'peer_user_id': b[0].id}, format='json')
+    assert r.status_code == 201, r.data
+    return Conversation.objects.get(pk=r.data['id'])
 
 
 # -- Feature flag ------------------------------------------------------------
 
+# Block / Report are reachable with EITHER flag on, so they are not listed here
+# (see TestBlockReportFlag); everything below is gated by MESSAGING_ENABLED alone,
+# except POST conversations/ which also needs FOLLOW_ENABLED (TestOpenConversation).
 ALL_ENDPOINTS = [
-    ('post', '/api/v1/contact-requests/'),
-    ('get', '/api/v1/contact-requests/received/'),
-    ('get', '/api/v1/contact-requests/status/?user_id=1'),
-    ('post', '/api/v1/contact-requests/1/accept/'),
-    ('post', '/api/v1/contact-requests/1/ignore/'),
     ('get', '/api/v1/conversations/'),
+    ('post', '/api/v1/conversations/'),
     ('get', '/api/v1/conversations/1/messages/'),
     ('post', '/api/v1/conversations/1/messages/'),
     ('post', '/api/v1/conversations/1/read/'),
     ('get', '/api/v1/messages/unread-count/'),
-    ('post', '/api/v1/users/1/block/'),
-    ('delete', '/api/v1/users/1/block/'),
-    ('post', '/api/v1/reports/'),
 ]
 
 
@@ -81,6 +69,13 @@ class TestFeatureFlag:
         settings.MESSAGING_ENABLED = False
         assert getattr(ca, method)(url, {}, format='json').status_code == 404
 
+    def test_flag_off_block_report_404_when_both_off(self, settings, ca):
+        settings.MESSAGING_ENABLED = False
+        settings.FOLLOW_ENABLED = False
+        assert ca.post('/api/v1/users/1/block/').status_code == 404
+        assert ca.delete('/api/v1/users/1/block/').status_code == 404
+        assert ca.post('/api/v1/reports/', {}, format='json').status_code == 404
+
     def test_flag_off_404_even_anonymous(self, settings):
         from rest_framework.test import APIClient
         settings.MESSAGING_ENABLED = False
@@ -88,317 +83,179 @@ class TestFeatureFlag:
 
     def test_me_features_flag(self, settings, ca):
         settings.MESSAGING_ENABLED = False
+        settings.FOLLOW_ENABLED = False
         r = ca.get('/api/v1/auth/me/')
         assert r.status_code == 200
-        assert r.data['features'] == {'messaging': False}
+        assert r.data['features'] == {'messaging': False, 'follow': False}
         assert 'display_name' in r.data and 'user_id' in r.data
         settings.MESSAGING_ENABLED = True
-        assert ca.get('/api/v1/auth/me/').data['features'] == {'messaging': True}
+        assert ca.get('/api/v1/auth/me/').data['features'] == {'messaging': True, 'follow': False}
+        settings.FOLLOW_ENABLED = True
+        assert ca.get('/api/v1/auth/me/').data['features'] == {'messaging': True, 'follow': True}
 
 
-# -- Requests ----------------------------------------------------------------
+# -- Open conversation -------------------------------------------------------
 
-class TestSendRequest:
-    def test_send_and_received_list(self, ca, cb, alice, bob):
-        r = send(ca, bob, 'hello')
-        assert r.status_code == 201 and r.data == {'status': 'sent'}
-        recv = cb.get('/api/v1/contact-requests/received/').data['results']
-        assert len(recv) == 1
-        assert recv[0]['greeting'] == 'hello'
-        assert recv[0]['sender']['user_id'] == alice[0].id
-        assert ca.get('/api/v1/contact-requests/received/').data['results'] == []
+def open_conv(client, peer_user_id):
+    return client.post('/api/v1/conversations/', {'peer_user_id': peer_user_id}, format='json')
 
-    def test_self_rejected(self, ca, alice):
-        assert send(ca, alice).status_code == 400
 
-    def test_guest_sender_rejected(self, db, bob):
-        g = make_user('guesty', guest=True)
-        assert send(client_for(g[0]), bob).status_code == 403
+class TestOpenConversation:
+    def test_not_following_403(self, ca, bob):
+        r = open_conv(ca, bob[0].id)
+        assert r.status_code == 403 and r.data == {'detail': 'not_allowed'}
+        assert not Conversation.objects.exists()
 
-    def test_sender_without_personality_rejected(self, bob):
-        s = make_user('nosender', personality=False)
-        r = send(client_for(s[0]), bob)
-        assert r.status_code == 400 and r.data == {'detail': 'assessment_required'}
-        assert not ContactRequest.objects.exists()
+    def test_follow_then_201_then_200_same_id(self, ca, alice, bob):
+        follow(alice, bob)
+        r1 = open_conv(ca, bob[0].id)
+        assert r1.status_code == 201
+        assert r1.data['closed'] is False
+        assert r1.data['other']['user_id'] == bob[0].id
+        r2 = open_conv(ca, bob[0].id)
+        assert r2.status_code == 200 and r2.data['id'] == r1.data['id']
+        assert Conversation.objects.count() == 1
 
-    def test_d11_no_personality(self, ca):
-        t = make_user('nopers', personality=False)
-        assert send(ca, t).status_code == 400
+    def test_no_system_message_and_actor_read(self, ca, alice, bob):
+        follow(alice, bob)
+        r = open_conv(ca, bob[0].id)
+        conv = Conversation.objects.get(pk=r.data['id'])
+        assert not conv.messages.exists()
+        assert conv.last_message_at is None
+        assert getattr(conv, conv.last_read_field(alice[1])) is not None
+        assert getattr(conv, conv.last_read_field(bob[1])) is None
+        assert unread(ca) == 0
 
-    def test_d11_opt_out(self, ca):
-        t = make_user('hidden', opt_in=False)
-        assert send(ca, t).status_code == 400
+    def test_follower_must_be_the_opener(self, cb, alice, bob):
+        follow(alice, bob)  # alice follows bob; bob does NOT follow alice
+        assert open_conv(cb, alice[0].id).status_code == 403
 
-    def test_guest_recipient_rejected(self, ca):
-        # Guests cannot accept/ignore/block (IsVerifiedUser) -> not contactable.
-        t = make_user('guestrcpt', guest=True)
-        assert send(ca, t).status_code == 400
+    def test_blocked_either_direction_403(self, ca, cb, alice, bob):
+        follow(alice, bob)
+        Block.objects.create(blocker=bob[1], blocked=alice[1])
+        assert open_conv(ca, bob[0].id).status_code == 403
+        Block.objects.all().delete()
+        follow(bob, alice)
+        Block.objects.create(blocker=alice[1], blocked=bob[1])
+        r = open_conv(ca, bob[0].id)
+        assert r.status_code == 403 and r.data == {'detail': 'not_allowed'}
 
-    def test_unknown_recipient(self, ca):
-        r = ca.post('/api/v1/contact-requests/', {'recipient_id': 999999}, format='json')
-        assert r.status_code == 400
-
-    def test_greeting_too_long(self, ca, bob):
-        assert send(ca, bob, 'x' * 101).status_code == 400
-
-    def test_duplicate_pending_is_silent(self, ca, bob, alice):
-        assert send(ca, bob).data == {'status': 'sent'}
-        assert send(ca, bob).data == {'status': 'sent'}
-        assert ContactRequest.objects.filter(sender=alice[1]).count() == 1
-
-    def test_blocked_either_direction(self, ca, cb, alice, bob):
-        cb.post(f'/api/v1/users/{alice[0].id}/block/')
-        assert send(ca, bob).status_code == 400  # blocked by recipient
+    def test_closed_conversation_reopened_after_unblock_and_follow(self, ca, cb, alice, bob):
+        conv = connect_pair(ca, cb, alice, bob)
+        assert cb.post(f'/api/v1/users/{alice[0].id}/block/').status_code == 201
+        conv.refresh_from_db()
+        assert conv.closed_at is not None
+        assert not UserFollow.objects.exists()  # block removed the follow edges
+        assert open_conv(ca, bob[0].id).status_code == 403
         cb.delete(f'/api/v1/users/{alice[0].id}/block/')
-        ca.post(f'/api/v1/users/{bob[0].id}/block/')
-        assert send(ca, bob).status_code == 400  # blocker themselves
+        assert open_conv(ca, bob[0].id).status_code == 403  # unblock does not restore follows
+        follow(alice, bob)
+        r = open_conv(ca, bob[0].id)
+        assert r.status_code == 200 and r.data['id'] == conv.id and r.data['closed'] is False
+        conv.refresh_from_db()
+        assert conv.closed_at is None
 
-    def test_no_notification_rows(self, ca, cb, alice, bob):
-        connect_pair(ca, cb, alice, bob)
-        assert Notification.objects.count() == 0
-
-
-class TestIgnoreAndCooldown:
-    def test_ignore_then_cooldown_silent(self, ca, cb, alice, bob):
-        send(ca, bob)
-        cr = ContactRequest.objects.get()
-        assert cb.post(f'/api/v1/contact-requests/{cr.id}/ignore/').status_code == 200
-        cr.refresh_from_db()
-        assert cr.status == 'ignored'
-        assert cb.get('/api/v1/contact-requests/received/').data['results'] == []
-        # re-request: identical success shape, no new row
-        r = send(ca, bob)
-        assert r.status_code == 201 and r.data == {'status': 'sent'}
-        assert ContactRequest.objects.count() == 1
-        st = ca.get(f'/api/v1/contact-requests/status/?user_id={bob[0].id}').data
-        assert st['state'] == 'sent'
-
-    def test_cooldown_expires_after_30_days(self, ca, cb, alice, bob):
-        send(ca, bob)
-        cr = ContactRequest.objects.get()
-        cb.post(f'/api/v1/contact-requests/{cr.id}/ignore/')
-        ContactRequest.objects.filter(pk=cr.pk).update(
-            responded_at=timezone.now() - timedelta(days=31))
-        st = ca.get(f'/api/v1/contact-requests/status/?user_id={bob[0].id}').data
-        assert st['state'] == 'none'
-        send(ca, bob)
-        assert ContactRequest.objects.filter(status='pending').count() == 1
-
-    def test_only_recipient_can_respond(self, ca, cb, cc, alice, bob):
-        send(ca, bob)
-        cr = ContactRequest.objects.get()
-        assert cc.post(f'/api/v1/contact-requests/{cr.id}/accept/').status_code == 404
-        assert ca.post(f'/api/v1/contact-requests/{cr.id}/ignore/').status_code == 404
-        cb.post(f'/api/v1/contact-requests/{cr.id}/ignore/')
-        assert cb.post(f'/api/v1/contact-requests/{cr.id}/accept/').status_code == 409
-
-
-class TestStatus:
-    def test_transitions(self, ca, cb, alice, bob):
-        url = f'/api/v1/contact-requests/status/?user_id={bob[0].id}'
-        assert ca.get(url).data == {
-            'state': 'none', 'can_request': True, 'reason': None, 'blocked_by_me': False,
-        }
-        send(ca, bob)
-        assert ca.get(url).data['state'] == 'sent'
-        cr = ContactRequest.objects.get()
-        cb.post(f'/api/v1/contact-requests/{cr.id}/accept/')
-        assert ca.get(url).data['state'] == 'connected'
-        assert cb.get(f'/api/v1/contact-requests/status/?user_id={alice[0].id}').data['state'] == 'connected'
-
-    def test_can_request_false_cases(self, ca, alice, bob):
-        assert ca.get(f'/api/v1/contact-requests/status/?user_id={alice[0].id}').data['can_request'] is False
-        t = make_user('optout', opt_in=False)
-        assert ca.get(f'/api/v1/contact-requests/status/?user_id={t[0].id}').data['can_request'] is False
-        ca.post(f'/api/v1/users/{bob[0].id}/block/')
-        assert ca.get(f'/api/v1/contact-requests/status/?user_id={bob[0].id}').data['can_request'] is False
-
-    def test_blocked_by_me(self, ca, cb, alice, bob):
-        url = f'/api/v1/contact-requests/status/?user_id={bob[0].id}'
-        assert ca.get(url).data['blocked_by_me'] is False
-        ca.post(f'/api/v1/users/{bob[0].id}/block/')
-        assert ca.get(url).data['blocked_by_me'] is True
-        ca.delete(f'/api/v1/users/{bob[0].id}/block/')
-        assert ca.get(url).data['blocked_by_me'] is False
-
-    def test_blocked_by_me_false_when_target_blocked_me(self, ca, cb, alice, bob):
-        cb.post(f'/api/v1/users/{alice[0].id}/block/')
-        d = ca.get(f'/api/v1/contact-requests/status/?user_id={bob[0].id}').data
-        assert d['blocked_by_me'] is False
-        assert d['reason'] == 'unavailable'
-
-    def test_blocked_by_me_self_false(self, ca, alice):
-        d = ca.get(f'/api/v1/contact-requests/status/?user_id={alice[0].id}').data
-        assert d['blocked_by_me'] is False and d['reason'] == 'self'
-
-    def test_bad_param(self, ca):
-        assert ca.get('/api/v1/contact-requests/status/').status_code == 400
-
-
-class TestStatusReason:
-    @staticmethod
-    def _get(client, target):
-        return client.get(f'/api/v1/contact-requests/status/?user_id={target[0].id}').data
-
-    def test_eligible_reason_null(self, ca, bob):
-        d = self._get(ca, bob)
-        assert d['can_request'] is True and d['reason'] is None
-
-    def test_viewer_guest_verify_required(self, db, bob):
-        g = make_user('guesty', guest=True)
-        d = self._get(client_for(g[0]), bob)
-        assert d['can_request'] is False and d['reason'] == 'verify_required'
-
-    def test_viewer_no_personality_assessment_required(self, bob):
-        s = make_user('nosender', personality=False)
-        d = self._get(client_for(s[0]), bob)
-        assert d['can_request'] is False and d['reason'] == 'assessment_required'
-
-    def test_guest_without_personality_verify_required(self, bob):
-        g = make_user('guestnop', guest=True, personality=False)
-        d = self._get(client_for(g[0]), bob)
-        assert d['can_request'] is False and d['reason'] == 'verify_required'
-
-    def test_guest_viewer_opted_out_target_unavailable(self, db):
-        g = make_user('guestx', guest=True)
-        t = make_user('optoutx', opt_in=False)
-        assert self._get(client_for(g[0]), t)['reason'] == 'unavailable'
-
-    def test_nonassessed_viewer_blocked_target_no_block_leak(self, bob):
-        # A block must not be distinguishable from a reachable target for a
-        # viewer who can't request anyway: same viewer-side reason either way.
-        s = make_user('nosenderx', personality=False)
-        assert self._get(client_for(s[0]), bob)['reason'] == 'assessment_required'
-        client_for(bob[0]).post(f'/api/v1/users/{s[0].id}/block/')
-        assert self._get(client_for(s[0]), bob)['reason'] == 'assessment_required'
-
-    def test_guest_viewer_blocked_target_no_block_leak(self, db, bob):
-        g = make_user('guestblk', guest=True)
-        Block.objects.create(blocker=bob[1], blocked=g[1])
-        assert self._get(client_for(g[0]), bob)['reason'] == 'verify_required'
-
-    def test_recipient_blocked_viewer_unavailable(self, ca, cb, alice, bob):
-        cb.post(f'/api/v1/users/{alice[0].id}/block/')
-        d = self._get(ca, bob)
-        assert d['can_request'] is False and d['reason'] == 'unavailable'
-
-    def test_viewer_blocked_recipient_unavailable(self, ca, bob):
-        ca.post(f'/api/v1/users/{bob[0].id}/block/')
-        assert self._get(ca, bob)['reason'] == 'unavailable'
-
-    def test_recipient_opted_out_unavailable(self, ca):
-        t = make_user('optout', opt_in=False)
-        d = self._get(ca, t)
-        assert d['can_request'] is False and d['reason'] == 'unavailable'
-
-    def test_recipient_no_personality_unavailable(self, ca):
-        t = make_user('nopers', personality=False)
-        assert self._get(ca, t)['reason'] == 'unavailable'
-
-    def test_recipient_guest_unavailable(self, ca):
-        t = make_user('guestrec', guest=True)
-        d = self._get(ca, t)
-        assert d['can_request'] is False and d['reason'] == 'unavailable'
-
-    def test_self_reason_self(self, ca, alice):
-        d = self._get(ca, alice)
-        assert d['can_request'] is False and d['reason'] == 'self'
-
-    def test_state_sent_reason_null(self, ca, bob):
-        send(ca, bob)
-        d = self._get(ca, bob)
-        assert d['state'] == 'sent' and d['reason'] is None
-
-
-# -- Accept / unread ---------------------------------------------------------
-
-class TestAccept:
-    def test_accept_creates_conversation_greeting_and_system(self, ca, cb, alice, bob):
-        conv = connect_pair(ca, cb, alice, bob, greeting='nice taste')
-        msgs = list(conv.messages.order_by('id'))
-        assert [m.kind for m in msgs] == ['user', 'system']
-        assert msgs[0].sender_id == alice[1].pk and msgs[0].body == 'nice taste'
-        assert msgs[1].sender_id is None
-        assert msgs[1].system_type == 'connected' and msgs[1].body == ''
-        assert conv.user_a_id < conv.user_b_id
-
-    def test_unread_requester_1_acceptor_0(self, ca, cb, alice, bob):
-        send(ca, bob, 'hi')
-        assert unread(cb) == 1  # pending request
-        assert unread(ca) == 0
-        cr = ContactRequest.objects.get()
-        cb.post(f'/api/v1/contact-requests/{cr.id}/accept/')
-        assert unread(ca) == 1  # system 'connected' only; own greeting excluded
-        assert unread(cb) == 0
-
-    def test_unread_without_greeting(self, ca, cb, alice, bob):
-        connect_pair(ca, cb, alice, bob, greeting='')
-        assert Message.objects.count() == 1
-        assert unread(ca) == 1
-        assert unread(cb) == 0
-
-    def test_read_clears_unread(self, ca, cb, alice, bob):
-        conv = connect_pair(ca, cb, alice, bob)
-        assert unread(ca) == 1
-        assert ca.post(f'/api/v1/conversations/{conv.id}/read/').status_code == 200
-        assert unread(ca) == 0
-
-    def test_conversation_list(self, ca, cb, alice, bob):
-        conv = connect_pair(ca, cb, alice, bob)
-        res = ca.get('/api/v1/conversations/').data['results']
-        assert len(res) == 1
-        item = res[0]
-        assert item['id'] == conv.id
-        assert item['other']['user_id'] == bob[0].id
-        assert item['unread_count'] == 1
-        assert item['last_message']['kind'] == 'system'
-        assert item['last_message']['system_type'] == 'connected'
-        assert cb.get('/api/v1/conversations/').data['results'][0]['unread_count'] == 0
-
-
-class TestMutual:
-    def test_mutual_auto_accept(self, ca, cb, alice, bob):
-        send(ca, bob, 'from alice')
-        r = send(cb, alice, 'from bob')
+    def test_peer_who_does_not_follow_can_reply(self, ca, cb, alice, bob):
+        conv = connect_pair(ca, cb, alice, bob)  # only alice follows bob
+        url = f'/api/v1/conversations/{conv.id}/messages/'
+        assert ca.post(url, {'body': 'hello'}, format='json').status_code == 201
+        assert not UserFollow.objects.filter(follower=bob[1]).exists()
+        r = cb.post(url, {'body': 'hi back'}, format='json')
         assert r.status_code == 201
-        assert r.data['status'] == 'connected'
-        conv = Conversation.objects.get(pk=r.data['conversation_id'])
-        msgs = list(conv.messages.order_by('id'))
-        assert [(m.kind, m.body) for m in msgs] == [
-            ('user', 'from alice'), ('user', 'from bob'), ('system', ''),
-        ]
-        assert msgs[0].sender_id == alice[1].pk and msgs[1].sender_id == bob[1].pk
-        assert msgs[0].created_at <= msgs[1].created_at <= msgs[2].created_at
-        assert not ContactRequest.objects.filter(status='pending').exists()
-        # earlier requester (alice): system message unread; actor (bob): 0
-        assert unread(ca) == 1
-        assert unread(cb) == 0
 
-    def test_mutual_without_greetings(self, ca, cb, alice, bob):
-        send(ca, bob)
-        send(cb, alice)
-        assert unread(ca) == 1
-        assert unread(cb) == 0
+    def test_follow_flag_off_404(self, settings, ca, alice, bob):
+        follow(alice, bob)
+        settings.FOLLOW_ENABLED = False
+        assert open_conv(ca, bob[0].id).status_code == 404
+        assert not Conversation.objects.exists()
 
-    def test_race_reverse_pending_swept_on_accept(self, ca, cb, alice, bob):
-        r1 = ContactRequest.objects.create(sender=alice[1], recipient=bob[1], greeting='a')
-        r2 = ContactRequest.objects.create(sender=bob[1], recipient=alice[1], greeting='b')
-        res = cb.post(f'/api/v1/contact-requests/{r1.id}/accept/')
-        assert res.status_code == 200
-        r2.refresh_from_db()
-        assert r2.status == ContactRequest.STATUS_ACCEPTED and r2.responded_at is not None
-        assert ca.get('/api/v1/contact-requests/received/').data['results'] == []
-        assert not ContactRequest.objects.filter(status='pending').exists()
+    def test_messaging_flag_off_404(self, settings, ca, alice, bob):
+        follow(alice, bob)
+        settings.MESSAGING_ENABLED = False
+        assert open_conv(ca, bob[0].id).status_code == 404
 
-    def test_connect_idempotent_on_open_conversation(self, ca, cb, alice, bob):
-        from apps.messaging import services
+    def test_get_list_needs_only_messaging_flag(self, settings, ca):
+        settings.FOLLOW_ENABLED = False
+        assert ca.get('/api/v1/conversations/').status_code == 200
+
+    def test_anonymous_follow_off_404_on_on_401(self, settings):
+        from rest_framework.test import APIClient
+        settings.FOLLOW_ENABLED = False
+        assert APIClient().post('/api/v1/conversations/', {}, format='json').status_code == 404
+        settings.FOLLOW_ENABLED = True
+        assert APIClient().post('/api/v1/conversations/', {}, format='json').status_code == 401
+
+    def test_guest_requester_verify_required(self, db, bob):
+        g = make_user('guesty3', guest=True)
+        r = open_conv(client_for(g[0]), bob[0].id)
+        assert r.status_code == 403 and r.data['detail'] == 'verify_required'
+
+    def test_validation(self, ca, alice):
+        assert open_conv(ca, alice[0].id).status_code == 400  # self
+        assert open_conv(ca, 2**31).status_code == 400  # out of int4 range
+        assert open_conv(ca, 0).status_code == 400
+        assert open_conv(ca, -3).status_code == 400
+        assert open_conv(ca, int(HUGE)).status_code == 400
+        assert ca.post('/api/v1/conversations/', {}, format='json').status_code == 400
+        assert ca.post('/api/v1/conversations/', {'peer_user_id': 'x'}, format='json').status_code == 400
+        assert open_conv(ca, 999999).status_code == 404  # in range, no such user
+
+    def test_open_throttle_60_per_day(self, ca, alice):
+        from apps.messaging.throttling import ConversationOpenThrottle
+        assert ConversationOpenThrottle.rate == '60/day'
+        codes = [open_conv(ca, 999999).status_code for _ in range(61)]
+        assert codes[:60] == [404] * 60 and codes[60] == 429
+        # GET keeps its own (read) throttle
+        assert ca.get('/api/v1/conversations/').status_code == 200
+
+    def test_conversation_list_after_open(self, ca, cb, alice, bob):
         conv = connect_pair(ca, cb, alice, bob)
-        cr = ContactRequest.objects.get(sender=alice[1], recipient=bob[1])
-        services.connect([cr], actor=bob[1])
-        assert conv.messages.filter(kind='system', system_type='connected').count() == 1
-        assert conv.messages.count() == 2
-        assert unread(ca) == 1
+        rows = ca.get('/api/v1/conversations/').data['results']
+        assert [r['id'] for r in rows] == [conv.id]
+        assert rows[0]['other']['user_id'] == bob[0].id
+        assert rows[0]['last_message'] is None and rows[0]['closed'] is False
+        assert [r['id'] for r in cb.get('/api/v1/conversations/').data['results']] == [conv.id]
+
+
+class TestUnread:
+    def test_unread_counts_messages_only(self, ca, cb, alice, bob):
+        conv = connect_pair(ca, cb, alice, bob)
+        assert unread(ca) == 0 and unread(cb) == 0
+        ca.post(f'/api/v1/conversations/{conv.id}/messages/', {'body': 'yo'}, format='json')
+        assert unread(ca) == 0
+        assert unread(cb) == 1
+        cb.post(f'/api/v1/conversations/{conv.id}/read/')
         assert unread(cb) == 0
+
+    def test_follow_does_not_count(self, ca, cb, alice, bob):
+        follow(alice, bob)
+        assert unread(cb) == 0
+        assert set(cb.get('/api/v1/messages/unread-count/').data) == {'count'}
+
+
+class TestBlockReportFlag:
+    @pytest.mark.parametrize('messaging,follow_on,expected_404', [
+        (True, False, False), (False, True, False), (True, True, False), (False, False, True),
+    ])
+    def test_block_report_reachable_when_either_flag_on(
+        self, settings, ca, bob, messaging, follow_on, expected_404,
+    ):
+        settings.MESSAGING_ENABLED = messaging
+        settings.FOLLOW_ENABLED = follow_on
+        r_block = ca.post(f'/api/v1/users/{bob[0].id}/block/')
+        r_report = ca.post('/api/v1/reports/', {
+            'target_type': 'user', 'target_id': str(bob[0].id)}, format='json')
+        if expected_404:
+            assert r_block.status_code == 404 and r_report.status_code == 404
+        else:
+            assert r_block.status_code == 201 and r_report.status_code == 201
+
+    def test_other_messaging_views_stay_messaging_gated(self, settings, ca):
+        settings.MESSAGING_ENABLED = False
+        settings.FOLLOW_ENABLED = True
+        assert ca.get('/api/v1/conversations/').status_code == 404
+        assert ca.get('/api/v1/messages/unread-count/').status_code == 404
+        assert ca.post('/api/v1/conversations/1/messages/', {'body': 'x'}, format='json').status_code == 404
 
 
 # -- Messages ----------------------------------------------------------------
@@ -413,7 +270,7 @@ class TestMessages:
         cb.post(url, {'body': 'second'}, format='json')
 
         full = ca.get(url).data['results']
-        assert [m['kind'] for m in full][:2] == ['user', 'system']
+        assert [m['kind'] for m in full] == ['user', 'user']
         assert [m['id'] for m in full] == sorted(m['id'] for m in full)
         inc = ca.get(url + f'?after={first_id}').data['results']
         assert [m['body'] for m in inc] == ['second']
@@ -424,7 +281,7 @@ class TestMessages:
     def test_send_advances_own_read_and_unread_for_other(self, ca, cb, alice, bob):
         conv = connect_pair(ca, cb, alice, bob)
         ca.post(f'/api/v1/conversations/{conv.id}/messages/', {'body': 'yo'}, format='json')
-        assert unread(ca) == 0  # own send advanced last_read past the system message
+        assert unread(ca) == 0  # own messages never count as unread
         assert unread(cb) == 1
         conv.refresh_from_db()
         assert conv.last_message_at is not None
@@ -459,13 +316,6 @@ class TestMessages:
         assert codes[30] == 429
         # GET is not throttled
         assert ca.get(url).status_code == 200
-
-    def test_contact_request_throttle(self, ca, alice):
-        codes = []
-        for i in range(21):
-            t = make_user(f'target{i}')
-            codes.append(send(ca, t).status_code)
-        assert codes[:20] == [201] * 20 and codes[20] == 429
 
     def test_report_throttle(self, ca, bob):
         codes = [
@@ -510,23 +360,30 @@ class TestBlock:
         assert ca.post(f'/api/v1/users/{alice[0].id}/block/').status_code == 400
         assert ca.post('/api/v1/users/999999/block/').status_code == 404
 
-    def test_blocked_pending_request_hidden(self, ca, cb, alice, bob):
-        send(ca, bob)
-        assert unread(cb) == 1
-        cb.post(f'/api/v1/users/{alice[0].id}/block/')
-        assert cb.get('/api/v1/contact-requests/received/').data['results'] == []
-        assert unread(cb) == 0
-        cr = ContactRequest.objects.get()
-        assert cb.post(f'/api/v1/contact-requests/{cr.id}/accept/').status_code == 400
+    def test_block_deletes_follows_both_directions(self, ca, cb, cc, alice, bob, carol):
+        follow(alice, bob)
+        follow(bob, alice)
+        follow(alice, carol)
+        assert ca.post(f'/api/v1/users/{bob[0].id}/block/').status_code == 201
+        assert not UserFollow.objects.filter(follower=alice[1], following=bob[1]).exists()
+        assert not UserFollow.objects.filter(follower=bob[1], following=alice[1]).exists()
+        assert UserFollow.objects.filter(follower=alice[1], following=carol[1]).exists()
+        # unblock does not restore
+        ca.delete(f'/api/v1/users/{bob[0].id}/block/')
+        assert UserFollow.objects.count() == 1
 
-    def test_reconnect_after_unblock_reopens(self, ca, cb, alice, bob):
+    def test_block_by_either_side_deletes_follows(self, cb, alice, bob):
+        follow(alice, bob)
+        assert cb.post(f'/api/v1/users/{alice[0].id}/block/').status_code == 201
+        assert not UserFollow.objects.exists()
+
+    def test_reopen_after_unblock_and_refollow(self, ca, cb, alice, bob):
         conv = connect_pair(ca, cb, alice, bob)
         cb.post(f'/api/v1/users/{alice[0].id}/block/')
         cb.delete(f'/api/v1/users/{alice[0].id}/block/')
-        assert send(ca, bob).status_code == 201
-        cr = ContactRequest.objects.get(status='pending')
-        r = cb.post(f'/api/v1/contact-requests/{cr.id}/accept/')
-        assert r.data['conversation_id'] == conv.id
+        follow(alice, bob)
+        r = open_conv(ca, bob[0].id)
+        assert r.status_code == 200 and r.data['id'] == conv.id
         conv.refresh_from_db()
         assert conv.closed_at is None
 
@@ -575,15 +432,20 @@ class TestReports:
             'target_type': 'user', 'target_id': '999999'}, format='json').status_code == 404
 
     def test_report_message_participant_only(self, ca, cb, cc, alice, bob):
-        conv = connect_pair(ca, cb, alice, bob, greeting='rude')
-        user_msg = conv.messages.filter(kind='user').get()
+        conv = connect_pair(ca, cb, alice, bob)
+        user_msg = Message.objects.create(
+            conversation=conv, sender=alice[1], kind=Message.KIND_USER, body='rude',
+        )
         payload = {'target_type': 'message', 'target_id': str(user_msg.id)}
         assert cb.post('/api/v1/reports/', payload, format='json').status_code == 201
         assert cc.post('/api/v1/reports/', payload, format='json').status_code == 404
 
     def test_report_system_message_rejected(self, ca, cb, alice, bob):
         conv = connect_pair(ca, cb, alice, bob)
-        sys_msg = conv.messages.filter(kind='system').get()
+        sys_msg = Message.objects.create(
+            conversation=conv, sender=None, kind=Message.KIND_SYSTEM,
+            system_type=Message.SYSTEM_CONNECTED,
+        )
         r = cb.post('/api/v1/reports/', {
             'target_type': 'message', 'target_id': str(sys_msg.id)}, format='json')
         assert r.status_code == 400
@@ -598,8 +460,6 @@ class TestReports:
 
 class TestReadThrottle:
     READ_URLS = [
-        '/api/v1/contact-requests/received/',
-        '/api/v1/contact-requests/status/?user_id=1',
         '/api/v1/conversations/',
         '/api/v1/conversations/1/messages/',
         '/api/v1/messages/unread-count/',
@@ -631,7 +491,6 @@ class TestReadThrottle:
             assert ca.get('/api/v1/messages/unread-count/').status_code == 200
         # Non-GET messaging endpoints keep their own (or no) throttle.
         assert ca.post('/api/v1/conversations/1/read/').status_code == 404
-        assert ca.post('/api/v1/contact-requests/1/ignore/').status_code == 404
 
     def test_normal_polling_not_throttled(self, ca):
         codes = [ca.get('/api/v1/messages/unread-count/').status_code for _ in range(30)]
@@ -661,18 +520,22 @@ class TestOversizedIds:
         assert services.get_profile_by_auth_id(services.AUTH_USER_ID_MAX + 1) is None
         # 2**31 - 1 is in range for int4 -> valid lookup (no such user -> 404, not 500).
         assert ca.get(
-            f'/api/v1/contact-requests/status/?user_id={services.AUTH_USER_ID_MAX}'
+            f'/api/v1/users/{services.AUTH_USER_ID_MAX}/follow/'
         ).status_code == 404
         assert ca.get(
-            f'/api/v1/contact-requests/status/?user_id={services.AUTH_USER_ID_MAX + 1}'
+            f'/api/v1/users/{services.AUTH_USER_ID_MAX + 1}/follow/'
         ).status_code == 404
+        assert open_conv(ca, services.AUTH_USER_ID_MAX).status_code == 404
+        assert open_conv(ca, services.AUTH_USER_ID_MAX + 1).status_code == 400
 
     def test_block_404(self, ca):
         assert ca.post(f'/api/v1/users/{HUGE}/block/').status_code == 404
         assert ca.delete(f'/api/v1/users/{HUGE}/block/').status_code == 404
 
-    def test_status_404(self, ca):
-        assert ca.get(f'/api/v1/contact-requests/status/?user_id={HUGE}').status_code == 404
+    def test_follow_404(self, ca):
+        assert ca.get(f'/api/v1/users/{HUGE}/follow/').status_code == 404
+        assert ca.post(f'/api/v1/users/{HUGE}/follow/').status_code == 404
+        assert ca.delete(f'/api/v1/users/{HUGE}/follow/').status_code == 404
 
     @pytest.mark.parametrize('target_type', ['user', 'message', 'profile'])
     def test_report_target_id_400(self, ca, target_type):
@@ -693,8 +556,6 @@ class TestOversizedIds:
         assert r.status_code == 400
 
     @pytest.mark.parametrize('method,path', [
-        ('post', '/api/v1/contact-requests/{id}/accept/'),
-        ('post', '/api/v1/contact-requests/{id}/ignore/'),
         ('post', '/api/v1/conversations/{id}/read/'),
         ('get', '/api/v1/conversations/{id}/messages/'),
         ('post', '/api/v1/conversations/{id}/messages/'),
@@ -712,7 +573,3 @@ class TestOversizedIds:
         r = ca.get(f'/api/v1/conversations/{conv.id}/messages/?after={HUGE}')
         assert r.status_code == 200
         assert r.data['results'] == []
-
-    def test_contact_request_recipient_oversized_400(self, ca):
-        r = ca.post('/api/v1/contact-requests/', {'recipient_id': int(HUGE)}, format='json')
-        assert r.status_code == 400

@@ -21,9 +21,12 @@ def _attr_str(name):
 
 # (key, label_ko, description_ko, getter)
 _REGISTRY = [
-    ('MESSAGING_ENABLED', '쪽지/연락 요청',
-     '켜면 연락 요청과 쪽지 기능이 열리고, 끄면 관련 API가 모두 404를 돌려줍니다.',
+    ('MESSAGING_ENABLED', '메시지',
+     '켜면 메시지 기능이 열리고, 끄면 관련 API가 모두 404를 돌려줍니다. 새 대화를 열려면 사람 팔로우도 켜져 있어야 합니다.',
      _attr_bool('MESSAGING_ENABLED')),
+    ('FOLLOW_ENABLED', '사람 팔로우',
+     '켜면 다른 사람을 팔로우할 수 있고, 끄면 팔로우 API가 모두 404를 돌려줍니다.',
+     _attr_bool('FOLLOW_ENABLED')),
     ('PERF_TIMING_ENABLED', '성능 타이밍 로그',
      '켜면 요청 단계별 소요 시간을 서버 로그에 남깁니다. 약간의 오버헤드가 있어 측정할 때만 켭니다.',
      _attr_bool('PERF_TIMING_ENABLED')),

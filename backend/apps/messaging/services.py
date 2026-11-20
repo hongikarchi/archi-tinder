@@ -1,20 +1,17 @@
 """Domain helpers for apps.messaging (no HTTP concerns)."""
-from datetime import timedelta
-
+from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from apps.accounts.models import PersonalityProfile, UserProfile
-from .models import Block, ContactRequest, Conversation, Message
-
-CONTACT_COOLDOWN_DAYS = 30
+from apps.accounts.models import UserProfile
+from .models import Block, Conversation, Message
 
 
 # -- Id bounds --------------------------------------------------------------
 # An integer from the URL / query / body that exceeds its column type reaches
 # Postgres as a DataError ("integer out of range") -> HTTP 500. Bound it first so
 # the caller answers 404 / 400 instead. auth_user.id is int4; this app's own
-# BigAutoField pks (Conversation, ContactRequest, Message, ...) are int8.
+# BigAutoField pks (Conversation, Message, ...) are int8.
 AUTH_USER_ID_MAX = 2**31 - 1
 BIGINT_ID_MAX = 2**63 - 1
 
@@ -61,26 +58,6 @@ def has_blocked(blocker, blocked):
     return Block.objects.filter(blocker=blocker, blocked=blocked).exists()
 
 
-def recipient_eligible(profile):
-    """D11: PersonalityProfile exists AND discovery_opt_in is True.
-
-    Guests are excluded too: IsVerifiedUser blocks them from accept/ignore/
-    block, so a request to a guest would stay pending forever.
-    """
-    if profile.is_guest:
-        return False
-    return PersonalityProfile.objects.filter(user=profile, discovery_opt_in=True).exists()
-
-
-def sender_has_personality(profile):
-    """Product rule: the sender must have completed the personality assessment.
-
-    No discovery opt-in requirement for the sender. Guests are rejected earlier
-    (IsVerifiedUser on send; 'verify_required' in the status view).
-    """
-    return PersonalityProfile.objects.filter(user=profile).exists()
-
-
 def pair(a, b):
     """Normalized (user_a, user_b) with user_a.pk < user_b.pk."""
     return (a, b) if a.pk < b.pk else (b, a)
@@ -91,73 +68,33 @@ def find_conversation(a, b):
     return Conversation.objects.filter(user_a=lo, user_b=hi).first()
 
 
-def recent_ignore_exists(sender, recipient, now=None):
-    now = now or timezone.now()
-    cutoff = now - timedelta(days=CONTACT_COOLDOWN_DAYS)
-    return ContactRequest.objects.filter(
-        sender=sender, recipient=recipient,
-        status=ContactRequest.STATUS_IGNORED, responded_at__gt=cutoff,
-    ).exists()
+# -- Open conversation -------------------------------------------------------
 
+def open_conversation(actor, peer, now=None):
+    """Open (or reuse) the 1:1 conversation between `actor` and `peer`.
 
-# -- Connect (accept) -------------------------------------------------------
+    Returns (conversation, created). The caller has already checked the gate
+    (actor follows peer, no block either way); this opens its own transaction.
+    Normalized pair + select_for_update get_or_create (the
+    unique pair constraint makes a concurrent create IntegrityError-safe).
 
-def connect(requests, actor, now=None):
-    """Open (or reuse) the conversation for accepted request(s). Caller wraps in a transaction.
-
-    `requests` — 1 request (normal accept) or 2 (mutual interest), already marked accepted.
-    Message order: greetings chronologically (sender = the requester), then ONE
-    kind=system/connected message (no text stored, D13).
-
-    Read state: the actor sees everything (last_read = now). The other side keeps
-    last_read at (at most) their view of the greetings, so the connected system
-    message counts as 1 unread for them — the only way the earlier requester can
-    learn of the accept, since no Notification row is created (D9).
+    An existing conversation that was closed by a block is reopened: the caller
+    only gets here when no block exists. No system message is emitted. On create
+    the actor's last_read is set to now.
     """
     now = now or timezone.now()
-    requests = sorted(requests, key=lambda r: r.created_at)
-    first = requests[0]
-    lo, hi = pair(first.sender, first.recipient)
-    conv, created = Conversation.objects.select_for_update().get_or_create(
-        user_a=lo, user_b=hi, defaults={'created_at': now},
-    )
-    # Sweep any other pending request between the pair (simultaneous A->B / B->A race).
-    ContactRequest.objects.filter(
-        status=ContactRequest.STATUS_PENDING,
-    ).filter(
-        Q(sender=lo, recipient=hi) | Q(sender=hi, recipient=lo)
-    ).update(status=ContactRequest.STATUS_ACCEPTED, responded_at=now)
-
-    if not created and conv.closed_at is None and conv.messages.filter(
-        kind=Message.KIND_SYSTEM, system_type=Message.SYSTEM_CONNECTED,
-    ).exists():
-        return conv  # already connected and open: idempotent, no duplicate messages
-
-    if conv.closed_at is not None:
-        conv.closed_at = None  # re-connect after block/unblock
-
-    for r in requests:
-        if r.greeting:
-            Message.objects.create(
-                conversation=conv, sender=r.sender, kind=Message.KIND_USER,
-                body=r.greeting, created_at=r.created_at,
-            )
-    Message.objects.create(
-        conversation=conv, sender=None, kind=Message.KIND_SYSTEM,
-        system_type=Message.SYSTEM_CONNECTED, body='', created_at=now,
-    )
-
-    actor_field = conv.last_read_field(actor)
-    setattr(conv, actor_field, now)
-    other_field = 'b_last_read_at' if actor_field == 'a_last_read_at' else 'a_last_read_at'
-    greeting_times = [r.created_at for r in requests if r.greeting]
-    if greeting_times:
-        current = getattr(conv, other_field)
-        seen = max(greeting_times)
-        setattr(conv, other_field, seen if current is None else max(current, seen))
-    conv.last_message_at = now
-    conv.save()
-    return conv
+    lo, hi = pair(actor, peer)
+    with transaction.atomic():
+        conv, created = Conversation.objects.select_for_update().get_or_create(
+            user_a=lo, user_b=hi, defaults={'created_at': now},
+        )
+        if created:
+            setattr(conv, conv.last_read_field(actor), now)
+            conv.save(update_fields=[conv.last_read_field(actor)])
+        elif conv.closed_at is not None:
+            conv.closed_at = None
+            conv.save(update_fields=['closed_at'])
+    return conv, created
 
 
 # -- Unread -----------------------------------------------------------------
@@ -186,11 +123,3 @@ def unread_message_count(profile):
         .filter(Q(sender__isnull=True) | ~Q(sender=profile))
         .count()
     )
-
-
-def pending_received_count(profile):
-    qs = ContactRequest.objects.filter(recipient=profile, status=ContactRequest.STATUS_PENDING)
-    blocked = blocked_profile_ids(profile)
-    if blocked:
-        qs = qs.exclude(sender_id__in=blocked)
-    return qs.count()

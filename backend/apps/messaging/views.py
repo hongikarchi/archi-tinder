@@ -1,13 +1,16 @@
-"""apps.messaging views — contact requests, conversations, blocks, reports.
+"""apps.messaging views — conversations, messages, blocks, reports.
 
 Every view inherits MessagingView: the MESSAGING_ENABLED gate (404 when OFF,
-D12) + authentication, plus a non-guest requirement for write methods.
-Participant-only resources answer 404 (never 403) to non-participants so
-existence is not revealed.
+D12) + authentication, plus a non-guest requirement for write methods. Block and
+Report use MessagingOrFollowEnabled instead (reachable when either flag is on).
+Opening a conversation additionally needs FOLLOW_ENABLED and that the requester
+follows the peer (SNS-FOLLOW-1); replying inside an existing conversation only
+needs participant + open + not blocked. Participant-only resources answer 404
+(never 403) to non-participants so existence is not revealed.
 """
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import (
     Case, Count, DateTimeField, F, IntegerField, OuterRef, Q, Subquery, Value, When,
 )
@@ -21,16 +24,19 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import UserProfile
 from apps.accounts.permissions import IsVerifiedUser
+from apps.social import services as social_services
+from apps.social.models import UserFollow
+from apps.social.permissions import FollowEnabled
 
 from . import services
-from .models import Block, ContactRequest, Conversation, Message, Report
-from .permissions import MessagingEnabled
+from .models import Block, Conversation, Message, Report
+from .permissions import MessagingEnabled, MessagingOrFollowEnabled
 from .serializers import (
-    ContactRequestCreateSerializer, MessageCreateSerializer, ReportCreateSerializer,
+    ConversationOpenSerializer, MessageCreateSerializer, ReportCreateSerializer,
     last_message_dict, message_dict, user_summary,
 )
 from .throttling import (
-    ContactRequestThrottle, MessageReadThrottle, MessageSendThrottle, ReportThrottle,
+    ConversationOpenThrottle, MessageReadThrottle, MessageSendThrottle, ReportThrottle,
 )
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
@@ -41,9 +47,10 @@ _CONVERSATIONS_CAP = 100
 
 class MessagingView(APIView):
     """Base: flag gate -> auth -> (writes only) non-guest."""
+    flag_permission = MessagingEnabled
 
     def get_permissions(self):
-        perms = [MessagingEnabled(), IsAuthenticated()]
+        perms = [self.flag_permission(), IsAuthenticated()]
         if self.request.method not in SAFE_METHODS:
             perms.append(IsVerifiedUser())
         return perms
@@ -53,241 +60,6 @@ class MessagingView(APIView):
         if profile is None:
             raise Http404()
         return profile
-
-
-def _unavailable():
-    return Response({'detail': 'recipient_unavailable'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-def _sent():
-    """The ONE success shape for every non-connecting outcome (D10: never reveal ignore)."""
-    return Response({'status': 'sent'}, status=status.HTTP_201_CREATED)
-
-
-# -- Contact requests -------------------------------------------------------
-
-class ContactRequestCreateView(MessagingView):
-    """POST /api/v1/contact-requests/ {recipient_id, greeting?}
-
-    201 {status: 'sent'} for a normal send AND for every silent no-op (pending
-    already / already connected / ignored within 30 days).
-    201 {status: 'connected', conversation_id} when a reverse pending request
-    existed (mutual interest -> auto-accept).
-    """
-    throttle_classes = [ContactRequestThrottle]
-
-    def post(self, request):
-        ser = ContactRequestCreateSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        sender = self.my_profile(request)
-        greeting = ser.validated_data.get('greeting', '').strip()
-
-        recipient = services.get_profile_by_auth_id(ser.validated_data['recipient_id'])
-        if recipient is None:
-            return _unavailable()
-        if recipient.pk == sender.pk:
-            return Response({'detail': 'self_request'}, status=status.HTTP_400_BAD_REQUEST)
-        if not services.sender_has_personality(sender):
-            # The sender's own state, so revealing it is not a privacy leak.
-            return Response({'detail': 'assessment_required'}, status=status.HTTP_400_BAD_REQUEST)
-        if services.is_blocked_between(sender, recipient) or not services.recipient_eligible(recipient):
-            return _unavailable()
-
-        now = timezone.now()
-        with transaction.atomic():
-            reverse = (
-                ContactRequest.objects.select_for_update()
-                .filter(sender=recipient, recipient=sender, status=ContactRequest.STATUS_PENDING)
-                .first()
-            )
-            if reverse is not None:
-                # Mutual interest: keep a record of the new request as accepted too,
-                # stamped just before the system message so greetings stay chronological.
-                new_req = ContactRequest.objects.create(
-                    sender=sender, recipient=recipient, greeting=greeting,
-                    status=ContactRequest.STATUS_ACCEPTED,
-                    created_at=now - timedelta(milliseconds=1), responded_at=now,
-                )
-                reverse.status = ContactRequest.STATUS_ACCEPTED
-                reverse.responded_at = now
-                reverse.save(update_fields=['status', 'responded_at'])
-                conv = services.connect([reverse, new_req], actor=sender, now=now)
-                return Response(
-                    {'status': 'connected', 'conversation_id': conv.pk},
-                    status=status.HTTP_201_CREATED,
-                )
-
-            existing = services.find_conversation(sender, recipient)
-            if existing is not None and existing.closed_at is None:
-                return _sent()
-            if ContactRequest.objects.filter(
-                sender=sender, recipient=recipient, status=ContactRequest.STATUS_PENDING,
-            ).exists():
-                return _sent()
-            if services.recent_ignore_exists(sender, recipient, now):
-                return _sent()
-            try:
-                with transaction.atomic():
-                    ContactRequest.objects.create(
-                        sender=sender, recipient=recipient, greeting=greeting, created_at=now,
-                    )
-            except IntegrityError:
-                # Concurrent duplicate pending request — same silent success.
-                pass
-        return _sent()
-
-
-class ContactRequestReceivedView(MessagingView):
-    """GET /api/v1/contact-requests/received/ — my pending requests, newest first."""
-    throttle_classes = [MessageReadThrottle]
-
-    def get(self, request):
-        me = self.my_profile(request)
-        qs = (
-            ContactRequest.objects
-            .filter(recipient=me, status=ContactRequest.STATUS_PENDING)
-            .select_related('sender')
-            .order_by('-created_at', '-id')
-        )
-        blocked = services.blocked_profile_ids(me)
-        if blocked:
-            qs = qs.exclude(sender_id__in=blocked)
-        return Response({'results': [
-            {
-                'id': r.id,
-                'sender': user_summary(r.sender),
-                'greeting': r.greeting,
-                'created_at': r.created_at,
-            }
-            for r in qs[:100]
-        ]})
-
-
-class ContactRequestStatusView(MessagingView):
-    """GET /api/v1/contact-requests/status/?user_id= -> {state, can_request, reason,
-    blocked_by_me}.
-
-    state: 'none' | 'sent' | 'connected'. Ignored (within the 30-day cooldown)
-    maps to 'sent' — the sender is never told.
-
-    reason: null unless (state == 'none' and can_request is false), then one of
-      'self'                -- target is the viewer
-      'verify_required'     -- viewer is a guest
-      'assessment_required' -- viewer has not completed the personality assessment
-      'unavailable'         -- everything else (blocked in either direction,
-                               recipient guest / no personality / discovery
-                               opt-out). PRIVACY: deliberately indistinguishable.
-
-    blocked_by_me: true only if the viewer blocked the target (one direction).
-    PRIVACY: never true because the target blocked the viewer.
-    """
-    throttle_classes = [MessageReadThrottle]
-
-    def get(self, request):
-        me = self.my_profile(request)
-        try:
-            target_auth_id = int(request.query_params.get('user_id', ''))
-        except (TypeError, ValueError):
-            return Response({'detail': 'user_id required'}, status=status.HTTP_400_BAD_REQUEST)
-        # Out-of-range ids resolve to None in the helper (no query) -> 404.
-        target = services.get_profile_by_auth_id(target_auth_id)
-        if target is None:
-            raise Http404()
-
-        is_self = target.pk == me.pk
-        blocked = (not is_self) and services.is_blocked_between(me, target)
-        can_request = (
-            not is_self and not blocked and not me.is_guest
-            and services.sender_has_personality(me)
-            and services.recipient_eligible(target)
-        )
-
-        state = 'none'
-        if not is_self:
-            conv = services.find_conversation(me, target)
-            if conv is not None and conv.closed_at is None:
-                state = 'connected'
-            elif (
-                ContactRequest.objects.filter(
-                    sender=me, recipient=target, status=ContactRequest.STATUS_PENDING,
-                ).exists()
-                or services.recent_ignore_exists(me, target)
-            ):
-                state = 'sent'
-        reason = None
-        if state == 'none' and not can_request:
-            if is_self:
-                reason = 'self'
-            elif not services.recipient_eligible(target):
-                # Target-side dead end first (guest / no personality / opted out;
-                # the profile already shows these as "no personality"), so a
-                # viewer is never routed through verify or assessment for
-                # someone they can't reach. Blocks are NOT checked here: a
-                # block must only surface as the final 'unavailable' bucket,
-                # after the viewer-side reasons, so a guest / non-assessed
-                # viewer can't tell blocked from reachable.
-                reason = 'unavailable'
-            elif me.is_guest:
-                reason = 'verify_required'
-            elif not services.sender_has_personality(me):
-                reason = 'assessment_required'
-            else:
-                reason = 'unavailable'
-        return Response({
-            'state': state, 'can_request': can_request, 'reason': reason,
-            'blocked_by_me': (not is_self) and services.has_blocked(me, target),
-        })
-
-
-class ContactRequestAcceptView(MessagingView):
-    """POST /api/v1/contact-requests/<id>/accept/ (recipient only, pending only)."""
-
-    def post(self, request, request_id):
-        me = self.my_profile(request)
-        if not services.id_in_range(request_id):
-            raise Http404()
-        with transaction.atomic():
-            cr = (
-                ContactRequest.objects.select_for_update()
-                .select_related('sender', 'recipient')
-                .filter(pk=request_id, recipient=me)
-                .first()
-            )
-            if cr is None:
-                raise Http404()
-            if cr.status != ContactRequest.STATUS_PENDING:
-                return Response({'detail': 'not_pending'}, status=status.HTTP_409_CONFLICT)
-            if services.is_blocked_between(me, cr.sender):
-                return Response({'detail': 'blocked'}, status=status.HTTP_400_BAD_REQUEST)
-            now = timezone.now()
-            cr.status = ContactRequest.STATUS_ACCEPTED
-            cr.responded_at = now
-            cr.save(update_fields=['status', 'responded_at'])
-            conv = services.connect([cr], actor=me, now=now)
-        return Response({'status': 'accepted', 'conversation_id': conv.pk})
-
-
-class ContactRequestIgnoreView(MessagingView):
-    """POST /api/v1/contact-requests/<id>/ignore/ (recipient only, pending only)."""
-
-    def post(self, request, request_id):
-        me = self.my_profile(request)
-        if not services.id_in_range(request_id):
-            raise Http404()
-        with transaction.atomic():
-            cr = (
-                ContactRequest.objects.select_for_update()
-                .filter(pk=request_id, recipient=me)
-                .first()
-            )
-            if cr is None:
-                raise Http404()
-            if cr.status != ContactRequest.STATUS_PENDING:
-                return Response({'detail': 'not_pending'}, status=status.HTTP_409_CONFLICT)
-            cr.status = ContactRequest.STATUS_IGNORED
-            cr.responded_at = timezone.now()
-            cr.save(update_fields=['status', 'responded_at'])
-        return Response({'status': 'ignored'})
 
 
 # -- Conversations ----------------------------------------------------------
@@ -302,8 +74,53 @@ def _get_conversation_or_404(me, conversation_id):
 
 
 class ConversationListView(MessagingView):
-    """GET /api/v1/conversations/ — mine, last_message_at desc."""
-    throttle_classes = [MessageReadThrottle]
+    """GET /api/v1/conversations/ — mine, last_message_at desc.
+
+    POST /api/v1/conversations/ {peer_user_id} — open (or reuse) the 1:1
+    conversation with a user I follow. Needs MESSAGING_ENABLED AND FOLLOW_ENABLED
+    (404 otherwise), auth, a verified (non-guest) user.
+      400 bad / out-of-range / self peer_user_id; 404 unknown peer;
+      403 {'detail': 'not_allowed'} unless I follow the peer AND no block either
+      way (one identical body for both reasons);
+      201 {id, other, closed: false} when created, 200 when it already existed
+      (a conversation closed by an earlier block is reopened -> 200).
+    No system message is written. Replies are NOT gated on follow.
+    """
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [
+                MessagingEnabled(), FollowEnabled(), IsAuthenticated(), IsVerifiedUser(),
+            ]
+        return super().get_permissions()
+
+    def get_throttles(self):
+        if self.request.method == 'POST':
+            return [ConversationOpenThrottle()]
+        return [MessageReadThrottle()]
+
+    def post(self, request):
+        ser = ConversationOpenSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        peer_auth_id = ser.validated_data['peer_user_id']
+        if not services.id_in_range(peer_auth_id, services.AUTH_USER_ID_MAX):
+            return Response({'detail': 'invalid peer_user_id'}, status=status.HTTP_400_BAD_REQUEST)
+        me = self.my_profile(request)
+        peer = services.get_profile_by_auth_id(peer_auth_id)
+        if peer is None:
+            raise Http404()
+        if peer.pk == me.pk:
+            return Response({'detail': 'self_conversation'}, status=status.HTTP_400_BAD_REQUEST)
+        if (
+            not social_services.is_following(me, peer)
+            or services.is_blocked_between(me, peer)
+        ):
+            return Response({'detail': 'not_allowed'}, status=status.HTTP_403_FORBIDDEN)
+        conv, created = services.open_conversation(me, peer)
+        return Response(
+            {'id': conv.id, 'other': user_summary(peer), 'closed': False},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
     def get(self, request):
         me = self.my_profile(request)
@@ -420,20 +237,24 @@ class ConversationReadView(MessagingView):
 
 
 class UnreadCountView(MessagingView):
-    """GET /api/v1/messages/unread-count/ -> {count}: pending requests + unread messages."""
+    """GET /api/v1/messages/unread-count/ -> {count}: unread messages only."""
     throttle_classes = [MessageReadThrottle]
 
     def get(self, request):
         me = self.my_profile(request)
-        return Response({
-            'count': services.pending_received_count(me) + services.unread_message_count(me),
-        })
+        return Response({'count': services.unread_message_count(me)})
 
 
 # -- Block / Report ---------------------------------------------------------
 
 class BlockView(MessagingView):
-    """POST/DELETE /api/v1/users/<user_id>/block/ (user_id = auth User id)."""
+    """POST/DELETE /api/v1/users/<user_id>/block/ (user_id = auth User id).
+
+    Reachable when EITHER MESSAGING_ENABLED or FOLLOW_ENABLED is on. POST also
+    deletes the follow edges between the pair in BOTH directions (unblock does
+    not restore them).
+    """
+    flag_permission = MessagingOrFollowEnabled
 
     def _target(self, me, user_id):
         target = services.get_profile_by_auth_id(user_id)
@@ -452,6 +273,11 @@ class BlockView(MessagingView):
             Conversation.objects.filter(
                 user_a=lo, user_b=hi, closed_at__isnull=True,
             ).update(closed_at=timezone.now())
+            removed, _ = UserFollow.objects.filter(
+                Q(follower=me, following=target) | Q(follower=target, following=me)
+            ).delete()
+        if removed:
+            social_services.evict_follow_counts_cache(me, target)
         return Response({'blocked': True}, status=status.HTTP_201_CREATED)
 
     def delete(self, request, user_id):
@@ -463,7 +289,11 @@ class BlockView(MessagingView):
 
 
 class ReportView(MessagingView):
-    """POST /api/v1/reports/ {target_type, target_id, reason?}"""
+    """POST /api/v1/reports/ {target_type, target_id, reason?}
+
+    Reachable when EITHER MESSAGING_ENABLED or FOLLOW_ENABLED is on.
+    """
+    flag_permission = MessagingOrFollowEnabled
     throttle_classes = [ReportThrottle]
 
     def post(self, request):
