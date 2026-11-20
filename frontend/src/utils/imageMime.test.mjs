@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { safeImageMime, imageExtension } from './imageMime.js'
+import { safeImageMime, imageExtension } from './imageMime.ts'
 
 describe('safeImageMime', () => {
   test('keeps allowlisted types', () => {

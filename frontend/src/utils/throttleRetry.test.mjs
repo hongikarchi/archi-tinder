@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { throttleRetryDelayMs, DEFAULT_RETRY_MS, MAX_RETRY_MS } from './throttleRetry.js'
+import { throttleRetryDelayMs, DEFAULT_RETRY_MS, MAX_RETRY_MS } from './throttleRetry.ts'
 
 test('defaults to ~8s plus jitter', () => {
   assert.equal(throttleRetryDelayMs(undefined, 0), DEFAULT_RETRY_MS)

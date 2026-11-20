@@ -4,8 +4,8 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { classifyApiError, describeSaveError } from './apiError.js'
-import { describePromoteError } from '../components/promoteError.js'
+import { classifyApiError, describeSaveError } from './apiError.ts'
+import { describePromoteError } from '../components/promoteError.ts'
 
 const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
 const http = (status, data) => Object.assign(new Error('x'), { status, data })

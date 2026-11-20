@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveCoverTitle, isNameDirty } from './boardCoverTitle.js'
+import { resolveCoverTitle, isNameDirty } from './boardCoverTitle.ts'
 
 test('resolveCoverTitle: board name wins over persona type', () => {
   assert.equal(resolveCoverTitle({ boardName: 'My board', personaType: 'Persona', defaultName: 'Def' }), 'My board')

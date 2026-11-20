@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isReportStale, shouldRegenerateOnOpen, shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName, countDistinctLiked, staleReason, staleReasonKey } from './reportStale.js'
+import { isReportStale, shouldRegenerateOnOpen, shouldRegenerateAfterSession, shouldFetchBoardBeforeReport, pickServerBoardName, countDistinctLiked, staleReason, staleReasonKey } from './reportStale.ts'
 // swipeSettle tests ride this file (package.json test script is an explicit file list)
 import './swipeSettle.test.mjs'
 

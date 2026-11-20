@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { postUntilReady } from './postUntilReady.js'
+import { postUntilReady } from './postUntilReady.ts'
 
 const OK = { final_report: { a: 1 } }
 

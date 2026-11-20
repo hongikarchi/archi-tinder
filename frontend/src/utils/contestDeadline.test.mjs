@@ -13,7 +13,7 @@ import {
   formatKstDate,
   isoToKstInputValue,
   kstInputValueToIso,
-} from './contestDeadline.js'
+} from './contestDeadline.ts'
 
 const d = s => new Date(s)
 

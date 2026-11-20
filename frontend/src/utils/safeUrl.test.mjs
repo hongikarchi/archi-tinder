@@ -4,7 +4,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { safeHttpUrl } from './safeUrl.js'
+import { safeHttpUrl } from './safeUrl.ts'
 
 describe('safeHttpUrl', () => {
   test('accepts http and https, returns normalized href', () => {

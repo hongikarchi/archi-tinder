@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createSwipeSettler } from './swipeSettle.js'
+import { createSwipeSettler } from './swipeSettle.ts'
 
 test('wait resolves immediately at 0 and leaves no waiter', async () => {
   const s = createSwipeSettler({ timeoutMs: 50 })

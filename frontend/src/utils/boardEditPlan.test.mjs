@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { planEditSave } from './boardEditPlan.js'
+import { planEditSave } from './boardEditPlan.ts'
 
 test('name only: dirty draft is trimmed, selection is not deleted', () => {
   const p = planEditSave({ draft: ' New ', baseline: 'Old', selectedIds: new Set(['a']), deleting: false })

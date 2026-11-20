@@ -24,7 +24,7 @@ let getImageSource
 let normalizeCard
 
 try {
-  const mod = await import('./images.js')
+  const mod = await import('./images.ts')
   getImageSource = mod.getImageSource
   normalizeCard = mod.normalizeCard
 } catch {

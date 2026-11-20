@@ -6,7 +6,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { localizeReport } from './reportText.js'
+import { localizeReport } from './reportText.ts'
 
 describe('localizeReport', () => {
   test('per-field fallback: uses i18n[language] field when present, falls back to top-level field when a field is missing from the block', () => {

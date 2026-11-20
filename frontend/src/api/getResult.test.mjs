@@ -28,7 +28,7 @@ globalThis.fetch = async (url) => {
   }
 }
 
-const { getResult, _resetResultCache } = await import('./sessions.js')
+const { getResult, _resetResultCache } = await import('./sessions.ts')
 
 test('concurrent getResult calls share one request', async () => {
   _resetResultCache(); calls.length = 0

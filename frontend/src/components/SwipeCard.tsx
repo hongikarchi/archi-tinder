@@ -1,0 +1,801 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useImageTelemetry } from '../hooks/useImageTelemetry.ts'
+import { useTranslation } from '../i18n/index.ts'
+import { useCardSize } from '../hooks/useCardSize.ts'
+import type { SwipeCardData } from '../types/api.ts'
+
+/**
+ * Shared swipe card — consumed by SwipePage (Taste) and DiscoveryPage (Discovery).
+ *
+ * Extracted from SwipePage.jsx so Discovery can render the same exact card UI
+ * inside its TinderCard deck. No logic changes from the original SwipePage
+ * version EXCEPT:
+ *   - <img decoding="async"> (was "sync" — sync blocks render)
+ *   - explicit width/height on the <img> (prevent layout thrash)
+ *   - 4-second image-load timeout that triggers the covers_by_type fallback
+ *     chain if the main URL hasn't fired onLoad yet (was 2s; bumped FIX F2)
+ *
+ * The fallback chain: covers_by_type.exterior → interior → aerial → detail →
+ * drawing → gallery[0]. The ?retry=1 cache-bust step was removed (FIX F2 —
+ * it doubled bandwidth without salvaging same-origin in-flight requests).
+ * Telemetry behavior is unchanged.
+ */
+
+// Card size is reactive — see hooks/useCardSize.js (useCardSize()).
+export const TAP_THRESHOLD = 8
+
+// B2 — adaptive object-fit: cover ONLY when crop loss (fraction of image area
+// lost cropping to the card's aspect ratio) stays within this budget. Above
+// it (e.g. a square image against the ~0.65 portrait card ratio, ~35% loss)
+// we keep 'contain' — letterboxing beats visible cropping.
+const COVER_CROP_MAX = 0.25
+
+// FRONT-UX-14-R7 — gallery glide duration + easing (manual rAF, matches the
+// card-exit spring's philosophy — see the animateScroll comment below).
+const GLIDE_DURATION_MS = 450
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+// FRONT-UX-14-R6 — module-level Set-cached preloader for gallery images.
+// Warms the adjacent gallery image's decode ahead of the glide that will
+// reveal it, so the destination frame doesn't paint mid-decode. (R6's
+// original comment attributed the R5 stutter to this decode landing on the
+// main thread mid-rAF-step; R7's empirical trace corrected that — the R5
+// stutter was actually its own PREFERS_REDUCED_MOTION guard short-circuiting
+// to an instant jump, not decode collision. Preloading is still good
+// practice and stays regardless.)
+//
+// srcset (optional 2nd arg): the gallery <img> renders card.gallery_srcset[i]
+// (a plain 1x/2x density descriptor — no `sizes` attr on either side, so the
+// candidate the browser picks for a bare Image() matches the mounted <img>
+// exactly). Without passing it through, the preload would warm the un-sized
+// `src` while the real <img> renders a differently-sized srcset candidate —
+// two different downloads, decode collision still there. Keyed by url only
+// (matches the mounted image's identity); srcset rides along when present.
+const galleryPreloaded = new Set<string>()
+export function preloadImg(url?: string | null, srcset?: string | null) {
+  if (!url || galleryPreloaded.has(url)) return
+  galleryPreloaded.add(url)
+  const i = new Image()
+  if (srcset) i.srcset = srcset
+  i.src = url
+}
+
+/**
+ * computeFit — pure helper (unit-testable inline): decide 'cover' vs 'contain'
+ * for a card image given its natural aspect ratio.
+ *   - Unknown ratio (image not yet loaded) -> 'contain' (current behavior,
+ *     no letterbox jump).
+ *   - Drawings always stay 'contain' regardless of crop loss.
+ *   - Otherwise cover only if cropping to the card ratio loses <= COVER_CROP_MAX
+ *     of the image area.
+ */
+export function computeFit(imgRatio: number | null | undefined, isDrawing: boolean | undefined, cardRatio: number): 'cover' | 'contain' {
+  if (!imgRatio || isDrawing) return 'contain'
+  const rCard = cardRatio
+  const cropLoss = 1 - Math.min(imgRatio, rCard) / Math.max(imgRatio, rCard)
+  return cropLoss <= COVER_CROP_MAX ? 'cover' : 'contain'
+}
+
+/* ── InfoRow ─────────────────────────────────────────────────────────────── */
+export function InfoRow({ label, value }: { label: React.ReactNode; value?: React.ReactNode }) {
+  if (!value) return null
+  return (
+    <div>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{value}</div>
+    </div>
+  )
+}
+
+/* ── SwipeCard ───────────────────────────────────────────────────────────── */
+interface SwipeCardProps {
+  card: SwipeCardData
+  onGalleryOpen?: () => void
+  onGalleryClose?: () => void
+}
+
+export default function SwipeCard({ card, onGalleryClose }: SwipeCardProps) {
+  const { t } = useTranslation()
+  const { width: CARD_WIDTH, height: CARD_HEIGHT } = useCardSize()
+  const cardRatio = CARD_WIDTH / CARD_HEIGHT
+  // Latest height for the gallery keyboard effect (deps [showGallery] would
+  // otherwise capture a stale value after a viewport resize).
+  const cardHeightRef = useRef(CARD_HEIGHT)
+  cardHeightRef.current = CARD_HEIGHT
+  const [isExpanded,     setIsExpanded]     = useState(false)
+  const [showGallery,    setShowGallery]    = useState(false)
+  const [hasBeenOpened,  setHasBeenOpened]  = useState(false)
+  const [imgLoaded,      setImgLoaded]      = useState(false)
+  const [imgFailed,      setImgFailed]      = useState(false)
+  // B2 — natural aspect ratio (naturalWidth/naturalHeight), first known from
+  // whichever of {LQIP, main img} fires onLoad first. null = not yet known.
+  const [imgRatio,       setImgRatio]       = useState<number | null>(null)
+  // B2 — did the fallback chain (advanceFallback) land the main <img> on the
+  // covers_by_type.drawing URL? Drives contain+white background same as
+  // isDrawingKind, for cards whose original photo cover failed to load.
+  const [landedOnDrawing, setLandedOnDrawing] = useState(false)
+  // FRONT-UX-14-FIX: per-gallery-image natural aspect ratio, index -> ratio.
+  // Populated by each gallery <img>'s onLoad; drives the same adaptive
+  // computeFit(imgRatio, isDrawing) used by the front face. Unknown (not yet
+  // loaded) falls back to the pre-adaptive isDrawing?'contain':'cover' so
+  // there's no layout flash while the image is still loading.
+  const [galleryRatios,  setGalleryRatios]  = useState<Record<number, number>>({})
+  // Set of URLs already attempted as src (cache-bust retry + covers_by_type
+  // fallback chain). Initialized lazily inside handleImgError on first failure.
+  const imgRetried = useRef<Set<string> | null>(null)
+  const dragStart = useRef<{ x: number; y: number } | null>(null)
+  const dragStartTime = useRef<number | null>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  // Mirror of imgLoaded for the 4s timer (its closure would otherwise be stale).
+  const imgLoadedRef = useRef(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const galleryScrollRef = useRef<HTMLDivElement>(null)
+  // first-writer-wins guard for imgRatio (LQIP onLoad vs main img onLoad)
+  const ratioSetRef = useRef(false)
+  // FRONT-UX-14-R7 — scrollSnapType value saved before the glide suspended it
+  // (restored on the rAF loop's natural finish, or on cancel-with-restore from
+  // Escape/close/unmount).
+  const glideSnapRestoreRef = useRef<string | null>(null)
+  // In-flight glide destination — rapid same-direction presses accumulate from
+  // the pending target instead of the in-transit scrollTop (which still rounds
+  // to the origin card mid-glide, eating presses).
+  const glideTargetRef = useRef<number | null>(null)
+  // R7 — the in-flight rAF handle, so a new press can cancel the current step
+  // and start a fresh glide (deterministic end — no scrollend listener / no
+  // fallback timer needed, unlike the R6 compositor-driven version).
+  const glideRafRef = useRef<number | null>(null)
+
+  const { onLoad: telemetryOnLoad, onError: telemetryOnError } = useImageTelemetry({
+    buildingId: card.image_id,
+    context: 'swipe_card',
+  })
+
+  function openGallery() {
+    setHasBeenOpened(true)
+    setShowGallery(true)
+    // R6 — preload the first 3 gallery images so the initial glide(s) reveal
+    // an already-decoded frame.
+    const gal = card.gallery || []
+    const galSrcset = card.gallery_srcset || []
+    gal.slice(0, 3).forEach((url, i) => preloadImg(url, galSrcset[i]))
+  }
+  function closeGallery() { setShowGallery(false); onGalleryClose && onGalleryClose() }
+
+  function handlePointerDown(e: React.PointerEvent) {
+    dragStart.current = { x: e.clientX, y: e.clientY }
+    dragStartTime.current = Date.now()
+  }
+  function handlePointerUp(e: React.PointerEvent) {
+    if (!dragStart.current) return
+    const dx = Math.abs(e.clientX - dragStart.current.x)
+    const dy = Math.abs(e.clientY - dragStart.current.y)
+    const dt = Date.now() - dragStartTime.current
+    dragStart.current = null
+    if (dx < TAP_THRESHOLD && dy < TAP_THRESHOLD && dt < 300) {
+      if (showGallery) closeGallery()
+      else setIsExpanded(v => !v)
+    }
+  }
+
+  // Multi-step fallback chain for cold/warm + external-CDN flakiness (S2).
+  // Order: covers_by_type.exterior (canonical default) -> other covers_by_type
+  //        variants -> first gallery URL -> give up.
+  //
+  // FIX F2 (Codex retest 2026-05-26): dropped the ?retry=1 cache-bust step.
+  // R2/external CDN images take 1.7-2.6s; the cache-bust was firing on normal-
+  // latency loads, adding a duplicate request to the same origin that never
+  // salvages the original in-flight GET. The covers_by_type chain handles real
+  // failures already; retry=1 only doubled bandwidth.
+  function advanceFallback(target: HTMLImageElement | null) {
+    if (!target) return false
+    const cbt = card.covers_by_type || {}
+    const fallbackChain = [
+      cbt.exterior, cbt.interior, cbt.aerial, cbt.detail, cbt.drawing,
+      ...(card.gallery || []),
+    ].filter(u => u && typeof u === 'string')
+    if (!(imgRetried.current instanceof Set)) {
+      imgRetried.current = new Set([card.image_url])
+    }
+    for (const url of fallbackChain) {
+      if (!imgRetried.current.has(url)) {
+        imgRetried.current.add(url)
+        target.srcset = ''   // a 1x-containing srcset wins over src; clear so the fallback URL loads
+        // B2 — the fallback is a different photo with its own aspect ratio:
+        // re-arm the ratio guard so the fallback's onLoad re-measures fit
+        // (contain until it paints — safe no-letterbox-jump default).
+        ratioSetRef.current = false
+        setImgRatio(null)
+        target.src = url
+        // B2 — track whether the chain landed on the drawing cover so the
+        // main img keeps contain+white background even when isDrawingKind
+        // (from image_kind) is false for this card.
+        if (cbt.drawing && url === cbt.drawing) setLandedOnDrawing(true)
+        return true
+      }
+    }
+    return false
+  }
+
+  function handleImgError(e: React.SyntheticEvent<HTMLImageElement>) {
+    // Emit telemetry FIRST (captures original failed URL before retry mutates e.target.src)
+    telemetryOnError(e)
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    if (!advanceFallback(e.target as HTMLImageElement)) {
+      setImgFailed(true)
+    }
+  }
+
+  function handleImgLoad(e: { target: EventTarget | HTMLImageElement }) {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+    captureImgRatio(e.target as HTMLImageElement)
+    imgLoadedRef.current = true
+    setImgLoaded(true)
+    telemetryOnLoad(e)
+  }
+
+  // B2 — capture natural aspect ratio from whichever <img> (LQIP or main)
+  // fires onLoad first. First writer wins — later calls are no-ops.
+  function captureImgRatio(node: HTMLImageElement | null) {
+    if (ratioSetRef.current) return
+    if (!node || !node.naturalWidth || !node.naturalHeight) return
+    ratioSetRef.current = true
+    setImgRatio(node.naturalWidth / node.naturalHeight)
+  }
+
+  function handleLqipLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    // Once the fallback chain has engaged (imgRetried initialized), the main
+    // img no longer shows the LQIP's source image — its ratio is stale.
+    if (imgRetried.current) return
+    captureImgRatio(e.target as HTMLImageElement)
+  }
+
+  // FIX F2 (Codex retest 2026-05-26): bumped timeout 2000ms → 4000ms.
+  // R2 cold cache + Singapore latency regularly takes 1.7-2.6s; the old 2s
+  // timer was firing prematurely on normal loads. 4s matches the observed
+  // worst-case cold-CDN P99 and avoids false-positive fallback triggers.
+  // useLayoutEffect: the reset must run BEFORE paint and before any cached
+  // image's onLoad can be processed after it, else a late reset leaves the
+  // image stuck at opacity 0.
+  useLayoutEffect(() => {
+    imgLoadedRef.current = false
+    setImgLoaded(false)
+    setImgFailed(false)
+    setHasBeenOpened(false)
+    setShowGallery(false)
+    setImgRatio(null)
+    setLandedOnDrawing(false)
+    setGalleryRatios({})
+    ratioSetRef.current = false
+    imgRetried.current = null
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    // Cached image: the browser may already have it decoded (onLoad fired
+    // before/while we reset). naturalWidth check excludes broken images.
+    const cachedNode = imgRef.current
+    if (cachedNode && cachedNode.complete && cachedNode.naturalWidth > 0) {
+      handleImgLoad({ target: cachedNode })
+    }
+    timeoutRef.current = setTimeout(() => {
+      const node = imgRef.current
+      if (!node || imgLoadedRef.current) return
+      if (node.complete && node.naturalWidth > 0) {
+        handleImgLoad({ target: node })
+        return
+      }
+      if (!advanceFallback(node)) {
+        setImgFailed(true)
+      }
+      timeoutRef.current = null
+    }, 4000)
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card?.image_id, card?.image_url])
+
+  // FRONT-UX-14-R7 — cancel any in-flight keyboard glide, restoring the
+  // scrollSnapType value that was in effect before the glide suspended it.
+  // Single cancel path: called at the start of every new glide (so a rapid
+  // keypress re-targets instead of stacking restores), from the rAF loop's
+  // natural finish, and from the effect cleanup (gallery close / unmount) so
+  // a glide interrupted by Escape doesn't leave snapType stuck at 'none'.
+  function cancelGlide(restoreSnap: boolean) {
+    if (glideRafRef.current != null) {
+      cancelAnimationFrame(glideRafRef.current)
+      glideRafRef.current = null
+    }
+    if (restoreSnap && glideSnapRestoreRef.current != null) {
+      const el = galleryScrollRef.current
+      if (el) el.style.scrollSnapType = glideSnapRestoreRef.current
+      glideSnapRestoreRef.current = null
+    }
+    if (restoreSnap) glideTargetRef.current = null
+  }
+
+  // FRONT-UX-14-R7 — DELIBERATE PRODUCT DECISION (2026-08-15): the gallery
+  // glide is a manual rAF animation that does NOT honor prefers-reduced-
+  // motion, matching the card-exit spring (react-spring), which also writes
+  // transforms per frame with no reduced-motion guard. Interaction-feedback
+  // motion (swipe exits, gallery nav) is core to the product; decorative CSS
+  // motion (hover lifts, fades, gradients) still honors reduced-motion via
+  // the module.css @media blocks.
+  //
+  // Root-cause record for this round: on the machine this was diagnosed on,
+  // OS-level reduced-motion is ON. That degrades native
+  // el.scrollTo({behavior:'smooth'}) (R6) to an instant jump in Chromium, and
+  // the R5 rAF version's own PREFERS_REDUCED_MOTION guard short-circuited to
+  // an instant jump too — the "stutter" attributed to rAF main-thread jank in
+  // the R6 comment (now removed) was actually the reduced-motion guard firing,
+  // not decode collision. Card exits animate smoothly on the same machine
+  // because react-spring writes transforms manually per frame with no such
+  // guard — this rework brings the gallery glide to the same philosophy:
+  // manual rAF, unconditional.
+  function animateScroll(el: HTMLDivElement, targetTop: number) {
+    // No-op guard: an ArrowUp at the top / ArrowDown at the bottom clamps to
+    // the current position. Bail before suspending snap — nothing is in
+    // flight (glideTargetRef null) and the resting position already matches,
+    // so there's no glide to run and no rAF loop will ever fire to restore it
+    // (would otherwise strand snap suspended with nothing to un-suspend it).
+    if (glideTargetRef.current == null && el.scrollTop === targetTop) return
+    // Keep snap suspended across a rapid re-press — cancel only the in-flight
+    // rAF step, not the suspension itself. Accumulation via glideTargetRef:
+    // read the base from the pending target (not the in-transit scrollTop,
+    // which still rounds to the origin card mid-glide and would eat presses).
+    cancelGlide(false)
+    if (glideSnapRestoreRef.current == null) {
+      glideSnapRestoreRef.current = el.style.scrollSnapType || 'y mandatory'
+      el.style.scrollSnapType = 'none'
+    }
+    glideTargetRef.current = targetTop
+    const startTop = el.scrollTop
+    const delta = targetTop - startTop
+    let startTime: number | null = null
+    function step(now: number) {
+      if (startTime == null) startTime = now
+      const elapsed = now - startTime
+      const t = Math.min(1, elapsed / GLIDE_DURATION_MS)
+      const eased = easeInOutCubic(t)
+      el.scrollTop = startTop + delta * eased
+      if (t < 1) {
+        glideRafRef.current = requestAnimationFrame(step)
+      } else {
+        el.scrollTop = targetTop
+        cancelGlide(true)
+      }
+    }
+    glideRafRef.current = requestAnimationFrame(step)
+  }
+
+  // FRONT-UX-14 FIX 3 — gallery keyboard nav. Bound only while showGallery is
+  // true (added/removed per open/close cycle, cleaned up on unmount too).
+  // ArrowDown scrolls one card forward, ArrowUp one card back; Escape closes
+  // (previously unhandled — SwipeCard had no keydown listener at all, so this
+  // also fixes the missing Escape-to-close behavior).
+  // FRONT-UX-14-FIX: page-scroll keys removed per user review — ArrowLeft/Right
+  // now swipe the deck even while the gallery is open (see useKeyboardSwipe
+  // guardCondition in SwipePage/DiscoveryPage), so this listener only owns
+  // vertical gallery nav (one card per press) + Escape.
+  // FRONT-UX-14-R7: ArrowUp/Down drive the manual rAF glide (animateScroll)
+  // — see animateScroll's comment for why. Wheel and touch scrolling are
+  // untouched (native snap still handles those). Also preloads the neighbor
+  // image beyond the new target so its decode is already warm before the
+  // NEXT press's glide starts.
+  useEffect(() => {
+    if (!showGallery) return
+    function onKeyDown(e: KeyboardEvent) {
+      const el = galleryScrollRef.current
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeGallery()
+        return
+      }
+      if (!el) return
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight)
+        // Accumulate from the pending glide destination when one is in flight
+        // (in-transit scrollTop still rounds to the origin card mid-glide,
+        // which would eat rapid presses).
+        const baseTop = glideTargetRef.current ?? el.scrollTop
+        const currentIndex = Math.round(baseTop / cardHeightRef.current)
+        const targetIndex = currentIndex + (e.key === 'ArrowDown' ? 1 : -1)
+        const target = Math.min(Math.max(targetIndex * cardHeightRef.current, 0), maxScroll)
+        animateScroll(el, target)
+        const galSrcset = card.gallery_srcset || []
+        preloadImg(gallery[targetIndex + 1], galSrcset[targetIndex + 1])
+        preloadImg(gallery[targetIndex - 1], galSrcset[targetIndex - 1])
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      cancelGlide(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showGallery])
+
+  // Native direction-lock for gallery vertical scroll.
+  // Bubble order: this gallery div listener fires BEFORE the react-tinder-card
+  // native touchmove on the ancestor card element. stopPropagation() in a passive
+  // listener is valid (passive only forbids preventDefault). We never call
+  // preventDefault so the browser still handles pan-y scroll natively.
+  // Horizontal intent propagates normally → card swipe still works.
+  useEffect(() => {
+    const el = galleryScrollRef.current
+    if (!el) return
+    // Snap ownership is imperative-only (see the scroller's style comment):
+    // set the resting snap here once per gallery mount; the keyboard glide
+    // suspends/restores it without React fighting back.
+    el.style.scrollSnapType = 'y mandatory'
+    let startX = 0
+    let startY = 0
+    let axis = null // null (undecided) | 'v' (vertical → block card) | 'h' (horizontal → allow swipe)
+    const SLOP = 8  // px before axis is committed
+    const onStart = (e) => {
+      if (!e.touches.length) return
+      const t = e.touches[0]
+      startX = t.clientX
+      startY = t.clientY
+      axis = null
+    }
+    const onMove = (e) => {
+      if (!e.touches.length) return
+      const t = e.touches[0]
+      const dx = Math.abs(t.clientX - startX)
+      const dy = Math.abs(t.clientY - startY)
+      if (axis === null && (dx > SLOP || dy > SLOP)) {
+        axis = dy > dx ? 'v' : 'h'
+      }
+      // Vertical intent: stop the event reaching react-tinder-card's native
+      // touchmove listener on the parent card (bubble phase). Card does NOT
+      // wobble. Horizontal intent propagates → card swipe preserved.
+      if (axis === 'v') e.stopPropagation()
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: true })
+
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+    }
+  }, [hasBeenOpened])
+
+  const typology   = card.metadata?.axis_typology
+  const architects = card.metadata?.axis_architects
+  const country    = card.metadata?.axis_country
+  const city       = card.metadata?.axis_city
+  const year       = card.metadata?.axis_year
+  const style      = card.metadata?.axis_style
+  const atmosphere = card.metadata?.axis_atmosphere
+  // canonical_v2 drops single-string `material`; expose first 2-3 of
+  // material_visual[] as a comma-joined chip instead.
+  const materialList = Array.isArray(card.metadata?.axis_material_visual)
+    ? card.metadata.axis_material_visual.slice(0, 3)
+    : []
+  const material     = materialList.length ? materialList.join(', ') : null
+  const gallery         = card.gallery || []
+  const drawingStart    = card.gallery_drawing_start ?? gallery.length
+  // image_kind is passed through by normalizeCard. B2-4: OR in landedOnDrawing —
+  // the fallback chain may have moved the main <img> onto covers_by_type.drawing
+  // even when the card's own kind field says otherwise.
+  const isDrawingKind = card.image_kind === 'drawing' || landedOnDrawing
+  // B2-3: adaptive object-fit — cover only when crop loss is small and it's not a drawing.
+  const imgFit = computeFit(imgRatio, isDrawingKind, cardRatio)
+
+  return (
+    <div
+      style={{
+        position: 'absolute', top: 0, left: 0,
+        width: CARD_WIDTH, height: CARD_HEIGHT,
+        cursor: 'grab',
+        userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'pan-y',
+        perspective: 1200,
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+    >
+      <div style={{
+        width: '100%', height: '100%', position: 'relative',
+        transformStyle: 'preserve-3d',
+        transform: showGallery ? 'rotateY(180deg)' : 'rotateY(0deg)',
+        transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
+
+        {/* ── FRONT FACE ── */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+          borderRadius: 20, overflow: 'hidden',
+          boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+        }}>
+          {/* Photo / Skeleton / Fallback */}
+          {imgFailed ? (
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              gap: 12,
+            }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: 500 }}>
+                {t('swipe.detail.imageUnavailable')}
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="skeleton-shimmer" style={{ position: 'absolute', inset: 0, background: isDrawingKind ? '#fff' : '#111' }} />
+              {/* B1 — LQIP blur-up placeholder: paints fast (20px thumb), also
+                  supplies the natural aspect ratio (B2) before the main image
+                  loads. Hidden once the main image finishes loading. No
+                  scale(1.1) edge-bleed hack — cover crops the blur naturally,
+                  contain letterboxes as-is. */}
+              {card.lqip_url && (
+                <img
+                  src={card.lqip_url}
+                  aria-hidden="true"
+                  alt=""
+                  draggable={false}
+                  onLoad={handleLqipLoad}
+                  style={{
+                    position: 'absolute', inset: 0,
+                    width: '100%', height: '100%',
+                    objectFit: imgFit, objectPosition: 'center',
+                    filter: 'blur(16px)',
+                    opacity: imgLoaded ? 0 : 1,
+                    transition: 'opacity 0.2s ease',
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              <img
+                ref={imgRef}
+                src={card.image_url}
+                srcSet={card.image_srcset || undefined}
+                alt={card.image_title}
+                width={CARD_WIDTH}
+                height={CARD_HEIGHT}
+                {...({ fetchpriority: 'high' } as object) /* TODO(ts): lowercase attr kept for React 18 runtime parity */}
+                decoding="async"
+                draggable={false}
+                onLoad={handleImgLoad}
+                onError={handleImgError}
+                style={{
+                  position: 'absolute', inset: 0,
+                  width: '100%', height: '100%',
+                  objectFit: imgFit, objectPosition: 'center',
+                  background: isDrawingKind ? '#fff' : '#111',
+                  opacity: imgLoaded ? 1 : 0,
+                  transition: 'opacity 0.2s ease',
+                }}
+              />
+            </>
+          )}
+
+          {/* Gradient — expands upward on detail open */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            height: isExpanded ? '100%' : '52%',
+            background: 'linear-gradient(to top, rgba(0,0,0,0.93) 0%, rgba(0,0,0,0.6) 38%, rgba(0,0,0,0.12) 72%, transparent 100%)',
+            transition: 'height 0.42s cubic-bezier(0.32, 0, 0.18, 1)',
+            pointerEvents: 'none',
+          }} />
+
+          {/* Front: hint only (no title) */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 18px 20px',
+            opacity: isExpanded ? 0 : 1,
+            transform: isExpanded ? 'translateY(-6px)' : 'translateY(0)',
+            transition: 'opacity 0.22s ease, transform 0.38s ease',
+            pointerEvents: isExpanded ? 'none' : 'auto',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: 'rgba(255,255,255,0.5)', fontSize: 11, letterSpacing: '0.04em' }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+              {t('swipe.detail.tapForDetails')}
+            </div>
+          </div>
+
+          {/* Detail content — transparent, slides over expanded gradient.
+              Height is auto (max 100%) and content hugs the bottom (flex-end); room for 2-line H2 + architects +
+              7-row InfoRow grid + gallery button. flexShrink:0 on critical
+              elements means only the grid compresses when content overflows;
+              H2 / architects / divider / button always keep their natural
+              height. */}
+          <div style={{
+            position: 'absolute', left: 0, right: 0, bottom: 0,
+            height: 'auto', maxHeight: '100%',
+            justifyContent: 'flex-end',
+            background: 'transparent',
+            transform: isExpanded ? 'translateY(0)' : 'translateY(100%)',
+            // Collapsed panel is non-interactive (no focus / programmatic scroll):
+            // visibility flips only after the slide-out ends, immediately on open.
+            visibility: isExpanded ? 'visible' : 'hidden',
+            transition: isExpanded
+              ? 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1), visibility 0s'
+              : 'transform 0.42s cubic-bezier(0.32, 0, 0.18, 1), visibility 0s linear 0.42s',
+            display: 'flex', flexDirection: 'column',
+            padding: '16px 18px 20px', gap: 0, overflow: 'hidden',
+          }}>
+            <h2 style={{
+              color: '#fff', fontSize: 18, fontWeight: 700, lineHeight: 1.3,
+              margin: '0 0 3px', flexShrink: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            }}>
+              {card.image_title}
+            </h2>
+            {architects && (
+              <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, margin: '0 0 12px', fontStyle: 'italic', flexShrink: 0 }}>
+                {architects}
+              </p>
+            )}
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.1)', marginBottom: 12, flexShrink: 0 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', flex: '0 1 auto', minHeight: 0 }}>
+              <InfoRow label={t('swipe.detail.labels.type')}       value={typology} />
+              <InfoRow label={t('swipe.detail.labels.country')}    value={country} />
+              <InfoRow label={t('swipe.detail.labels.city')}       value={city} />
+              <InfoRow label={t('swipe.detail.labels.year')}       value={year} />
+              <InfoRow label={t('swipe.detail.labels.style')}      value={style} />
+              <InfoRow label={t('swipe.detail.labels.atmosphere')} value={atmosphere} />
+              <InfoRow label={t('swipe.detail.labels.material')}   value={material} />
+
+            </div>
+            {gallery.length > 0 && (
+              <button
+                className="pressable"
+                onPointerDown={e => e.stopPropagation()}
+                onPointerUp={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); openGallery() }}
+                style={{
+                  marginTop: 12, width: '100%', padding: '10px 14px', borderRadius: 10,
+                  background: 'rgba(255,255,255,0.09)', border: '1px solid rgba(255,255,255,0.18)',
+                  color: '#fff', fontSize: 12, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                {t('swipe.detail.viewGallery', { n: gallery.length })}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── GALLERY FACE ── lazy-mounted on first gallery open, stays mounted after */}
+        {hasBeenOpened && <div style={{
+          position: 'absolute', inset: 0,
+          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
+          transform: 'rotateY(180deg)',
+          borderRadius: 20, overflow: 'hidden',
+          boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+          background: '#000',
+        }}>
+          {/* Vertical scroll of full-width images */}
+          <div
+            ref={galleryScrollRef}
+            className="pressable"
+            style={{
+              position: 'absolute', inset: 0,
+              overflowY: 'auto', overflowX: 'hidden',
+              // scrollSnapType intentionally NOT set here — owned imperatively
+              // (mount effect + glide suspend/restore). As a React inline style
+              // it gets re-applied on EVERY re-render (e.g. lazy gallery img
+              // onLoad -> galleryRatios setState), resurrecting mandatory snap
+              // mid-glide and causing a jump-to-snap stutter.
+              overscrollBehaviorY: 'contain',
+              scrollbarWidth: 'none',
+              touchAction: 'pan-y',
+            }}
+          >
+            {gallery.map((url, i) => {
+              const isDrawing = i >= drawingStart
+              const knownRatio = galleryRatios[i] ?? null
+              // FRONT-UX-14-FIX: adaptive fit via the same computeFit(ratio, isDrawing)
+              // used by the front face — 'cover' (fill-bleed, no letterbox) when the
+              // image ratio is close to the card ratio, 'contain' (ratio-preserving,
+              // letterboxed) when it's far off. Before the ratio is known, fall back
+              // to the pre-adaptive isDrawing?'contain':'cover' to avoid a layout flash.
+              const galleryFit = knownRatio != null
+                ? computeFit(knownRatio, isDrawing, cardRatio)
+                : (isDrawing ? 'contain' : 'cover')
+              // Background: drawings always keep white (matches the split above).
+              // Photos that resolve to 'cover' show no bars at all (background is
+              // fully covered, color is moot). Photos that resolve to 'contain' use
+              // dark #111 so the letterbox bars match the photo-viewer look.
+              const galleryBg = isDrawing ? '#fff' : '#111'
+              return (
+                <div key={i} className="pressable" style={{
+                  width: '100%', height: CARD_HEIGHT,
+                  flexShrink: 0,
+                  scrollSnapAlign: 'start',
+                  background: galleryBg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <img
+                    src={url}
+                    srcSet={card.gallery_srcset?.[i] || undefined}
+                    alt=""
+                    className="pressable"
+                    loading={i <= 1 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable={false}
+                    onLoad={e => {
+                      const node = e.target as HTMLImageElement
+                      if (!node.naturalWidth || !node.naturalHeight) return
+                      const ratio = node.naturalWidth / node.naturalHeight
+                      setGalleryRatios(prev => (prev[i] != null ? prev : { ...prev, [i]: ratio }))
+                    }}
+                    onError={e => { e.currentTarget.style.visibility = 'hidden' }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      // FRONT-UX-14-FIX (B2-5 successor): adaptive cover/contain —
+                      // see computeFit() usage above.
+                      objectFit: galleryFit,
+                      objectPosition: 'center',
+                      display: 'block',
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Close button */}
+          <button
+            className="pressable"
+            onPointerDown={e => e.stopPropagation()}
+            onPointerUp={e => e.stopPropagation()}
+            onClick={e => { e.stopPropagation(); closeGallery() }}
+            style={{
+              position: 'absolute', top: 14, right: 14,
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff', fontSize: 16, lineHeight: 1,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            ✕
+          </button>
+
+          {/* Top arrow */}
+          <div style={{ position: 'absolute', top: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15"/>
+            </svg>
+          </div>
+          {/* Bottom arrow */}
+          <div style={{ position: 'absolute', bottom: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+        </div>}
+
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,642 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode, RefObject } from 'react'
+import type { ReportArchitect, ReportBuildingCard, ReportMeta, FinalReport, AxisScoresMap } from '../types/api.ts'
+import { useReportImageJob, reportImageJobs } from '../hooks/useReportImageJob.ts'
+import { useTranslation } from '../i18n/index.ts'
+import { localizeReport } from '../utils/reportText.ts'
+import { isLegacyAxisScores } from '../utils/axisScores.ts'
+import { safeImageMime, imageExtension } from '../utils/imageMime.ts'
+import TasteSpectrum from './TasteSpectrum.tsx'
+import EmptyState from './EmptyState.tsx'
+import PageLogoHeader from './PageLogoHeader.tsx'
+import PageTopControls from './PageTopControls.tsx'
+import PageBackButton from './PageBackButton.tsx'
+import s from './PersonaReportPage.module.css'
+
+/**
+ * PersonaReportPage — the ONE shared persona report page (FULL-REPORT-UI-1, #445).
+ *
+ * Used by /board/:boardId (BoardReportPage, owner + read-only viewer), which is also
+ * the post-save landing. Look, copy and behaviour follow the approved mock
+ * (archi-tinder-mock/persona-report-all.html); off-scale values are DESIGN.md
+ * §11 E1-E10 and live in PersonaReportPage.module.css.
+ *
+ * Exports
+ *   default  PersonaReportPage  — page shell (logo header, top controls, scroll
+ *            column) + the state screens (loading skeleton, generation failure,
+ *            no report, board unavailable) + the report body when state='ready'.
+ *   named    PersonaReportBody  — the report sections only (no page chrome).
+ */
+
+/* ── Constants ──────────────────────────────────────────────────────────── */
+const REVEAL_THRESHOLD = 0.15          // DESIGN.md §3.5a rule 1
+const TAG_STAGGER_S = 0.06             // E8
+const TAG_STAGGER_MAX_S = 0.66         // §3.5a rule 3: total stagger ≤ 700 ms
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(REDUCED_MOTION_QUERY).matches
+}
+
+type TFn = (key: string, params?: Record<string, unknown>) => string
+
+function cardId(card?: ReportBuildingCard | null) {
+  return card?.image_id || card?.canonical_bld_id || card?.building_id || ''
+}
+
+/* ── Reveal on scroll (DESIGN.md §3.5a) ─────────────────────────────────── */
+/**
+ * One IntersectionObserver per page. Every `[data-rv]` element inside the
+ * container is revealed once (class `in`) when ≥15 % of it is visible, then
+ * unobserved. Reduced motion / no IntersectionObserver → revealed immediately.
+ * `onReveal(node)` fires for each revealed node (used to start the spectrum).
+ * Re-scans after every render so late-mounting blocks (recommendations that
+ * arrive after the fetch) are picked up.
+ */
+function useReveal(containerRef: RefObject<HTMLElement | null>, onReveal?: (node: Element) => void) {
+  const ioRef = useRef<IntersectionObserver | null>(null)
+  const onRevealRef = useRef(onReveal)
+  useEffect(() => { onRevealRef.current = onReveal })
+
+  // Tear the observer down on unmount (and for StrictMode's mount→cleanup→mount).
+  useEffect(() => () => {
+    ioRef.current?.disconnect()
+    ioRef.current = null
+  }, [])
+
+  useEffect(() => {
+    const root = containerRef.current
+    if (!root) return
+    const nodes = [...root.querySelectorAll<HTMLElement>('[data-rv]')].filter(n => !n.classList.contains(s.in))
+    if (nodes.length === 0) return
+    const reveal = (node: Element) => {
+      node.classList.add(s.in)
+      onRevealRef.current?.(node)
+    }
+    if (prefersReducedMotion() || typeof IntersectionObserver === 'undefined') {
+      nodes.forEach(reveal)
+      return
+    }
+    if (!ioRef.current) {
+      ioRef.current = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return
+          reveal(entry.target)
+          ioRef.current?.unobserve(entry.target)
+        })
+      }, { threshold: REVEAL_THRESHOLD })
+    }
+    nodes.forEach(n => ioRef.current!.observe(n))   // observing twice is a no-op
+  })
+}
+
+/* ── Small pieces ───────────────────────────────────────────────────────── */
+const ICON_PROPS = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
+
+function IconRefresh({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...ICON_PROPS} aria-hidden="true">
+      <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  )
+}
+function IconDoc() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...ICON_PROPS} aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+    </svg>
+  )
+}
+function IconLock() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" {...ICON_PROPS} aria-hidden="true">
+      <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+function IconDownload() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" {...ICON_PROPS} strokeWidth="2.5" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
+
+function MetaRow({ meta, t }: { meta?: ReportMeta | null; t: TFn }) {
+  const count = meta?.buildingCount ?? 0
+  const parts = []
+  if (meta?.visibility) parts.push(meta.visibility === 'public' ? t('board.public') : t('board.private'))
+  parts.push(t(count === 1 ? 'board.buildingCountOne' : 'board.buildingCountMany', { n: count }))
+  if (typeof meta?.reactionCount === 'number') parts.push(`♥ ${meta.reactionCount}`)
+  return (
+    <p className={s.meta}>
+      <span>{parts.join(' · ')}</span>
+      {meta?.ownerLabel && meta?.onOwner && (
+        <button type="button" className={s.ownerLink} onClick={meta.onOwner}>{meta.ownerLabel} ›</button>
+      )}
+    </p>
+  )
+}
+
+function RefreshButton({ busy, failed, onClick, t }: { busy?: boolean; failed?: boolean; onClick?: () => void; t: TFn }) {
+  return (
+    <div className={s.refreshWrap}>
+      {failed && <span className={s.refreshFail} role="status">{t('persona.regenFail')}</span>}
+      <button
+        type="button"
+        className={`${s.refreshBtn} ${busy ? s.refreshBtnBusy : ''}`}
+        aria-label={t('persona.imgRefreshAria')}
+        onClick={onClick}
+      >
+        <IconRefresh />
+      </button>
+    </div>
+  )
+}
+
+/** Image slot: generating / failed / none / loaded (DESIGN.md §8.8 skeleton, no shimmer). */
+interface ImageSlotProps {
+  boardId?: string | null
+  personaName?: string
+  imageData?: string | null
+  imageMime?: string | null
+  jobStatus?: string
+  onRegenerateImage?: () => void
+  imageRegenerating?: boolean
+  imageRegenFailed?: boolean
+  fill?: boolean
+  t: TFn
+}
+export function ImageSlot({ boardId, personaName, imageData, imageMime, jobStatus, onRegenerateImage, imageRegenerating, imageRegenFailed, fill = false, t }: ImageSlotProps) {
+  const box = fill ? `${s.imgBox} ${s.imgBoxFill}` : s.imgBox   // fill: flex-grow slot inside a result card
+  const showRefresh = !!onRegenerateImage
+  const mime = safeImageMime(imageMime)
+  const src = imageData ? `data:${mime};base64,${imageData}` : null
+
+  if (src && !imageRegenerating) {
+    return (
+      <div className={box}>
+        <img className={s.img} src={src} alt={t('persona.imageSection')} />
+        {showRefresh && <RefreshButton busy={imageRegenerating} failed={imageRegenFailed} onClick={onRegenerateImage} t={t} />}
+        <a className={s.imgSave} href={src} download={`persona-${boardId || 'report'}.${imageExtension(mime)}`}>
+          <IconDownload />
+          {t('persona.imageSave')}
+        </a>
+      </div>
+    )
+  }
+  if (jobStatus === 'generating' || imageRegenerating) {
+    return (
+      <div className={box}>
+        <div className={s.imgState} role="status" aria-live="polite">
+          <div className={s.skeletonPulse} aria-hidden="true" />
+          <span className={s.imgStateLabel}>{t('persona.imgGenerating')}</span>
+        </div>
+        {showRefresh && <RefreshButton busy failed={imageRegenFailed} onClick={onRegenerateImage} t={t} />}
+      </div>
+    )
+  }
+  if (jobStatus === 'error') {
+    return (
+      <div className={box}>
+        <div className={`${s.imgState} ${s.imgFail}`} role="alert">
+          <span className={s.imgFailText}>{t('persona.imgError')}</span>
+          {boardId && (
+            <button type="button" className={s.imgRetry} onClick={() => reportImageJobs.start(boardId)}>
+              {t('persona.imgRetry')}
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className={box}>
+      <div className={`${s.imgState} ${s.imgNone}`}>
+        <span className={s.imgNoneName}>{personaName}</span>
+        <span className={s.imgNoneCap}>{t('persona.imgNone')}</span>
+      </div>
+    </div>
+  )
+}
+
+function BuildingCard({ card, rank, onOpen }: { card: ReportBuildingCard; rank?: number; onOpen?: (card: ReportBuildingCard, rank?: number) => void }) {
+  const title = card.image_title || card.name_en || ''
+  const rec = typeof rank === 'number'
+  const open = () => onOpen?.(card, rank)
+  return (
+    <article
+      className={s.card}
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } }}
+    >
+      {card.image_url && <img className={s.cardImg} src={card.image_url} alt={title} loading="lazy" />}
+      <div className={s.cardScrim} />
+      {rec && <span className={s.pill}>#{rank}</span>}
+      <div className={s.cardCap}>
+        <h3 className={s.cardTitle}>{title}</h3>
+      </div>
+    </article>
+  )
+}
+
+/** Recommended-architect row: photo tile · name + first work · "프로필 ›". */
+function ArchitectRow({ architect, onOpen, style, t }: { architect?: ReportArchitect; onOpen?: (architectId?: number | string) => void; style?: CSSProperties; t: TFn }) {
+  const first = architect?.buildings?.[0]
+  const img = first?.image_url
+  const work = first ? (first.name_en || first.name || '') : ''
+  const name = architect?.name || ''
+  return (
+    <button
+      type="button"
+      data-rv
+      className={`${s.rv} ${s.archRow}`}
+      style={style}
+      onClick={() => onOpen?.(architect?.architect_id)}
+      aria-label={`${name} ${t('board.profile')}`}
+    >
+      <span className={s.archAvatar} aria-hidden="true">
+        {img && <img className={s.archAvatarImg} src={img} alt="" loading="lazy" />}
+      </span>
+      <span className={s.archText}>
+        <span className={s.archName}>{name}</span>
+        {work && <span className={s.archSub}>{work}</span>}
+      </span>
+      <span className={s.archGo} aria-hidden="true">{t('board.profile')} ›</span>
+    </button>
+  )
+}
+
+/* ── Shared sections (also used by BoardDetailPage for report-less boards) ── */
+const delayStyle = (d: number) => ({ '--d': `${d}s` }) as CSSProperties
+
+/** Scope wrapper for report-style sections outside the report body: defines the
+ *  report CSS variables (gutter, card width, reveal) and runs the reveal hook. */
+export function ReportScope({ children }: { children?: ReactNode }) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  useReveal(rootRef)
+  return <div ref={rootRef} className={s.body}>{children}</div>
+}
+
+/** Report section block (26px / gutter padding). */
+export function ReportSection({ children, style }: { children?: ReactNode; style?: CSSProperties }) {
+  return <section className={s.section} style={style}>{children}</section>
+}
+
+/** Report hero block (meta / title / tools); `afterCover` tightens the top padding. */
+export function ReportHero({ children, afterCover = false }: { children?: ReactNode; afterCover?: boolean }) {
+  return <section className={s.hero} style={afterCover ? { paddingTop: 18 } : undefined}>{children}</section>
+}
+
+/** Report heading: 14px bold + trailing hairline, optional count and an optional
+ *  right-aligned control (`right`, rendered after the hairline). */
+export function ReportHeading({ children, count = null, right = null }: { children?: ReactNode; count?: ReactNode; right?: ReactNode }) {
+  return (
+    <h2 data-rv className={`${s.rv} ${s.h2}`}>
+      {children}
+      {count != null && <span className={s.cnt}>{count}</span>}
+      {right && <span className={s.hRight}>{right}</span>}
+    </h2>
+  )
+}
+
+/** Pattern-tag chips (pill, surface-2) — shared with the building detail info rows. */
+export function ReportTags({ items = [] }: { items?: string[] }) {
+  return (
+    <div className={s.tags}>
+      {items.map((x, i) => <span key={`${x}-${i}`} className={s.tag}>{x}</span>)}
+    </div>
+  )
+}
+
+/** Horizontal 4:5 card row (bleeds to the page edges) — same as the building row. */
+export function ReportRow({ children }: { children?: ReactNode }) {
+  return <div className={s.row}>{children}</div>
+}
+
+/** One 4:5 report card shell; `className` lets callers add overrides (e.g. cursor). */
+export function ReportCard({ children, className = '', onClick, ...rest }: { children?: ReactNode; className?: string; onClick?: () => void; [k: string]: unknown }) {
+  return (
+    <div className={`${s.card} ${className}`} onClick={onClick} {...rest}>{children}</div>
+  )
+}
+
+/** "추천 순위": one horizontal row of BuildingCard with rank pills; hidden when empty. */
+export function RecommendationsSection({ recommendations = [], onOpenBuilding }: { recommendations?: ReportBuildingCard[]; onOpenBuilding?: (card: ReportBuildingCard, rank?: number) => void }) {
+  const { t } = useTranslation()
+  if (recommendations.length === 0) return null
+  return (
+    <section className={s.section}>
+      <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('results.recTitle')}</h2>
+      <div data-rv className={`${s.rv} ${s.row}`} style={delayStyle(0.1)}>
+        {recommendations.map((card, i) => (
+          <BuildingCard key={cardId(card) || i} card={card} rank={i + 1} onOpen={onOpenBuilding} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** "추천 사무소": ArchitectRow list; hidden when empty. */
+export function ArchitectsSection({ architects = [], onOpenArchitect }: { architects?: ReportArchitect[]; onOpenArchitect?: (architectId?: number | string) => void }) {
+  const { t } = useTranslation()
+  if (architects.length === 0) return null
+  return (
+    <section className={s.section}>
+      <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('board.recommendedOffice')}</h2>
+      <div className={s.archList}>
+        {architects.map((architect, i) => (
+          <ArchitectRow
+            key={architect.architect_id ?? i}
+            architect={architect}
+            onOpen={onOpenArchitect}
+            style={delayStyle(Math.min(0.1 + i * 0.1, 0.5))}
+            t={t}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/* ── Body ───────────────────────────────────────────────────────────────── */
+/**
+ * Props:
+ *   boardId           string|null  - project UUID (image job + download name)
+ *   finalReport       object       - { persona_type, one_liner, description, pattern_paragraph, dominant_* }
+ *   axisScores        object|null  - see TasteSpectrum
+ *   reportImage / reportImageMime  - stored base64 image (or null)
+ *   meta              { visibility, buildingCount, reactionCount, ownerLabel?, onOwner? }
+ *                       (ownerLabel + onOwner render an "@handle ›" link in the meta row)
+ *   likedBuildings    ImageCard[]  - liked-buildings row (hidden when empty)
+ *   recommendations   ImageCard[]  - recommendation rows (hidden when empty)
+ *   onOpenBuilding    (card, rank?) => void
+ *   architects        object[]     - recommended architects (useBoard.recommendedArchitects shape:
+ *                       { architect_id, name, buildings[] }); section hidden when empty
+ *   onOpenArchitect   (architectId) => void   - tap on an architect row
+ *   topNotice         ReactNode    - rendered at the very top, above the hero
+ *   actionsSlot       ReactNode    - rendered right after the hero description
+ *   metaSlot          ReactNode    - replaces the default meta row (merged board page: owner link / visibility toggle)
+ *   titleSlot         ReactNode    - replaces the persona-name <h1> (owner rename input in edit mode)
+ *   likedSlot         ReactNode    - replaces the liked-buildings row (owner edit grid)
+ *   footerSlot        ReactNode    - rendered after the last section (owner: delete board)
+ *   onRegenerateImage () => void   - owner image refresh button (WP2); hidden when absent
+ *   imageRegenerating / imageRegenFailed  bool
+ */
+export interface PersonaReportBodyProps {
+  boardId?: string | null
+  finalReport?: FinalReport | null
+  axisScores?: AxisScoresMap | null
+  reportImage?: string | null
+  reportImageMime?: string | null
+  meta?: ReportMeta | null
+  likedBuildings?: ReportBuildingCard[]
+  recommendations?: ReportBuildingCard[]
+  onOpenBuilding?: (card: ReportBuildingCard, rank?: number) => void
+  architects?: ReportArchitect[]
+  onOpenArchitect?: (architectId?: number | string) => void
+  topNotice?: ReactNode
+  actionsSlot?: ReactNode
+  metaSlot?: ReactNode
+  titleSlot?: ReactNode
+  likedSlot?: ReactNode
+  footerSlot?: ReactNode
+  onRegenerateImage?: () => void
+  imageRegenerating?: boolean
+  imageRegenFailed?: boolean
+}
+
+export function PersonaReportBody({
+  boardId = null, finalReport, axisScores, reportImage, reportImageMime,
+  meta, likedBuildings = [], recommendations = [], onOpenBuilding,
+  architects = [], onOpenArchitect, topNotice = null, actionsSlot = null,
+  metaSlot = null, titleSlot = null, likedSlot = null, footerSlot = null,
+  onRegenerateImage, imageRegenerating = false, imageRegenFailed = false,
+}: PersonaReportBodyProps) {
+  const { t, language } = useTranslation()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [specPlay, setSpecPlay] = useState(false)
+  const [reduced] = useState(prefersReducedMotion)
+
+  const imageJob = useReportImageJob(boardId)
+  const imageData = imageJob.image || reportImage || null
+  const imageMime = imageJob.image ? imageJob.mime : reportImageMime
+
+  // Owner-only first-generation for legacy boards with NO image anywhere (store
+  // or board payload). Fires only while the job is 'idle' (never after
+  // 'error'/'done'); viewers (no onRegenerateImage) never write. An existing image
+  // is never regenerated here — only the refresh button does that.
+  const isOwnerView = !!onRegenerateImage
+  useEffect(() => {
+    if (isOwnerView && boardId && !imageData && imageJob.status === 'idle') {
+      reportImageJobs.start(boardId)
+    }
+  }, [isOwnerView, boardId, imageData, imageJob.status])
+
+  const onReveal = useCallback((node: Element) => {
+    if ((node as HTMLElement).dataset.spec) setSpecPlay(true)
+  }, [])
+  useReveal(rootRef, onReveal)
+
+  const report = localizeReport(finalReport || {}, language)
+  const scores = axisScores || {}
+  const legacy = isLegacyAxisScores(axisScores)
+
+  const tags = [
+    ...(report.dominant_programs || []),
+    ...(report.dominant_styles || []),
+    ...(report.dominant_materials || []),
+  ]
+
+  const delay = (d: number) => ({ '--d': `${d}s` }) as CSSProperties
+
+  return (
+    <div ref={rootRef} className={s.body}>
+      {topNotice && <div className={s.topNotice}>{topNotice}</div>}
+
+      {/* Persona */}
+      <section className={s.hero}>
+        {metaSlot || <MetaRow meta={meta} t={t} />}
+        <p data-rv className={`${s.rv} ${s.eyebrow} ${s.eyebrowLead}`}>{t('detailB3.personaReportEyebrow')}</p>
+        {titleSlot || <h1 data-rv className={`${s.rv} ${s.name} ${s.personaName}`} style={delay(0.1)}>{report.persona_type}</h1>}
+        <p data-rv className={`${s.rv} ${s.oneLiner}`} style={delay(0.3)}>{report.one_liner}</p>
+        <div data-rv className={s.rv} style={delay(0.5)}>
+          <ImageSlot
+            boardId={boardId}
+            personaName={report.persona_type}
+            imageData={imageData}
+            imageMime={imageMime}
+            jobStatus={imageJob.status}
+            onRegenerateImage={onRegenerateImage}
+            imageRegenerating={imageRegenerating}
+            imageRegenFailed={imageRegenFailed}
+            t={t}
+          />
+        </div>
+        {report.description && (
+          <p data-rv className={`${s.rv} ${s.description}`} style={delay(0.65)}>{report.description}</p>
+        )}
+        {actionsSlot && <div data-rv className={`${s.rv} ${s.actions}`} style={delay(0.75)}>{actionsSlot}</div>}
+      </section>
+
+      {/* Pattern analysis */}
+      <section className={s.section}>
+        <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('persona.patternTitle')}</h2>
+        <p data-rv className={`${s.rv} ${s.pattern}`} style={delay(0.1)}>
+          {report.pattern_paragraph || t('persona.patternEmpty')}
+        </p>
+        <div className={s.tags}>
+          {tags.map((tag, i) => (
+            <span
+              key={`${i}-${tag}`}
+              data-rv
+              className={`${s.rv} ${s.pop} ${s.tag}`}
+              style={delay(Math.min(i * TAG_STAGGER_S, TAG_STAGGER_MAX_S))}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* Taste analysis */}
+      <section className={s.section}>
+        <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('persona.tasteSection')}</h2>
+        {legacy && (
+          <p data-rv className={`${s.rv} ${s.legacy}`}>{t('persona.legacySpectrum')}</p>
+        )}
+        <div data-rv data-spec="1" className={s.rv} style={delay(0.1)}>
+          <TasteSpectrum axisScores={scores} animate={!reduced} play={specPlay} />
+        </div>
+      </section>
+
+      {/* Liked buildings */}
+      {likedSlot || (likedBuildings.length > 0 && (
+        <section className={s.section}>
+          <h2 data-rv className={`${s.rv} ${s.h2}`}>{t('detailB3.buildingsYouLiked')}</h2>
+          <div data-rv className={`${s.rv} ${s.row}`} style={delay(0.1)}>
+            {likedBuildings.map((card, i) => (
+              <BuildingCard key={cardId(card) || i} card={card} onOpen={onOpenBuilding} />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {/* Recommendations — one row of the same card, rank pills */}
+      <RecommendationsSection recommendations={recommendations} onOpenBuilding={onOpenBuilding} />
+
+      {/* Recommended architects */}
+      <ArchitectsSection architects={architects} onOpenArchitect={onOpenArchitect} />
+
+      {footerSlot}
+    </div>
+  )
+}
+
+/* ── Loading skeleton ───────────────────────────────────────────────────── */
+function Bar({ w, h, mb }: { w: string; h: number; mb: number }) {
+  return <div className={s.bar} style={{ width: w, height: h, marginBottom: mb }} />
+}
+
+export function ReportSkeleton({ label }: { label?: string }) {
+  return (
+    <div className={s.skel} role="status" aria-live="polite">
+      <p className={s.skelLabel}>{label}</p>
+      <Bar w="30%" h={10} mb={14} /><Bar w="58%" h={28} mb={14} /><Bar w="92%" h={14} mb={8} /><Bar w="70%" h={14} mb={22} />
+      <div className={s.skelImg} />
+      <Bar w="100%" h={12} mb={8} /><Bar w="96%" h={12} mb={8} /><Bar w="64%" h={12} mb={32} />
+      <Bar w="40%" h={16} mb={16} /><Bar w="100%" h={12} mb={8} /><Bar w="88%" h={12} mb={0} />
+    </div>
+  )
+}
+
+/* ── Page ───────────────────────────────────────────────────────────────── */
+/**
+ * Props (plus every PersonaReportBody prop, used when state === 'ready'):
+ *   state     'fetching' | 'making' | 'genFail' | 'loadFail' | 'noReport' | 'unavailable' | 'ready'
+ *             (loadFail = board fetch failed for a non-403/404 reason; onRetry re-fetches)
+ *   onLogout  () => void
+ *   onBack    () => void   - top-left back button + "뒤로가기" in the state screens
+ *   backLabel string|undefined - label for the back button on the ready page
+ *   onRetry   () => void   - generation-failure "다시 시도"
+ *   onProfile () => void   - unavailable-board "프로필로 가기"
+ *   makingLabelKey string  - i18n key for the 'making' status line (default persona.loadingMake)
+ */
+export type PersonaReportState = 'fetching' | 'making' | 'genFail' | 'loadFail' | 'noReport' | 'unavailable' | 'ready'
+
+export interface PersonaReportPageProps extends PersonaReportBodyProps {
+  state?: PersonaReportState
+  onLogout?: () => void
+  onBack?: () => void
+  backLabel?: string
+  onRetry?: () => void
+  onProfile?: () => void
+  makingLabelKey?: string
+}
+
+export default function PersonaReportPage({ state = 'ready', onLogout, onBack, backLabel, onRetry, onProfile, makingLabelKey, ...bodyProps }: PersonaReportPageProps) {
+  const { t } = useTranslation()
+
+  let content: ReactNode
+  if (state === 'fetching' || state === 'making') {
+    content = <ReportSkeleton label={t(state === 'making' ? (makingLabelKey || 'persona.loadingMake') : 'persona.loadingFetch')} />
+  } else if (state === 'genFail' || state === 'loadFail') {
+    content = (
+      <div className={s.stateSlot}>
+        <EmptyState
+          neutral
+          icon={<IconRefresh size={22} />}
+          title={t(state === 'loadFail' ? 'persona.loadFailTitle' : 'persona.genFailTitle')}
+          body={t('persona.genFailBody')}
+          actionLabel={t('board.retry')}
+          onAction={onRetry}
+          secondaryLabel={t('board.back')}
+          onSecondary={onBack}
+        />
+      </div>
+    )
+  } else if (state === 'noReport') {
+    content = (
+      <div className={s.stateSlot}>
+        <EmptyState
+          neutral
+          icon={<IconDoc />}
+          title={t('persona.noReportTitle')}
+          body={t('persona.noReportOwner')}
+          actionLabel={t('board.back')}
+          onAction={onBack}
+        />
+      </div>
+    )
+  } else if (state === 'unavailable') {
+    content = (
+      <div className={s.stateSlot}>
+        <EmptyState
+          neutral
+          icon={<IconLock />}
+          title={t('persona.unavailableTitle')}
+          body={t('persona.unavailableBody')}
+          actionLabel={t('persona.toProfile')}
+          onAction={onProfile}
+          secondaryLabel={t('board.back')}
+          onSecondary={onBack}
+        />
+      </div>
+    )
+  } else {
+    content = <PersonaReportBody {...bodyProps} />
+  }
+
+  return (
+    <div className={s.page}>
+      <PageLogoHeader />
+      <PageTopControls
+        onLogout={onLogout}
+        leading={<PageBackButton inline onClick={onBack} label={state === 'ready' ? backLabel : undefined} />}
+      />
+      <div className={s.column}>{content}</div>
+    </div>
+  )
+}

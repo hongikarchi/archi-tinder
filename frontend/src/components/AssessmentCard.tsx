@@ -1,0 +1,97 @@
+/**
+ * AssessmentCard — one personality-assessment question rendered as a swipe-deck
+ * card.
+ *
+ * Shares its entire surface with the shared card shell: it spreads
+ * `cardShellStyle` / `questionCardBodyStyle` / `questionTitleStyle` /
+ * `questionBadgeStyle` / `questionOptionStyle` from cardShell.js, which in
+ * turn takes its footprint from useCardSize(). Nothing
+ * here re-declares a radius, shadow, padding or font size of its own. (The
+ * in-session QuestionCard these exports were originally extracted from was
+ * removed — FULL-RECOMMEND-1 — but the exports themselves remain load-bearing
+ * for this component.)
+ *
+ * Every interactive element carries the `pressable` class: the vendored
+ * tinderCard fork calls preventDefault() on touchstart unless the event's
+ * srcElement className includes it (lib/tinderCard.js), which would otherwise
+ * swallow taps and the option-list scroll on touch devices.
+ */
+import {
+  cardShellStyle,
+  questionCardBodyStyle,
+  questionTitleStyle,
+  questionBadgeStyle,
+  questionOptionStyle,
+} from './cardShell.ts'
+import { useCardSize } from '../hooks/useCardSize.ts'
+import { LIKERT_KEYS, LIKERT_VALUES } from '../constants/assessmentQuestions.ts'
+import styles from './AssessmentCard.module.css'
+import { useTranslation } from '../i18n/index.ts'
+
+const DISPLAY_OPTIONS = LIKERT_VALUES
+  .map((val, idx) => ({ val, key: LIKERT_KEYS[idx] }))
+  .reverse()
+
+/**
+ * Props:
+ *   question   { id, axis, reversed, text_ko, text_en }
+ *   selected   stored response for this question (null = unanswered)
+ *   disabled   true while the card is flying out — blocks double answers
+ *   onAnswer   (rawLikertValue) => void
+ */
+interface AssessmentCardProps {
+  question: { id?: string | number; axis?: string | number; reversed?: boolean; text_ko: string; text_en?: string } | null
+  selected: number | null
+  disabled?: boolean
+  onAnswer: (value: number) => void
+}
+
+export default function AssessmentCard({ question, selected, disabled, onAnswer }: AssessmentCardProps) {
+  const { t, language } = useTranslation()
+  const { width, height } = useCardSize()
+  if (!question) return null
+
+  const questionText = language === 'en' ? (question.text_en || question.text_ko) : question.text_ko
+
+  return (
+    <div style={{ ...cardShellStyle, width, height, ...questionCardBodyStyle, justifyContent: 'center' }}>
+
+      {/* Badge */}
+      <p style={{ ...questionBadgeStyle, textAlign: 'center' }}>
+        {t('assessmentCard.chooseCloseness')}
+      </p>
+
+      {/* Question text */}
+      <p style={questionTitleStyle}>{questionText}</p>
+
+      {/* Likert options — unchanged 5-point scale, -2..+2 */}
+      <div
+        className={`${styles.options} pressable`}
+        role="group"
+        aria-label={t('assessmentCard.answerSelection')}
+      >
+        {/* Displayed agree-first (+2 at top, -2 at bottom). Reversed at render
+            time only — constants and submitted raw values are unchanged, and DOM
+            order = visual order so tab/focus order matches. */}
+        {DISPLAY_OPTIONS.map(({ val, key }) => {
+          const stored = question.reversed ? val * -1 : val
+          const isSelected = selected === stored
+          return (
+            <button
+              key={val}
+              type="button"
+              disabled={disabled}
+              className={`${styles.option} ${isSelected ? styles.optionSelected : ''} pressable`}
+              style={questionOptionStyle}
+              onClick={() => onAnswer(val)}
+              aria-pressed={isSelected}
+            >
+              <span className={`${styles.val} pressable`}>{val > 0 ? `+${val}` : val}</span>
+              <span className={`${styles.label} pressable`}>{t(`assessmentCard.likert.${key}`)}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

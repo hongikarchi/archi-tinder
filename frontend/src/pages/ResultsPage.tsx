@@ -1,0 +1,173 @@
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useResults } from '../hooks/useResults.ts'
+import { resolveProjectBackendId } from '../utils/resolveProjectBackendId.ts'
+import { useTranslation } from '../i18n/index.ts'
+import { generateReport, getProject } from '../api/projects.ts'
+import ResultCards, { ResultsStage, ResultStateCard } from '../components/ResultCards.tsx'
+
+const REPORT_ALREADY_PRESENT = Symbol('report-already-present')
+
+// /result/:sessionId — 3 swipeable result cards (FULL-REPORT-UI-1 WP3, #445).
+// Liked buildings + recommendations live on the shared report page
+// (/board/:id), reached through the closing card's CTA.
+export default function ResultsPage({ projects, setProjects, onReportGenerated, awaitSwipesSettled, onLogout, onRequestSave }) {
+  const navigate = useNavigate()
+  const { sessionId } = useParams()
+  const { t } = useTranslation()
+  const { error, loading, project } = useResults(sessionId, projects, setProjects)
+  const backendId = resolveProjectBackendId(project)
+  const hasLikes = !!(project?.likedBuildings?.length)
+
+  // Auto-repair: when the report is missing (e.g. a prior generation failure),
+  // fire ONE generateReport call. Guarded by a ref so it fires at most once per
+  // mount — a failure surfaces an inline error + retry button instead of
+  // silently retrying forever.
+  const reportRepairRef = useRef(false)
+  const [reportRepairError, setReportRepairError] = useState(false)
+  const [reportRepairing, setReportRepairing] = useState(false)
+  // Latest report on the project: while this page waits for in-flight swipes, the
+  // swipe-completion flow in App.jsx may have already produced the first report.
+  const finalReportRef = useRef(null)
+  finalReportRef.current = project?.finalReport || null
+
+  function attemptReportRepair() {
+    // No liked buildings yet → backend always 400s ('No liked buildings yet');
+    // retrying can never succeed, so skip generation and fall through to the
+    // neutral zero-likes card instead of a dead-end error+retry state.
+    if (!backendId || project?.finalReport || reportRepairRef.current) return
+    if (!(project?.likedBuildings?.length)) return
+    reportRepairRef.current = true
+    setReportRepairing(true)
+    setReportRepairError(false)
+    // Wait for in-flight swipe POSTs (never rejects, 8s cap) so the report is built
+    // from a liked set that includes the final like.
+    Promise.resolve(awaitSwipesSettled?.())
+      // A report may have landed while waiting: do not POST a second generation.
+      .then(() => (finalReportRef.current ? REPORT_ALREADY_PRESENT : generateReport(backendId)))
+      .then(data => {
+        if (data === REPORT_ALREADY_PRESENT) return
+        if (data?.final_report) {
+          setProjects(prev => prev.map(p => (
+            p.id === project.id
+              ? {
+                  ...p,
+                  finalReport: data.final_report,
+                  ...(data.axis_scores ? { axisScores: data.axis_scores } : {}),
+                }
+              : p
+          )))
+          onReportGenerated?.(project, data)
+        } else {
+          setReportRepairError(true)
+        }
+      })
+      .catch(err => {
+        console.error('[ResultsPage] generateReport retry failed:', err)
+        setReportRepairError(true)
+      })
+      .finally(() => {
+        setReportRepairing(false)
+      })
+  }
+
+  useEffect(() => {
+    attemptReportRepair()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backendId, project?.finalReport])
+
+  // Boards reloaded via the owner list endpoint carry finalReport but no
+  // axis_scores (the list defers it). Fetch the detail once and merge it in so
+  // the spectrum isn't rendered as all no-evidence.
+  const axisFetchedRef = useRef(null)
+  const needsAxisScores = !!(project?.finalReport && !project?.axisScores && backendId)
+  useEffect(() => {
+    if (!needsAxisScores || axisFetchedRef.current === backendId) return
+    axisFetchedRef.current = backendId
+    let cancelled = false
+    getProject(backendId).then(data => {
+      if (cancelled || !data?.axis_scores) return
+      setProjects(prev => prev.map(p => (
+        resolveProjectBackendId(p) === backendId && !p.axisScores
+          ? { ...p, axisScores: data.axis_scores }
+          : p
+      )))
+    })
+    return () => {
+      cancelled = true
+      // StrictMode/dep-change cleanup cancels the apply, so release the guard
+      // (only if still ours) to let the re-run fetch again.
+      if (axisFetchedRef.current === backendId) axisFetchedRef.current = null
+    }
+  }, [needsAxisScores, backendId, setProjects])
+
+  function handleReportRetry() {
+    reportRepairRef.current = false
+    attemptReportRepair()
+  }
+
+  // Taste/swipe tab — same destination the other "continue exploring" paths use.
+  const startExploring = () => navigate('/search')
+
+  let content
+  if (project?.finalReport && backendId) {
+    // CTA: a temp board opens the save sheet (→ shared report page after saving);
+    // an already-saved board goes straight to the shared report page.
+    content = (
+      <ResultCards
+        project={project}
+        backendId={backendId}
+        ctaLabel={project.isTemp ? t('results.saveAndProfile') : t('results.goToProfile')}
+        onCta={() => {
+          if (project.isTemp) onRequestSave?.(project)
+          else navigate(`/board/${backendId}`)
+        }}
+      />
+    )
+  } else if (!project) {
+    // Unknown / invalid session: nothing to show. While the lookup is still
+    // running show the skeleton; otherwise a neutral card that points back to exploring.
+    content = loading && !error
+      ? <ResultStateCard kind="loading" />
+      : (
+        <ResultStateCard
+          kind="fail"
+          title={t('results.reportError')}
+          body={error === 'invalid_session_id' ? t('results.invalidSession') : t('results.reportErrorBody')}
+          actionLabel={t('results.startExploring')}
+          onAction={startExploring}
+        />
+      )
+  } else if (reportRepairError || (hasLikes && !backendId && !loading)) {
+    // Without a backend id retry is a no-op, so that sub-case points back to exploring.
+    const canRetry = !!backendId
+    content = (
+      <ResultStateCard
+        kind="fail"
+        title={t('results.reportError')}
+        body={t('results.reportErrorBody')}
+        actionLabel={canRetry ? t('results.retry') : t('results.startExploring')}
+        onAction={canRetry ? (reportRepairing ? undefined : handleReportRetry) : startExploring}
+      />
+    )
+  } else if (!hasLikes) {
+    content = (
+      <ResultStateCard
+        kind="empty"
+        title={t('results.personaFallbackType')}
+        body={t('results.personaFallbackLine')}
+        hint={t('results.emptyHint')}
+        actionLabel={t('results.startExploring')}
+        onAction={startExploring}
+      />
+    )
+  } else {
+    content = <ResultStateCard kind="loading" />
+  }
+
+  return (
+    <ResultsStage onLogout={onLogout} onBack={() => navigate('/')}>
+      {content}
+    </ResultsStage>
+  )
+}

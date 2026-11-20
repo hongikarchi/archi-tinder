@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { exitDirectionForRaw, rawFromStored } from './assessmentDirection.js'
+import { exitDirectionForRaw, rawFromStored } from './assessmentDirection.ts'
 
 test('exit direction follows raw value', () => {
   assert.equal(exitDirectionForRaw(2), 'right')

@@ -6,7 +6,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isLegacyAxisScores } from './axisScores.js'
+import { isLegacyAxisScores } from './axisScores.ts'
 
 describe('isLegacyAxisScores', () => {
   test('null/undefined axisScores is not legacy', () => {

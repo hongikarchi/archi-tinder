@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createReportImageJobs } from './reportImageJobs.js'
+import { createReportImageJobs } from './reportImageJobs.ts'
 
 const noWait = { wait: async () => {} }
 const IMG = { image_data: 'AAAA', mime_type: 'image/png', prompt: null }

@@ -24,7 +24,7 @@ const {
   loadAssessmentDraft,
   saveAssessmentDraft,
   clearAssessmentDraft,
-} = await import('./assessmentDraft.js')
+} = await import('./assessmentDraft.ts')
 
 const TOTAL = 20
 const USER = '42'
