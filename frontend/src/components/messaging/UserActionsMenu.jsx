@@ -6,7 +6,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { blockUser, unblockUser, getContactStatus } from '../../api/messaging.js'
 import { useMessagingEnabled } from '../../hooks/useMessagingFeature.js'
 import { VerifyRequiredError } from '../../api/projects.js'
-import { markBlocked, markUnblocked, useBlockedUser } from './blockedUsers.js'
+import { markBlocked, markUnblocked, useBlockedUser, getBlockSeq, applyServerBlockedByMe } from './blockedUsers.js'
 import styles from './Messaging.module.css'
 
 /**
@@ -34,15 +34,16 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked, 
   const [error, setError] = useState(null)
   const wrapRef = useRef(null)
 
-  // The block state survives a refresh only server-side: seed the session store
-  // from the status read. Only ever marks blocked (never unmarks from a possibly
-  // stale response); errors are ignored so the menu still works.
+  // The server status is authoritative: sync the session store both ways
+  // (block/unblock done on another device/tab included). A response issued before
+  // a local block/unblock is dropped via the seq check.
   useEffect(() => {
     if (!enabled || !userId) return undefined
     let cancelled = false
+    const s = getBlockSeq()
     getContactStatus(userId)
-      .then(data => { if (!cancelled && data?.blocked_by_me === true) markBlocked(userId) })
-      .catch(() => {})
+      .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, s) })
+      .catch(() => {}) // non-critical: the menu works without the status read
     return () => { cancelled = true }
   }, [enabled, userId])
 
