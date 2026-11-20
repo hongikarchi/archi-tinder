@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react'
 /**
  * Session-local cache of users the viewer blocked (FULL-MESSAGING-1).
  *
- * The server status (`blocked_by_me` on contact-requests/status/, #372) is
+ * The server status (`blocked_by_me` on users/<id>/follow/, #372) is
  * authoritative and is applied both ways (true adds, false removes) via
  * applyServerBlockedByMe. Local block/unblock actions update the cache
  * immediately. A status response issued before a local action may be stale, so

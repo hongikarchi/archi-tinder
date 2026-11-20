@@ -1,12 +1,44 @@
 /**
- * api/social.js
- * Social graph: project reactors + the viewer's liked boards.
+ * api/social.ts
+ * Social graph: user follow (SNS-FOLLOW-1), project reactors and the viewer's
+ * liked boards.
  *
- * User-to-user follow/unfollow (followUser, unfollowUser, getFollowers,
- * getFollowing) has been removed. Architect/firm follow is in api/architects.js.
+ *   GET    /users/<id>/follow/  -> FollowStatus
+ *   POST   /users/<id>/follow/  -> FollowStatus (201 created / 200 already following)
+ *   DELETE /users/<id>/follow/  -> 204
+ *
+ * Every follow endpoint answers 404 while the FOLLOW_ENABLED backend flag is
+ * off — callers gate on `useFollowEnabled()` (hooks/useMessagingFeature.ts)
+ * and never call these when it is off. Guest writes answer 403
+ * {detail:'verify_required'}: the write helpers dispatch the global
+ * 'archithon:verify-required' event and throw VerifyRequiredError (same
+ * contract as api/messaging.ts). A 400 {detail:'unavailable'} (self / blocked
+ * either way / guest target / opted-out target) is deliberately identical for
+ * all causes. Architect/firm follow is a separate feature in api/architects.ts.
  */
 
 import { callApi } from './core.ts'
+import { verifyGatedWrite } from './messaging.ts'
+import type { FollowStatus } from '../types/api.ts'
+
+/** Numeric user ids only — the id is interpolated into the URL path. */
+function followPath(userId: number | string) {
+  const id = Number(userId)
+  if (!Number.isInteger(id) || id <= 0) throw new Error('invalid user id')
+  return `/users/${id}/follow/`
+}
+
+export async function getFollowStatus(userId: number | string): Promise<FollowStatus> {
+  return await callApi('GET', followPath(userId))
+}
+
+export async function followUser(userId: number | string): Promise<FollowStatus> {
+  return await verifyGatedWrite('POST', followPath(userId))
+}
+
+export async function unfollowUser(userId: number | string): Promise<null> {
+  return await verifyGatedWrite('DELETE', followPath(userId))
+}
 
 export async function getProjectReactors(projectId, { page = 1, pageSize = 50 } = {}) {
   return await callApi('GET', `/projects/${projectId}/reactors/?page=${page}&page_size=${pageSize}`)

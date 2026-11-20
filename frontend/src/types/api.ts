@@ -21,15 +21,16 @@ export interface ChatMessage {
   created_at?: string
   [k: string]: unknown
 }
-export interface ContactStatus {
-  state?: 'none' | 'sent' | 'connected' | string
-  can_request?: boolean
-  reason?: string
-  blocked_by_me?: boolean
-  [k: string]: unknown
+/** GET/POST users/<id>/follow/ (SNS-FOLLOW-1). `reason` only for a guest requester. */
+export interface FollowStatus {
+  is_following: boolean
+  is_followed_by: boolean
+  can_follow: boolean
+  blocked_by_me: boolean
+  reason?: 'verify_required'
 }
-export interface ContactRequestResult { status?: 'sent' | 'connected' | string; conversation_id?: number | string | null; [k: string]: unknown }
-export interface ContactRequestItem { id: number | string; sender?: MessagingUser; greeting?: string; created_at?: string; [k: string]: unknown }
+/** POST conversations/ {peer_user_id} (201 created / 200 existing). */
+export interface OpenConversationResult { id: number; other: MessagingUser; closed: boolean }
 export interface ConversationItem {
   id: number | string
   other?: MessagingUser
@@ -40,7 +41,6 @@ export interface ConversationItem {
   [k: string]: unknown
 }
 export interface MessagesPage { results?: ChatMessage[]; closed?: boolean }
-export interface InboxBusy { id: number | string; action?: string }
 export interface ProfileBoard {
   board_id: string
   name?: string

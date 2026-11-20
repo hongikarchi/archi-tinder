@@ -10,38 +10,27 @@ import ConversationView from '../components/messaging/ConversationView.tsx'
 import { useTranslation } from '../i18n/index.ts'
 import { useMessagingEnabled } from '../hooks/useMessagingFeature.ts'
 import { refreshUnreadMessages } from '../hooks/useUnreadMessages.ts'
-import {
-  listReceivedRequests,
-  listConversations,
-  acceptContactRequest,
-  ignoreContactRequest,
-} from '../api/messaging.ts'
-import { VerifyRequiredError } from '../api/projects.ts'
+import { listConversations } from '../api/messaging.ts'
 import styles from './MessagesPage.module.css'
 
 /**
  * MessagesPage — the "메시지" TabBar tab (FRONT-MESSAGES-TAB-1).
  *
- *   /messages                    tab root: received requests + conversation list
+ *   /messages                    tab root: conversation list
  *   /messages/:conversationId    conversation (numeric id; anything else -> /messages)
  *
  * Replaces the own-profile pill + bottom sheet. As a tab root the inbox has no
  * back button; the conversation view gets a PageBackButton -> /messages.
  *
- * `/messages` may carry `location.state.peerUserId` (ContactCta "메시지 보내기":
- * the contact-status API returns no conversation id) — once the list is loaded
- * the page jumps to that peer's conversation. A just-accepted request passes
- * `location.state.conversation` so the view opens without waiting for a refetch.
+ * A just-opened conversation (FollowCta "메시지 보내기" -> POST conversations/)
+ * passes `location.state.conversation` so the view opens without waiting for a
+ * list refetch.
  * Flag OFF -> renders nothing (and makes no request); the tab is hidden too.
  */
 export default function MessagesPage({ onLogout }) {
   const { t } = useTranslation()
   const enabled = useMessagingEnabled()
   const navigate = useNavigate()
-  // latest-ref: navigate's identity changes per route transition (BrowserRouter);
-  // keeping it out of effect deps avoids a redundant non-silent reload.
-  const navigateRef = useRef(navigate)
-  navigateRef.current = navigate
   const location = useLocation()
   const { conversationId: rawId } = useParams()
 
@@ -50,13 +39,9 @@ export default function MessagesPage({ onLogout }) {
   const hint = location.state?.conversation ?? null
 
   const [loadState, setLoadState] = useState('loading') // 'loading' | 'ready' | 'error'
-  const [requests, setRequests] = useState([])
   const [conversations, setConversations] = useState([])
-  const [busy, setBusy] = useState(null) // { id, action } of a request being handled
-  const [actionError, setActionError] = useState(null)
 
   const mountedRef = useRef(true)
-  const peerRef = useRef(location.state?.peerUserId ?? null)
   const wasInConversationRef = useRef(false)
 
   useEffect(() => {
@@ -67,36 +52,19 @@ export default function MessagesPage({ onLogout }) {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoadState('loading')
     try {
-      const [rq, cv] = await Promise.all([listReceivedRequests(), listConversations()])
-      if (!mountedRef.current) return null
-      const convs = cv?.results || []
-      setRequests(rq?.results || [])
-      setConversations(convs)
+      const cv = await listConversations()
+      if (!mountedRef.current) return
+      setConversations(cv?.results || [])
       setLoadState('ready')
-      return convs
     } catch {
       if (mountedRef.current && !silent) setLoadState('error')
-      return null
     }
   }, [])
 
-  // Initial load, then jump to the requested peer's conversation if any.
+  // Initial load.
   useEffect(() => {
-    if (!enabled) return undefined
-    let cancelled = false
-    load().then(convs => {
-      const peer = peerRef.current
-      if (cancelled || !convs || peer == null) return
-      peerRef.current = null
-      const conv = convs.find(c => String(c.other?.user_id) === String(peer))
-      if (conv) {
-        navigateRef.current(`/messages/${conv.id}`, {
-          replace: true,
-          state: { conversation: { id: conv.id, other: conv.other, closed: conv.closed } },
-        })
-      }
-    })
-    return () => { cancelled = true }
+    if (!enabled) return
+    load()
   }, [enabled, load])
 
   // Returning from a conversation (back button, browser back, tab re-tap):
@@ -113,59 +81,9 @@ export default function MessagesPage({ onLogout }) {
   }, [convId, load])
 
   function openConversation(conv) {
-    setActionError(null)
     navigate(`/messages/${conv.id}`, {
       state: { conversation: { id: conv.id, other: conv.other, closed: conv.closed } },
     })
-  }
-
-  async function handleAccept(req) {
-    if (busy) return
-    setBusy({ id: req.id, action: 'accept' })
-    setActionError(null)
-    try {
-      const res = await acceptContactRequest(req.id)
-      if (!mountedRef.current) return
-      setRequests(prev => prev.filter(r => r.id !== req.id))
-      refreshUnreadMessages({ force: true })
-      if (res?.conversation_id != null) {
-        load({ silent: true })
-        navigate(`/messages/${res.conversation_id}`, {
-          state: { conversation: { id: res.conversation_id, other: req.sender, closed: false } },
-        })
-      } else {
-        load({ silent: true })
-      }
-    } catch (err) {
-      if (!mountedRef.current || err instanceof VerifyRequiredError) return
-      if (err?.status === 409) {
-        // already handled elsewhere — drop the stale card and resync
-        setRequests(prev => prev.filter(r => r.id !== req.id))
-        load({ silent: true })
-      } else {
-        setActionError('messaging.requestActionError')
-      }
-    } finally {
-      if (mountedRef.current) setBusy(null)
-    }
-  }
-
-  async function handleIgnore(req) {
-    if (busy) return
-    setBusy({ id: req.id, action: 'ignore' })
-    setActionError(null)
-    try {
-      await ignoreContactRequest(req.id)
-      if (!mountedRef.current) return
-      setRequests(prev => prev.filter(r => r.id !== req.id))
-      refreshUnreadMessages({ force: true })
-    } catch (err) {
-      if (!mountedRef.current || err instanceof VerifyRequiredError) return
-      if (err?.status === 409) setRequests(prev => prev.filter(r => r.id !== req.id))
-      else setActionError('messaging.requestActionError')
-    } finally {
-      if (mountedRef.current) setBusy(null)
-    }
   }
 
   // Flag OFF (or not loaded yet): nothing to show, nothing requested.
@@ -173,7 +91,7 @@ export default function MessagesPage({ onLogout }) {
   if (Number.isNaN(convId)) return <Navigate to="/messages" replace />
 
   // Conversation target: the loaded list wins, the navigation hint covers a
-  // conversation the list does not contain yet (just accepted / just created).
+  // conversation the list does not contain yet (just created).
   let active = null
   if (convId != null) {
     const fromList = conversations.find(c => c.id === convId)
@@ -223,13 +141,8 @@ export default function MessagesPage({ onLogout }) {
           <PageTitle style={{ margin: '12px 0 12px' }}>{t('messaging.title')}</PageTitle>
           <InboxView
             loadState={loadState}
-            requests={requests}
             conversations={conversations}
-            busy={busy}
-            actionError={actionError}
             onRetry={() => load()}
-            onAccept={handleAccept}
-            onIgnore={handleIgnore}
             onOpenConversation={openConversation}
           />
         </div>

@@ -1,6 +1,6 @@
 /*
- * Messaging.module.css — contact requests + 1:1 messaging UI (FULL-MESSAGING-1;
- * hosted by the /messages tab page since FRONT-MESSAGES-TAB-1).
+ * Messaging.module.css — 1:1 messaging + follow CTA UI (FULL-MESSAGING-1,
+ * SNS-FOLLOW-1; hosted by the /messages tab page since FRONT-MESSAGES-TAB-1).
  * DESIGN.md §4/§10.4: interactive controls owning :hover/:focus/:active live in
  * a CSS Module; themeable values come from tokens.css; layout-only values may
  * stay inline in the JSX. Type scale = the 5 --fs-* steps; weights <= 700;
@@ -122,42 +122,7 @@
   font-size: var(--fs-body);
 }
 
-.inlineError {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  border-left: 3px solid var(--color-destructive);
-  background: color-mix(in srgb, var(--color-destructive) 12%, transparent);
-  color: var(--color-text);
-  font-size: var(--fs-body);
-}
-
-/* ---- Received request cards --------------------------------------------- */
-
-.requestCard {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
-
-.requestCard + .requestCard {
-  margin-top: 8px;
-}
-
-.requestTop {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.requestText {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+/* ---- Names / previews --------------------------------------------------- */
 
 .name {
   margin: 0;
@@ -167,23 +132,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.greeting {
-  margin: 2px 0 0;
-  font-size: var(--fs-body);
-  color: var(--color-text-2);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.requestActions {
-  display: flex;
-  gap: 8px;
-}
-
-.requestActions > .btn {
-  flex: 1 1 0;
 }
 
 /* ---- Conversation rows --------------------------------------------------- */
@@ -365,15 +313,6 @@
   color: var(--color-text-dim);
 }
 
-.systemMsg {
-  align-self: center;
-  margin: 8px 0;
-  padding: 4px 12px;
-  text-align: center;
-  font-size: var(--fs-caption);
-  color: var(--color-text-muted);
-}
-
 .msgReportBtn {
   position: relative;
   width: 28px;
@@ -547,6 +486,28 @@
 
 .dialogActions > .btn {
   flex: 1 1 0;
+}
+
+/* ---- Follow CTA (SNS-FOLLOW-1) -------------------------------------------- */
+
+/* [팔로잉][메시지 보내기]: two equal halves; stretch so the secondary .btn and
+   the host's primary CTA end up the same height. */
+.followRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.followRow > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.followError {
+  margin: 0;
+  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

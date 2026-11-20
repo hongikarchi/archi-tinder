@@ -1318,7 +1318,7 @@ export default function App() {
               if (user.access) api.setTokens(user.access, user.refresh)
             }
 
-            // Let status-dependent UI (ContactCta) refetch now that is_guest is false.
+            // Let status-dependent UI (FollowCta) refetch now that is_guest is false.
             window.dispatchEvent(new CustomEvent('archithon:verified'))
 
             setGlobalToast({
