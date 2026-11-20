@@ -1,7 +1,8 @@
 /**
  * useUnreadNotifications — self-only unread notification count.
  *
- * Fetches on mount + on document visibilitychange (tab becomes visible).
+ * Fetches on mount + on every route change + on document visibilitychange
+ * (tab becomes visible).
  * Deliberately NO setInterval polling (spec NOTIF-INAPP-1 §3).
  *
  * The count lives in a tiny module-level store (same pattern as
@@ -18,6 +19,7 @@
  * refreshUnreadNotifications({ force: true }) so the badge / dot clear.
  */
 import { useEffect, useSyncExternalStore, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { getUnreadCount } from '../api/notifications.js'
 
 let unreadCount = 0
@@ -84,16 +86,21 @@ export function resetUnreadNotifications() {
 
 export function useUnreadNotifications(enabled = true) {
   const count = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const { pathname } = useLocation()
 
   const refresh = useCallback(() => {
     if (!enabled) return
     refreshUnreadNotifications()
   }, [enabled])
 
+  // mount + route change
+  useEffect(() => {
+    if (enabled) refreshUnreadNotifications()
+  }, [enabled, pathname])
+
+  // tab becomes visible again
   useEffect(() => {
     if (!enabled) return undefined
-    refreshUnreadNotifications()
-
     function onVisibilityChange() {
       if (document.visibilityState === 'visible') refreshUnreadNotifications()
     }
