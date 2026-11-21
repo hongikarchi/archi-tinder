@@ -1260,7 +1260,10 @@ class MeView(APIView):
             return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
         payload = dict(UserSerializer(profile).data)
         # D12: runtime feature flags — backend is the single source of truth.
-        payload['features'] = {'messaging': bool(getattr(settings, 'MESSAGING_ENABLED', False))}
+        payload['features'] = {
+            'messaging': bool(getattr(settings, 'MESSAGING_ENABLED', False)),
+            'follow': bool(getattr(settings, 'FOLLOW_ENABLED', False)),
+        }
         return Response(payload)
 
 

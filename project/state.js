@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-21 01:29 KST',
-    head: 'f755a7b',
-    branch: 'upd494',
+    updatedAt: '2026-11-21 14:41 KST',
+    head: 'e6c410b',
+    branch: 'feature/sns-follow-model',
   },
   done: [
+    {
+      id: 'PR #502',
+      title: 'feat(frontend): migrate src JS/JSX to TypeScript — types only',
+      completedAt: '2026-11-21',
+      prs: [502],
+      note: '',
+    },
     {
       id: 'PR #497',
       title: 'fix(SNS-BLOCK-SYNC-1): apply server blocked_by_me both ways, fetch status while hidden',
@@ -50,6 +57,13 @@ window.PROJECT_STATE = {
       note: '',
     },
     {
+      id: 'PR #494',
+      title: 'perf+ui(profile,discovery,board): faster profile/discovery load; report-style board, save modal, building & studio pages',
+      completedAt: '2026-11-21',
+      prs: [494],
+      note: '',
+    },
+    {
       id: 'PR #487',
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
       completedAt: '2026-11-10',
@@ -68,20 +82,6 @@ window.PROJECT_STATE = {
       title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
       completedAt: '2026-11-10',
       prs: [485],
-      note: '',
-    },
-    {
-      id: 'PR #484',
-      title: 'fix(report): wait for in-flight swipes on auto-complete path + report generation diagnostics',
-      completedAt: '2026-11-10',
-      prs: [484],
-      note: '',
-    },
-    {
-      id: 'PR #483',
-      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
-      completedAt: '2026-11-10',
-      prs: [483],
       note: '',
     },
   ],
@@ -140,6 +140,18 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: '#DESIGN-REVIEW-1: mobile UI/UX design re',
+        title: 'DESIGN-REVIEW-1: mobile UI/UX design review + upgrade (impeccable + emil skills)',
+        note: 'Epic. Mobile (390px) design review of frontend, then batched fixes. Plan: `.claude/plans/design-review.md` (branch `feature/claude-design-review`).',
+        issue: 503,
+      },
+      {
+        id: '#perf(discovery): pool rebuild backoff +',
+        title: 'perf(discovery): pool rebuild backoff + shared pool across gunicorn workers',
+        note: 'discovery_pool (#494):',
+        issue: 498,
+      },
       {
         id: '#security(recommendation): set NUM_PROXI',
         title: 'security(recommendation): set NUM_PROXIES so anon throttles key on real client IP',
@@ -328,6 +340,18 @@ window.PROJECT_STATE = {
       },
     ],
     low: [
+      {
+        id: '#chore: small leftovers from SNS cleanup',
+        title: 'chore: small leftovers from SNS cleanup + block sync',
+        note: 'project/file-roles.json:159 still lists deleted backend/apps/social/serializers.py (#496).',
+        issue: 500,
+      },
+      {
+        id: '#test(discovery): retarget create_discov',
+        title: 'test(discovery): retarget create_discovery_draft patch to discovery_feed',
+        note: 'tests/test_is_temp_lifecycle.py:185 patches apps.recommendation.views.discovery.create_discovery_draft, but view now calls get_or_create_recent_discovery_draft -> discovery_feed.create_discovery_draft; patch is dead (test still passes on status != 403). Retarget to apps.recomm…',
+        issue: 499,
+      },
       {
         id: '#fix(messaging): small gaps after messag',
         title: 'fix(messaging): small gaps after messages tab + block status',
@@ -536,6 +560,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 502,
+      title: 'feat(frontend): migrate src JS/JSX to TypeScript — types only',
+      mergedAt: '2026-11-20T18:40:48Z',
+      mergedAtKST: '2026-11-21 03:40 KST',
+      sha: 'e6c410b',
+    },
+    {
       number: 497,
       title: 'fix(SNS-BLOCK-SYNC-1): apply server blocked_by_me both ways, fetch status while hidden',
       mergedAt: '2026-11-20T16:29:19Z',
@@ -557,6 +588,13 @@ window.PROJECT_STATE = {
       sha: '6a5ef4f',
     },
     {
+      number: 494,
+      title: 'perf+ui(profile,discovery,board): faster profile/discovery load; report-style board, save modal, building & studio pages',
+      mergedAt: '2026-11-20T16:41:02Z',
+      mergedAtKST: '2026-11-21 01:41 KST',
+      sha: '872a2e0',
+    },
+    {
       number: 487,
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
       mergedAt: '2026-11-10T13:55:32Z',
@@ -576,20 +614,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-10T13:55:02Z',
       mergedAtKST: '2026-11-10 22:55 KST',
       sha: 'a7eb694',
-    },
-    {
-      number: 484,
-      title: 'fix(report): wait for in-flight swipes on auto-complete path + report generation diagnostics',
-      mergedAt: '2026-11-10T13:57:04Z',
-      mergedAtKST: '2026-11-10 22:57 KST',
-      sha: 'cbdb4d1',
-    },
-    {
-      number: 483,
-      title: 'feat: unified persona report UI + Discovery→Taste promote flow',
-      mergedAt: '2026-11-10T13:56:08Z',
-      mergedAtKST: '2026-11-10 22:56 KST',
-      sha: '3e00472',
     },
   ],
   agents: [
@@ -1380,6 +1404,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/messaging/migrations/0002_follow_replaces_contact_request.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/messaging/migrations/__init__.py',
       role: '',
     },
@@ -1409,6 +1437,10 @@ window.PROJECT_STATE = {
     },
     {
       path: 'backend/apps/messaging/tests/test_messaging.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/messaging/tests/test_migration_0002.py',
       role: '',
     },
     {
@@ -2136,12 +2168,24 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/social/migrations/0008_userfollow.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/social/migrations/__init__.py',
       role: '패키지 init',
     },
     {
       path: 'backend/apps/social/models.py',
       role: '팔로우/리액션 모델',
+    },
+    {
+      path: 'backend/apps/social/permissions.py',
+      role: '',
+    },
+    {
+      path: 'backend/apps/social/services.py',
+      role: '',
     },
     {
       path: 'backend/apps/social/tests/__init__.py',
@@ -2156,6 +2200,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/social/tests/test_follow.py',
+      role: '유저 팔로우 테스트',
+    },
+    {
       path: 'backend/apps/social/tests/test_people_temp_boards.py',
       role: '',
     },
@@ -2168,12 +2216,20 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'backend/apps/social/throttling.py',
+      role: '',
+    },
+    {
       path: 'backend/apps/social/urls.py',
       role: 'social API URL 라우팅',
     },
     {
       path: 'backend/apps/social/views.py',
       role: '팔로우/리액션 뷰',
+    },
+    {
+      path: 'backend/apps/social/views_follow.py',
+      role: '',
     },
     {
       path: 'backend/apps/social/views_liked.py',
@@ -2604,6 +2660,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'docs/decisions/2026-11-21-follow-model.md',
+      role: '',
+    },
+    {
       path: 'docs/decisions/architect-unification.md',
       role: 'Office/Architect 통합 결정 기록 (Phase 0 완료, 1-4 미착수)',
     },
@@ -2740,51 +2800,43 @@ window.PROJECT_STATE = {
       role: '프론트 패키지 매니페스트',
     },
     {
-      path: 'frontend/package.json',
-      role: '프론트 패키지 매니페스트',
-    },
-    {
-      path: 'frontend/package.json',
-      role: '프론트 패키지 매니페스트',
-    },
-    {
       path: 'frontend/public/favicon.svg',
       role: '파비콘 에셋',
     },
     {
-      path: 'frontend/src/App.jsx',
-      role: '앱 루트 라우팅 컴포넌트',
-    },
-    {
-      path: 'frontend/src/api/admin.js',
+      path: 'frontend/src/App.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/api/architects.js',
-      role: 'architect 추천/프로필/팔로우/saved studios API 래퍼 (#178/#182)',
-    },
-    {
-      path: 'frontend/src/api/auth.js',
-      role: '인증 API 클라이언트',
-    },
-    {
-      path: 'frontend/src/api/client.js',
-      role: 'API 클라이언트 facade',
-    },
-    {
-      path: 'frontend/src/api/contests.js',
+      path: 'frontend/src/api/admin.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/core.js',
-      role: 'JWT 토큰·fetch 코어',
+      path: 'frontend/src/api/architects.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/api/discovery.js',
-      role: '디스커버리 피드 API 클라이언트',
+      path: 'frontend/src/api/auth.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/api/feedback.js',
+      path: 'frontend/src/api/client.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/contests.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/core.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/discovery.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/feedback.ts',
       role: '',
     },
     {
@@ -2792,47 +2844,43 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/api/images.js',
-      role: '이미지 카드 정규화·텔레메트리 헬퍼',
-    },
-    {
       path: 'frontend/src/api/images.test.mjs',
       role: '',
     },
     {
-      path: 'frontend/src/api/inspect.js',
+      path: 'frontend/src/api/images.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/messaging.js',
+      path: 'frontend/src/api/inspect.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/meta.js',
+      path: 'frontend/src/api/messaging.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/notifications.js',
+      path: 'frontend/src/api/meta.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/people.js',
+      path: 'frontend/src/api/notifications.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/personality.js',
+      path: 'frontend/src/api/people.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/profiles.js',
-      role: '사무소·유저 프로필 API 클라이언트',
+      path: 'frontend/src/api/personality.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/api/projects.js',
-      role: '프로젝트·보드 CRUD API 클라이언트',
+      path: 'frontend/src/api/profiles.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/api/rightSizeImageUrl.js',
+      path: 'frontend/src/api/projects.ts',
       role: '',
     },
     {
@@ -2840,31 +2888,31 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/api/sessions.js',
-      role: '분석 세션·스와이프 API 클라이언트',
-    },
-    {
-      path: 'frontend/src/api/social.js',
-      role: '팔로우·리액션 소셜 API 클라이언트',
-    },
-    {
-      path: 'frontend/src/api/taste.js',
+      path: 'frontend/src/api/rightSizeImageUrl.ts',
       role: '',
     },
     {
-      path: 'frontend/src/api/works.js',
+      path: 'frontend/src/api/sessions.ts',
       role: '',
     },
     {
-      path: 'frontend/src/components/AppearanceSettings.jsx',
-      role: '테마·폰트 설정 UI',
+      path: 'frontend/src/api/social.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/taste.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/api/works.ts',
+      role: '',
     },
     {
       path: 'frontend/src/components/AppearanceSettings.module.css',
       role: '외관설정 스타일(CSS Module)',
     },
     {
-      path: 'frontend/src/components/AssessmentCard.jsx',
+      path: 'frontend/src/components/AppearanceSettings.tsx',
       role: '',
     },
     {
@@ -2872,11 +2920,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/Avatar.jsx',
+      path: 'frontend/src/components/AssessmentCard.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/BoardSocialCard.jsx',
+      path: 'frontend/src/components/Avatar.tsx',
       role: '',
     },
     {
@@ -2884,15 +2932,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/BoardSocialCard.tsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/Button.module.css',
       role: '버튼 스타일(CSS Module)',
     },
     {
-      path: 'frontend/src/components/CardSkeleton.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/ChoiceCard.jsx',
+      path: 'frontend/src/components/CardSkeleton.tsx',
       role: '',
     },
     {
@@ -2900,7 +2948,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/ConfirmDialog.jsx',
+      path: 'frontend/src/components/ChoiceCard.tsx',
       role: '',
     },
     {
@@ -2908,15 +2956,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/DebugOverlay.jsx',
-      role: '세션·스와이프 디버그 오버레이',
-    },
-    {
-      path: 'frontend/src/components/DiscoveryCapCard.jsx',
+      path: 'frontend/src/components/ConfirmDialog.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/DiscoveryPromoteOverlay.jsx',
+      path: 'frontend/src/components/DebugOverlay.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/DiscoveryCapCard.tsx',
       role: '',
     },
     {
@@ -2924,11 +2972,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/DiscoveryTriggerCard.jsx',
-      role: 'Discovery-Taste 전환 카드',
+      path: 'frontend/src/components/DiscoveryPromoteOverlay.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/EmptyState.jsx',
+      path: 'frontend/src/components/DiscoveryTriggerCard.tsx',
       role: '',
     },
     {
@@ -2936,11 +2984,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/ErrorBoundary.jsx',
-      role: '에러 바운더리 컴포넌트',
+      path: 'frontend/src/components/EmptyState.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/FinishReportButton.jsx',
+      path: 'frontend/src/components/ErrorBoundary.tsx',
       role: '',
     },
     {
@@ -2948,7 +2996,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/FloatingIconButton.jsx',
+      path: 'frontend/src/components/FinishReportButton.tsx',
       role: '',
     },
     {
@@ -2956,15 +3004,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/GoogleLoginButton.jsx',
-      role: '구글 로그인 버튼',
+      path: 'frontend/src/components/FloatingIconButton.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/GoogleVerifyButton.jsx',
-      role: '구글 계정 인증 버튼',
+      path: 'frontend/src/components/GoogleLoginButton.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/KakaoLoginButton.jsx',
+      path: 'frontend/src/components/GoogleVerifyButton.tsx',
       role: '',
     },
     {
@@ -2972,7 +3020,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/LeaveDiscoveryModal.jsx',
+      path: 'frontend/src/components/KakaoLoginButton.tsx',
       role: '',
     },
     {
@@ -2980,7 +3028,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/Modal.jsx',
+      path: 'frontend/src/components/LeaveDiscoveryModal.tsx',
       role: '',
     },
     {
@@ -2988,27 +3036,27 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/NotFoundRedirect.jsx',
+      path: 'frontend/src/components/Modal.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/PageBackButton.jsx',
+      path: 'frontend/src/components/NotFoundRedirect.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/PageLogoHeader.jsx',
+      path: 'frontend/src/components/PageBackButton.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/PageShell.jsx',
+      path: 'frontend/src/components/PageLogoHeader.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/PageTitle.jsx',
+      path: 'frontend/src/components/PageShell.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/PageTopControls.jsx',
+      path: 'frontend/src/components/PageTitle.tsx',
       role: '',
     },
     {
@@ -3016,7 +3064,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/PasswordInput.jsx',
+      path: 'frontend/src/components/PageTopControls.tsx',
       role: '',
     },
     {
@@ -3024,7 +3072,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/PentagonChart.jsx',
+      path: 'frontend/src/components/PasswordInput.tsx',
       role: '',
     },
     {
@@ -3032,7 +3080,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/PersonaReportPage.jsx',
+      path: 'frontend/src/components/PentagonChart.tsx',
       role: '',
     },
     {
@@ -3040,7 +3088,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/PhotoTile.jsx',
+      path: 'frontend/src/components/PersonaReportPage.tsx',
       role: '',
     },
     {
@@ -3048,11 +3096,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/ProtectedRoute.jsx',
-      role: '인증 보호 라우트 가드',
+      path: 'frontend/src/components/PhotoTile.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/ReportReentryBanner.jsx',
+      path: 'frontend/src/components/ProtectedRoute.tsx',
       role: '',
     },
     {
@@ -3060,7 +3108,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/ResultCards.jsx',
+      path: 'frontend/src/components/ReportReentryBanner.tsx',
       role: '',
     },
     {
@@ -3068,11 +3116,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/RouteFallback.jsx',
+      path: 'frontend/src/components/ResultCards.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/SaveBoardModal.jsx',
+      path: 'frontend/src/components/RouteFallback.tsx',
       role: '',
     },
     {
@@ -3080,11 +3128,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/SectionTitle.jsx',
+      path: 'frontend/src/components/SaveBoardModal.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/SegmentedControl.jsx',
+      path: 'frontend/src/components/SectionTitle.tsx',
       role: '',
     },
     {
@@ -3092,11 +3140,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/Skeleton.jsx',
+      path: 'frontend/src/components/SegmentedControl.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/SocialSegment.jsx',
+      path: 'frontend/src/components/Skeleton.tsx',
       role: '',
     },
     {
@@ -3104,7 +3152,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/StudioCard.jsx',
+      path: 'frontend/src/components/SocialSegment.tsx',
       role: '',
     },
     {
@@ -3112,23 +3160,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/SwipeCard.jsx',
-      role: '스와이프 카드 컴포넌트',
-    },
-    {
-      path: 'frontend/src/components/SwipeDeck.jsx',
+      path: 'frontend/src/components/StudioCard.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/SwipeGestureFrame.jsx',
-      role: '공통 swipe 제스처 래퍼',
+      path: 'frontend/src/components/SwipeCard.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/TabBar.jsx',
-      role: '하단 탭바 내비게이션',
+      path: 'frontend/src/components/SwipeDeck.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/Tabs.jsx',
+      path: 'frontend/src/components/SwipeGestureFrame.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/TabBar.tsx',
       role: '',
     },
     {
@@ -3136,15 +3184,19 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/TasteCardDetail.jsx',
+      path: 'frontend/src/components/Tabs.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/TasteCardGallery.jsx',
+      path: 'frontend/src/components/TasteCardDetail.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/TasteCardReport.jsx',
+      path: 'frontend/src/components/TasteCardGallery.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/TasteCardReport.tsx',
       role: '',
     },
     {
@@ -3152,15 +3204,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/TasteSpectrum.jsx',
-      role: '취향 스펙트럼 SVG 시각화',
-    },
-    {
-      path: 'frontend/src/components/ThemePreviewCard.jsx',
+      path: 'frontend/src/components/TasteSpectrum.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/Toast.jsx',
+      path: 'frontend/src/components/ThemePreviewCard.tsx',
       role: '',
     },
     {
@@ -3168,23 +3216,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/Toggle.jsx',
-      role: '스위치 토글 컴포넌트',
+      path: 'frontend/src/components/Toast.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/Toggle.module.css',
       role: '토글 스타일 (CSS Module)',
     },
     {
-      path: 'frontend/src/components/TutorialPopup.jsx',
-      role: '스와이프 튜토리얼 팝업',
+      path: 'frontend/src/components/Toggle.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/VerifyGateModal.jsx',
-      role: '보드 한도 인증 게이트 모달',
+      path: 'frontend/src/components/TutorialPopup.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/WorkDetailModal.jsx',
+      path: 'frontend/src/components/VerifyGateModal.tsx',
       role: '',
     },
     {
@@ -3192,15 +3240,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/cardLanguage.js',
+      path: 'frontend/src/components/WorkDetailModal.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/cardShell.js',
+      path: 'frontend/src/components/cardLanguage.ts',
       role: '',
     },
     {
-      path: 'frontend/src/components/contests/DeadlineBadge.jsx',
+      path: 'frontend/src/components/cardShell.ts',
       role: '',
     },
     {
@@ -3208,7 +3256,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/contests/PosterLightbox.jsx',
+      path: 'frontend/src/components/contests/DeadlineBadge.tsx',
       role: '',
     },
     {
@@ -3216,23 +3264,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/icons.jsx',
-      role: '공통 stroke 아이콘 세트',
-    },
-    {
-      path: 'frontend/src/components/messaging/ContactCta.jsx',
+      path: 'frontend/src/components/contests/PosterLightbox.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/ConversationView.jsx',
+      path: 'frontend/src/components/icons.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/GreetingSheet.jsx',
+      path: 'frontend/src/components/messaging/ConversationView.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/InboxView.jsx',
+      path: 'frontend/src/components/messaging/FollowCta.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/InboxView.tsx',
       role: '',
     },
     {
@@ -3240,15 +3288,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/ReportDialog.jsx',
+      path: 'frontend/src/components/messaging/ReportDialog.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/UserActionsMenu.jsx',
-      role: '',
-    },
-    {
-      path: 'frontend/src/components/messaging/blockedUsers.js',
+      path: 'frontend/src/components/messaging/UserActionsMenu.tsx',
       role: '',
     },
     {
@@ -3256,215 +3300,215 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/components/messaging/messagingUtils.js',
+      path: 'frontend/src/components/messaging/blockedUsers.ts',
       role: '',
     },
     {
-      path: 'frontend/src/components/photoCardShell.js',
+      path: 'frontend/src/components/messaging/messagingUtils.ts',
       role: '',
     },
     {
-      path: 'frontend/src/components/profile/BoardCard.jsx',
-      role: '프로필 보드 플립 카드',
+      path: 'frontend/src/components/photoCardShell.ts',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/BoardCard.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/components/profile/BusinessCard.jsx',
-      role: '프로필 명함 카드(3D 플립)',
+      path: 'frontend/src/components/profile/BoardCard.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/components/profile/EditCardForm.jsx',
-      role: '프로필 편집 폼',
+      path: 'frontend/src/components/profile/BusinessCard.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/components/profile/EditCardForm.module.css',
       role: '프로필 편집 폼 스타일',
     },
     {
-      path: 'frontend/src/components/profile/InfoCol.jsx',
-      role: '카드 정보 컬럼 프리미티브',
-    },
-    {
-      path: 'frontend/src/components/profile/ProfileQr.jsx',
+      path: 'frontend/src/components/profile/EditCardForm.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/promoteError.js',
+      path: 'frontend/src/components/profile/InfoCol.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/components/swipeGestureConfig.js',
-      role: 'swipe 제스처 설정 상수',
-    },
-    {
-      path: 'frontend/src/constants/assessmentQuestions.js',
+      path: 'frontend/src/components/profile/ProfileQr.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/constants/personalityTypes.js',
+      path: 'frontend/src/components/promoteError.ts',
       role: '',
     },
     {
-      path: 'frontend/src/constants/roles.js',
+      path: 'frontend/src/components/swipeGestureConfig.ts',
       role: '',
     },
     {
-      path: 'frontend/src/context/LanguageContext.jsx',
-      role: '언어 선택 제공자',
-    },
-    {
-      path: 'frontend/src/context/ThemeContext.jsx',
-      role: '테마·폰트 Provider',
-    },
-    {
-      path: 'frontend/src/context/_languageContext.js',
-      role: '언어 컨텍스트 (원본)',
-    },
-    {
-      path: 'frontend/src/context/_themeContext.js',
-      role: '테마 React context 정의',
-    },
-    {
-      path: 'frontend/src/hooks/useAdminStatus.js',
+      path: 'frontend/src/constants/assessmentQuestions.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useBoard.js',
-      role: '보드 상세 로딩 훅',
-    },
-    {
-      path: 'frontend/src/hooks/useBoardEdit.js',
+      path: 'frontend/src/constants/personalityTypes.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useBoardReaction.js',
+      path: 'frontend/src/constants/roles.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useCardLean.js',
+      path: 'frontend/src/context/LanguageContext.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useCardSize.js',
+      path: 'frontend/src/context/ThemeContext.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useGoogleEmailVerify.js',
+      path: 'frontend/src/context/_languageContext.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useImageTelemetry.js',
-      role: '이미지 로드 텔레메트리 훅',
-    },
-    {
-      path: 'frontend/src/hooks/useKeyboardSwipe.js',
+      path: 'frontend/src/context/_themeContext.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useLanguage.js',
-      role: '언어 선택 훅',
-    },
-    {
-      path: 'frontend/src/hooks/useMessagingFeature.js',
+      path: 'frontend/src/hooks/useAdminStatus.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useNearViewport.js',
+      path: 'frontend/src/hooks/useBoard.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useNow.js',
+      path: 'frontend/src/hooks/useBoardEdit.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useProjectReactors.js',
-      role: '프로젝트 리액터 페이지네이션 훅',
-    },
-    {
-      path: 'frontend/src/hooks/usePublicBoardReport.js',
+      path: 'frontend/src/hooks/useBoardReaction.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useRegeneration.jsx',
+      path: 'frontend/src/hooks/useCardLean.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useReportImageJob.js',
+      path: 'frontend/src/hooks/useCardSize.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useReportJobs.js',
+      path: 'frontend/src/hooks/useGoogleEmailVerify.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useResults.js',
-      role: '세션 결과·북마크 훅',
-    },
-    {
-      path: 'frontend/src/hooks/useSwipeOrchestration.js',
+      path: 'frontend/src/hooks/useImageTelemetry.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useTheme.js',
-      role: '테마 context 소비 훅',
-    },
-    {
-      path: 'frontend/src/hooks/useUnreadMessages.js',
+      path: 'frontend/src/hooks/useKeyboardSwipe.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useUnreadNotifications.js',
+      path: 'frontend/src/hooks/useLanguage.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useVisualViewportSheetStyle.js',
+      path: 'frontend/src/hooks/useMessagingFeature.ts',
       role: '',
     },
     {
-      path: 'frontend/src/hooks/useWindowSize.js',
+      path: 'frontend/src/hooks/useNearViewport.ts',
       role: '',
     },
     {
-      path: 'frontend/src/i18n/index.js',
-      role: '번역 훅 (경로 해석)',
+      path: 'frontend/src/hooks/useNow.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/i18n/locales.js',
-      role: '번역 사전 (한영)',
+      path: 'frontend/src/hooks/useProjectReactors.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/usePublicBoardReport.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useRegeneration.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useReportImageJob.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useReportJobs.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useResults.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useSwipeOrchestration.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useTheme.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useUnreadMessages.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useUnreadNotifications.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useVisualViewportSheetStyle.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/hooks/useWindowSize.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/i18n/index.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/i18n/locales.ts',
+      role: '',
     },
     {
       path: 'frontend/src/index.css',
       role: '전역 기본 스타일',
     },
     {
-      path: 'frontend/src/layouts/MainLayout.jsx',
-      role: '메인 레이아웃 + TabBar 셸',
-    },
-    {
-      path: 'frontend/src/lazyPages.js',
+      path: 'frontend/src/layouts/MainLayout.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/lib/tinderCard.js',
+      path: 'frontend/src/lazyPages.ts',
       role: '',
     },
     {
-      path: 'frontend/src/main.jsx',
-      role: 'React 앱 진입점',
+      path: 'frontend/src/lib/tinderCard.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/ArchitectProfilePage.jsx',
-      role: 'architect 프로필 페이지 (#182)',
+      path: 'frontend/src/main.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/ArchitectProfilePage.module.css',
       role: 'architect 프로필 페이지 CSS 모듈 (#182)',
     },
     {
-      path: 'frontend/src/pages/AssessmentPage.jsx',
+      path: 'frontend/src/pages/ArchitectProfilePage.tsx',
       role: '',
     },
     {
@@ -3472,31 +3516,31 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/BoardDetailPage.jsx',
-      role: '보드 상세 페이지',
+      path: 'frontend/src/pages/AssessmentPage.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BoardDetailPage.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/pages/BoardReportPage.jsx',
-      role: '페르소나 리포트 페이지',
-    },
-    {
-      path: 'frontend/src/pages/BoardRoute.jsx',
+      path: 'frontend/src/pages/BoardDetailPage.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/BuildingDetailPage.jsx',
-      role: '건물 상세 페이지',
+      path: 'frontend/src/pages/BoardReportPage.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/BoardRoute.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/BuildingDetailPage.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/pages/CompetitionDetailPage.jsx',
+      path: 'frontend/src/pages/BuildingDetailPage.tsx',
       role: '',
     },
     {
@@ -3504,7 +3548,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/CompetitionListPage.jsx',
+      path: 'frontend/src/pages/CompetitionDetailPage.tsx',
       role: '',
     },
     {
@@ -3512,23 +3556,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/DiscoveryPage.jsx',
-      role: '디스커버리 스와이프 피드',
-    },
-    {
-      path: 'frontend/src/pages/KakaoCallbackPage.jsx',
+      path: 'frontend/src/pages/CompetitionListPage.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/LoginPage.jsx',
-      role: '게스트 온보딩 로그인 페이지',
+      path: 'frontend/src/pages/DiscoveryPage.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/KakaoCallbackPage.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/LoginPage.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/pages/MessagesPage.jsx',
+      path: 'frontend/src/pages/LoginPage.tsx',
       role: '',
     },
     {
@@ -3536,11 +3580,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/OnboardingPage.jsx',
+      path: 'frontend/src/pages/MessagesPage.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/PeopleDiscoveryPage.jsx',
+      path: 'frontend/src/pages/OnboardingPage.tsx',
       role: '',
     },
     {
@@ -3548,15 +3592,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/ResultsPage.jsx',
-      role: '추천 결과 페이지',
+      path: 'frontend/src/pages/PeopleDiscoveryPage.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/SwipePage.jsx',
-      role: '취향 분석 스와이프 페이지',
+      path: 'frontend/src/pages/ResultsPage.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/TasteStartPage.jsx',
+      path: 'frontend/src/pages/SwipePage.tsx',
       role: '',
     },
     {
@@ -3564,7 +3608,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/UploadWorkPage.jsx',
+      path: 'frontend/src/pages/TasteStartPage.tsx',
       role: '',
     },
     {
@@ -3572,19 +3616,19 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/UserProfilePage.jsx',
-      role: '유저 프로필 페이지',
+      path: 'frontend/src/pages/UploadWorkPage.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/UserProfilePage.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/AdminGate.jsx',
+      path: 'frontend/src/pages/UserProfilePage.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/AdminPage.jsx',
+      path: 'frontend/src/pages/admin/AdminGate.tsx',
       role: '',
     },
     {
@@ -3592,19 +3636,19 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/AuditSection.jsx',
+      path: 'frontend/src/pages/admin/AdminPage.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/CiSection.jsx',
+      path: 'frontend/src/pages/admin/AuditSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/ContestFormModal.jsx',
+      path: 'frontend/src/pages/admin/CiSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/ContestsSection.jsx',
+      path: 'frontend/src/pages/admin/ContestFormModal.tsx',
       role: '',
     },
     {
@@ -3612,43 +3656,43 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/DeploySection.jsx',
+      path: 'frontend/src/pages/admin/ContestsSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/FlagsSection.jsx',
+      path: 'frontend/src/pages/admin/DeploySection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/MigrationSection.jsx',
+      path: 'frontend/src/pages/admin/FlagsSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/SectionCard.jsx',
+      path: 'frontend/src/pages/admin/MigrationSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/ServicesSection.jsx',
+      path: 'frontend/src/pages/admin/SectionCard.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/StatsSection.jsx',
+      path: 'frontend/src/pages/admin/ServicesSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/contestConstants.js',
+      path: 'frontend/src/pages/admin/StatsSection.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/contestErrors.js',
+      path: 'frontend/src/pages/admin/contestConstants.ts',
       role: '',
     },
     {
-      path: 'frontend/src/pages/admin/useAdminSection.js',
+      path: 'frontend/src/pages/admin/contestErrors.ts',
       role: '',
     },
     {
-      path: 'frontend/src/pages/boardDetail/BoardCover.jsx',
+      path: 'frontend/src/pages/admin/useAdminSection.ts',
       role: '',
     },
     {
@@ -3656,15 +3700,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/boardDetail/BuildingTile.jsx',
-      role: '보드 건물 타일 카드',
+      path: 'frontend/src/pages/boardDetail/BoardCover.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/boardDetail/BuildingTile.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/pages/boardDetail/CoverIconButton.jsx',
+      path: 'frontend/src/pages/boardDetail/BuildingTile.tsx',
       role: '',
     },
     {
@@ -3672,11 +3716,15 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/boardDetail/EditActionBar.jsx',
+      path: 'frontend/src/pages/boardDetail/CoverIconButton.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/boardReport/BoardReportParts.jsx',
+      path: 'frontend/src/pages/boardDetail/EditActionBar.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/boardReport/BoardReportParts.tsx',
       role: '',
     },
     {
@@ -3684,59 +3732,55 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/buildingDetail/ErrorState.jsx',
-      role: '건물 상세 에러 상태',
-    },
-    {
-      path: 'frontend/src/pages/buildingDetail/Header.jsx',
-      role: '건물 상세 헤더 바',
-    },
-    {
-      path: 'frontend/src/pages/buildingDetail/LoadingState.jsx',
-      role: '건물 상세 로딩 상태',
-    },
-    {
-      path: 'frontend/src/pages/buildingDetail/PhotoLightbox.jsx',
+      path: 'frontend/src/pages/buildingDetail/ErrorState.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/buildingDetail/helpers.js',
-      role: '건물 상세 메타 헬퍼',
+      path: 'frontend/src/pages/buildingDetail/Header.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/buildingDetail/LoadingState.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/buildingDetail/PhotoLightbox.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/pages/buildingDetail/helpers.ts',
+      role: '',
     },
     {
       path: 'frontend/src/pages/dbCheck/DbCheck.module.css',
       role: '',
     },
     {
-      path: 'frontend/src/pages/dbCheck/DbCheckDetailModal.jsx',
+      path: 'frontend/src/pages/dbCheck/DbCheckDetailModal.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/dbCheck/DbCheckPage.jsx',
+      path: 'frontend/src/pages/dbCheck/DbCheckPage.tsx',
       role: '',
     },
     {
-      path: 'frontend/src/pages/dbCheck/DbCheckTile.jsx',
+      path: 'frontend/src/pages/dbCheck/DbCheckTile.tsx',
       role: '',
-    },
-    {
-      path: 'frontend/src/pages/settings/AccountScreen.jsx',
-      role: '계정 관리 설정 화면',
     },
     {
       path: 'frontend/src/pages/settings/AccountScreen.module.css',
       role: '계정 설정 폼 스타일(CSS Module)',
     },
     {
-      path: 'frontend/src/pages/settings/AppearanceScreen.jsx',
-      role: '화면 설정 페이지 (테마·폰트·언어)',
+      path: 'frontend/src/pages/settings/AccountScreen.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/settings/EditProfileScreen.jsx',
-      role: '프로필 편집 페이지 (이름·직업·소개)',
+      path: 'frontend/src/pages/settings/AppearanceScreen.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/settings/NotificationInboxScreen.jsx',
+      path: 'frontend/src/pages/settings/EditProfileScreen.tsx',
       role: '',
     },
     {
@@ -3744,39 +3788,47 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/pages/settings/NotificationsScreen.jsx',
-      role: '알림 설정 페이지 (푸시·이메일)',
+      path: 'frontend/src/pages/settings/NotificationInboxScreen.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/settings/NotificationsScreen.module.css',
       role: '알림 설정 화면 스타일(CSS Module)',
     },
     {
-      path: 'frontend/src/pages/settings/SettingsPage.jsx',
-      role: '설정 메인 네비게이션',
+      path: 'frontend/src/pages/settings/NotificationsScreen.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/settings/SettingsPage.module.css',
       role: '설정 목록 레이아웃 스타일(CSS Module)',
     },
     {
-      path: 'frontend/src/pages/userProfile/BoardGrid.jsx',
-      role: '프로필 보드 그리드',
+      path: 'frontend/src/pages/settings/SettingsPage.tsx',
+      role: '',
     },
     {
-      path: 'frontend/src/pages/userProfile/ProfileHero.jsx',
-      role: '유저 프로필 히어로',
+      path: 'frontend/src/pages/userProfile/BoardGrid.tsx',
+      role: '',
     },
     {
       path: 'frontend/src/pages/userProfile/ProfileHero.module.css',
       role: '아바타 업로드 오버레이 스타일',
     },
     {
+      path: 'frontend/src/pages/userProfile/ProfileHero.tsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/tokens.css',
       role: '디자인 토큰 CSS 변수',
     },
     {
-      path: 'frontend/src/utils/apiError.js',
+      path: 'frontend/src/types/api.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/types/vendor.d.ts',
       role: '',
     },
     {
@@ -3784,11 +3836,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/appHelpers.js',
-      role: '앱 필터·에러 헬퍼',
+      path: 'frontend/src/utils/apiError.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/utils/assessmentDirection.js',
+      path: 'frontend/src/utils/appHelpers.ts',
       role: '',
     },
     {
@@ -3796,7 +3848,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/assessmentDraft.js',
+      path: 'frontend/src/utils/assessmentDirection.ts',
       role: '',
     },
     {
@@ -3804,7 +3856,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/axisScores.js',
+      path: 'frontend/src/utils/assessmentDraft.ts',
       role: '',
     },
     {
@@ -3812,7 +3864,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/boardCoverTitle.js',
+      path: 'frontend/src/utils/axisScores.ts',
       role: '',
     },
     {
@@ -3820,7 +3872,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/boardDeleteRules.js',
+      path: 'frontend/src/utils/boardCoverTitle.ts',
       role: '',
     },
     {
@@ -3828,7 +3880,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/boardEditPlan.js',
+      path: 'frontend/src/utils/boardDeleteRules.ts',
       role: '',
     },
     {
@@ -3836,7 +3888,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/contestDeadline.js',
+      path: 'frontend/src/utils/boardEditPlan.ts',
       role: '',
     },
     {
@@ -3844,11 +3896,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/discoveryGuard.js',
+      path: 'frontend/src/utils/contestDeadline.ts',
       role: '',
     },
     {
-      path: 'frontend/src/utils/draftFeedbackQueue.js',
+      path: 'frontend/src/utils/discoveryGuard.ts',
       role: '',
     },
     {
@@ -3856,7 +3908,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/imageMime.js',
+      path: 'frontend/src/utils/draftFeedbackQueue.ts',
       role: '',
     },
     {
@@ -3864,19 +3916,19 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/loginFlow.js',
-      role: '게스트 온보딩 유틸',
+      path: 'frontend/src/utils/imageMime.ts',
+      role: '',
     },
     {
       path: 'frontend/src/utils/loginFlow.test.mjs',
       role: 'loginFlow 테스트',
     },
     {
-      path: 'frontend/src/utils/onboardingFlag.js',
+      path: 'frontend/src/utils/loginFlow.ts',
       role: '',
     },
     {
-      path: 'frontend/src/utils/postUntilReady.js',
+      path: 'frontend/src/utils/onboardingFlag.ts',
       role: '',
     },
     {
@@ -3884,7 +3936,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/reportImageJobs.js',
+      path: 'frontend/src/utils/postUntilReady.ts',
       role: '',
     },
     {
@@ -3892,7 +3944,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/reportJobs.js',
+      path: 'frontend/src/utils/reportImageJobs.ts',
       role: '',
     },
     {
@@ -3900,7 +3952,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/reportStale.js',
+      path: 'frontend/src/utils/reportJobs.ts',
       role: '',
     },
     {
@@ -3908,23 +3960,23 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/reportText.js',
-      role: '리포트 문장 언어 선택',
+      path: 'frontend/src/utils/reportStale.ts',
+      role: '',
     },
     {
       path: 'frontend/src/utils/reportText.test.mjs',
       role: '리포트 언어 선택 테스트',
     },
     {
-      path: 'frontend/src/utils/reportWriteError.js',
-      role: '저장 실패 토스트 유틸리티',
+      path: 'frontend/src/utils/reportText.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/utils/resolveProjectBackendId.js',
-      role: '프로젝트 백엔드 ID 해석 유틸',
+      path: 'frontend/src/utils/reportWriteError.ts',
+      role: '',
     },
     {
-      path: 'frontend/src/utils/safeUrl.js',
+      path: 'frontend/src/utils/resolveProjectBackendId.ts',
       role: '',
     },
     {
@@ -3932,11 +3984,11 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/shareBoard.js',
+      path: 'frontend/src/utils/safeUrl.ts',
       role: '',
     },
     {
-      path: 'frontend/src/utils/socialFeed.js',
+      path: 'frontend/src/utils/shareBoard.ts',
       role: '',
     },
     {
@@ -3944,7 +3996,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/swipeSettle.js',
+      path: 'frontend/src/utils/socialFeed.ts',
       role: '',
     },
     {
@@ -3952,7 +4004,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/tasteStart.js',
+      path: 'frontend/src/utils/swipeSettle.ts',
       role: '',
     },
     {
@@ -3960,7 +4012,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/teamFit.js',
+      path: 'frontend/src/utils/tasteStart.ts',
       role: '',
     },
     {
@@ -3968,7 +4020,7 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/throttleRetry.js',
+      path: 'frontend/src/utils/teamFit.ts',
       role: '',
     },
     {
@@ -3976,15 +4028,27 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
-      path: 'frontend/src/utils/timeAgo.js',
+      path: 'frontend/src/utils/throttleRetry.ts',
       role: '',
     },
     {
-      path: 'frontend/src/utils/userIdentity.js',
+      path: 'frontend/src/utils/timeAgo.ts',
       role: '',
     },
     {
       path: 'frontend/src/utils/userIdentity.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/userIdentity.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/vite-env.d.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/tsconfig.json',
       role: '',
     },
     {

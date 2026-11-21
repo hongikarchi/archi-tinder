@@ -14,19 +14,12 @@ export function formatMessageTime(iso?: string | null, language?: string) {
   return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }
 
-export function isConnectedSystem(message?: { kind?: string, system_type?: string } | null) {
-  return message?.kind === 'system' && message?.system_type === 'connected'
-}
-
-/** Inbox row preview. System "connected" renders the i18n caption, not DB text. */
-export function previewText(
-  lastMessage: { kind?: string, system_type?: string, body?: string } | null | undefined,
-  t: (key: string, params?: Record<string, unknown>) => string,
-) {
-  if (!lastMessage) return ''
-  if (lastMessage.kind === 'system') {
-    return isConnectedSystem(lastMessage) ? t('messaging.connectedText') : ''
-  }
+/**
+ * Inbox row preview. System messages (legacy 'connected' rows from the removed
+ * contact-request flow stay in the DB) have no preview text.
+ */
+export function previewText(lastMessage: { kind?: string, body?: string } | null | undefined) {
+  if (!lastMessage || lastMessage.kind === 'system') return ''
   return lastMessage.body || ''
 }
 

@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import F
+from django.db.models import F, Q
 from django.db.models.functions import Greatest
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
@@ -27,6 +27,45 @@ class ArchitectFollow(models.Model):
 
     def __str__(self):
         return f'{self.follower_id} -> arch:{self.architect_id}'
+
+
+class UserFollow(models.Model):
+    """One-way user-to-user follow (SNS-FOLLOW-1): `follower` follows `following`.
+
+    Not ArchitectFollow (user -> architect) and not profiles.Office follower
+    counters (placeholders). follower_count / following_count are COUNT(*) —
+    no counter cache (see apps.social.services).
+
+    on_delete=CASCADE on BOTH FKs is an explicit decision: deleting an account
+    removes every follow edge in both directions (no tombstone). Relevant to
+    account deletion (#412).
+    """
+    follower = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='follows_out',
+    )
+    following = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='follows_in',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        unique_together = [('follower', 'following')]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(follower=F('following')),
+                name='user_follow_not_self',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['following', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.follower_id} -> {self.following_id}'
 
 
 # ---------------------------------------------------------------------------

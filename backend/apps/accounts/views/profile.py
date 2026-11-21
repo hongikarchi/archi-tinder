@@ -225,6 +225,11 @@ class UserProfileDetailView(APIView):
             return Response(cached_payload)
 
         data = UserProfileSerializer(profile).data
+        # SNS-FOLLOW-1: COUNT(*) follow counts, detail view only (no N+1 in lists).
+        # Cached with the payload; follow/unfollow/block evict this user's entries.
+        from apps.social import services as social_services
+        data['follower_count'] = social_services.follower_count(profile)
+        data['following_count'] = social_services.following_count(profile)
         data['boards'] = _build_boards_field(profile, is_owner, page=page, page_size=page_size)
 
         # Personality field: all 5 axes included — axis_5 (bonus) is needed for

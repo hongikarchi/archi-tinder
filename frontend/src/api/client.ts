@@ -14,13 +14,12 @@ export { startSession, getSessionState, recordSwipe, getResult } from './session
 export { listProjects, getProject, updateProject, deleteProject, getBuildings, getBoardBuildings, generateReport, generateReportImage, getProjectRecommendations, createProject, VerifyRequiredError } from './projects.ts'
 export { fetchDiscoveryFeed, discoveryFeedback, promoteToTaste } from './discovery.ts'
 export { getUserProfile, updateMyProfile } from './profiles.ts'
-export { getProjectReactors, reactToProject, unreactToProject, getLikedBoards } from './social.ts'
+export { getProjectReactors, reactToProject, unreactToProject, getLikedBoards, followUser, unfollowUser, getFollowStatus } from './social.ts'
 export { listContests, getContest, addContestInterest, removeContestInterest } from './contests.ts'
 export { getRecommendedArchitects, getArchitectProfile, getUserSavedStudios } from './architects.ts'
 export { listNotifications, getUnreadCount, markRead } from './notifications.ts'
 export { getInspectBuildings, getInspectBuilding, inspectSearch } from './inspect.ts'
 export {
-  sendContactRequest, listReceivedRequests, getContactStatus, acceptContactRequest, ignoreContactRequest,
-  listConversations, listMessages, sendMessage, markConversationRead, getMessagesUnreadCount,
+  openConversation, listConversations, listMessages, sendMessage, markConversationRead, getMessagesUnreadCount,
   blockUser, unblockUser, reportTarget,
 } from './messaging.ts'

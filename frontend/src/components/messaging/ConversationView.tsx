@@ -7,7 +7,7 @@ import ReportDialog from './ReportDialog.tsx'
 import { listMessages, sendMessage, markConversationRead } from '../../api/messaging.ts'
 import { VerifyRequiredError } from '../../api/projects.ts'
 import { refreshUnreadMessages } from '../../hooks/useUnreadMessages.ts'
-import { formatMessageTime, isConnectedSystem, maxMessageId } from './messagingUtils.ts'
+import { formatMessageTime, maxMessageId } from './messagingUtils.ts'
 import type { ChatMessage, ConversationItem, MessagesPage } from '../../types/api.ts'
 import styles from './Messaging.module.css'
 import { userHandle } from '../../utils/userIdentity.ts'
@@ -21,8 +21,8 @@ const STICK_THRESHOLD = 80
  * (FULL-MESSAGING-1; page-hosted since FRONT-MESSAGES-TAB-1). The back button
  * lives in the page's PageTopControls, not here.
  *
- * Bubbles (mine right / accent, theirs left), `kind:'system'` messages as a
- * centered i18n caption (never DB text), composer (1..1000 chars). On entry
+ * Bubbles (mine right / accent, theirs left), `kind:'system'` messages skipped
+ * (legacy rows only; nothing creates them any more), composer (1..1000 chars). On entry
  * the conversation is marked read and the shared unread count refreshed.
  *
  * Polling (D8): ONLY while this view is mounted AND the document is visible,
@@ -265,10 +265,9 @@ export default function ConversationView({ conversation, onOpenProfile }: Conver
         )}
 
         {loadState === 'ready' && messages.map((m, i) => {
-          if (m.kind === 'system') {
-            if (!isConnectedSystem(m)) return null
-            return <div key={m.id} className={styles.systemMsg}>{t('messaging.connectedText')}</div>
-          }
+          // System rows (legacy 'connected' from the removed contact-request
+          // flow) render nothing.
+          if (m.kind === 'system') return null
           const mine = Boolean(m.is_mine)
           const next = messages[i + 1]
           const showTime = !next || next.kind !== 'user' || Boolean(next.is_mine) !== mine ||

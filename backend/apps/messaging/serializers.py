@@ -4,11 +4,9 @@ from rest_framework import serializers
 from .models import Report
 
 
-class ContactRequestCreateSerializer(serializers.Serializer):
-    recipient_id = serializers.IntegerField()
-    greeting = serializers.CharField(
-        max_length=100, required=False, allow_blank=True, default='',
-    )
+class ConversationOpenSerializer(serializers.Serializer):
+    # Auth User id of the peer; range-checked in the view (-> 400, never a DB error).
+    peer_user_id = serializers.IntegerField()
 
 
 class MessageCreateSerializer(serializers.Serializer):

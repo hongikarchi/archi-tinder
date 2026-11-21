@@ -41,6 +41,12 @@ def messaging_on(settings):
     settings.MESSAGING_ENABLED = True
 
 
+@pytest.fixture(autouse=True)
+def follow_on(settings):
+    """Opening a conversation needs FOLLOW_ENABLED too; flag-OFF tests flip it back."""
+    settings.FOLLOW_ENABLED = True
+
+
 def make_user(username, opt_in=True, personality=True, guest=False):
     from django.contrib.auth.models import User
     from apps.accounts.models import PersonalityProfile, UserProfile
