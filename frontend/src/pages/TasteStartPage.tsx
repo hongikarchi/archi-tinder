@@ -79,7 +79,7 @@ function TagChip({ tag, matched, language, t }) {
       title={matched ? t('search.tasteTagMatched') : t('search.tasteTagMissed')}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
-        fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 999,
+        fontSize: 'var(--fs-caption)', fontWeight: 500, padding: '4px 10px', borderRadius: 999,
         color: 'var(--accent-1)',
         background: 'color-mix(in srgb, var(--accent-1) 10%, transparent)',
         border: '1px solid color-mix(in srgb, var(--accent-1) 22%, transparent)',

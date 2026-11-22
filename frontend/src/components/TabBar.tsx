@@ -352,7 +352,7 @@ export default function TabBar() {
               <span
                 aria-hidden="true"
                 style={{
-                  fontSize: 11, lineHeight: '13px', fontWeight: isActive ? 600 : 400,
+                  fontSize: 'var(--fs-caption)', lineHeight: '13px', fontWeight: isActive ? 600 : 400,
                   whiteSpace: 'nowrap', maxWidth: '100%',
                   overflow: 'hidden', textOverflow: 'ellipsis',
                   maxHeight: compact ? 0 : 13,

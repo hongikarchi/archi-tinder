@@ -177,7 +177,7 @@ export default function BusinessCard({ user }: BusinessCardProps) {
               {items.map(({ label, value }) => (
                 <div key={label} style={{
                   fontFamily: MONO,
-                  fontSize: 11,
+                  fontSize: 'var(--fs-caption)',
                   fontWeight: 500,
                   color: INK3,
                   lineHeight: 1.3,

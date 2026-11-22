@@ -36,7 +36,7 @@
 }
 
 .btnPrimary {
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
 }
 
@@ -80,7 +80,7 @@
   padding: 0 6px;
   box-sizing: border-box;
   border-radius: var(--radius-pill);
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   font-size: var(--fs-caption);
   font-weight: var(--fw-bold);
@@ -296,7 +296,7 @@
 }
 
 .bubbleMine {
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   border-bottom-right-radius: var(--radius-sm);
 }

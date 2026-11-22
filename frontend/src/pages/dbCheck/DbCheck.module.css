@@ -121,7 +121,7 @@
   background: var(--color-tag-bg);
   border: 1px solid var(--color-tag-border);
   color: var(--color-tag-label);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 600;
 }
 
@@ -139,7 +139,7 @@
   background: color-mix(in srgb, var(--accent-3) 16%, transparent);
   border: 1px solid var(--accent-3);
   color: var(--accent-3);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 700;
 }
 
@@ -228,7 +228,7 @@
 
 .tileId {
   margin: 0;
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 500;
   color: rgba(255,255,255,0.65);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -249,7 +249,7 @@
 }
 
 .tilePlaceholderId {
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   word-break: break-all;
 }
@@ -337,7 +337,7 @@
 
 .sectionTitle {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -358,7 +358,7 @@
 }
 
 .fieldLabel {
-  font-size: 10px;
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
@@ -372,7 +372,7 @@
 
 .fieldValueMuted {
   font-size: 13px;
-  color: var(--color-text-dimmer);
+  color: var(--color-text-dim);
   font-style: italic;
 }
 
@@ -413,7 +413,7 @@
   border-radius: var(--radius-sm);
   background: rgba(0,0,0,0.65);
   color: #fff;
-  font-size: 9px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -427,7 +427,7 @@
 }
 
 .coverSlotLabel {
-  font-size: 10px;
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
@@ -441,8 +441,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-dimmer);
-  font-size: 11px;
+  color: var(--color-text-dim);
+  font-size: var(--fs-caption);
   font-style: italic;
 }
 
@@ -464,7 +464,7 @@
 }
 
 .sourceGroupKey {
-  font-size: 10px;
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
@@ -485,7 +485,7 @@
 
 .rawJsonPre {
   margin: 10px 0 0;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   line-height: 1.5;
   color: var(--color-text-muted);
   white-space: pre-wrap;
@@ -500,7 +500,7 @@
   gap: 4px;
   padding: 3px 10px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 700;
   width: fit-content;
 }

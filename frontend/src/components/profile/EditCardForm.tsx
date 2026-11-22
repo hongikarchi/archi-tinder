@@ -69,7 +69,7 @@ function rowsToDict(rows: LinkRow[]) {
 
 /** Label style — §4 hybrid: uppercase caps label, one-off letter-spacing */
 const labelStyle: CSSProperties = {
-  fontSize: 11,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 600,
   letterSpacing: '0.06em',
   color: 'var(--color-text-muted)',
@@ -186,7 +186,7 @@ export default function EditCardForm({ user, onChange }: EditCardFormProps) {
           ))}
         </select>
         {showLegacyRoleHint && (
-          <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4 }}>
+          <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-dim)', marginTop: 4 }}>
             {t('profileEdit.role.legacyHint', { role: draft.role })}
           </div>
         )}
@@ -218,7 +218,7 @@ export default function EditCardForm({ user, onChange }: EditCardFormProps) {
           placeholder={t('profileEdit.bioPlaceholder')}
           className={styles.textarea}
         />
-        <div style={{ fontSize: 11, color: 'var(--color-text-dim)', marginTop: 4, textAlign: 'right' }}>
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-dim)', marginTop: 4, textAlign: 'right' }}>
           {draft.bio.length}/500
         </div>
       </div>
@@ -231,7 +231,7 @@ export default function EditCardForm({ user, onChange }: EditCardFormProps) {
         {draft.linkRows.map(row => (
           <div key={row.id} className={styles.itemRow} style={{ marginBottom: 8 }}>
             <span style={{
-              fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+              fontSize: 'var(--fs-caption)', fontWeight: 600, letterSpacing: '0.04em',
               color: 'var(--color-text-muted)', textTransform: 'uppercase',
               minWidth: 72, flexShrink: 0,
             }}>

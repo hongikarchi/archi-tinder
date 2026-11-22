@@ -83,7 +83,7 @@ export function InfoRow({ label, value }: { label: React.ReactNode; value?: Reac
   if (!value) return null
   return (
     <div>
-      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 'var(--fs-caption)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
         {label}
       </div>
       <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 500, lineHeight: 1.3 }}>{value}</div>
@@ -605,7 +605,7 @@ export default function SwipeCard({ card, onGalleryClose }: SwipeCardProps) {
             transition: 'opacity 0.22s ease, transform 0.38s ease',
             pointerEvents: isExpanded ? 'none' : 'auto',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: 'rgba(255,255,255,0.5)', fontSize: 11, letterSpacing: '0.04em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, color: 'rgba(255,255,255,0.5)', fontSize: 'var(--fs-caption)', letterSpacing: '0.04em' }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="18 15 12 9 6 15" />
               </svg>

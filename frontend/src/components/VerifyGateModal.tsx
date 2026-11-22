@@ -72,7 +72,7 @@ export default function VerifyGateModal({ onClose, onPromoted, reason = null }: 
     >
       <p style={{
         fontSize: 14,
-        color: 'var(--color-text-dimmer)',
+        color: 'var(--color-text-dim)',
         margin: '0 0 20px',
         lineHeight: 1.55,
       }}>
@@ -104,7 +104,7 @@ export default function VerifyGateModal({ onClose, onPromoted, reason = null }: 
         ) : (
           <p style={{
             fontSize: 13,
-            color: 'var(--color-text-dimmer)',
+            color: 'var(--color-text-dim)',
             margin: 0,
             textAlign: 'center',
           }}>
@@ -136,8 +136,8 @@ export default function VerifyGateModal({ onClose, onPromoted, reason = null }: 
 
       {/* Legal footer */}
       <p style={{
-        fontSize: 11,
-        color: 'var(--color-text-dimmest, #8C959F)',
+        fontSize: 'var(--fs-caption)',
+        color: 'var(--color-text-dim)',
         margin: '16px 0 0',
         lineHeight: 1.45,
         textAlign: 'center',

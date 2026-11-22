@@ -100,7 +100,7 @@ export default function PentagonChart({
   const zeroVec: number[] = Array(NUM_AXES).fill(0)
 
   const legendH = legend ? (mini ? 18 : 22) : 0
-  const legendFont = mini ? 9 : 11
+  const legendFont = mini ? 9 : 12
 
   return (
     <svg
@@ -190,7 +190,7 @@ export default function PentagonChart({
             y={pt.y}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize={mini ? 8 : 10}
+            fontSize={mini ? 8 : 12}
             fontWeight={isHighlighted ? 700 : 400}
             fill={isHighlighted ? 'var(--accent-1)' : 'var(--color-text-muted)'}
             style={{ fontFamily: 'inherit', userSelect: 'none' }}

@@ -141,7 +141,7 @@ function ExitConfirmPopup({ onNewProject, onHome, onCancel }) {
           onClick={onNewProject}
           style={{
             padding: '13px 24px', borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-1)', color: '#fff',
+            background: 'var(--accent-1-fill)', color: '#fff',
             fontSize: 'var(--fs-body)', fontWeight: 600, border: 'none',
             cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
           }}
@@ -475,7 +475,7 @@ export default function SwipePage({
           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto' }}>
             <ConfidenceBar value={confidence} phase={phase} progress={progress} />
             {filter_relaxed && (
-              <p style={{ color: 'var(--color-text-dimmer)', fontSize: 11, marginTop: 6, textAlign: 'center' }}>
+              <p style={{ color: 'var(--color-text-dim)', fontSize: 'var(--fs-caption)', marginTop: 6, textAlign: 'center' }}>
                 Filters were relaxed to find more buildings
               </p>
             )}

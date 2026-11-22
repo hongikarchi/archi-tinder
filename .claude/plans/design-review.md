@@ -71,7 +71,9 @@ D8 = light-theme tab bar: light glass + bottom fade, labels always visible.
 D4 = HOLD: /people is not the user's area (SNS owner); leave all C-0x /people findings for that owner.
 D9 = HOLD report reveal timing. D10 = build sheet drag-to-close (velocity + distance, backdrop follows).
 NEW (user, 2026-11-22): 'Add to Home Screen' install button (iOS + Android) -> PWA scope, see Phase 4 PR-PWA.
-NEXT: PWA button placement decision, then PR1 tokens., then PR1 (tokens) via front-maker.
+PWA: install button in Settings + one-time small banner right after the first taste report (Android = beforeinstallprompt, iOS = share-sheet guide, in-app browsers = 'open in Safari/Chrome' guide, hidden when display-mode standalone). Icons/logo via `codex exec` image generation -> web-testing/reports/design/pwa/concept-N (user picks).
+PR1 narrowed to a11y foundations: contrast tokens (4 themes), inputs 16px on pointer:coarse, 12px text floor. Font-size ramp migration (13/15/18/26-30) deferred to per-flow PRs.
+IN PROGRESS: PR1 (front-maker, clone), icon concepts (codex exec)., then PR1 (tokens) via front-maker.
 Artifact `[Archibe]-UI점검`: per-screen screenshot + findings P0–P3 + baseline metrics. User sets priorities.
 
 ## Phase 4 — fixes (PR batches, makers)

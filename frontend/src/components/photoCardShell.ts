@@ -69,7 +69,7 @@ export const photoCardCaptionStyle: CSSProperties = {
 /** Caption title — 1-line clamp. */
 export const photoCardTitleStyle: CSSProperties = {
   color: '#fff',
-  fontSize: 10,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 700,
   lineHeight: 1.2,
   margin: '0 0 2px',
@@ -82,7 +82,7 @@ export const photoCardTitleStyle: CSSProperties = {
 /** Caption subtitle (architect / handle). */
 export const photoCardSubtitleStyle: CSSProperties = {
   color: 'rgba(255,255,255,0.68)',
-  fontSize: 9,
+  fontSize: 'var(--fs-caption)',
   fontStyle: 'italic',
   margin: '0 0 6px',
 }

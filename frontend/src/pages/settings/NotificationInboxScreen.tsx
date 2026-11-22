@@ -263,7 +263,7 @@ export default function NotificationInboxScreen({ onLogout }: ScreenProps) {
                       </span>
                     </div>
                     <span style={{
-                      fontSize: 11,
+                      fontSize: 'var(--fs-caption)',
                       color: 'var(--color-text-dim)',
                       marginLeft: isUnread ? 13 : 0,
                     }}>

@@ -85,7 +85,7 @@ export const loginWordmarkStyle: CSSProperties = {
 // intentional business-card meta accents (@id row, JOINED/stamp) only.
 export const baseLabelStyle: CSSProperties = {
   fontFamily: 'var(--font-family)',
-  fontSize: 11,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: LS_CAPS,
@@ -133,7 +133,7 @@ export const monoRowStyle: CSSProperties = {
 
 export const monoLabelStyle: CSSProperties = {
   fontFamily: MONO,
-  fontSize: 11,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 500,
   textTransform: 'uppercase',
   letterSpacing: LS_CAPS,
@@ -147,7 +147,7 @@ export const monoLabelStyle: CSSProperties = {
 // §2.5a, not MONO. Hierarchy vs. body text comes from size/color only.
 export const finePrintStyle: CSSProperties = {
   fontFamily: 'var(--font-family)',
-  fontSize: 11,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 400,
   color: INK.dim,
   lineHeight: 1.55,

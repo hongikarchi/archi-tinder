@@ -58,7 +58,7 @@
   padding: 8px;
 }
 .placeholderText {
-  font-size: 9px;
+  font-size: var(--fs-caption);
   color: var(--color-text-dim);
   text-align: center;
 }

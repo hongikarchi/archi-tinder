@@ -231,7 +231,7 @@
   z-index: 2;
 }
 .refreshFail {
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: var(--fw-semibold);
   color: #fff;
   padding: 3px 8px;
@@ -433,5 +433,5 @@
 }
 
 /* Count next to a section heading (board detail "좋아요한 건물 12"). */
-.h2 .cnt { font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--color-text-dimmer); }
+.h2 .cnt { font-size: var(--fs-caption); font-weight: var(--fw-semibold); color: var(--color-text-dim); }
 .h2 .hRight { order: 3; display: inline-flex; flex: 0 0 auto; }

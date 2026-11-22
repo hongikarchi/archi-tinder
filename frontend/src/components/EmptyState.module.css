@@ -56,7 +56,7 @@
   padding: 0 22px;
   border-radius: var(--radius-pill);
   border: none;
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);

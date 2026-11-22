@@ -149,7 +149,7 @@
   left: 4px;
   background: rgba(0, 0, 0, 0.7);
   color: #ffd700;
-  font-size: 9px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   letter-spacing: 0.04em;
   padding: 2px 5px;
@@ -267,7 +267,7 @@
 
 .editApplyBtn {
   flex: 1;
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   border: 0;
   border-radius: var(--radius-md);
@@ -306,7 +306,7 @@
 }
 
 .label {
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   color: var(--color-text-muted);
   letter-spacing: 0.06em;
@@ -481,7 +481,7 @@
 /* ── Submit button ──────────────────────────────────────────────────────── */
 
 .submitBtn {
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   border: 0;
   border-radius: var(--radius-md);

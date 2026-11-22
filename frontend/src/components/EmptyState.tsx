@@ -98,7 +98,7 @@ export default function EmptyState({
             padding: '0 24px',
             borderRadius: 'var(--radius-md)',
             border: 'none',
-            background: 'var(--accent-1)',
+            background: 'var(--accent-1-fill)',
             color: '#fff',
             fontSize: 'var(--fs-body)',
             fontWeight: 'var(--fw-semibold)',

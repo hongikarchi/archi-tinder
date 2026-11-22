@@ -214,7 +214,7 @@ function tgStyle(selected: boolean): CSSProperties {
     border: 0,
     background: 'transparent',
     color: selected ? 'var(--color-text)' : 'var(--color-text-muted)',
-    fontSize: 10,
+    fontSize: 'var(--fs-caption)',
     fontWeight: 600,
     letterSpacing: '0.04em',
     cursor: 'pointer',
