@@ -46,7 +46,11 @@ body 14 / caption 12`) but inline `fontSize` 137 uses with 17 distinct values (9
 font-sizes; hex literals 115 in tsx/ts + 94 in module.css; rgba literals 161; `style={{` 599;
 z-index literals 64; `100vh` 10 vs `dvh` 10; safe-area-inset 6; 17 files with inputs (iOS zoom risk if <16px).
 
-## Phase 2 — judgment review (NEXT)
+## Phase 2 — judgment review (DONE 2026-11-22)
+Result: 5 sonnet reviewers, 167 findings (P0 1 / P1 34 / P2 93 / P3 39) in
+`web-testing/reports/design/2026-11-22/review-{A..E}-*.md` (gitignored, local). Flow recapture:
+`web-testing/reports/flow/2026-11-22/` (59/63 ok; 22, 38, 39, 52 failed).
+
 Narrow targets, per flow (A taste-start/search, B swipe+result, C profile/board, D social: people/messages/
 notifications/competitions, E settings/account). Per flow:
 1. impeccable `critique` (scored heuristics) + `audit` (a11y/perf/theming/responsive, P0–P3) + `adapt` (mobile).
@@ -58,7 +62,9 @@ notifications/competitions, E settings/account). Per flow:
 5. Real-device check by user (iPhone Safari + Android Chrome) with a checklist.
 Reviews are read-only; run as sub-agents or in-session, findings written to files, never sliced.
 
-## Phase 3 — report
+## Phase 3 — report (PUBLISHED 2026-11-22: https://claude.ai/artifact/5ys5xzZbC21gHmEx2uF1MT)
+Built by `web-testing/reports/design/2026-11-22/build.py` + `template.html`. 14 root causes, 10 decisions (D1-D10), PR1-PR6+.
+NEXT: user answers D1-D10, then PR1 (tokens) via front-maker.
 Artifact `[Archibe]-UI점검`: per-screen screenshot + findings P0–P3 + baseline metrics. User sets priorities.
 
 ## Phase 4 — fixes (PR batches, makers)
