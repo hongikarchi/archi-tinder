@@ -5,9 +5,9 @@ Effective rate = the `rate` class attr; DEFAULT_THROTTLE_RATES entries are regis
 from rest_framework.throttling import UserRateThrottle
 
 
-class ContactRequestThrottle(UserRateThrottle):
-    scope = 'contact_request'
-    rate = '20/day'
+class ConversationOpenThrottle(UserRateThrottle):
+    scope = 'conversation_open'
+    rate = '60/day'
 
 
 class MessageSendThrottle(UserRateThrottle):
@@ -21,8 +21,8 @@ class ReportThrottle(UserRateThrottle):
 
 
 class MessageReadThrottle(UserRateThrottle):
-    """Per-user cap on messaging GETs (inbox, conversation poll, unread count,
-    received requests, request status). One shared scope across those endpoints.
+    """Per-user cap on messaging GETs (inbox, conversation poll, unread count).
+    One shared scope across those endpoints.
 
     120/min stays well above legitimate load: the in-conversation poll is every
     4s (15/min) plus unread-count polling and inbox / sheet loads.

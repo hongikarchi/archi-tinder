@@ -1,58 +1,21 @@
-"""apps.messaging models — contact requests, 1:1 conversations, blocks, reports.
+"""apps.messaging models — 1:1 conversations, messages, blocks, reports.
 
-Design: docs/decisions/2026-10-02-contact-messaging-design.md (D1-D13).
+Design: docs/decisions/2026-10-02-contact-messaging-design.md (D1-D13). The
+contact-request -> accept flow (ContactRequest) was replaced by the one-way
+user follow (apps.social.UserFollow, SNS-FOLLOW-1); a conversation is now opened
+directly by a follower (services.open_conversation). The old ContactRequest
+table is orphaned in the DB (state-only removal in migration 0002).
 
 All user FKs point at accounts.UserProfile (its PK is the auto `id`; the auth
 User id exposed by the API is `UserProfile.user_id`). Only the 'default' DB is
 used — never the 'buildings' alias.
 
-Schema is independent of the MESSAGING_ENABLED flag: tables always exist, the
-flag only gates the HTTP surface.
+Schema is independent of the MESSAGING_ENABLED / FOLLOW_ENABLED flags: tables
+always exist, the flags only gate the HTTP surface.
 """
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
-
-
-class ContactRequest(models.Model):
-    STATUS_PENDING = 'pending'
-    STATUS_ACCEPTED = 'accepted'
-    STATUS_IGNORED = 'ignored'
-    STATUS_CHOICES = [
-        (STATUS_PENDING, 'Pending'),
-        (STATUS_ACCEPTED, 'Accepted'),
-        (STATUS_IGNORED, 'Ignored'),
-    ]
-
-    sender = models.ForeignKey(
-        'accounts.UserProfile', on_delete=models.CASCADE, related_name='sent_contact_requests',
-    )
-    recipient = models.ForeignKey(
-        'accounts.UserProfile', on_delete=models.CASCADE, related_name='received_contact_requests',
-    )
-    greeting = models.CharField(max_length=100, blank=True, default='')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
-    created_at = models.DateTimeField(default=timezone.now)
-    responded_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['sender', 'recipient'],
-                condition=Q(status='pending'),
-                name='uniq_pending_contact_request',
-            ),
-            models.CheckConstraint(
-                check=~Q(sender=F('recipient')),
-                name='contact_request_not_self',
-            ),
-        ]
-        indexes = [
-            models.Index(fields=['recipient', 'status'], name='contactreq_rcpt_status_idx'),
-        ]
-
-    def __str__(self):
-        return f'{self.sender_id}->{self.recipient_id}:{self.status}'
 
 
 class Conversation(models.Model):
@@ -96,6 +59,9 @@ class Message(models.Model):
     KIND_SYSTEM = 'system'
     KIND_CHOICES = [(KIND_USER, 'User'), (KIND_SYSTEM, 'System')]
 
+    # Legacy: rows with system_type='connected' exist in the DB (emitted by the
+    # removed contact-request accept flow). Nothing emits it anymore; the constant
+    # and the choice stay so existing rows keep rendering / validating.
     SYSTEM_CONNECTED = 'connected'
 
     conversation = models.ForeignKey(

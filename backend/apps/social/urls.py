@@ -4,11 +4,14 @@ from .views import (
     ReactionView,
     UserSavedStudiosView,
 )
+from .views_follow import UserFollowView
 from .views_liked import LikedBoardsView
 from .views_people import PeopleBoardReportImageView, PeopleDiscoveryView
 
 urlpatterns = [
     path('users/<int:user_id>/saved_studios/', UserSavedStudiosView.as_view(), name='user-saved-studios'),
+    # SNS-FOLLOW-1 — one-way user follow (gated by FOLLOW_ENABLED)
+    path('users/<int:user_id>/follow/', UserFollowView.as_view(), name='user-follow'),
     # SOC2 — Project reaction
     path('projects/<uuid:project_id>/react/', ReactionView.as_view(), name='project-react'),
     path(

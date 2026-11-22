@@ -3,8 +3,9 @@ import Modal from '../Modal.tsx'
 import FloatingIconButton from '../FloatingIconButton.tsx'
 import ReportDialog from './ReportDialog.tsx'
 import { useTranslation } from '../../i18n/index.ts'
-import { blockUser, unblockUser, getContactStatus } from '../../api/messaging.ts'
-import { useMessagingEnabled } from '../../hooks/useMessagingFeature.ts'
+import { blockUser, unblockUser } from '../../api/messaging.ts'
+import { getFollowStatus } from '../../api/social.ts'
+import { useFollowEnabled } from '../../hooks/useMessagingFeature.ts'
 import { VerifyRequiredError } from '../../api/projects.ts'
 import { markBlocked, markUnblocked, useBlockedUser, getBlockSeq, applyServerBlockedByMe } from './blockedUsers.ts'
 import styles from './Messaging.module.css'
@@ -16,10 +17,15 @@ import styles from './Messaging.module.css'
  * a small dropdown, a block-confirm dialog and a report dialog.
  *
  * `onBlocked` fires after a successful block (parent closes the conversation
- * UI / hides the contact CTA); `onUnblocked` after a successful unblock. After blocking, the same menu item flips to
- * "Unblock". State lives in the shared `blockedUsers` store (every menu instance
- * for this user agrees); on mount it is seeded from `blocked_by_me` on
- * contact-requests/status/ so a refresh still offers "Unblock" (#372).
+ * UI / hides the follow CTA); `onUnblocked` after a successful unblock. After
+ * blocking, the same menu item flips to "Unblock". State lives in the shared
+ * `blockedUsers` store (every menu instance for this user agrees); on mount it
+ * is seeded from `blocked_by_me` on users/<id>/follow/ so a refresh still
+ * offers "Unblock" (#372). Block/report are reachable
+ * with either the messaging or the follow flag (the hosts decide whether to
+ * mount the menu); the follow-status seed read 404s while the follow flag is
+ * off, so it only runs with the follow flag — otherwise the menu works from
+ * the local store alone.
  */
 interface UserActionsMenuProps {
   userId: number | string
@@ -33,7 +39,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
-  const enabled = useMessagingEnabled()
+  const followEnabled = useFollowEnabled()
   const blocked = useBlockedUser(userId)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,14 +49,15 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }
   // (block/unblock done on another device/tab included). A response issued before
   // a local block/unblock is dropped via the seq check.
   useEffect(() => {
-    if (!enabled || !userId) return undefined
+    // users/<id>/follow/ answers 404 while the follow flag is off.
+    if (!followEnabled || !userId) return undefined
     let cancelled = false
     const s = getBlockSeq()
-    getContactStatus(userId)
+    getFollowStatus(userId)
       .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, s) })
       .catch(() => {}) // non-critical: the menu works without the status read
     return () => { cancelled = true }
-  }, [enabled, userId])
+  }, [followEnabled, userId])
 
   // dropdown: close on outside press / Escape
   useEffect(() => {

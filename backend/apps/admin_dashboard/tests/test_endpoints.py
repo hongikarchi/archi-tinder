@@ -108,7 +108,7 @@ class TestFlags:
     def test_shape_and_korean_text(self, admin_client):
         body = admin_client.get(BASE + 'flags/').json()
         items = {f['key']: f for f in body['flags']}
-        for key in ('MESSAGING_ENABLED', 'PERF_TIMING_ENABLED', 'PREWARM_ENABLED', 'DB_POOL_ENABLED',
+        for key in ('MESSAGING_ENABLED', 'FOLLOW_ENABLED', 'PERF_TIMING_ENABLED', 'PREWARM_ENABLED', 'DB_POOL_ENABLED',
                     'LLM_PROVIDER', 'LLM_IMAGE_PROVIDER',
                     'gemini_rerank_enabled', 'dpp_topk_enabled'):
             assert key in items
@@ -120,10 +120,12 @@ class TestFlags:
 
     def test_values_read_at_request_time(self, admin_client, settings):
         settings.MESSAGING_ENABLED = True
+        settings.FOLLOW_ENABLED = True
         settings.LLM_PROVIDER = 'openai'
         settings.RECOMMENDATION = {**settings.RECOMMENDATION, 'dpp_topk_enabled': True}
         items = {f['key']: f['value'] for f in admin_client.get(BASE + 'flags/').json()['flags']}
         assert items['MESSAGING_ENABLED'] is True
+        assert items['FOLLOW_ENABLED'] is True
         assert items['LLM_PROVIDER'] == 'openai'
         assert items['dpp_topk_enabled'] is True
 

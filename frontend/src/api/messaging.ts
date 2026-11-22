@@ -1,23 +1,20 @@
 /**
  * api/messaging.js
- * Contact requests + in-app 1:1 messaging (FULL-MESSAGING-1).
+ * In-app 1:1 messaging + block / report (FULL-MESSAGING-1, SNS-FOLLOW-1).
  *
- * Backend: apps/messaging, all under /api/v1/, JWT auth. Every endpoint
- * returns 404 while the MESSAGING_ENABLED backend flag is off — callers gate
- * on `useMessagingEnabled()` (hooks/useMessagingFeature.js) and never call
- * these when the flag is off.
+ * Backend: apps/messaging, all under /api/v1/, JWT auth. Conversation endpoints
+ * return 404 while the MESSAGING_ENABLED backend flag is off — callers gate on
+ * `useMessagingEnabled()` (hooks/useMessagingFeature.ts) and never call these
+ * when the flag is off. Opening a conversation also needs FOLLOW_ENABLED and
+ * that I follow the peer (SNS-FOLLOW-1; the contact-request flow is gone).
  *
- *   POST   /contact-requests/                  {recipient_id, greeting?} -> {status:'sent'} | {status:'connected', conversation_id}
- *   GET    /contact-requests/received/         -> {results:[{id, sender, greeting, created_at}]}
- *   GET    /contact-requests/status/?user_id=  -> {state:'none'|'sent'|'connected', can_request}
- *   POST   /contact-requests/<id>/accept/      -> {status:'accepted', conversation_id}
- *   POST   /contact-requests/<id>/ignore/      -> {status:'ignored'}
+ *   POST   /conversations/                     {peer_user_id} -> {id, other, closed}  (201 created / 200 existing)
  *   GET    /conversations/                     -> {results:[{id, other, last_message, last_message_at, unread_count, closed}]}
  *   GET    /conversations/<id>/messages/?after=&limit= -> {results:[message], closed}
  *   POST   /conversations/<id>/messages/       {body} -> message
  *   POST   /conversations/<id>/read/
  *   GET    /messages/unread-count/             -> {count}
- *   POST   /users/<user_id>/block/  | DELETE (unblock)
+ *   POST   /users/<user_id>/block/  | DELETE (unblock)   (MESSAGING or FOLLOW flag)
  *   POST   /reports/                           {target_type, target_id, reason?}
  *
  * Guest writes answer 403 {detail:'verify_required'}: write helpers dispatch
@@ -26,6 +23,7 @@
  */
 import { callApi } from './core.ts'
 import { VerifyRequiredError } from './projects.ts'
+import type { OpenConversationResult } from '../types/api.ts'
 
 function throwIfVerifyRequired(err) {
   if (err?.status === 403 && err?.data?.detail === 'verify_required') {
@@ -46,31 +44,17 @@ async function write(method: string, path: string, body?: unknown) {
   }
 }
 
-// -- Contact requests --------------------------------------------------------
-
-export async function sendContactRequest(recipientId: number | string, greeting?: string) {
-  const body: { recipient_id: number | string, greeting?: string } = { recipient_id: recipientId }
-  if (greeting) body.greeting = greeting
-  return await write('POST', '/contact-requests/', body)
-}
-
-export async function listReceivedRequests() {
-  return await callApi('GET', '/contact-requests/received/')
-}
-
-export async function getContactStatus(userId) {
-  return await callApi('GET', `/contact-requests/status/?user_id=${encodeURIComponent(userId)}`)
-}
-
-export async function acceptContactRequest(requestId) {
-  return await write('POST', `/contact-requests/${requestId}/accept/`)
-}
-
-export async function ignoreContactRequest(requestId) {
-  return await write('POST', `/contact-requests/${requestId}/ignore/`)
-}
+/** Shared guest-gated write (follow reuses it): 403 verify_required -> global gate event + VerifyRequiredError. */
+export const verifyGatedWrite = write
 
 // -- Conversations / messages ------------------------------------------------
+
+/** Open (or reopen) the 1:1 conversation with a followed user. */
+export async function openConversation(peerUserId: number | string): Promise<OpenConversationResult> {
+  const peer = Number(peerUserId)
+  if (!Number.isInteger(peer) || peer <= 0) throw new Error('invalid user id')
+  return await write('POST', '/conversations/', { peer_user_id: peer })
+}
 
 export async function listConversations() {
   return await callApi('GET', '/conversations/')

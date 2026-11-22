@@ -23,8 +23,8 @@ import SectionTitle from '../components/SectionTitle.tsx'
 import FloatingIconButton from '../components/FloatingIconButton.tsx'
 import Skeleton from '../components/Skeleton.tsx'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications.ts'
-import { useMessagingEnabled } from '../hooks/useMessagingFeature.ts'
-import ContactCta from '../components/messaging/ContactCta.tsx'
+import { useMessagingEnabled, useFollowEnabled } from '../hooks/useMessagingFeature.ts'
+import FollowCta from '../components/messaging/FollowCta.tsx'
 import UserActionsMenu from '../components/messaging/UserActionsMenu.tsx'
 import { useBlockedUser } from '../components/messaging/blockedUsers.ts'
 import { StudioCard, SkeletonCard, BuildingIconEmpty } from '../components/StudioCard.tsx'
@@ -126,6 +126,7 @@ export default function UserProfilePage({ onLogout }) {
   // FULL-MESSAGING-1: flag-gated messaging surfaces. `blockedPeer` hides the
   // contact CTA after the viewer blocks this user from the profile menu.
   const messagingEnabled = useMessagingEnabled()
+  const followEnabled = useFollowEnabled()
   const blockedPeer = useBlockedUser(effectiveUserId)
 
   // MINOR #1: inline error banner for failed board actions (optimistic revert feedback)
@@ -576,9 +577,10 @@ export default function UserProfilePage({ onLogout }) {
 
         {/* FULL-MESSAGING-1: in-flow (NOT fixed) so it can never overlap the
             fixed PageTopControls / isMe cluster; both render nothing while the
-            messaging flag is OFF. !isMe -> block/report "..." menu (own-profile
-            messaging lives on the /messages tab). */}
-        {!isMe && messagingEnabled && (
+            messaging AND follow flags are OFF. !isMe -> block/report "..." menu
+            (own-profile messaging lives on the /messages tab). Shown for either
+            flag: block is the only defence against unwanted followers. */}
+        {!isMe && (messagingEnabled || followEnabled) && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-12px 0 12px', minHeight: 44, alignItems: 'center' }}>
             <UserActionsMenu
               userId={effectiveUserId}
@@ -671,11 +673,12 @@ export default function UserProfilePage({ onLogout }) {
                 <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, fontStyle: 'italic' }}>
                   {t('profilePersonality.legend')}
                 </p>
-                {/* Contact CTA — reflects contact-requests/status/ (none ->
-                    greeting sheet, sent -> disabled, connected -> open
-                    conversation); hidden entirely while the flag is OFF. */}
-                <ContactCta
+                {/* Follow CTA — reflects users/<id>/follow/ (follow / follow
+                    back, following + message); renders nothing while the
+                    follow flag is OFF or the target is not followable. */}
+                <FollowCta
                   userId={effectiveUserId}
+                  name={userHandle(user)}
                   buttonClassName={styles.personalityCtaPrimary}
                   hidden={blockedPeer}
                 />
@@ -694,33 +697,35 @@ export default function UserProfilePage({ onLogout }) {
                 {/* Only a confirmed 404 means "never assessed"; while loading or
                     after a failed fetch, don't push assessed users to retake. */}
                 {myPersonalityState === 'ready' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/assessment')}
-                      className={styles.personalityCtaPrimary}
-                    >
-                      {t('profilePersonality.checkMine')}
-                    </button>
-                    {messagingEnabled && (
-                      <p style={{ fontSize: 'var(--fs-caption)', color: 'var(--color-text-muted)', margin: 0, textAlign: 'center' }}>
-                        {t('messaging.assessmentRequiredHint')}
-                      </p>
-                    )}
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/assessment')}
+                    className={styles.personalityCtaPrimary}
+                  >
+                    {t('profilePersonality.checkMine')}
+                  </button>
                 )}
+                {/* Follow has no assessment prerequisite: rendered regardless of
+                    my own assessment state. */}
+                <FollowCta
+                  userId={effectiveUserId}
+                  name={userHandle(user)}
+                  buttonClassName={styles.personalityCtaPrimary}
+                  hidden={blockedPeer}
+                />
               </div>
             )
           }
 
           // !isMe + their personality is null/hidden (not assessed or opted
-          // out): never render nothing — ContactCta shows the neutral
-          // "unavailable" state (block vs opt-out is deliberately not revealed).
-          if (!isMe && !user?.personality && messagingEnabled) {
+          // out): FollowCta alone (it renders nothing for unfollowable targets;
+          // block vs opt-out is deliberately not revealed).
+          if (!isMe && !user?.personality && followEnabled) {
             return (
               <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <ContactCta
+                <FollowCta
                   userId={effectiveUserId}
+                  name={userHandle(user)}
                   buttonClassName={styles.personalityCtaPrimary}
                   hidden={blockedPeer}
                 />
