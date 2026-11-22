@@ -288,7 +288,7 @@
 
   /* Ayu orange accent family */
   --accent-1: #FA8D3E;
-  --accent-1-fill: #FA8D3E;  /* TODO(a11y): white label 2.35:1 — needs design decision */
+  --accent-1-fill: #C05405;  /* darker ayu orange: white label 4.65:1 (accent-1 gives 2.35) */
   --accent-2: #86B300;
   --accent-3: #E6BA7E;
 
@@ -351,7 +351,7 @@
 
   /* SynthWave neon family */
   --accent-1: #FF7EDB;
-  --accent-1-fill: #FF7EDB;  /* TODO(a11y): white label 2.27:1 — needs design decision */
+  --accent-1-fill: #DC009F;  /* darker synthwave pink: white label 4.62:1 (accent-1 gives 2.27) */
   --accent-2: #36F9F6;
   --accent-3: #FDE24F;
 

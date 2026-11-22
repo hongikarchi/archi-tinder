@@ -5,7 +5,7 @@ Opens each route of the local app (5174) in a logged-in Chromium at 390x844, the
 (WCAG 2 A/AA) against it. Writes per-route JSON + a screenshot and a summary.json.
 
 Usage:
-    python web-testing/design_scan.py [--out DIR] [--env PATH] [--theme light|dark] [--only /a,/b]
+    python web-testing/design_scan.py [--out DIR] [--env PATH] [--theme light|dark] [--only /a,/b] [--base URL]
 
 Reads DEV_LOGIN_SECRET from backend/.env (never printed). Needs the dev servers up
 (frontend 5174, backend 8001). Read-only against the app apart from one dev-login.
@@ -109,6 +109,7 @@ def main():
     ap.add_argument('--env', default=os.path.join(ROOT, 'backend', '.env'))
     ap.add_argument('--theme', default='light', choices=list(THEME_KEYS))
     ap.add_argument('--only', default='')
+    ap.add_argument('--base', default=BASE_URL, help='frontend origin, e.g. http://localhost:5173')
     args = ap.parse_args()
     routes = [r for r in args.only.split(',') if r] or ROUTES
     out = os.path.join(args.out, args.theme)
@@ -126,7 +127,7 @@ def main():
             page = ctx.new_page()
             rec = {'route': route, 'slug': slug(route)}
             try:
-                page.goto(BASE_URL + route, wait_until='domcontentloaded', timeout=30000)
+                page.goto(args.base + route, wait_until='domcontentloaded', timeout=30000)
                 try:
                     page.wait_for_load_state('networkidle', timeout=12000)
                 except Exception:

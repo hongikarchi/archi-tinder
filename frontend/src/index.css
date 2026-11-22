@@ -113,3 +113,10 @@ body {
     font-size: 16px !important;
   }
 }
+
+/* Placeholders otherwise fall back to the browser default grey (#757575), which
+ * fails 4.5:1 on the dark surfaces. */
+::placeholder {
+  color: var(--color-text-dim);
+  opacity: 1;
+}
