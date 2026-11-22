@@ -65,7 +65,10 @@ Reviews are read-only; run as sub-agents or in-session, findings written to file
 ## Phase 3 — report (PUBLISHED 2026-11-22: https://claude.ai/artifact/5ys5xzZbC21gHmEx2uF1MT)
 Built by `web-testing/reports/design/2026-11-22/build.py` + `template.html`. 14 root causes, 10 decisions (D1-D10), PR1-PR6+.
 Decisions: D1 (2026-11-22) = keep swipe-only; no buttons, no drag stamp (B-01, B-02 dropped; identity).
-NEXT: user answers D2-D10, then PR1 (tokens) via front-maker.
+D2 = move theme/lang/logout to Settings, logout = red row + confirm sheet. D3 = keep letterbox as is (A-01, B-06 dropped).
+D5 = hold tab name. D6 = keep public default (B-20 dropped). D7 = first-left-swipe modal -> 5s undo snackbar.
+D8 = light-theme tab bar: light glass + bottom fade, labels always visible.
+NEXT: user answers D4 (/people person-first), D9 (report reveal timing), D10 (sheet drag-to-close vs remove handle), then PR1 (tokens) via front-maker.
 Artifact `[Archibe]-UI점검`: per-screen screenshot + findings P0–P3 + baseline metrics. User sets priorities.
 
 ## Phase 4 — fixes (PR batches, makers)
