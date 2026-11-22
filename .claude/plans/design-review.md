@@ -64,7 +64,8 @@ Reviews are read-only; run as sub-agents or in-session, findings written to file
 
 ## Phase 3 — report (PUBLISHED 2026-11-22: https://claude.ai/artifact/5ys5xzZbC21gHmEx2uF1MT)
 Built by `web-testing/reports/design/2026-11-22/build.py` + `template.html`. 14 root causes, 10 decisions (D1-D10), PR1-PR6+.
-NEXT: user answers D1-D10, then PR1 (tokens) via front-maker.
+Decisions: D1 (2026-11-22) = keep swipe-only; no buttons, no drag stamp (B-01, B-02 dropped; identity).
+NEXT: user answers D2-D10, then PR1 (tokens) via front-maker.
 Artifact `[Archibe]-UI점검`: per-screen screenshot + findings P0–P3 + baseline metrics. User sets priorities.
 
 ## Phase 4 — fixes (PR batches, makers)

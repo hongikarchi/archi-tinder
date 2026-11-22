@@ -58,6 +58,8 @@ user counts or press exist yet; do not fabricate them.
 2. Foundation correctness over feature breadth.
 3. Korea-first when localization choices conflict.
 4. Swipe surfaces stay uninterrupted (rapid-evaluation mode; no links on swipe cards).
+5. Swipe-only decisions are core identity: no on-screen like/dislike buttons and no drag stamps/overlays
+   on the swipe card (user ruling 2026-11-22). Do not propose changing the interaction model.
 
 ## Accessibility & Inclusion
 
