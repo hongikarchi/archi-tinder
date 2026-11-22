@@ -68,7 +68,10 @@ Decisions: D1 (2026-11-22) = keep swipe-only; no buttons, no drag stamp (B-01, B
 D2 = move theme/lang/logout to Settings, logout = red row + confirm sheet. D3 = keep letterbox as is (A-01, B-06 dropped).
 D5 = hold tab name. D6 = keep public default (B-20 dropped). D7 = first-left-swipe modal -> 5s undo snackbar.
 D8 = light-theme tab bar: light glass + bottom fade, labels always visible.
-NEXT: user answers D4 (/people person-first), D9 (report reveal timing), D10 (sheet drag-to-close vs remove handle), then PR1 (tokens) via front-maker.
+D4 = HOLD: /people is not the user's area (SNS owner); leave all C-0x /people findings for that owner.
+D9 = HOLD report reveal timing. D10 = build sheet drag-to-close (velocity + distance, backdrop follows).
+NEW (user, 2026-11-22): 'Add to Home Screen' install button (iOS + Android) -> PWA scope, see Phase 4 PR-PWA.
+NEXT: PWA button placement decision, then PR1 tokens., then PR1 (tokens) via front-maker.
 Artifact `[Archibe]-UI점검`: per-screen screenshot + findings P0–P3 + baseline metrics. User sets priorities.
 
 ## Phase 4 — fixes (PR batches, makers)
