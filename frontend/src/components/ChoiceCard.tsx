@@ -66,7 +66,7 @@ export default function ChoiceCard({ stamp, title, body, left, right, hint, lean
       }}>
         <span style={wordmarkStyle}>ARCHIBE</span>
         <span style={{
-          fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid,
+          fontFamily: MONO, fontSize: 'var(--fs-caption)', fontWeight: 600, letterSpacing: LS_CAPS, color: INK.mid,
         }}>
           {stamp}
         </span>

@@ -69,10 +69,10 @@ export default function ThemePreviewCard({ theme }: { theme?: string }) {
               gap: 6,
             }}
           >
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text)' }}>
+            <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 600, color: 'var(--color-text)' }}>
               Aa — {theme}
             </span>
-            <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--color-text-muted)' }}>
+            <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 400, color: 'var(--color-text-muted)' }}>
               Sample card text on surface
             </span>
           </div>
@@ -86,9 +86,9 @@ export default function ThemePreviewCard({ theme }: { theme?: string }) {
                 justifyContent: 'center',
                 padding: '6px 12px',
                 borderRadius: 999,
-                background: 'var(--accent-1)',
+                background: 'var(--accent-1-fill)',
                 color: '#fff',
-                fontSize: 10,
+                fontSize: 'var(--fs-caption)',
                 fontWeight: 600,
               }}
             >
@@ -104,7 +104,7 @@ export default function ThemePreviewCard({ theme }: { theme?: string }) {
                 background: 'transparent',
                 border: '1px solid var(--color-border-soft)',
                 color: 'var(--color-text)',
-                fontSize: 10,
+                fontSize: 'var(--fs-caption)',
                 fontWeight: 500,
               }}
             >
@@ -118,7 +118,7 @@ export default function ThemePreviewCard({ theme }: { theme?: string }) {
                 background: 'var(--color-tag-bg)',
                 border: '1px solid var(--color-tag-border)',
                 color: 'var(--color-tag-label)',
-                fontSize: 9,
+                fontSize: 'var(--fs-caption)',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',
@@ -133,7 +133,7 @@ export default function ThemePreviewCard({ theme }: { theme?: string }) {
                 background: 'var(--color-tag-bg)',
                 border: '1px solid var(--color-tag-border)',
                 color: 'var(--color-tag-label)',
-                fontSize: 9,
+                fontSize: 'var(--fs-caption)',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.04em',

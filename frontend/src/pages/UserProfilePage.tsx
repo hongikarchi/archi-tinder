@@ -558,8 +558,8 @@ export default function UserProfilePage({ onLogout }) {
                 style={{
                   position: 'absolute', top: -3, right: -3,
                   minWidth: 15, height: 15, padding: '0 4px',
-                  borderRadius: 999, background: 'var(--accent-1)', color: '#fff',
-                  fontSize: 9, fontWeight: 700, lineHeight: '15px', textAlign: 'center',
+                  borderRadius: 999, background: 'var(--accent-1-fill)', color: '#fff',
+                  fontSize: 'var(--fs-caption)', fontWeight: 700, lineHeight: '15px', textAlign: 'center',
                 }}
               >
                 {unreadBadgeLabel}

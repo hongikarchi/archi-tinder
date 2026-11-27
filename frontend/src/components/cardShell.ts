@@ -50,7 +50,7 @@ export const questionTitleStyle: CSSProperties = {
 
 /** Small dim label above the prompt (badge / hint row). */
 export const questionBadgeStyle: CSSProperties = {
-  fontSize: 11,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 500,
   color: 'var(--color-text-dim)',
   margin: 0,

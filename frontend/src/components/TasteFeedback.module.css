@@ -62,7 +62,7 @@
 .rtg { display: flex; flex-wrap: wrap; gap: 5px; }
 .tgc {
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 500;
   line-height: 1.3;
   padding: 4px 9px;
@@ -83,14 +83,14 @@
 }
 
 .sub2 { margin-top: 9px; padding-top: 9px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
-.subHint { font-size: 10px; line-height: 1.4; color: rgba(255, 255, 255, 0.55); margin-bottom: 6px; }
+.subHint { font-size: var(--fs-caption); line-height: 1.4; color: rgba(255, 255, 255, 0.55); margin-bottom: 6px; }
 
 .pr2 { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
 .pr2Input {
   flex: 1;
   min-width: 0;
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -103,7 +103,7 @@
 .pr2Btn {
   flex-shrink: 0;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   padding: 6px 11px;
   border-radius: 999px;
@@ -164,7 +164,7 @@
 /* round-level (query) report */
 .queryLink {
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   color: var(--color-text-dim);
   background: none;
   border: none;
@@ -177,7 +177,7 @@
 .queryLink:focus-visible { outline: 2px solid var(--accent-1); outline-offset: 2px; border-radius: 4px; }
 
 .sheetSub { font-size: 12px; color: var(--color-text-muted); margin: 0 0 12px; line-height: 1.5; }
-.sheetLabel { font-size: 11px; color: var(--color-text-muted); margin-bottom: 6px; }
+.sheetLabel { font-size: var(--fs-caption); color: var(--color-text-muted); margin-bottom: 6px; }
 .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .spk {
   font-family: inherit;

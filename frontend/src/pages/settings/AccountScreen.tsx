@@ -28,7 +28,7 @@ import btnStyles from '../../components/Button.module.css'
 import styles from './AccountScreen.module.css'
 
 const LABEL_STYLE = {
-  fontSize: 11,
+  fontSize: 'var(--fs-caption)',
   fontWeight: 600,
   letterSpacing: '0.06em',
   color: 'var(--color-text-muted)',
@@ -257,7 +257,7 @@ export default function AccountScreen({ onLogout }: ScreenProps) {
         {/* Read-only info section */}
         <section style={{ marginBottom: 32 }}>
           <p style={{
-            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            fontSize: 'var(--fs-caption)', fontWeight: 600, letterSpacing: '0.06em',
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
@@ -346,7 +346,7 @@ export default function AccountScreen({ onLogout }: ScreenProps) {
         {/* ID (handle) edit section */}
         <section style={{ marginBottom: 32 }}>
           <p style={{
-            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            fontSize: 'var(--fs-caption)', fontWeight: 600, letterSpacing: '0.06em',
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
@@ -411,7 +411,7 @@ export default function AccountScreen({ onLogout }: ScreenProps) {
         {/* Password section */}
         <section style={{ marginBottom: 32 }}>
           <p style={{
-            fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+            fontSize: 'var(--fs-caption)', fontWeight: 600, letterSpacing: '0.06em',
             color: 'var(--color-text-muted)', textTransform: 'uppercase',
             margin: '0 0 16px',
           }}>
@@ -502,7 +502,7 @@ export default function AccountScreen({ onLogout }: ScreenProps) {
         {personality && (
           <section style={{ marginBottom: 32 }}>
             <p style={{
-              fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
+              fontSize: 'var(--fs-caption)', fontWeight: 600, letterSpacing: '0.06em',
               color: 'var(--color-text-muted)', textTransform: 'uppercase',
               margin: '0 0 16px',
             }}>

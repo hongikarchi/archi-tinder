@@ -53,7 +53,7 @@ export default function TasteCardDetail({ card, expanded, captionHidden, interac
         )}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10,
-          color: 'rgba(255,255,255,0.5)', fontSize: 11, letterSpacing: '0.04em',
+          color: 'rgba(255,255,255,0.5)', fontSize: 'var(--fs-caption)', letterSpacing: '0.04em',
         }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <polyline points="18 15 12 9 6 15" />

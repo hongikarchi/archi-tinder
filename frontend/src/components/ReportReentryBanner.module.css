@@ -81,7 +81,7 @@
 
 .save {
   flex: 1;
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   font-weight: var(--fw-semibold);
 }

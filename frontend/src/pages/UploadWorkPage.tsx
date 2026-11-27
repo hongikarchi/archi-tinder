@@ -574,7 +574,7 @@ export default function UploadWorkPage({ onLogout }) {
               padding: '12px 16px',
               borderRadius: 'var(--radius-md)',
               border: 0,
-              background: 'var(--accent-1)',
+              background: 'var(--accent-1-fill)',
               color: '#fff',
               fontSize: 'var(--fs-body)',
               fontWeight: 600,

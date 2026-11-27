@@ -140,8 +140,8 @@
   --color-surface-3:  #E1E4E8;
   --color-text:       #1F2328;
   --color-text-2:     #24292F;
-  --color-text-muted: #656D76;
-  --color-text-dim:   #8C959F;
+  --color-text-muted: #59616A;
+  --color-text-dim:   #636C76;
   --color-border:     rgba(0,0,0,0.08);
   --color-border-soft: rgba(0,0,0,0.12);
 
@@ -151,6 +151,7 @@
 
   /* Accent (§1.2 exact) */
   --accent-1: #0969DA;
+  --accent-1-fill: #0969DA;  /* button/bubble fill under a white label (>=4.5:1); text/ring uses --accent-1 */
   --accent-2: #8250DF;
   --accent-3: #953800;
 
@@ -159,7 +160,7 @@
 
   /* Derived spirit tokens — light-mode alpha-on-bg math */
   --color-nav-bg:           rgba(255,255,255,0.97);
-  --color-nav-inactive:     #8C959F;
+  --color-nav-inactive:     #636C76;
   --color-nav-disabled:     #D0D7DE;
   --color-header-bg:        rgba(255,255,255,0.92);
   --color-ai-bubble:        rgba(246,248,250,0.95);
@@ -215,21 +216,22 @@
   --color-surface-3:  #2d333b;
   --color-text:       #e6edf3;
   --color-text-2:     #cdd9e5;
-  --color-text-muted: #768390;
-  --color-text-dim:   #636e7b;
+  --color-text-muted: #8B98A5;
+  --color-text-dim:   #7F8C99;
   --color-text-dimmer:  #444c56;
   --color-text-dimmest: #2d333b;
   --color-border:     rgba(255,255,255,0.10);
   --color-border-soft: rgba(255,255,255,0.15);
 
-  --accent-1: #2f81f7;
+  --accent-1: #4493f8;
+  --accent-1-fill: #1f6feb;  /* white label 4.63:1 (accent-1 gives 3.75) */
   --accent-2: #a371f7;
   --accent-3: #e3b341;
 
   --color-destructive: #F85149;
 
   --color-nav-bg:           rgba(13,17,23,0.97);
-  --color-nav-inactive:     #636e7b;
+  --color-nav-inactive:     #7F8C99;
   --color-nav-disabled:     #2d333b;
   --color-header-bg:        rgba(13,17,23,0.92);
   --color-ai-bubble:        rgba(22,27,34,0.88);
@@ -277,8 +279,8 @@
   --color-surface-3:  #E6E8DC;
   --color-text:       #3D4047;
   --color-text-2:     #5C6166;
-  --color-text-muted: #8A9199;
-  --color-text-dim:   #ABB0B8;
+  --color-text-muted: #5F666F;
+  --color-text-dim:   #656C75;
   --color-text-dimmer:  #C8CDD4;
   --color-text-dimmest: #DDE1E6;
   --color-border:     rgba(0,0,0,0.07);
@@ -286,13 +288,14 @@
 
   /* Ayu orange accent family */
   --accent-1: #FA8D3E;
+  --accent-1-fill: #C05405;  /* darker ayu orange: white label 4.65:1 (accent-1 gives 2.35) */
   --accent-2: #86B300;
   --accent-3: #E6BA7E;
 
   --color-destructive: #E5524B;
 
   --color-nav-bg:           rgba(252,252,252,0.97);
-  --color-nav-inactive:     #ABB0B8;
+  --color-nav-inactive:     #656C75;
   --color-nav-disabled:     #DDE1E6;
   --color-header-bg:        rgba(252,252,252,0.92);
   --color-ai-bubble:        rgba(248,249,240,0.95);
@@ -340,7 +343,7 @@
   --color-text:       #f0eff1;
   --color-text-2:     #e3e1ea;
   --color-text-muted: #a599c5;
-  --color-text-dim:   #7e7ab5;
+  --color-text-dim:   #9A94D0;
   --color-text-dimmer:  #574f8a;
   --color-text-dimmest: #3d3263;
   --color-border:     rgba(255,255,255,0.08);
@@ -348,13 +351,14 @@
 
   /* SynthWave neon family */
   --accent-1: #FF7EDB;
+  --accent-1-fill: #DC009F;  /* darker synthwave pink: white label 4.62:1 (accent-1 gives 2.27) */
   --accent-2: #36F9F6;
   --accent-3: #FDE24F;
 
   --color-destructive: #FF6188;
 
   --color-nav-bg:           rgba(38,35,53,0.97);
-  --color-nav-inactive:     #7e7ab5;
+  --color-nav-inactive:     #9A94D0;
   --color-nav-disabled:     #3d3263;
   --color-header-bg:        rgba(38,35,53,0.92);
   --color-ai-bubble:        rgba(42,33,57,0.88);

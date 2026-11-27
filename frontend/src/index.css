@@ -101,3 +101,22 @@ body {
 /* Login page rules live in pages/LoginPage.module.css (FRONT-DESIGN-B1) —
    `.lp-skel` above is the only login-adjacent rule left here, shared with
    components/CardSkeleton.jsx. */
+
+/* iOS Safari zooms the whole page when a focused input/textarea/select is
+ * under 16px. !important is deliberate: CSS-module classes and inline styles
+ * set 11-15px sizes and must not undercut this on touch devices. Do NOT fix
+ * this with maximum-scale/user-scalable in the viewport meta (blocks zoom). */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Placeholders otherwise fall back to the browser default grey (#757575), which
+ * fails 4.5:1 on the dark surfaces. */
+::placeholder {
+  color: var(--color-text-dim);
+  opacity: 1;
+}

@@ -765,7 +765,7 @@ export default function DiscoveryPage({ showToast, onLogout }) {
                 padding: '0 18px',
                 borderRadius: 12,
                 border: 'none',
-                background: 'var(--accent-1)',
+                background: 'var(--accent-1-fill)',
                 color: '#fff',
                 fontSize: 14,
                 fontWeight: 700,

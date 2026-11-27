@@ -104,12 +104,12 @@ export default function MainLayout({
           }}>
             <div style={{ fontSize: 48 }}>🃏</div>
             <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: '0.2em', color: 'var(--color-text)' }}>ARCHIBE</p>
-            <p style={{ color: 'var(--color-text-dimmer)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
+            <p style={{ color: 'var(--color-text-dim)', fontSize: 13 }}>Start a taste analysis to begin swiping</p>
             <button
               onClick={() => navigate('/search')}
               style={{
                 marginTop: 8, padding: '12px 28px', borderRadius: 12,
-                background: 'var(--accent-1)',
+                background: 'var(--accent-1-fill)',
                 color: '#fff', fontSize: 14, fontWeight: 600,
                 border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               }}

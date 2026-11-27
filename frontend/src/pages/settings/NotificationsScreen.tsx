@@ -195,7 +195,7 @@ export default function NotificationsScreen({ onLogout }: ScreenProps) {
               </div>
 
               {cat.locked && (
-                <p style={{ marginTop: 10, fontSize: 11, color: 'var(--color-text-dim)', lineHeight: 1.5 }}>
+                <p style={{ marginTop: 10, fontSize: 'var(--fs-caption)', color: 'var(--color-text-dim)', lineHeight: 1.5 }}>
                   {t('notifications.settings.categories.security.lockedHint')}
                 </p>
               )}

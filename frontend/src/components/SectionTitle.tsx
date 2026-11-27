@@ -51,7 +51,7 @@ export default function SectionTitle({ as, children, count, right, style, classN
             style={{
               fontSize: 'var(--fs-caption)',
               fontWeight: 'var(--fw-semibold)',
-              color: 'var(--color-text-dimmer)',
+              color: 'var(--color-text-dim)',
             }}
           >
             {count}

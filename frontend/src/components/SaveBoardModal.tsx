@@ -91,7 +91,7 @@ export default function SaveBoardModal({ projectId, finalReport, onSaved, onClos
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
         <span style={{
           fontFamily: MONO,
-          fontSize: 11,
+          fontSize: 'var(--fs-caption)',
           fontWeight: 600,
           letterSpacing: LS_CAPS,
           color: INK.mid,

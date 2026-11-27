@@ -204,7 +204,7 @@
   padding: 0 8px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--accent-1);
+  background: var(--accent-1-fill);
   color: #fff;
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);

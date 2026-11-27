@@ -12,7 +12,7 @@ export default function InfoCol({ label, value }: InfoColProps) {
     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <span style={{
         color: 'rgba(255,255,255,0.5)',
-        fontSize: 10, fontWeight: 600,
+        fontSize: 'var(--fs-caption)', fontWeight: 600,
         letterSpacing: '0.06em', textTransform: 'uppercase',
         marginBottom: 2,
       }}>

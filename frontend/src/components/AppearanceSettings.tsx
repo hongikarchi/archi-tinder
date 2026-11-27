@@ -164,7 +164,7 @@ export default function AppearanceSettings() {
         {/* Mini app-screen mockup previewing the selected theme (SETTINGS-POLISH-1 §D) */}
         <div style={{ marginTop: 14 }}>
           <p style={{
-            fontSize: 11,
+            fontSize: 'var(--fs-caption)',
             fontWeight: 600,
             color: 'var(--color-text-muted)',
             letterSpacing: '0.04em',
