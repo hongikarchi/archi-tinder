@@ -261,6 +261,7 @@ REST_FRAMEWORK = {
         # SNS-FOLLOW-1: follow / unfollow writes (registry; effective value = class attr
         # in apps/social/throttling.py).
         'follow':          '200/day',
+        'follow_status':   '60/min',
         # ADMIN-DASH-1: admitted admin-dashboard calls (registry; effective value = class attr
         # in apps/admin_dashboard/throttling.py).
         'admin': '120/min',

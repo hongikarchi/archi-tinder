@@ -280,9 +280,25 @@ class TestFollow:
             cache.clear()
             codes = [ca.delete(url(bob)).status_code for _ in range(4)]
             assert codes == [204, 204, 204, 429]
-            assert ca.get(url(bob)).status_code == 200  # GET not throttled
+            assert ca.get(url(bob)).status_code == 200  # GET has its own budget
         finally:
             FollowWriteThrottle.rate = '200/day'
+
+    def test_status_read_throttle(self, ca, bob):
+        from apps.social.throttling import FollowStatusReadThrottle
+        assert FollowStatusReadThrottle.scope == 'follow_status'
+        assert FollowStatusReadThrottle.rate == '60/min'
+        FollowStatusReadThrottle.rate = '3/min'
+        try:
+            from django.core.cache import cache
+            cache.clear()
+            codes = [ca.get(url(bob)).status_code for _ in range(3)]
+            # unknown ids count too, so the 200-vs-404 oracle is capped
+            codes.append(ca.get('/api/v1/users/999999/follow/').status_code)
+            assert codes == [200, 200, 200, 429]
+            assert ca.delete(url(bob)).status_code == 204  # writes keep their own budget
+        finally:
+            FollowStatusReadThrottle.rate = '60/min'
 
     def test_model_constraints(self, alice, bob):
         from django.db import IntegrityError, transaction
