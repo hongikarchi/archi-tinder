@@ -14,8 +14,8 @@ class FollowStatusReadThrottle(UserRateThrottle):
     """Per-user cap on GET users/<id>/follow/ (#506): 200 vs 404 is a cheap
     user-id enumeration oracle (same class as #391).
 
-    60/min stays well above legitimate load: one read per profile open (the
-    menu shares FollowCta's read) plus a refetch after each follow/block write.
+    60/min stays well above legitimate load: one or two reads per profile open
+    (FollowCta + the "..." menu) plus a refetch after each follow/block write.
     Own scope, so reads never eat the follow-write budget.
     """
     scope = 'follow_status'
