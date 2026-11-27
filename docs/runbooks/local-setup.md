@@ -26,6 +26,7 @@ cp frontend/.env.example frontend/.env
 Fill `backend/.env` from the values the admin gives you. Rules:
 - `DB_*` must point at a **Neon child branch** of `production`, never at the production endpoint (its hostname contains `broad-hat`). The admin provisions one with `neonctl branches create --name local-dev-N --parent production --project-id holy-pond-45504245`. The app DB (`user_data`) and the buildings DB (`archi_data`) may live on different child branches; copy both host values as given.
 - `DB_USER=make_web_app` (runtime role, no DDL). `BUILDINGS_DB_USER=make_web` (SELECT-only). Never put `neondb_owner` in `.env`.
+- Admin dashboard: with `DJANGO_DEBUG=True` and a non-production `DB_HOST`, any logged-in user gets admin access locally — no `ADMIN_EMAILS` / `grant_admin` needed. Production keeps the full gate (`backend/apps/admin_dashboard/permissions.py`).
 - `REDIS_URL` empty locally (LocMemCache fallback). LLM keys optional until you touch search/report code.
 - `frontend/.env`: `VITE_API_BASE_URL=http://localhost:8001`, `VITE_GOOGLE_CLIENT_ID`, and `VITE_DEV_LOGIN_SECRET` matching the backend `DEV_LOGIN_SECRET` (dev-login button only renders in `import.meta.env.DEV`).
 

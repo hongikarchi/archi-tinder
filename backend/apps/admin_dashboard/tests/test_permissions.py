@@ -106,3 +106,59 @@ class TestMeIsAdmin:
     def test_empty_allow_list_false(self, settings):
         client, _ = make_operator_client(settings, in_list=False)
         assert client.get('/api/v1/auth/me/').json()['is_admin'] is False
+
+
+PROD_HOST = 'ep-broad-hat-123.ap-southeast-1.aws.neon.tech'
+
+
+@pytest.fixture
+def plain_client(db):
+    """Authenticated non-staff, non-listed, non-Google user."""
+    from django.contrib.auth import get_user_model
+    from rest_framework.test import APIClient
+    user = get_user_model().objects.create_user(
+        username='plain', email='plain@example.com', password='x')
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client, user
+
+
+@pytest.mark.django_db
+class TestDevOpen:
+    URL = ENDPOINTS[2]
+
+    def test_debug_non_prod_host_opens_gate(self, settings, monkeypatch, plain_client):
+        from apps.admin_dashboard.permissions import admin_dev_open, is_admin_operator
+        client, user = plain_client
+        settings.DEBUG = True
+        monkeypatch.setitem(settings.DATABASES['default'], 'HOST', 'localhost')
+        assert admin_dev_open() is True
+        assert is_admin_operator(user) is True
+        assert client.get(self.URL).status_code == 200
+        assert client.get('/api/v1/auth/me/').json()['is_admin'] is True
+
+    def test_debug_prod_host_stays_closed(self, settings, monkeypatch, plain_client):
+        from apps.admin_dashboard.permissions import admin_dev_open, is_admin_operator
+        client, user = plain_client
+        settings.DEBUG = True
+        monkeypatch.setitem(settings.DATABASES['default'], 'HOST', PROD_HOST.upper())
+        assert admin_dev_open() is False
+        assert is_admin_operator(user) is False
+        assert client.get(self.URL).status_code == 403
+
+    def test_debug_off_stays_closed(self, settings, monkeypatch, plain_client):
+        from apps.admin_dashboard.permissions import is_admin_operator
+        client, user = plain_client
+        settings.DEBUG = False
+        monkeypatch.setitem(settings.DATABASES['default'], 'HOST', 'localhost')
+        assert is_admin_operator(user) is False
+        assert client.get(self.URL).status_code == 403
+
+    def test_anonymous_never_admin_even_when_open(self, settings, monkeypatch, api_client):
+        from django.contrib.auth.models import AnonymousUser
+        from apps.admin_dashboard.permissions import is_admin_operator
+        settings.DEBUG = True
+        monkeypatch.setitem(settings.DATABASES['default'], 'HOST', 'localhost')
+        assert is_admin_operator(AnonymousUser()) is False
+        assert is_admin_operator(None) is False
+        assert api_client.get(self.URL).status_code == 401
