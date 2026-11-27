@@ -8,7 +8,7 @@ import PageTitle from '../components/PageTitle.tsx'
 import InboxView from '../components/messaging/InboxView.tsx'
 import ConversationView from '../components/messaging/ConversationView.tsx'
 import { useTranslation } from '../i18n/index.ts'
-import { useMessagingEnabled } from '../hooks/useMessagingFeature.ts'
+import { useMessagingEnabled, useMessagingFeatureLoaded } from '../hooks/useMessagingFeature.ts'
 import { refreshUnreadMessages } from '../hooks/useUnreadMessages.ts'
 import { listConversations } from '../api/messaging.ts'
 import styles from './MessagesPage.module.css'
@@ -26,10 +26,12 @@ import styles from './MessagesPage.module.css'
  * passes `location.state.conversation` so the view opens without waiting for a
  * list refetch.
  * Flag OFF -> renders nothing (and makes no request); the tab is hidden too.
+ * Once the flags are known and messaging is OFF, redirects home (#493).
  */
 export default function MessagesPage({ onLogout }) {
   const { t } = useTranslation()
   const enabled = useMessagingEnabled()
+  const featureLoaded = useMessagingFeatureLoaded()
   const navigate = useNavigate()
   const location = useLocation()
   const { conversationId: rawId } = useParams()
@@ -86,8 +88,9 @@ export default function MessagesPage({ onLogout }) {
     })
   }
 
-  // Flag OFF (or not loaded yet): nothing to show, nothing requested.
-  if (!enabled) return null
+  // Not loaded yet: render nothing. Answered OFF (e.g. a stale bookmark):
+  // leave for the home route instead of a blank page (#493).
+  if (!enabled) return featureLoaded ? <Navigate to="/" replace /> : null
   if (Number.isNaN(convId)) return <Navigate to="/messages" replace />
 
   // Conversation target: the loaded list wins, the navigation hint covers a

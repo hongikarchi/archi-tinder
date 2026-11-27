@@ -9,7 +9,8 @@
  *
  * Both flags default to OFF: until /auth/me/ answers — or if it fails, or the
  * field is absent — every messaging / follow surface renders nothing and no
- * endpoint of that feature is called.
+ * endpoint of that feature is called. `loaded` tells "not answered yet" apart
+ * from "answered OFF" (e.g. /messages redirects only once it knows, #493).
  */
 import { useSyncExternalStore } from 'react'
 import { getMe } from '../api/auth.ts'
@@ -17,13 +18,15 @@ import { setAdminStatus } from './useAdminStatus.ts'
 
 let messagingEnabled = false
 let followEnabled = false
+let loaded = false
 let generation = 0
 const listeners = new Set<() => void>()
 
-function setFlags(messaging: boolean, follow: boolean) {
-  if (messagingEnabled === messaging && followEnabled === follow) return
+function setFlags(messaging: boolean, follow: boolean, isLoaded: boolean) {
+  if (messagingEnabled === messaging && followEnabled === follow && loaded === isLoaded) return
   messagingEnabled = messaging
   followEnabled = follow
+  loaded = isLoaded
   listeners.forEach(fn => fn())
 }
 
@@ -40,18 +43,22 @@ export function isFollowEnabled() {
   return followEnabled
 }
 
+export function isMessagingFeatureLoaded() {
+  return loaded
+}
+
 /** Fetch /auth/me/ and publish `features.messaging` / `features.follow`. Stale responses are dropped. */
 export async function loadMessagingFeature() {
   const mine = ++generation
   try {
     const me = await getMe()
     if (mine !== generation) return
-    setFlags(me?.features?.messaging === true, me?.features?.follow === true)
+    setFlags(me?.features?.messaging === true, me?.features?.follow === true, true)
     // ADMIN-DASH-1: same /auth/me/ answer also carries `is_admin` (UX gate only).
     setAdminStatus(me?.is_admin === true)
   } catch {
     if (mine !== generation) return
-    setFlags(false, false)
+    setFlags(false, false, true)
     setAdminStatus(false)
   }
 }
@@ -59,7 +66,7 @@ export async function loadMessagingFeature() {
 /** Logout / no session — flag back to OFF and invalidate any in-flight load. */
 export function resetMessagingFeature() {
   generation += 1
-  setFlags(false, false)
+  setFlags(false, false, false)
   setAdminStatus(null)
 }
 
@@ -69,4 +76,9 @@ export function useMessagingEnabled() {
 
 export function useFollowEnabled() {
   return useSyncExternalStore(subscribe, isFollowEnabled, isFollowEnabled)
+}
+
+/** True once /auth/me/ answered (success or failure) for the current login. */
+export function useMessagingFeatureLoaded() {
+  return useSyncExternalStore(subscribe, isMessagingFeatureLoaded, isMessagingFeatureLoaded)
 }

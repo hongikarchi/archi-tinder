@@ -25,6 +25,7 @@ import ReportReentryBanner from './components/ReportReentryBanner.tsx'
 import { resolveProjectBackendId } from './utils/resolveProjectBackendId.ts'
 import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.ts'
 import { clearBlocked } from './components/messaging/blockedUsers.ts'
+import { invalidateFollowStatus } from './api/followStatusInflight.ts'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.ts'
 import { resetUnreadNotifications, refreshUnreadNotifications } from './hooks/useUnreadNotifications.ts'
 import { reportImageJobs } from './hooks/useReportImageJob.ts'
@@ -124,6 +125,7 @@ export default function App() {
     resetUnreadMessages()
     resetUnreadNotifications()
     clearBlocked()
+    invalidateFollowStatus() // a read in flight carries the previous user's token
     if (!userId || !api.getToken()) {
       resetMessagingFeature()
       return

@@ -20,6 +20,7 @@
 import { callApi } from './core.ts'
 import { verifyGatedWrite } from './messaging.ts'
 import type { FollowStatus } from '../types/api.ts'
+import { followStatusInflight, invalidateFollowStatus } from './followStatusInflight.ts'
 
 /** Numeric user ids only — the id is interpolated into the URL path. */
 function followPath(userId: number | string) {
@@ -28,16 +29,22 @@ function followPath(userId: number | string) {
   return `/users/${id}/follow/`
 }
 
+/** Concurrent reads for one user share a request (followStatusInflight.ts). */
 export async function getFollowStatus(userId: number | string): Promise<FollowStatus> {
-  return await callApi('GET', followPath(userId))
+  const path = followPath(userId)
+  return await followStatusInflight.run(String(Number(userId)), () => callApi('GET', path))
 }
 
 export async function followUser(userId: number | string): Promise<FollowStatus> {
-  return await verifyGatedWrite('POST', followPath(userId))
+  const path = followPath(userId)
+  invalidateFollowStatus(userId)
+  return await verifyGatedWrite('POST', path)
 }
 
 export async function unfollowUser(userId: number | string): Promise<null> {
-  return await verifyGatedWrite('DELETE', followPath(userId))
+  const path = followPath(userId)
+  invalidateFollowStatus(userId)
+  return await verifyGatedWrite('DELETE', path)
 }
 
 export async function getProjectReactors(projectId, { page = 1, pageSize = 50 } = {}) {
