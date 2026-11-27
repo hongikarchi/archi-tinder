@@ -146,3 +146,18 @@ def _patch_last_liked_renderable_count():
     conn.__getitem__.return_value.cursor.return_value.__enter__.return_value = cur
     with _patch('apps.recommendation.views.projects.connections', conn):
         yield
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        'markers', 'admin_dev_open: keep the local-DEBUG admin bypass live for this test')
+
+
+@pytest.fixture(autouse=True)
+def _admin_dev_open_off(request, monkeypatch):
+    """Tests run with DJANGO_DEBUG=True on SQLite (no HOST), which would satisfy
+    admin_dev_open() and open the admin gate everywhere. Keep the production gate
+    by default; tests of the bypass itself opt in with @pytest.mark.admin_dev_open."""
+    if request.node.get_closest_marker('admin_dev_open'):
+        return
+    monkeypatch.setattr('apps.admin_dashboard.permissions.admin_dev_open', lambda: False)

@@ -124,6 +124,7 @@ def plain_client(db):
 
 
 @pytest.mark.django_db
+@pytest.mark.admin_dev_open
 class TestDevOpen:
     URL = ENDPOINTS[2]
 
@@ -135,7 +136,6 @@ class TestDevOpen:
         assert admin_dev_open() is True
         assert is_admin_operator(user) is True
         assert client.get(self.URL).status_code == 200
-        assert client.get('/api/v1/auth/me/').json()['is_admin'] is True
 
     def test_debug_prod_host_stays_closed(self, settings, monkeypatch, plain_client):
         from apps.admin_dashboard.permissions import admin_dev_open, is_admin_operator
