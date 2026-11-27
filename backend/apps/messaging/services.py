@@ -120,6 +120,7 @@ def unread_message_count(profile):
         Message.objects
         .filter(conversation__closed_at__isnull=True)
         .filter(mine)
-        .filter(Q(sender__isnull=True) | ~Q(sender=profile))
+        .filter(kind=Message.KIND_USER)  # legacy system rows are hidden in the UI (#506)
+        .filter(~Q(sender=profile))
         .count()
     )

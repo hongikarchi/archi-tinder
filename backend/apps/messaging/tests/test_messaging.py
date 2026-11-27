@@ -227,6 +227,17 @@ class TestUnread:
         cb.post(f'/api/v1/conversations/{conv.id}/read/')
         assert unread(cb) == 0
 
+    def test_legacy_system_rows_do_not_count(self, ca, cb, alice, bob):
+        # Old 'connected' system rows are hidden in the UI, so they must not
+        # light the TabBar dot or the inbox badge (#506).
+        conv = connect_pair(ca, cb, alice, bob)
+        Message.objects.create(conversation=conv, sender=None, kind=Message.KIND_SYSTEM, body='connected')
+        assert unread(ca) == 0 and unread(cb) == 0
+        assert cb.get('/api/v1/conversations/').data['results'][0]['unread_count'] == 0
+        ca.post(f'/api/v1/conversations/{conv.id}/messages/', {'body': 'yo'}, format='json')
+        assert unread(cb) == 1
+        assert cb.get('/api/v1/conversations/').data['results'][0]['unread_count'] == 1
+
     def test_follow_does_not_count(self, ca, cb, alice, bob):
         follow(alice, bob)
         assert unread(cb) == 0

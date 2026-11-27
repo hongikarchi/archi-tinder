@@ -76,7 +76,7 @@ export default function FollowCta({ userId, name, buttonClassName, hidden = fals
     // `hidden` stays a dep so a local unblock refetches fresh status.
     if (!enabled || !userId) return undefined
     let cancelled = false
-    const s = getBlockSeq()
+    const s = getBlockSeq(userId)
     getFollowStatus(userId)
       .then(data => {
         if (cancelled) return
