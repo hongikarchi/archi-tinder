@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-21 14:41 KST',
-    head: 'e6c410b',
-    branch: 'feature/sns-follow-model',
+    updatedAt: '2026-11-27 17:47 KST',
+    head: '6f955f5',
+    branch: 'feature/sns-messages-gaps',
   },
   done: [
+    {
+      id: 'PR #505',
+      title: 'feat(SNS-FOLLOW-1): user follow replaces interest request → accept',
+      completedAt: '2026-11-22',
+      prs: [505],
+      note: '',
+    },
     {
       id: 'PR #502',
       title: 'feat(frontend): migrate src JS/JSX to TypeScript — types only',
@@ -77,15 +84,15 @@ window.PROJECT_STATE = {
       prs: [486],
       note: '',
     },
+  ],
+  now: [
     {
-      id: 'PR #485',
-      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
-      completedAt: '2026-11-10',
-      prs: [485],
-      note: '',
+      id: '#perf(discovery): first entry ~9s — deci',
+      title: 'perf(discovery): first entry ~9s — decide app start page (Taste vs Discovery)',
+      note: 'From team meeting 2026-11-22 (`docs/meetings/2026-11-22.md`, item 1).',
+      issue: 508,
     },
   ],
-  now: [],
   next: {
     xhigh: [
       {
@@ -96,6 +103,12 @@ window.PROJECT_STATE = {
       },
     ],
     high: [
+      {
+        id: '#perf(discovery): first entry ~9s — deci',
+        title: 'perf(discovery): first entry ~9s — decide app start page (Taste vs Discovery)',
+        note: 'From team meeting 2026-11-22 (`docs/meetings/2026-11-22.md`, item 1).',
+        issue: 508,
+      },
       {
         id: '#PERF: measure taste-start tag matching ',
         title: 'PERF: measure taste-start tag matching full scan before deploy',
@@ -140,6 +153,12 @@ window.PROJECT_STATE = {
       },
     ],
     medium: [
+      {
+        id: '#feat(report): pre-set Korean building d',
+        title: 'feat(report): pre-set Korean building data in DB for persona report',
+        note: 'From team meeting 2026-11-22 (`docs/meetings/2026-11-22.md`, item 2).',
+        issue: 509,
+      },
       {
         id: '#DESIGN-REVIEW-1: mobile UI/UX design re',
         title: 'DESIGN-REVIEW-1: mobile UI/UX design review + upgrade (impeccable + emil skills)',
@@ -217,12 +236,6 @@ window.PROJECT_STATE = {
         title: 'account deletion cascades other participant\'s history + report evidence',
         note: 'From #343 review. Conversation/ContactRequest/Block FK CASCADE on UserProfile → deleting one account deletes the OTHER participant\'s conversation history. `Report.reporter` CASCADE → reporter deletion destroys moderation evidence. `Message.sender` is SET_NULL (ok). Decide rete…',
         issue: 412,
-      },
-      {
-        id: 'FULL-MESSAGING-3',
-        title: 'ignored request becomes detectable after 30 days (D10 leak)',
-        note: 'From #343 review (2026-10-03). `ContactRequestStatusView` maps pending and ignored-within-30d both to `sent` (D10), but `recent_ignore_exists()` expires at day 31 so an ignored request flips `sent → none` while a still-pending one stays `sent` forever. Sender can infer the ign…',
-        issue: 409,
       },
       {
         id: 'FRONT-LAYOUT-1',
@@ -340,6 +353,12 @@ window.PROJECT_STATE = {
       },
     ],
     low: [
+      {
+        id: '#fix(messaging): follow-model leftovers ',
+        title: 'fix(messaging): follow-model leftovers — phantom unread, open/follow block races, status throttle',
+        note: 'Follow-ups from #505 review (2026-11-22):',
+        issue: 506,
+      },
       {
         id: '#chore: small leftovers from SNS cleanup',
         title: 'chore: small leftovers from SNS cleanup + block sync',
@@ -560,6 +579,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 505,
+      title: 'feat(SNS-FOLLOW-1): user follow replaces interest request → accept',
+      mergedAt: '2026-11-22T00:44:01Z',
+      mergedAtKST: '2026-11-22 09:44 KST',
+      sha: '6f955f5',
+    },
+    {
       number: 502,
       title: 'feat(frontend): migrate src JS/JSX to TypeScript — types only',
       mergedAt: '2026-11-20T18:40:48Z',
@@ -607,13 +633,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-10T14:00:56Z',
       mergedAtKST: '2026-11-10 23:00 KST',
       sha: '373325f',
-    },
-    {
-      number: 485,
-      title: 'fix(FULL-MESSAGING-2): 새로고침 후에도 차단 해제 가능',
-      mergedAt: '2026-11-10T13:55:02Z',
-      mergedAtKST: '2026-11-10 22:55 KST',
-      sha: 'a7eb694',
     },
   ],
   agents: [
@@ -2840,6 +2859,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/api/followStatusInflight.ts',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/getResult.test.mjs',
       role: '',
     },
@@ -3917,6 +3940,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/imageMime.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/inflight.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/inflight.ts',
       role: '',
     },
     {
