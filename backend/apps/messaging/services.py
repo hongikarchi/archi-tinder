@@ -100,7 +100,9 @@ def open_conversation(actor, peer, now=None):
 # -- Unread -----------------------------------------------------------------
 
 def unread_message_count(profile):
-    """Messages after my last_read_at (all if null) NOT authored by me (system included).
+    """User messages after my last_read_at (all if null) NOT authored by me.
+
+    Legacy system rows are hidden in the UI, so they are excluded (#506).
 
     Closed (blocked) conversations are excluded. One COUNT over the
     (conversation, id) index + conversation participant lookup.

@@ -238,6 +238,11 @@ class TestUnread:
         assert unread(cb) == 1
         assert cb.get('/api/v1/conversations/').data['results'][0]['unread_count'] == 1
 
+    def test_message_from_deleted_author_still_counts(self, ca, cb, alice, bob):
+        conv = connect_pair(ca, cb, alice, bob)
+        Message.objects.create(conversation=conv, sender=None, kind=Message.KIND_USER, body='hi')
+        assert unread(cb) == 1 and unread(ca) == 1
+
     def test_follow_does_not_count(self, ca, cb, alice, bob):
         follow(alice, bob)
         assert unread(cb) == 0

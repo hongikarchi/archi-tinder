@@ -9,8 +9,8 @@ import { useSyncExternalStore } from 'react'
  * immediately. A status response issued before a local action may be stale, so
  * callers capture getBlockSeq(userId) before the request and the response is
  * dropped if a local action on that same user (or clearBlocked) happened
- * meanwhile. Actions on other users never invalidate it (#500). Module-level (not component
- * state) so every UserActionsMenu instance — the conversation header (remounted
+ * meanwhile. Actions on other users never invalidate it (#500). Module-level
+ * (not component state) so every UserActionsMenu instance — the conversation header (remounted
  * whenever a conversation is opened on the /messages tab) and the profile menu —
  * agrees and offers "Unblock".
  */
