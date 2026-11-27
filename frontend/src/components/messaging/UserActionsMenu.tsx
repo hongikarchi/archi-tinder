@@ -53,9 +53,9 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }
     // users/<id>/follow/ answers 404 while the follow flag is off.
     if (!followEnabled || !userId) return undefined
     let cancelled = false
-    const { promise, meta } = joinFollowStatus(userId, getBlockSeq())
+    const { promise, meta } = joinFollowStatus(userId, getBlockSeq(userId))
     promise
-      .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, meta as number) })
+      .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, meta as string) })
       .catch(() => {}) // non-critical: the menu works without the status read
     return () => { cancelled = true }
   }, [followEnabled, userId])

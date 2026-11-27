@@ -82,13 +82,13 @@ export default function FollowCta({ userId, name, buttonClassName, hidden = fals
     const first = loadedUserRef.current !== userId
     loadedUserRef.current = userId
     const { promise, meta } = first
-      ? joinFollowStatus(userId, getBlockSeq())
-      : { promise: getFollowStatus(userId), meta: getBlockSeq() }
+      ? joinFollowStatus(userId, getBlockSeq(userId))
+      : { promise: getFollowStatus(userId), meta: getBlockSeq(userId) }
     promise
       .then(data => {
         if (cancelled) return
         // Server status is authoritative (both ways); stale responses dropped.
-        applyServerBlockedByMe(userId, data?.blocked_by_me, meta as number)
+        applyServerBlockedByMe(userId, data?.blocked_by_me, meta as string)
         setStatus(data)
         setLoadFailed(false)
       })

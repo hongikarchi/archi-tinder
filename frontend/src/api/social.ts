@@ -29,7 +29,7 @@ function followPath(userId: number | string) {
   return `/users/${id}/follow/`
 }
 
-/** Fresh read (never shared); callers capture getBlockSeq() before calling. */
+/** Fresh read (never shared); callers capture getBlockSeq(userId) before calling. */
 export async function getFollowStatus(userId: number | string): Promise<FollowStatus> {
   return await callApi('GET', followPath(userId))
 }

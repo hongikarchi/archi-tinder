@@ -131,7 +131,8 @@ class ConversationListView(MessagingView):
         unread_sq = (
             Message.objects
             .filter(conversation=OuterRef('pk'), created_at__gt=OuterRef('my_last_read'))
-            .filter(Q(sender__isnull=True) | ~Q(sender=me))
+            .filter(kind=Message.KIND_USER)  # legacy system rows are hidden in the UI (#506)
+            .filter(~Q(sender=me))
             .order_by().values('conversation').annotate(c=Count('id')).values('c')
         )
         last_id_sq = (
