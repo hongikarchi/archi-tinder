@@ -32,7 +32,7 @@ from apps.messaging import services as messaging_services
 from . import services
 from .models import UserFollow
 from .permissions import FollowEnabled
-from .throttling import FollowWriteThrottle
+from .throttling import FollowStatusReadThrottle, FollowWriteThrottle
 
 
 def follow_status(me, target):
@@ -69,7 +69,7 @@ class UserFollowView(APIView):
 
     def get_throttles(self):
         if self.request.method in SAFE_METHODS:
-            return []
+            return [FollowStatusReadThrottle()]
         return [FollowWriteThrottle()]
 
     @staticmethod
