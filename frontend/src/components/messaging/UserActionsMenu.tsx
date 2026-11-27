@@ -52,7 +52,7 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }
     // users/<id>/follow/ answers 404 while the follow flag is off.
     if (!followEnabled || !userId) return undefined
     let cancelled = false
-    const s = getBlockSeq()
+    const s = getBlockSeq(userId)
     getFollowStatus(userId)
       .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, s) })
       .catch(() => {}) // non-critical: the menu works without the status read

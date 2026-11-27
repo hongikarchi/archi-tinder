@@ -23,11 +23,18 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-28 04:21 KST',
-    head: '6f955f5',
-    branch: 'feature/sns-follow-status-throttle',
+    updatedAt: '2026-11-28 08:22 KST',
+    head: '124f6a0',
+    branch: 'pr510',
   },
   done: [
+    {
+      id: 'PR #512',
+      title: 'security(social): throttle GET follow status (60/min per user)',
+      completedAt: '2026-11-28',
+      prs: [512],
+      note: '',
+    },
     {
       id: 'PR #505',
       title: 'feat(SNS-FOLLOW-1): user follow replaces interest request → accept',
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
       completedAt: '2026-11-10',
       prs: [487],
-      note: '',
-    },
-    {
-      id: 'PR #486',
-      title: 'feat(FRONT-MESSAGES-TAB-1): 메시지를 하단 탭바 탭으로',
-      completedAt: '2026-11-10',
-      prs: [486],
       note: '',
     },
   ],
@@ -579,6 +579,13 @@ window.PROJECT_STATE = {
   },
   prs: [
     {
+      number: 512,
+      title: 'security(social): throttle GET follow status (60/min per user)',
+      mergedAt: '2026-11-27T23:22:28Z',
+      mergedAtKST: '2026-11-28 08:22 KST',
+      sha: '124f6a0',
+    },
+    {
       number: 505,
       title: 'feat(SNS-FOLLOW-1): user follow replaces interest request → accept',
       mergedAt: '2026-11-22T00:44:01Z',
@@ -626,13 +633,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-10T13:55:32Z',
       mergedAtKST: '2026-11-10 22:55 KST',
       sha: '597ff93',
-    },
-    {
-      number: 486,
-      title: 'feat(FRONT-MESSAGES-TAB-1): 메시지를 하단 탭바 탭으로',
-      mergedAt: '2026-11-10T14:00:56Z',
-      mergedAtKST: '2026-11-10 23:00 KST',
-      sha: '373325f',
     },
   ],
   agents: [
@@ -4093,6 +4093,14 @@ window.PROJECT_STATE = {
     {
       path: 'project/mermaid.min.js',
       role: 'Mermaid 다이어그램 번들',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
+    },
+    {
+      path: 'project/state.js',
+      role: '대시보드 상태 데이터',
     },
     {
       path: 'project/state.js',

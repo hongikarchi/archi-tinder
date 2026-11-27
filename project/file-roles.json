@@ -156,7 +156,6 @@
   "backend/apps/social/migrations/0004_officefollow.py": "DB 마이그레이션 OfficeFollow",
   "backend/apps/social/migrations/__init__.py": "패키지 init",
   "backend/apps/social/models.py": "팔로우/리액션 모델",
-  "backend/apps/social/serializers.py": "social 직렬화기 재노출",
   "backend/apps/social/tests/__init__.py": "패키지 init",
   "backend/apps/social/tests/conftest.py": "social 테스트 픽스처",
   "backend/apps/social/tests/test_follow.py": "유저 팔로우 테스트",
