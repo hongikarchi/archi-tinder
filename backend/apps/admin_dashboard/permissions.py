@@ -19,6 +19,14 @@ value (audited 2026-10-06, ADMIN-DASH-1):
 If a future endpoint can change ``User.email``, compare against the Google-sourced
 email instead (and add it to this audit note).
 
+Dev-open rule (local servers only): when ``admin_dev_open()`` is True, ANY
+authenticated user is an admin operator and checks 2-5 are skipped. This is safe because
+a local server is reached only by its own developer, who already holds the dev DB and API
+keys in ``backend/.env``. It is double-guarded: ``settings.DEBUG`` must be True AND the app
+DB host must not contain the production marker (``PROD_DB_HOST_MARKER``), so a mis-set
+DEBUG on production still fails on the DB-host check. Django/pytest force DEBUG=False
+during tests, so the strict path is what tests exercise unless they opt in via ``settings``.
+
 Denials are logged with ``logger.warning`` ONLY -- never a DB row (the permission
 check runs before the throttle, so a DB write here would be a DB-fill vector).
 
@@ -32,11 +40,24 @@ from rest_framework.permissions import BasePermission
 
 logger = logging.getLogger('apps.admin_dashboard')
 
+# Substring of the production app-DB host; dev-open is never allowed when it matches.
+PROD_DB_HOST_MARKER = 'broad-hat'
+
+
+def admin_dev_open():
+    """True only on a local DEBUG server whose app DB is not the production DB."""
+    if not getattr(settings, 'DEBUG', False):
+        return False
+    host = (settings.DATABASES.get('default', {}).get('HOST', '') or '')
+    return PROD_DB_HOST_MARKER not in str(host).lower()
+
 
 def is_admin_operator(user):
     """Pure predicate shared by IsAdminOperator and the /auth/me/ ``is_admin`` flag."""
     if user is None or not getattr(user, 'is_authenticated', False):
         return False
+    if admin_dev_open():
+        return True
     if not getattr(user, 'is_staff', False):
         return False
     allow = getattr(settings, 'ADMIN_EMAILS', None) or ()
