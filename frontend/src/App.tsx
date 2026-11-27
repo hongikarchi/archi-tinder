@@ -23,7 +23,7 @@ import ErrorBoundary from './components/ErrorBoundary.tsx'
 import NotFoundRedirect from './components/NotFoundRedirect.tsx'
 import ReportReentryBanner from './components/ReportReentryBanner.tsx'
 import { resolveProjectBackendId } from './utils/resolveProjectBackendId.ts'
-import { loadMessagingFeature, resetMessagingFeature } from './hooks/useMessagingFeature.ts'
+import { loadMessagingFeature, resetMessagingFeature, markMessagingFeatureStale } from './hooks/useMessagingFeature.ts'
 import { clearBlocked } from './components/messaging/blockedUsers.ts'
 import { invalidateFollowStatus } from './api/followStatusInflight.ts'
 import { resetUnreadMessages, refreshUnreadMessages } from './hooks/useUnreadMessages.ts'
@@ -133,6 +133,7 @@ export default function App() {
     // Re-fetch the badge after the reset (guest->account merge changes userId
     // A->B with no null in between). No-op while the flag is OFF.
     // refreshUnreadMessages itself no-ops unless the flag is ON.
+    markMessagingFeatureStale()
     loadMessagingFeature().then(() => refreshUnreadMessages({ force: true })).catch(() => {})
     // TabBar (eager, child) fetches before this parent effect resets the
     // store and its stale-epoch result is dropped — refetch after the reset.

@@ -63,6 +63,15 @@ export async function loadMessagingFeature() {
   }
 }
 
+/**
+ * A new login is about to load its flags (account switch A->B with no logout in
+ * between): keep the current flags but mark them not-yet-known, so /messages
+ * does not redirect on the previous account's answer (#493).
+ */
+export function markMessagingFeatureStale() {
+  setFlags(messagingEnabled, followEnabled, false)
+}
+
 /** Logout / no session — flag back to OFF and invalidate any in-flight load. */
 export function resetMessagingFeature() {
   generation += 1
