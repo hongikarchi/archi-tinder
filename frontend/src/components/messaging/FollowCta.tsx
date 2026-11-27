@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Modal from '../Modal.tsx'
 import { useTranslation } from '../../i18n/index.ts'
-import { getFollowStatus, followUser, unfollowUser } from '../../api/social.ts'
+import { getFollowStatus, joinFollowStatus, followUser, unfollowUser } from '../../api/social.ts'
 import { openConversation, listConversations } from '../../api/messaging.ts'
 import { VerifyRequiredError } from '../../api/projects.ts'
 import { useFollowEnabled, useMessagingEnabled } from '../../hooks/useMessagingFeature.ts'
@@ -70,18 +70,25 @@ export default function FollowCta({ userId, name, buttonClassName, hidden = fals
   // user's state.
   const userIdRef = useRef(userId)
   userIdRef.current = userId
+  const loadedUserRef = useRef<typeof userId | null>(null)
 
   useEffect(() => {
     // Fetched even while `hidden` so a block/unblock done elsewhere is noticed;
     // `hidden` stays a dep so a local unblock refetches fresh status.
     if (!enabled || !userId) return undefined
     let cancelled = false
-    const s = getBlockSeq(userId)
-    getFollowStatus(userId)
+    // First read for this user may share the menu's read (#493); refetches
+    // after a write / unhide / verify always go fresh.
+    const first = loadedUserRef.current !== userId
+    loadedUserRef.current = userId
+    const { promise, meta } = first
+      ? joinFollowStatus(userId, getBlockSeq(userId))
+      : { promise: getFollowStatus(userId), meta: getBlockSeq(userId) }
+    promise
       .then(data => {
         if (cancelled) return
         // Server status is authoritative (both ways); stale responses dropped.
-        applyServerBlockedByMe(userId, data?.blocked_by_me, s)
+        applyServerBlockedByMe(userId, data?.blocked_by_me, meta as string)
         setStatus(data)
         setLoadFailed(false)
       })

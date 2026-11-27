@@ -4,7 +4,7 @@ import FloatingIconButton from '../FloatingIconButton.tsx'
 import ReportDialog from './ReportDialog.tsx'
 import { useTranslation } from '../../i18n/index.ts'
 import { blockUser, unblockUser } from '../../api/messaging.ts'
-import { getFollowStatus } from '../../api/social.ts'
+import { joinFollowStatus } from '../../api/social.ts'
 import { useFollowEnabled } from '../../hooks/useMessagingFeature.ts'
 import { VerifyRequiredError } from '../../api/projects.ts'
 import { markBlocked, markUnblocked, useBlockedUser, getBlockSeq, applyServerBlockedByMe } from './blockedUsers.ts'
@@ -47,14 +47,15 @@ export default function UserActionsMenu({ userId, name, onBlocked, onUnblocked }
 
   // The server status is authoritative: sync the session store both ways
   // (block/unblock done on another device/tab included). A response issued before
-  // a local block/unblock is dropped via the seq check.
+  // a local block/unblock is dropped via the seq check. Joins FollowCta's read
+  // on the profile page; the seq used is the one from when that read started.
   useEffect(() => {
     // users/<id>/follow/ answers 404 while the follow flag is off.
     if (!followEnabled || !userId) return undefined
     let cancelled = false
-    const s = getBlockSeq(userId)
-    getFollowStatus(userId)
-      .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, s) })
+    const { promise, meta } = joinFollowStatus(userId, getBlockSeq(userId))
+    promise
+      .then(data => { if (!cancelled) applyServerBlockedByMe(userId, data?.blocked_by_me, meta as string) })
       .catch(() => {}) // non-critical: the menu works without the status read
     return () => { cancelled = true }
   }, [followEnabled, userId])

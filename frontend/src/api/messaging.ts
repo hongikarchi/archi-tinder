@@ -24,6 +24,7 @@
 import { callApi } from './core.ts'
 import { VerifyRequiredError } from './projects.ts'
 import type { OpenConversationResult } from '../types/api.ts'
+import { withFollowStatusWrite } from './followStatusInflight.ts'
 
 function throwIfVerifyRequired(err) {
   if (err?.status === 403 && err?.data?.detail === 'verify_required') {
@@ -82,12 +83,13 @@ export async function getMessagesUnreadCount() {
 
 // -- Block / report ----------------------------------------------------------
 
+// The follow status carries blocked_by_me, so block writes invalidate its shared read.
 export async function blockUser(userId) {
-  return await write('POST', `/users/${userId}/block/`)
+  return await withFollowStatusWrite(userId, () => write('POST', `/users/${userId}/block/`))
 }
 
 export async function unblockUser(userId) {
-  return await write('DELETE', `/users/${userId}/block/`)
+  return await withFollowStatusWrite(userId, () => write('DELETE', `/users/${userId}/block/`))
 }
 
 export async function reportTarget({ targetType, targetId, reason }: { targetType: string, targetId: number | string, reason?: string }) {

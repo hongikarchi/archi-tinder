@@ -23,9 +23,9 @@
 window.PROJECT_STATE = {
   meta: {
     name: 'ArchiTinder — Make Web',
-    updatedAt: '2026-11-28 08:22 KST',
-    head: '124f6a0',
-    branch: 'pr510',
+    updatedAt: '2026-11-28 08:23 KST',
+    head: '68a5c31',
+    branch: 'pr511',
   },
   done: [
     {
@@ -33,6 +33,13 @@ window.PROJECT_STATE = {
       title: 'security(social): throttle GET follow status (60/min per user)',
       completedAt: '2026-11-28',
       prs: [512],
+      note: '',
+    },
+    {
+      id: 'PR #510',
+      title: 'fix(messaging): per-user block seq; unread skips legacy system rows',
+      completedAt: '2026-11-28',
+      prs: [510],
       note: '',
     },
     {
@@ -75,13 +82,6 @@ window.PROJECT_STATE = {
       title: 'perf+ui(profile,discovery,board): faster profile/discovery load; report-style board, save modal, building & studio pages',
       completedAt: '2026-11-21',
       prs: [494],
-      note: '',
-    },
-    {
-      id: 'PR #487',
-      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
-      completedAt: '2026-11-10',
-      prs: [487],
       note: '',
     },
   ],
@@ -586,6 +586,13 @@ window.PROJECT_STATE = {
       sha: '124f6a0',
     },
     {
+      number: 510,
+      title: 'fix(messaging): per-user block seq; unread skips legacy system rows',
+      mergedAt: '2026-11-27T23:22:55Z',
+      mergedAtKST: '2026-11-28 08:22 KST',
+      sha: '68a5c31',
+    },
+    {
       number: 505,
       title: 'feat(SNS-FOLLOW-1): user follow replaces interest request → accept',
       mergedAt: '2026-11-22T00:44:01Z',
@@ -626,13 +633,6 @@ window.PROJECT_STATE = {
       mergedAt: '2026-11-20T16:41:02Z',
       mergedAtKST: '2026-11-21 01:41 KST',
       sha: '872a2e0',
-    },
-    {
-      number: 487,
-      title: 'feat(FULL-CONTEST-NOTIF-1): 관심 공모전 마감 임박 알림 (D-7·D-1)',
-      mergedAt: '2026-11-10T13:55:32Z',
-      mergedAtKST: '2026-11-10 22:55 KST',
-      sha: '597ff93',
     },
   ],
   agents: [
@@ -2859,6 +2859,10 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/api/followStatusInflight.ts',
+      role: '',
+    },
+    {
       path: 'frontend/src/api/getResult.test.mjs',
       role: '',
     },
@@ -3299,6 +3303,14 @@ window.PROJECT_STATE = {
       role: '',
     },
     {
+      path: 'frontend/src/components/messaging/FollowCta.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/FollowCta.tsx',
+      role: '',
+    },
+    {
       path: 'frontend/src/components/messaging/InboxView.tsx',
       role: '',
     },
@@ -3308,6 +3320,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/components/messaging/ReportDialog.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.tsx',
+      role: '',
+    },
+    {
+      path: 'frontend/src/components/messaging/UserActionsMenu.tsx',
       role: '',
     },
     {
@@ -3936,6 +3956,14 @@ window.PROJECT_STATE = {
     },
     {
       path: 'frontend/src/utils/imageMime.ts',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/inflight.test.mjs',
+      role: '',
+    },
+    {
+      path: 'frontend/src/utils/inflight.ts',
       role: '',
     },
     {

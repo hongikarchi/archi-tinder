@@ -20,6 +20,7 @@
 import { callApi } from './core.ts'
 import { verifyGatedWrite } from './messaging.ts'
 import type { FollowStatus } from '../types/api.ts'
+import { followStatusInflight, followStatusKey, withFollowStatusWrite } from './followStatusInflight.ts'
 
 /** Numeric user ids only — the id is interpolated into the URL path. */
 function followPath(userId: number | string) {
@@ -28,16 +29,28 @@ function followPath(userId: number | string) {
   return `/users/${id}/follow/`
 }
 
+/** Fresh read (never shared); callers capture getBlockSeq(userId) before calling. */
 export async function getFollowStatus(userId: number | string): Promise<FollowStatus> {
   return await callApi('GET', followPath(userId))
 }
 
+/**
+ * Share a pending read for this user, or start one. `meta` is the block-seq
+ * token from when the shared read started — pass it to applyServerBlockedByMe.
+ */
+export function joinFollowStatus(userId: number | string, blockSeq?: number | string) {
+  const path = followPath(userId)
+  return followStatusInflight.join(followStatusKey(userId), () => callApi('GET', path), blockSeq)
+}
+
 export async function followUser(userId: number | string): Promise<FollowStatus> {
-  return await verifyGatedWrite('POST', followPath(userId))
+  const path = followPath(userId)
+  return await withFollowStatusWrite(userId, () => verifyGatedWrite('POST', path))
 }
 
 export async function unfollowUser(userId: number | string): Promise<null> {
-  return await verifyGatedWrite('DELETE', followPath(userId))
+  const path = followPath(userId)
+  return await withFollowStatusWrite(userId, () => verifyGatedWrite('DELETE', path))
 }
 
 export async function getProjectReactors(projectId, { page = 1, pageSize = 50 } = {}) {
